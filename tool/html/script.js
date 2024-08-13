@@ -1,4 +1,4 @@
-input.value = '<h1>醉墨居士</h1>'
+input.value = '<h1>洞察哥</h1>'
 output.innerHTML = input.value
 opt = 0
 input.oninput = (evt) => {

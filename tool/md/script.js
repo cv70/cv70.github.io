@@ -1,4 +1,4 @@
-input.value = '# 醉墨居士'
+input.value = '# 洞察哥'
 output.innerHTML = marked.parse(input.value)
 opt = 0
 input.oninput = (evt) => {
