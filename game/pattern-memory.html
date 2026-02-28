@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pattern Memory</title>
+  <style>
+    :root{--size:90px;--gap:12px;}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f7f7f7;font-family:system-ui, Arial}
+    .wrap{max-width:800px;margin:0 auto;padding:16px}
+    h1{font-size:1.4rem;margin:6px 0 12px}
+    .tiles{display:grid;grid-template-columns:repeat(4, var(--size));gap:var(--gap);justify-content:center}
+    .tile{width:var(--size);height:var(--size);border-radius:12px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;background:#fff;transition:transform .2s}
+    .tile.active{box-shadow:0 0 0 4px rgba(0,0,0,.05);}
+    .tile.selected{outline:3px solid #2ecc71}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#fff;cursor:pointer}
+    #status{color:#555}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Pattern Memory</h1>
+    <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
+      <button id="startBtn">Start</button>
+      <span id="status">Press Start</span>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+
+  <script>
+    const shapes = ['◯','■','▲','★']; // circle, square, triangle, star
+    const tilesEl = document.getElementById('tiles');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+
+    let pattern = [];
+    let user = [];
+    let level = 0;
+    function reset(){ tilesEl.innerHTML=''; user=[]; level=0; pattern=[]; statusEl.textContent=''; }
+    function addTile(){ pattern.push(Math.floor(Math.random()*4)); level++; }
+    function renderTiles(active=false){ tilesEl.innerHTML=''; for(let i=0;i<4;i++){ const t=document.createElement('div'); t.className='tile'; t.textContent=shapes[i]; t.dataset.index=i; if(active) t.style.background='#fafafa'; t.addEventListener('click', ()=>{ onClick(i); }); tilesEl.appendChild(t); } }
+    function showPattern(cb){ let i=0; const seq = pattern; const interval=setInterval(()=>{ if(i>=seq.length){ clearInterval(interval); cb(); return; } const idx=seq[i++]; // highlight corresponding tile
+      const t = tilesEl.children[idx]; if(t){ t.classList.add('active'); setTimeout(()=> t.classList.remove('active'), 300); }
+    }, 500); }
+    function onClick(index){ if(user.length >= pattern.length) return; user.push(index); // temporary visual feedback
+      const t = tilesEl.children[index]; t.classList.add('selected'); setTimeout(()=> t.classList.remove('selected'), 150);
+      if(user.length === pattern.length){ // check result
+        const ok = user.every((v,i)=> v===pattern[i]);
+        statusEl.textContent = ok ? 'Correct! Next level' : 'Incorrect. Try again';
+        if(ok){ setTimeout(()=>{ level++; addTile(); startRound(); }, 800); } else { setTimeout(()=>{ startRound(true); }, 800); }
+      }
+    }
+    function startRound(resetOnly){ // reset or begin
+      if(!pattern.length){ addTile(); } // ensure at least one
+      renderTiles();
+      statusEl.textContent = `Level ${level+1}: Memorize the sequence`;
+      // show pattern then allow input
+      showPattern(()=> {
+        statusEl.textContent = 'Now reproduce the sequence by clicking tiles';
+        user = [];
+      });
+    }
+    startBtn.addEventListener('click', ()=>{ reset(); addTile(); renderTiles(true); startRound(false); });
+  </script>
+</body>
+</html>

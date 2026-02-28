@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Memory Grid</title>
+  <style>
+    :root{--bg:#0c1020;--panel:#1f2a44;--tile:#2b3a68;--fg:#eaf0f8;--accent:#69f0a0}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at 20% -10%, #2a1f55 0%, #0c1020 40%), #0c1020;color:var(--fg);font-family:Arial, sans-serif;min-height:100vh}
+    .wrap{max-width:900px;margin:20px auto;padding:16px}
+    h1{text-align:center;margin:6px 0 12px;font-size:28px}
+    .grid{display:grid;grid-template-columns:repeat(4,74px);grid-gap:10px;justify-content:center;margin:0 auto}
+    .tile{width:74px;height:74px;background:#223;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:white;font-weight:bold;font-size:22px;user-select:none;}
+    .tile.revealed{background:#fff;color:#111}
+    .tile.matched{visibility:hidden}
+    #controls{display:flex;gap:12px;justify-content:center;align-items:center;margin:14px 0}
+    input{padding:8px 10px;border-radius:6px;border:1px solid #555;background:#111;color:#fff;width:120px}
+    button{padding:9px 12px;border-radius:6px;border:0;background:#4CAF50;color:white;cursor:pointer}
+    #stats{text-align:center;margin-top:8px;color:#ddd}
+    #panel{background:#1b2540;border-radius:12px;padding:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Memory Grid</h1>
+    <div id="panel" style="text-align:center;margin-bottom:8px;">
+      <span class="stat">Score: <span id="score">0</span></span>
+      <span class="stat" style="margin-left:20px;">Time Left: <span id="timeLeft">60</span>s</span>
+      <span class="stat" style="margin-left:20px;">Pairs Found: <span id="pairs">0</span>/8</span>
+    </div>
+    <div class="grid" id="grid" aria-label="memory grid"></div>
+    <div id="feedback" class="stat" style="text-align:center;height:20px;margin-top:6px"></div>
+    <div id="footer" style="text-align:center;margin-top:8px;" >Tip: Remember the positions to match pairs.</div>
+  </div>
+  <script>
+    (function(){
+      const SIZE = 4; // 4x4
+      const PAIRS = 8; // 8 unique values
+      const REVEAL_MS = 1200;
+      const TOTAL_TIME = 60;
+      let grid = document.getElementById('grid');
+      let score = 0;
+      let high = Number(localStorage.getItem('memory_high')||'0');
+      let timeLeft = TOTAL_TIME;
+      let opened = [];
+      let matches = 0;
+      let lock = false;
+
+      function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+      function newBoard(){
+        grid.innerHTML='';
+        const values = [];
+        for(let i=0;i<PAIRS;i++){ const ch = String.fromCharCode(65+i); values.push(ch); values.push(ch); }
+        shuffle(values);
+        for(let i=0;i<SIZE*SIZE;i++){
+          const tile = document.createElement('div');
+          tile.className = 'tile';
+          tile.dataset.value = values[i]||'';
+          tile.textContent = values[i]||'';
+          grid.appendChild(tile);
+        }
+        // reveal all briefly
+        const tiles = grid.querySelectorAll('.tile');
+        tiles.forEach(t=>t.classList.add('revealed'));
+        setTimeout(()=>{ tiles.forEach(t=>t.classList.remove('revealed')); }, REVEAL_MS);
+        matches = 0; timeLeft = TOTAL_TIME; score = 0;
+        renderStats();
+        // enable clicking after reveal
+        lock = false;
+      }
+
+      function renderStats(){ document.getElementById('score').textContent = String(score); document.getElementById('timeLeft').textContent = String(timeLeft); document.getElementById('pairs').textContent = String(matches); }
+
+      grid.addEventListener('click', (e)=>{
+        if(lock) return; const t = e.target.closest('.tile'); if(!t) return; if(!t.dataset.value) return;
+        if(opened.includes(t)) return;
+        if(opened.length===0){ t.style.visibility='visible'; opened.push(t); }
+        else if(opened.length===1){ const a = opened[0]; const b = t; a.style.visibility='visible'; b.style.visibility='visible'; if(a.dataset.value===b.dataset.value){ a.classList.add('matched'); b.classList.add('matched'); score += 2; matches++; opened = []; } else { lock = true; setTimeout(()=>{ a.style.visibility='hidden'; b.style.visibility='hidden'; opened = []; lock = false; }, 500); } }
+        renderStats();
+        if(matches===PAIRS){ // win
+          const final = score + timeLeft;
+          if(final>high){ high = final; localStorage.setItem('memory_high', String(high)); }
+          document.getElementById('feedback').textContent = `Solved! Score: ${final} (high: ${high})`;
+        }
+      });
+
+      // Start game
+      newBoard();
+      // Auto timer countdown (educational only)
+      const countdown = setInterval(()=>{ timeLeft--; if(timeLeft<=0){ clearInterval(countdown); document.getElementById('feedback').textContent='Time up!'; } renderStats(); }, 1000);
+    })();
+  </script>
+</body>
+</html>

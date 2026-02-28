@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flashcards - Educational</title>
+  <style>
+    :root{--bg:#f6f6f6;--card:#ffffff;--accent:#4e86ff;--text:#111}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Arial}
+    .wrap{max-width:780px;margin:0 auto;padding:20px}
+    h1{font-size:1.6rem;margin:8px 0 12px}
+    .card{background:var(--card);border:1px solid #ddd;border-radius:12px;padding:20px;min-height:140px;display:flex;flex-direction:column;justify-content:center;gap:12px;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+    .question{font-size:1.1rem}
+    .input-row{display:flex;gap:8px;align-items:center}
+    input{flex:1 1 auto;padding:10px;border-radius:6px;border:1px solid #ccc}
+    button{padding:10px 14px;border-radius:6px;border:1px solid #888;background:#fff;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .hidden{display:none}
+    .feedback{font-size:.95rem;color:#333}
+    .score{font-weight:600}
+    @media (max-width: 600px){.wrap{padding:12px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" aria-label="flashcard-quiz">
+      <div class="question" id="question"></div>
+      <div class="input-row">
+        <input id="answer" placeholder="Type your answer here" autocomplete="off"/>
+        <button id="checkBtn">Check</button>
+        <button id="nextBtn" disabled>Next</button>
+      </div>
+      <div class="feedback" id="feedback"></div>
+      <div class="progress" id="progress" style="margin-top:8px;font-size:12px;color:#555"></div>
+    </div>
+  </div>
+
+  <script>
+    const cards = [
+      {q:"What is 2 + 2?", a:"4"},
+      {q:"What is the capital of France?", a:"Paris"},
+      {q:"What color do you get by mixing red and blue?", a:"Purple"},
+      {q:"What is the largest planet in our solar system?", a:"Jupiter"},
+      {q:"What gas do plants primarily absorb for photosynthesis?", a:"Carbon dioxide"},
+      {q:"What is the square root of 16?", a:"4"},
+      {q:"Which vitamin is primarily obtained from sunlight?", a:"Vitamin D"},
+      {q:"What is the capital of Japan?", a:"Tokyo"},
+      {q:"2 times 6 equals?", a:"12"},
+      {q:"How many continents are there?", a:"7"}
+    ];
+    let order = [];
+    let idx = 0;
+    let score = 0;
+
+    const questionEl = document.getElementById('question');
+    const answerEl = document.getElementById('answer');
+    const checkBtn = document.getElementById('checkBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const feedbackEl = document.getElementById('feedback');
+    const progressEl = document.getElementById('progress');
+
+    function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}}; 
+
+    function loadCard(i){
+      const c = cards[order[i]];
+      questionEl.textContent = `Q${i+1}: ${c.q}`;
+      answerEl.value = '';
+      feedbackEl.textContent = '';
+      nextBtn.disabled = true;
+      progressEl.textContent = `Card ${i+1} / ${cards.length} | Score: ${score}`;
+    }
+
+    function finish(){
+      questionEl.textContent = `Session finished. Final score: ${score} / ${cards.length}`;
+      answerEl.style.display = 'none';
+      checkBtn.style.display = 'none';
+      nextBtn.style.display = 'none';
+      progressEl.textContent = 'Tap Restart to try again.';
+      const restart = document.createElement('button');
+      restart.textContent = 'Restart';
+      restart.onclick = () => location.reload();
+      document.querySelector('.card').appendChild(restart);
+    }
+
+    function nextCard(){
+      idx++;
+      if(idx >= cards.length){ finish(); return; }
+      loadCard(idx);
+    }
+
+    // Initialize order
+    function start(){
+      order = cards.map((_,i)=>i);
+      shuffle(order);
+      idx = 0; score = 0;
+      loadCard(idx);
+    }
+
+    checkBtn.addEventListener('click', ()=>{
+      const user = (answerEl.value||'').trim().toLowerCase();
+      const correct = cards[order[idx]].a.toString().toLowerCase();
+      if(user === correct){
+        score++;
+        feedbackEl.textContent = 'Correct!';
+      }else{
+        feedbackEl.textContent = `Incorrect. Answer: ${cards[order[idx]].a}`;
+      }
+      nextBtn.disabled = false;
+      progressEl.textContent = `Card ${idx+1} / ${cards.length} | Score: ${score}`;
+    });
+
+    nextBtn.addEventListener('click', nextCard);
+
+    // Keyboard enter to check
+    answerEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ checkBtn.click(); } });
+
+    // Start when page loads
+    start();
+  </script>
+</body>
+</html>

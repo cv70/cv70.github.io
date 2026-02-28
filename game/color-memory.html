@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Color Memory</title>
+  <style>
+    :root{--bg:#f6f6f6;--card:#fff;--gap:10px;--size:90px;}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:system-ui,Arial}
+    .wrap{max-width:780px;margin:0 auto;padding:16px}
+    h1{font-size:1.4rem;margin:8px 0}
+    .board{display:grid;grid-template-columns:repeat(4, var(--size));gap:var(--gap);justify-content:center;margin:12px 0}
+    .card{width:var(--size);height:var(--size);border-radius:10px;cursor:pointer;border:1px solid #bbb;background:#eee;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.08)}
+    .card.revealed{background:var(--color);}
+    .card.matched{visibility: hidden;}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#fff;cursor:pointer}
+    #status{font-size:14px;color:#555}
+    @media (max-width: 700px){
+      :root{--size:70px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Color Memory</h1>
+    <div class="toolbar">
+      <button id="startBtn">Start</button>
+      <span id="status">Press Start to begin</span>
+    </div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <script>
+    // 8 pairs of colors
+    const colors = [
+      '#e74c3c','#2ecc71','#3498db','#f1c40f',
+      '#9b59b6','#e67e22','#1abc9c','#34495e'
+    ];
+    let deck = [];
+    let first = null, lock = false, matches = 0, moves = 0;
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } }
+    function newDeck(){
+      deck = colors.concat(colors).slice();
+      shuffle(deck);
+      boardEl.innerHTML = '';
+      deck.forEach((col, i)=>{
+        const d = document.createElement('div');
+        d.className = 'card';
+        d.style.background = '#ddd';
+        d.dataset.color = col;
+        d.addEventListener('click', ()=>{ onCardClick(d); });
+        boardEl.appendChild(d);
+      });
+      // reveal all for 2 seconds
+      revealAll(true);
+      setTimeout(()=> revealAll(false), 2000);
+      statusEl.textContent = 'Memorize the colors and find matches.';
+      matches = 0; moves = 0;
+      first = null;
+    }
+    function revealAll(show){
+      boardEl.querySelectorAll('.card').forEach((c)=>{
+        c.classList.toggle('revealed', show);
+        c.style.background = show ? c.dataset.color : '#ddd';
+      });
+    }
+    function onCardClick(card){
+      if(lock) return;
+      const color = card.dataset.color;
+      if(card.classList.contains('revealed')) return;
+      card.classList.add('revealed');
+      card.style.background = color;
+      if(!first){ first = card; return; }
+      // second card
+      lock = true;
+      moves++;
+      if(first.dataset.color === color){
+        // match
+        first.classList.add('matched');
+        card.classList.add('matched');
+        first = null; lock = false; matches++;
+        if(matches === deck.length/2){
+          statusEl.textContent = `Completed in ${moves} moves!`;
+        } else {
+          statusEl.textContent = `Matches: ${matches} / ${deck.length/2}, Moves: ${moves}`;
+          lock = false;
+        }
+      } else {
+        // not a match
+        setTimeout(()=>{
+          first.classList.remove('revealed'); first.style.background='#ddd';
+          card.classList.remove('revealed'); card.style.background='#ddd';
+          first = null; lock = false;
+          statusEl.textContent = `No match. Moves: ${moves}`;
+        }, 400);
+      }
+    }
+
+    startBtn.addEventListener('click', ()=>{ newDeck(); statusEl.textContent = 'Game started'; });
+
+    // Auto-start on first click
+    function autoStartIfNeeded(){ if(deck.length===0){ newDeck(); } }
+    autoStartIfNeeded();
+  </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shape Puzzle</title>
+  <style>
+    :root{--bg:#0a0f1a;--panel:#1b2540;--tile:#2a2f5a;--fg:#eaf0ff;--accent:#ffd166}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at 20% -10%, #2a1744 0%, #0a0f1a 50%), #0a0f1a;color:var(--fg);font-family:Arial, sans-serif}
+    .wrap{max-width:860px;margin:20px auto;padding:12px}
+    h1{text-align:center;margin:6px 0 12px;font-size:28px}
+    #board{display:grid;grid-template-columns:repeat(4,90px);grid-gap:12px;justify-content:center;margin:0 auto}
+    .tile{width:90px;height:90px;background:var(--tile);border-radius:12px;display:flex;align-items:center;justify-content:center;border:1px solid #333;cursor:pointer}
+    .shape{ width:48px; height:48px; display:block; }
+    .circle{ width:48px; height:48px; border-radius:50%; background:#e74c3c; }
+    .square{ width:48px; height:48px; background:#2e86de; display:block; }
+    .triangle{ width:0; height:0; border-left:24px solid transparent; border-right:24px solid transparent; border-bottom:48px solid #f39c12; }
+    #panel{ display:flex; gap:12px; justify-content:center; align-items:center; padding:8px 0; }
+    button{ padding:8px 12px; border-radius:6px; border:0; background:#4CAF50; color:white; cursor:pointer; }
+    #stats{ text-align:center; margin-top:6px; color:#ddd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Shape Puzzle</h1>
+    <div id="panel">
+      <span>Moves: <span id="moves">0</span></span>
+      <span>Time: <span id="time">60</span>s</span>
+      <span>Score: <span id="score">0</span></span>
+      <button id="restart">Restart</button>
+    </div>
+    <div id="board" aria-label="shape puzzle board"></div>
+    <div id="feedback" class="stats" style="text-align:center;margin-top:6px"></div>
+  </div>
+  <script>
+    (function(){
+      const SIZE = 4;
+      const TOTAL = SIZE*SIZE; // 16
+      const SHAPES = ['circle','square','triangle'];
+      const TOTAL_TIME = 60;
+      let board = Array.from({length: TOTAL}, ()=> null);
+      let emptyIndex = TOTAL - 1;
+      let moves = 0;
+      let score = 0;
+      let timeLeft = TOTAL_TIME;
+      let timer = null;
+      const boardEl = document.getElementById('board');
+      const movesEl = document.getElementById('moves');
+      const timeEl = document.getElementById('time');
+      const scoreEl = document.getElementById('score');
+      const restartBtn = document.getElementById('restart');
+      const feedback = document.getElementById('feedback');
+
+      function renderBoard(){ boardEl.innerHTML=''; for(let i=0;i<TOTAL;i++){
+          const cell = document.createElement('div'); cell.className='tile'; cell.dataset.idx = i;
+          if(i===TOTAL-1){ cell.style.visibility='hidden'; boardEl.appendChild(cell); continue; }
+          const shape = board[i]; const inner = document.createElement('div'); inner.className='shape ' + shape; cell.appendChild(inner); boardEl.appendChild(cell);
+        }
+      }
+
+      function scramble(movesCount=120){ // perform random valid moves from solved state
+        for(let i=0;i<TOTAL-1;i++){ board[i] = SHAPES[i%3]; }
+        board[TOTAL-1] = null; emptyIndex = TOTAL-1;
+        for(let k=0;k<movesCount;k++){
+          const adj = getAdjacent(emptyIndex); if(adj.length===0) continue; const pick = adj[Math.floor(Math.random()*adj.length)];
+          board[emptyIndex] = board[pick]; board[pick] = null; emptyIndex = pick;
+        }
+      }
+      function getAdjacent(idx){ const r = Math.floor(idx/4), c = idx%4; const out=[]; if(r>0) out.push(idx-4); if(r<3) out.push(idx+4); if(c>0) out.push(idx-1); if(c<3) out.push(idx+1); return out; }
+      function clickTile(e){ if(!e.target.closest('.tile')) return; const t = e.target.closest('.tile'); const i = Number(t.dataset.idx); if(board[i]===null) return; if(isAdjacent(i, emptyIndex)){
+          board[emptyIndex] = board[i]; board[i] = null; emptyIndex = i; moves++; renderBoard(); score += 1; scoreEl.textContent = String(score);
+          if(isSolved()){ finish(); }
+        }}
+      function isAdjacent(a,b){ const ra=Math.floor(a/4), ca=a%4, rb=Math.floor(b/4), cb=b%4; return Math.abs(ra-rb)+Math.abs(ca-cb)===1; }
+      function isSolved(){ for(let i=0;i<TOTAL-1;i++){ if(board[i] !== SHAPES[i%3]) return false; } return board[TOTAL-1]===null; }
+      function finish(){ clearInterval(timer); feedback.textContent = 'Solved!'; const final = score + timeLeft + 100; score = final; scoreEl.textContent = score; const high = Number(localStorage.getItem('shape_high')||'0'); if(final>high){ localStorage.setItem('shape_high', String(final)); } }
+      function tick(){ timeLeft--; timeEl.textContent = String(timeLeft); if(timeLeft<=0){ clearInterval(timer); feedback.textContent='Time up!'; }}
+
+      // Init
+      restartBtn.addEventListener('click', ()=>{ clearInterval(timer); moves=0; score=0; timeLeft = TOTAL_TIME; movesEl.textContent = '0'; timeEl.textContent = String(timeLeft); scoreEl.textContent = '0'; feedback.textContent=''; scramble(); renderBoard(); timer = setInterval(tick, 1000); boardEl.addEventListener('click', clickTile); });
+      // Start game
+      scramble(); renderBoard(); timer = setInterval(tick, 1000); boardEl.addEventListener('click', clickTile);
+    })();
+  </script>
+</body>
+</html>
