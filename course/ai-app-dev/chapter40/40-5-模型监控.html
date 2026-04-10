@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.5 模型监控 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-MLOps概述.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.5 模型监控</h1>
+      <p class="subtitle">生产环境中模型性能的持续追踪</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解模型监控的重要性和核心指标</li>
+        <li>掌握数据漂移和概念漂移的检测方法</li>
+        <li>学会设计完整的监控告警体系</li>
+        <li>了解模型监控工具和最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="模型监控概念图" class="card-image">
+      <h3 class="card-title">为什么需要模型监控</h3>
+      <p class="card-text">
+        机器学习模型部署后并非一劳永逸。数据分布变化、用户行为改变等因素会导致<strong>模型性能退化</strong>。<strong>模型监控</strong>帮助我们及时发现问题，确保模型持续提供高质量的预测服务。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 监控指标体系</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">系统指标</h3>
+          <p class="card-text">延迟、吞吐量、错误率、资源使用</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">模型指标</h3>
+          <p class="card-text">准确率、预测分布、置信度</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">数据指标</h3>
+          <p class="card-text">数据漂移、特征分布、数据质量</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 数据漂移类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>漂移类型</th>
+            <th>定义</th>
+            <th>原因</th>
+            <th>检测方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>数据漂移</td>
+            <td>输入数据分布变化</td>
+            <td>用户群体变化、季节性</td>
+            <td>KS检验、PSI</td>
+          </tr>
+          <tr>
+            <td>概念漂移</td>
+            <td>输入输出关系变化</td>
+            <td>市场环境、趋势变化</td>
+            <td>准确率监控、ADWIN</td>
+          </tr>
+          <tr>
+            <td>标签漂移</td>
+            <td>输出标签分布变化</td>
+            <td>业务策略调整</td>
+            <td>标签分布监控</td>
+          </tr>
+          <tr>
+            <td>特征漂移</td>
+            <td>单个特征分布变化</td>
+            <td>数据源变更</td>
+            <td>特征级统计检验</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 漂移检测实现</h2>
+      <div class="code-block">
+import numpy as np
+from scipy import stats
+
+def calculate_psi(expected, actual, buckets=10):
+    """计算群体稳定性指标(PSI)"""
+    def scale_range(input, min, max):
+        input += -(np.min(input))
+        input /= np.max(input) / (max - min)
+        input += min
+        return input
+
+    breakpoints = np.arange(0, buckets + 1) / buckets * 100
+
+    if len(np.unique(expected)) < buckets:
+        breakpoints = np.percentile(expected, np.unique(breakpoints))
+
+    expected_percents = np.histogram(expected, breakpoints)[0] / len(expected)
+    actual_percents = np.histogram(actual, breakpoints)[0] / len(actual)
+
+    # 避免除零
+    expected_percents = np.where(expected_percents == 0, 0.0001, expected_percents)
+    actual_percents = np.where(actual_percents == 0, 0.0001, actual_percents)
+
+    psi_value = np.sum((actual_percents - expected_percents) *
+                       np.log(actual_percents / expected_percents))
+
+    return psi_value
+
+# PSI解读
+# < 0.1: 无显著变化
+# 0.1 - 0.25: 需要关注
+# > 0.25: 显著变化，需要行动
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">监控最佳实践</div>
+        <p>监控应该从<strong>基线建立</strong>开始，记录模型部署初期的各项指标分布。设置合理的<strong>告警阈值</strong>，避免过于敏感导致告警疲劳，也不可过于宽松导致问题遗漏。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 监控告警配置</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">告警规则示例</h3>
+          <div class="code-block">
+# Prometheus告警规则
+groups:
+  - name: model_alerts
+    rules:
+      - alert: ModelAccuracyDrop
+        expr: |
+          model_accuracy < 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "模型准确率下降"
+
+      - alert: DataDriftDetected
+        expr: |
+          data_psi > 0.25
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "检测到显著数据漂移"
+
+      - alert: HighLatency
+        expr: |
+          p99_prediction_latency > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "预测延迟过高"
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">监控仪表盘</h3>
+          <div class="code-block">
+# 关键监控面板
+dashboards:
+  - name: Model Performance
+    panels:
+      - 实时准确率曲线
+      - 预测分布直方图
+      - 置信度分布
+      - 每日预测量
+
+  - name: Data Quality
+    panels:
+      - 特征分布对比
+      - PSI趋势图
+      - 缺失值统计
+      - 异常值检测
+
+  - name: System Health
+    panels:
+      - 请求延迟P99
+      - 错误率趋势
+      - GPU/CPU使用率
+      - 内存消耗
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 自动化响应机制</h2>
+      <div class="code-block">
+def handle_drift_alert(alert):
+    """处理漂移告警的自动化响应"""
+    if alert.type == "data_drift":
+        # 1. 记录事件
+        log_event("data_drift", alert.details)
+
+        # 2. 触发数据收集
+        trigger_data_collection()
+
+        # 3. 通知相关团队
+        notify_team("data_team", alert)
+
+    elif alert.type == "concept_drift":
+        # 1. 自动触发重训练
+        trigger_retraining(
+            reason="concept_drift_detected",
+            priority="high"
+        )
+
+        # 2. 降低模型权重
+        adjust_model_weight(factor=0.5)
+
+    elif alert.type == "accuracy_drop":
+        # 1. 回退到上一稳定版本
+        if alert.severity == "critical":
+            rollback_model()
+
+        # 2. 启动人工审核流程
+        create_review_ticket(alert)
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="监控系统">
+      <div class="caption">图：完善的监控体系保障模型在生产环境的稳定运行</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 模型监控包括系统、模型和数据三个维度</li>
+            <li>• 数据漂移和概念漂移是模型退化的主要原因</li>
+            <li>• PSI是常用的漂移检测指标</li>
+            <li>• 自动化响应机制可快速处理告警事件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-4-CI-CD流水线.html">← 上一节</a>
+      <a href="../chapter41/41-1-Function-Calling.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

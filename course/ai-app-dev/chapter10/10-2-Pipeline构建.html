@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.2 Pipeline构建 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Scikit-learn-API设计.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.2 Pipeline构建</h1>
+      <p class="subtitle">串联机器学习工作流</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Pipeline的作用与优势</li>
+        <li>掌握Pipeline和FeatureUnion的使用</li>
+        <li>学会使用ColumnTransformer处理异构数据</li>
+        <li>了解Pipeline与网格搜索的结合</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=800" alt="Pipeline概念图" class="card-image">
+      <h3 class="card-title">为什么使用Pipeline</h3>
+      <p class="card-text">
+        <strong>Pipeline</strong>将多个数据处理步骤和模型串联成一个整体，避免数据泄露，
+        简化代码，便于交叉验证和超参数调优。它是构建可复现机器学习流程的关键工具。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Pipeline工作流程</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center; padding: 1rem;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📥</div>
+          <h3 class="card-title">原始数据</h3>
+        </div>
+        <div class="card" style="text-align: center; padding: 1rem;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔄</div>
+          <h3 class="card-title">预处理</h3>
+        </div>
+        <div class="card" style="text-align: center; padding: 1rem;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧠</div>
+          <h3 class="card-title">模型训练</h3>
+        </div>
+        <div class="card" style="text-align: center; padding: 1rem;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📤</div>
+          <h3 class="card-title">预测输出</h3>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 基本Pipeline使用</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.pipeline <span class="keyword">import</span> Pipeline
+<span class="keyword">from</span> sklearn.preprocessing <span class="keyword">import</span> StandardScaler
+<span class="keyword">from</span> sklearn.decomposition <span class="keyword">import</span> PCA
+<span class="keyword">from</span> sklearn.ensemble <span class="keyword">import</span> RandomForestClassifier
+
+<span class="comment"># 创建Pipeline</span>
+pipeline = Pipeline([
+    (<span class="string">'scaler'</span>, StandardScaler()),      <span class="comment"># 步骤1: 标准化</span>
+    (<span class="string">'pca'</span>, PCA(n_components=<span class="number">10</span>)),       <span class="comment"># 步骤2: 降维</span>
+    (<span class="string">'classifier'</span>, RandomForestClassifier())  <span class="comment"># 步骤3: 分类</span>
+])
+
+<span class="comment"># 训练</span>
+pipeline.fit(X_train, y_train)
+
+<span class="comment"># 预测</span>
+y_pred = pipeline.predict(X_test)
+
+<span class="comment"># 评估</span>
+score = pipeline.score(X_test, y_test)
+
+<span class="comment"># 访问Pipeline中的步骤</span>
+pipeline.named_steps[<span class="string">'scaler'</span>]
+pipeline[<span class="string">'classifier'</span>]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> ColumnTransformer处理异构数据</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.compose <span class="keyword">import</span> ColumnTransformer
+<span class="keyword">from</span> sklearn.preprocessing <span class="keyword">import</span> OneHotEncoder, StandardScaler
+
+<span class="comment"># 定义数值型和类别型特征</span>
+numeric_features = [<span class="string">'age'</span>, <span class="string">'income'</span>]
+categorical_features = [<span class="string">'gender'</span>, <span class="string">'city'</span>]
+
+<span class="comment"># 创建预处理变换器</span>
+preprocessor = ColumnTransformer(
+    transformers=[
+        (<span class="string">'num'</span>, StandardScaler(), numeric_features),
+        (<span class="string">'cat'</span>, OneHotEncoder(), categorical_features)
+    ]
+)
+
+<span class="comment"># 组合成完整Pipeline</span>
+pipeline = Pipeline([
+    (<span class="string">'preprocessor'</span>, preprocessor),
+    (<span class="string">'classifier'</span>, RandomForestClassifier())
+])
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Pipeline与网格搜索</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> GridSearchCV
+
+<span class="comment"># 定义参数网格（使用步骤名__参数名格式）</span>
+param_grid = {
+    <span class="string">'pca__n_components'</span>: [<span class="number">5</span>, <span class="number">10</span>, <span class="number">20</span>],
+    <span class="string">'classifier__n_estimators'</span>: [<span class="number">50</span>, <span class="number">100</span>, <span class="number">200</span>],
+    <span class="string">'classifier__max_depth'</span>: [<span class="number">5</span>, <span class="number">10</span>, <span class="keyword">None</span>]
+}
+
+<span class="comment"># 网格搜索</span>
+grid_search = GridSearchCV(pipeline, param_grid, cv=<span class="number">5</span>)
+grid_search.fit(X_train, y_train)
+
+<span class="keyword">print</span>(<span class="string">f'最佳参数: {grid_search.best_params_}'</span>)
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">避免数据泄露</div>
+        <p>使用Pipeline进行交叉验证时，每个fold的预处理只在训练集上进行，避免了测试集信息泄露到训练过程中。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="Pipeline流程">
+      <div class="caption">图：Pipeline将多个步骤串联成完整工作流</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Pipeline串联多个处理步骤，形成完整工作流</li>
+            <li>• 避免数据泄露，确保交叉验证正确性</li>
+            <li>• ColumnTransformer处理异构数据类型</li>
+            <li>• 与GridSearchCV结合实现全流程调优</li>
+            <li>• 参数访问格式：步骤名__参数名</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-1-Scikit-learn-API设计.html">← 上一节</a>
+      <a href="10-3-模型持久化.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

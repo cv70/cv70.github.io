@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4.4 异步编程基础 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="4-1-Python核心语法回顾.html">第四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>4.4 异步编程基础</h1>
+      <p class="subtitle">高效处理并发任务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解同步与异步的区别</li>
+        <li>掌握async/await语法</li>
+        <li>学会使用asyncio库</li>
+        <li>了解异步在AI API调用中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 同步 vs 异步</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">同步执行</h3>
+          <p class="card-text">任务按顺序执行，一个完成后再执行下一个</p>
+          <div class="code-block">
+# 同步请求API
+import requests
+import time
+
+def fetch_data(urls):
+    results = []
+    for url in urls:
+        response = requests.get(url)
+        results.append(response.json())
+    return results
+
+# 如果每个请求1秒，10个URL需要10秒
+          </div>
+          <div style="text-align: center; margin-top: 1rem;">
+            <span class="badge badge-error">效率低</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">异步执行</h3>
+          <p class="card-text">多个任务同时进行，不阻塞等待</p>
+          <div class="code-block">
+# 异步请求API
+import aiohttp
+import asyncio
+
+async def fetch_data(urls):
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_one(session, url) for url in urls]
+        return await asyncio.gather(*tasks)
+
+async def fetch_one(session, url):
+    async with session.get(url) as response:
+        return await response.json()
+
+# 10个URL可能只需1-2秒
+          </div>
+          <div style="text-align: center; margin-top: 1rem;">
+            <span class="badge badge-success">效率高</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> async/await语法</h2>
+      <div class="code-block">
+import asyncio
+
+# 定义异步函数
+async def say_hello(name, delay):
+    print(f"Hello {name}!")
+    await asyncio.sleep(delay)  # 模拟IO操作
+    print(f"Goodbye {name}!")
+    return f"Done: {name}"
+
+# 运行异步函数
+async def main():
+    # 顺序执行
+    result1 = await say_hello("Alice", 1)
+    result2 = await say_hello("Bob", 1)
+    # 总耗时: 2秒
+
+    # 并发执行
+    results = await asyncio.gather(
+        say_hello("Alice", 1),
+        say_hello("Bob", 1),
+        say_hello("Charlie", 1)
+    )
+    # 总耗时: 1秒（并发）
+    print(results)
+
+# 运行事件循环
+asyncio.run(main())
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 异步HTTP请求</h2>
+      <div class="card">
+        <h3 class="card-title">调用AI API的最佳实践</h3>
+        <div class="code-block">
+import aiohttp
+import asyncio
+from typing import List
+
+class AsyncOpenAI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.openai.com/v1"
+
+    async def chat_completion(
+        self,
+        session: aiohttp.ClientSession,
+        messages: List[dict]
+    ):
+        async with session.post(
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": "gpt-3.5-turbo",
+                "messages": messages
+            }
+        ) as response:
+            return await response.json()
+
+    async def batch_chat(self, prompts: List[str]):
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self.chat_completion(
+                    session,
+                    [{"role": "user", "content": prompt}]
+                )
+                for prompt in prompts
+            ]
+            return await asyncio.gather(*tasks)
+
+# 使用
+client = AsyncOpenAI("your-api-key")
+results = asyncio.run(client.batch_chat([
+    "What is AI?",
+    "Explain machine learning",
+    "What is deep learning?"
+]))
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 异步编程注意事项</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <ul style="padding-left: 1.5rem;">
+            <li><strong>不要阻塞事件循环：</strong>CPU密集型任务应该用多进程</li>
+            <li><strong>异常处理：</strong>使用try/except包装await调用</li>
+            <li><strong>超时控制：</strong>使用asyncio.wait_for设置超时</li>
+            <li><strong>并发限制：</strong>使用asyncio.Semaphore控制并发数</li>
+          </ul>
+        </div>
+      </div>
+      <div class="code-block">
+# 并发限制示例
+async def limited_concurrency(urls, max_concurrent=5):
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def fetch_with_limit(session, url):
+        async with semaphore:
+            return await fetch_one(session, url)
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_with_limit(session, url) for url in urls]
+        return await asyncio.gather(*tasks)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 异步编程适合IO密集型任务</li>
+            <li>• async/await是Python原生异步语法</li>
+            <li>• asyncio.gather实现并发执行</li>
+            <li>• AI API调用推荐使用异步方式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="4-3-函数式编程特性.html">← 上一节</a>
+      <a href="../chapter05/5-1-NumPy数组操作.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

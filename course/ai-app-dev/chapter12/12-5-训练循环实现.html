@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.5 训练循环实现 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="12-1-Tensor操作基础.html">第十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>12.5 训练循环实现</h1>
+      <p class="subtitle">完整的模型训练流程</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握完整的模型训练流程</li>
+        <li>学会使用损失函数和优化器</li>
+        <li>了解模型保存与加载方法</li>
+        <li>掌握训练过程的监控与调试</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800" alt="神经网络训练" class="card-image">
+      <h3 class="card-title">训练循环概述</h3>
+      <p class="card-text">
+        <strong>训练循环</strong>是深度学习的核心流程，包括前向传播、计算损失、反向传播和参数更新四个步骤。
+        一个完整的训练流程还包括验证评估、模型保存、早停策略等。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 训练流程四步骤</h2>
+      <div class="steps">
+        <div class="step active">
+          <div class="step-number">1</div>
+          <div class="step-label">前向传播</div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-label">计算损失</div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-label">反向传播</div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-label">参数更新</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 损失函数选择</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>损失函数</th>
+            <th>适用场景</th>
+            <th>PyTorch实现</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>交叉熵损失</td>
+            <td>多分类问题</td>
+            <td>nn.CrossEntropyLoss()</td>
+          </tr>
+          <tr>
+            <td>二元交叉熵</td>
+            <td>二分类问题</td>
+            <td>nn.BCELoss() / nn.BCEWithLogitsLoss()</td>
+          </tr>
+          <tr>
+            <td>均方误差</td>
+            <td>回归问题</td>
+            <td>nn.MSELoss()</td>
+          </tr>
+          <tr>
+            <td>平均绝对误差</td>
+            <td>回归问题（鲁棒）</td>
+            <td>nn.L1Loss()</td>
+          </tr>
+          <tr>
+            <td>负对数似然</td>
+            <td>多分类（配合LogSoftmax）</td>
+            <td>nn.NLLLoss()</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 优化器选择</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch.optim <span class="keyword">as</span> optim
+
+<span class="comment"># SGD（随机梯度下降）</span>
+optimizer = optim.SGD(model.parameters(), lr=<span class="number">0.01</span>, momentum=<span class="number">0.9</span>)
+
+<span class="comment"># Adam（自适应学习率）</span>
+optimizer = optim.Adam(model.parameters(), lr=<span class="number">0.001</span>, betas=(<span class="number">0.9</span>, <span class="number">0.999</span>))
+
+<span class="comment"># AdamW（带权重衰减的Adam）</span>
+optimizer = optim.AdamW(model.parameters(), lr=<span class="number">0.001</span>, weight_decay=<span class="number">0.01</span>)
+
+<span class="comment"># RMSprop</span>
+optimizer = optim.RMSprop(model.parameters(), lr=<span class="number">0.01</span>)
+
+<span class="comment"># 学习率调度器</span>
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=<span class="number">10</span>, gamma=<span class="number">0.1</span>)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=<span class="number">100</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整训练循环</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">import</span> torch.optim <span class="keyword">as</span> optim
+<span class="keyword">from</span> tqdm <span class="keyword">import</span> tqdm
+
+<span class="keyword">def</span> <span class="function">train_model</span>(model, train_loader, val_loader, epochs, device):
+    <span class="string">"""完整训练函数"""</span>
+
+    <span class="comment"># 定义损失函数和优化器</span>
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=<span class="number">0.001</span>)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=<span class="number">5</span>, gamma=<span class="number">0.1</span>)
+
+    model = model.to(device)
+    best_val_acc = <span class="number">0.0</span>
+
+    <span class="keyword">for</span> epoch <span class="keyword">in</span> range(epochs):
+        <span class="comment"># ========== 训练阶段 ==========</span>
+        model.train()
+        train_loss = <span class="number">0.0</span>
+        train_correct = <span class="number">0</span>
+        train_total = <span class="number">0</span>
+
+        <span class="keyword">for</span> batch_idx, (data, targets) <span class="keyword">in</span> enumerate(tqdm(train_loader, desc=<span class="string">f'Epoch {epoch+1}'</span>)):
+            data, targets = data.to(device), targets.to(device)
+
+            <span class="comment"># 1. 清零梯度</span>
+            optimizer.zero_grad()
+
+            <span class="comment"># 2. 前向传播</span>
+            outputs = model(data)
+            loss = criterion(outputs, targets)
+
+            <span class="comment"># 3. 反向传播</span>
+            loss.backward()
+
+            <span class="comment"># 4. 参数更新</span>
+            optimizer.step()
+
+            <span class="comment"># 统计</span>
+            train_loss += loss.item()
+            _, predicted = outputs.max(<span class="number">1</span>)
+            train_total += targets.size(<span class="number">0</span>)
+            train_correct += predicted.eq(targets).sum().item()
+
+        scheduler.step()
+
+        <span class="comment"># ========== 验证阶段 ==========</span>
+        model.eval()
+        val_loss = <span class="number">0.0</span>
+        val_correct = <span class="number">0</span>
+        val_total = <span class="number">0</span>
+
+        <span class="keyword">with</span> torch.no_grad():
+            <span class="keyword">for</span> data, targets <span class="keyword">in</span> val_loader:
+                data, targets = data.to(device), targets.to(device)
+                outputs = model(data)
+                loss = criterion(outputs, targets)
+
+                val_loss += loss.item()
+                _, predicted = outputs.max(<span class="number">1</span>)
+                val_total += targets.size(<span class="number">0</span>)
+                val_correct += predicted.eq(targets).sum().item()
+
+        <span class="comment"># 打印结果</span>
+        <span class="keyword">print</span>(<span class="string">f'Epoch [{epoch+1}/{epochs}]'</span>)
+        <span class="keyword">print</span>(<span class="string">f'Train Loss: {train_loss/len(train_loader):.4f}, '</span>
+              <span class="string">f'Train Acc: {100.*train_correct/train_total:.2f}%'</span>)
+        <span class="keyword">print</span>(<span class="string">f'Val Loss: {val_loss/len(val_loader):.4f}, '</span>
+              <span class="string">f'Val Acc: {100.*val_correct/val_total:.2f}%'</span>)
+
+        <span class="comment"># 保存最佳模型</span>
+        val_acc = val_correct / val_total
+        <span class="keyword">if</span> val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), <span class="string">'best_model.pth'</span>)
+
+    <span class="keyword">print</span>(<span class="string">f'Best Validation Accuracy: {best_val_acc*100:.2f}%'</span>)
+    <span class="keyword">return</span> model
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 模型保存与加载</h2>
+      <div class="code-block">
+<span class="comment"># 保存模型参数（推荐）</span>
+torch.save(model.state_dict(), <span class="string">'model_weights.pth'</span>)
+
+<span class="comment"># 加载模型参数</span>
+model.load_state_dict(torch.load(<span class="string">'model_weights.pth'</span>))
+model.eval()  <span class="comment"># 切换到评估模式</span>
+
+<span class="comment"># 保存完整模型（包含结构）</span>
+torch.save(model, <span class="string">'complete_model.pth'</span>)
+
+<span class="comment"># 加载完整模型</span>
+model = torch.load(<span class="string">'complete_model.pth'</span>)
+
+<span class="comment"># 保存训练检查点（断点续训）</span>
+checkpoint = {
+    <span class="string">'epoch'</span>: epoch,
+    <span class="string">'model_state_dict'</span>: model.state_dict(),
+    <span class="string">'optimizer_state_dict'</span>: optimizer.state_dict(),
+    <span class="string">'loss'</span>: loss,
+}
+torch.save(checkpoint, <span class="string">'checkpoint.pth'</span>)
+
+<span class="comment"># 加载检查点</span>
+model.load_state_dict(checkpoint[<span class="string">'model_state_dict'</span>])
+optimizer.load_state_dict(checkpoint[<span class="string">'optimizer_state_dict'</span>])
+start_epoch = checkpoint[<span class="string">'epoch'</span>]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> train()与eval()模式区别</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>模式</th>
+            <th>Dropout</th>
+            <th>BatchNorm</th>
+            <th>梯度计算</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>train()</td>
+            <td>启用（随机丢弃）</td>
+            <td>使用批次统计量更新</td>
+            <td>启用</td>
+          </tr>
+          <tr>
+            <td>eval()</td>
+            <td>禁用（保留所有神经元）</td>
+            <td>使用固定的均值和方差</td>
+            <td>可启用（配合no_grad禁用）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>训练时务必调用model.train()，验证/测试时调用model.eval()。这会影响Dropout和BatchNorm的行为。推理时建议同时使用with torch.no_grad()来节省内存。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=800" alt="深度学习训练">
+      <div class="caption">图：训练循环是深度学习的核心流程</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 训练循环包括：前向传播、计算损失、反向传播、参数更新</li>
+            <li>• 选择合适的损失函数：分类用CrossEntropy，回归用MSE</li>
+            <li>• Adam是最常用的优化器，适合大多数场景</li>
+            <li>• model.train()和model.eval()切换训练/评估模式</li>
+            <li>• 使用torch.save/load进行模型保存和加载</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="12-4-数据加载器.html">← 上一节</a>
+      <a href="../chapter13/13-1-卷积操作原理.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

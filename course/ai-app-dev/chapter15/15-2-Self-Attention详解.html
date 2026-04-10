@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.2 Self-Attention详解 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-注意力机制原理.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.2 Self-Attention详解</h1>
+      <p class="subtitle">自注意力机制的核心原理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解Self-Attention的工作原理</li>
+        <li>掌握Q、K、V矩阵的计算过程</li>
+        <li>理解缩放点积注意力的必要性</li>
+        <li>能够实现Self-Attention层</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800" alt="神经网络结构" class="card-image">
+      <h3 class="card-title">什么是Self-Attention</h3>
+      <p class="card-text">
+        <strong>自注意力机制（Self-Attention）</strong>是注意力机制的一种特殊形式，其中Query、Key和Value都来自同一个输入序列。
+        这意味着序列中的每个元素都可以与序列中的其他所有元素进行交互，从而捕捉序列内部的依赖关系。
+        Self-Attention是Transformer架构的核心，也是BERT、GPT等模型的基础。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Self-Attention工作流程</h2>
+      <div class="steps">
+        <div class="step completed">
+          <div class="step-number">1</div>
+          <div class="step-label">线性投影</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">2</div>
+          <div class="step-label">计算相似度</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">3</div>
+          <div class="step-label">缩放归一化</div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-label">加权聚合</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> Self-Attention数学公式</h2>
+      <div class="code-block">
+<span class="comment"># Self-Attention（缩放点积注意力）</span>
+
+<span class="comment"># 输入：X [batch_size, seq_len, d_model]</span>
+
+<span class="comment"># 步骤1：线性投影生成Q、K、V</span>
+Q = X · W<sup>Q</sup>    <span class="comment"># [batch, seq_len, d_k]</span>
+K = X · W<sup>K</sup>    <span class="comment"># [batch, seq_len, d_k]</span>
+V = X · W<sup>V</sup>    <span class="comment"># [batch, seq_len, d_v]</span>
+
+<span class="comment"># 步骤2：计算注意力分数（缩放点积）</span>
+Scores = Q · K<sup>T</sup> / √d<sub>k</sub>    <span class="comment"># [batch, seq_len, seq_len]</span>
+
+<span class="comment"># 步骤3：Softmax归一化</span>
+Attention = softmax(Scores)    <span class="comment"># [batch, seq_len, seq_len]</span>
+
+<span class="comment"># 步骤4：加权求和</span>
+Output = Attention · V    <span class="comment"># [batch, seq_len, d_v]</span>
+
+<span class="comment"># 为什么需要缩放？</span>
+<span class="comment"># 当d_k很大时，点积结果会很大，导致softmax梯度趋近于0</span>
+<span class="comment"># 缩放因子√d_k使梯度更稳定</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> PyTorch实现Self-Attention</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">import</span> math
+
+<span class="keyword">class</span> <span class="function">SelfAttention</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, d_model, d_k=<span class="keyword">None</span>, d_v=<span class="keyword">None</span>):
+        <span class="function">super</span>().__init__()
+        self.d_model = d_model
+        self.d_k = d_k <span class="keyword">or</span> d_model
+        self.d_v = d_v <span class="keyword">or</span> d_model
+
+        <span class="comment"># Q、K、V的线性投影</span>
+        self.W_q = nn.Linear(d_model, self.d_k)
+        self.W_k = nn.Linear(d_model, self.d_k)
+        self.W_v = nn.Linear(d_model, self.d_v)
+
+        <span class="comment"># 输出投影</span>
+        self.W_o = nn.Linear(self.d_v, d_model)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x, mask=<span class="keyword">None</span>):
+        batch_size, seq_len, _ = x.size()
+
+        <span class="comment"># 计算Q、K、V</span>
+        Q = self.W_q(x)  <span class="comment"># [batch, seq, d_k]</span>
+        K = self.W_k(x)  <span class="comment"># [batch, seq, d_k]</span>
+        V = self.W_v(x)  <span class="comment"># [batch, seq, d_v]</span>
+
+        <span class="comment"># 计算注意力分数（缩放点积）</span>
+        scores = torch.matmul(Q, K.transpose(-<span class="number">2</span>, -<span class="number">1</span>)) / math.sqrt(self.d_k)
+
+        <span class="comment"># 应用mask（用于解码器或填充）</span>
+        <span class="keyword">if</span> mask <span class="keyword">is not None</span>:
+            scores = scores.masked_fill(mask == <span class="number">0</span>, -<span class="number">1e9</span>)
+
+        <span class="comment"># Softmax归一化</span>
+        attention = torch.softmax(scores, dim=-<span class="number">1</span>)
+
+        <span class="comment"># 加权求和</span>
+        output = torch.matmul(attention, V)
+
+        <span class="comment"># 输出投影</span>
+        output = self.W_o(output)
+
+        <span class="keyword">return</span> output, attention
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> Self-Attention vs 传统注意力</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>传统注意力</th>
+            <th>Self-Attention</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Query来源</td>
+            <td>解码器状态</td>
+            <td>输入序列本身</td>
+          </tr>
+          <tr>
+            <td>Key/Value来源</td>
+            <td>编码器输出</td>
+            <td>输入序列本身</td>
+          </tr>
+          <tr>
+            <td>交互范围</td>
+            <td>跨序列（源→目标）</td>
+            <td>序列内部</td>
+          </tr>
+          <tr>
+            <td>并行计算</td>
+            <td>受限于解码顺序</td>
+            <td>完全可并行</td>
+          </tr>
+          <tr>
+            <td>长距离依赖</td>
+            <td>需要编码器传递</td>
+            <td>直接一步到达</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据可视化">
+      <div class="caption">图：Self-Attention矩阵计算流程</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔬</span> Self-Attention的优势</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">并行计算</h3>
+          <p class="card-text">所有位置同时计算，不像RNN需要顺序处理</p>
+          <div class="code-block">
+<span class="comment"># 所有位置一次性计算</span>
+output = self_attention(input)
+<span class="comment"># vs RNN需要逐步处理</span>
+<span class="keyword">for</span> t <span class="keyword">in</span> range(seq_len):
+    h[t] = rnn(x[t], h[t-1])
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">全局感受野</h3>
+          <p class="card-text">每个位置直接与所有其他位置交互</p>
+          <div class="code-block">
+<span class="comment"># 序列中任意两个位置的距离都是1</span>
+<span class="comment"># 无论序列多长，都能直接捕捉依赖</span>
+
+<span class="comment"># 解决了RNN的长距离依赖问题</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">计算复杂度</div>
+        <p>Self-Attention的时间复杂度为O(n²d)，其中n是序列长度，d是特征维度。对于超长序列，
+        可以考虑使用<strong>稀疏注意力</strong>或<strong>局部注意力</strong>来降低计算量。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Self-Attention的Q、K、V来自同一输入</li>
+            <li>• 缩放因子√d_k防止梯度消失</li>
+            <li>• 支持完全并行计算</li>
+            <li>• 实现了任意位置间的直接交互</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-1-注意力机制原理.html">← 上一节</a>
+      <a href="15-3-Multi-Head-Attention.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

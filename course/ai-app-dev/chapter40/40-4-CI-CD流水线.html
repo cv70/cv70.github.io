@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.4 CI/CD流水线 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-MLOps概述.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.4 CI/CD流水线</h1>
+      <p class="subtitle">机器学习的持续集成与持续部署</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解ML中的CI/CD与传统软件的区别</li>
+        <li>掌握模型CI/CD流水线的设计方法</li>
+        <li>学会配置自动化训练和部署流程</li>
+        <li>了解持续训练(CT)的概念与实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=800" alt="CI/CD流水线概念图" class="card-image">
+      <h3 class="card-title">ML中的CI/CD</h3>
+      <p class="card-text">
+        <strong>ML CI/CD</strong>在传统CI/CD基础上增加了机器学习特有的环节：数据验证、模型训练、模型评估和模型部署。它实现了从代码提交到模型上线的全自动化流程。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> ML CI/CD流水线架构</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📥</div>
+          <h3 class="card-title">持续集成(CI)</h3>
+          <p class="card-text">代码测试、数据验证、模型训练</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📤</div>
+          <h3 class="card-title">持续部署(CD)</h3>
+          <p class="card-text">模型打包、服务部署、流量切换</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">持续训练(CT)</h3>
+          <p class="card-text">自动触发训练、模型更新</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> CI/CD流水线对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>传统软件</th>
+            <th>机器学习</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>代码验证</td>
+            <td>单元测试、集成测试</td>
+            <td>+ 模型性能测试、数据质量检查</td>
+          </tr>
+          <tr>
+            <td>构建产物</td>
+            <td>可执行文件、Docker镜像</td>
+            <td>模型文件、推理服务镜像</td>
+          </tr>
+          <tr>
+            <td>部署策略</td>
+            <td>蓝绿部署、金丝雀发布</td>
+            <td>+ 模型A/B测试、影子模式</td>
+          </tr>
+          <tr>
+            <td>触发条件</td>
+            <td>代码提交、定时任务</td>
+            <td>+ 数据更新、性能退化</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> GitHub Actions配置示例</h2>
+      <div class="code-block">
+# .github/workflows/ml-pipeline.yml
+name: ML Pipeline
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨2点
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Validate data
+        run: python scripts/validate_data.py
+
+      - name: Train model
+        run: |
+          python scripts/train.py \
+            --data-path ${{ secrets.DATA_PATH }} \
+            --experiment-name ${{ github.sha }}
+
+      - name: Evaluate model
+        run: python scripts/evaluate.py
+
+      - name: Register model
+        if: success()
+        run: python scripts/register_model.py
+  deploy:
+    needs: train
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to production
+        run: python scripts/deploy.py --stage production
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">流水线触发策略</div>
+        <p>ML流水线可以由多种条件触发：<strong>代码提交</strong>（模型架构变更）、<strong>定时任务</strong>（周期性重训）、<strong>数据更新</strong>（新数据到达）、<strong>性能告警</strong>（模型退化）。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 部署策略详解</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">蓝绿部署</h3>
+          <div class="code-block">
+# 流量切换脚本
+def blue_green_deploy(new_model_version):
+    # 1. 部署新版本到Green环境
+    deploy_model(new_model_version, env="green")
+
+    # 2. 健康检查
+    if not health_check(env="green"):
+        rollback(env="green")
+        return False
+
+    # 3. 切换流量
+    update_load_balancer(target="green")
+
+    # 4. 保留Blue环境用于回滚
+    keep_old_version(env="blue", ttl="24h")
+    return True
+          </div>
+          <ul class="feature-list">
+            <li>快速回滚能力</li>
+            <li>零停机部署</li>
+            <li>需要双倍资源</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">金丝雀发布</h3>
+          <div class="code-block">
+# 渐进式流量切换
+def canary_deploy(new_model_version):
+    # 逐步增加流量
+    for percentage in [5, 10, 25, 50, 100]:
+        set_traffic_split({
+            "current": 100 - percentage,
+            "canary": percentage
+        })
+
+        # 监控指标
+        if not monitor_metrics(duration="1h"):
+            rollback_canary()
+            return False
+
+    # 完全切换
+    set_traffic_split({"current": 0, "canary": 100})
+          </div>
+          <ul class="feature-list">
+            <li>渐进式验证</li>
+            <li>风险可控</li>
+            <li>适合大规模系统</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 持续训练(CT)流水线</h2>
+      <div class="code-block">
+# 持续训练触发器配置
+ct_triggers = {
+    # 数据触发：新数据达到阈值
+    "data_trigger": {
+        "type": "data_volume",
+        "threshold": 10000,  # 新增1万条样本
+        "action": "retrain"
+    },
+
+    # 性能触发：模型准确率下降
+    "performance_trigger": {
+        "type": "metric_threshold",
+        "metric": "accuracy",
+        "threshold": 0.90,
+        "condition": "below",
+        "action": "retrain_and_alert"
+    },
+
+    # 时间触发：定期重训
+    "schedule_trigger": {
+        "type": "cron",
+        "schedule": "0 2 * * 0",  # 每周日凌晨2点
+        "action": "retrain"
+    }
+}
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="自动化流水线">
+      <div class="caption">图：完善的CI/CD流水线实现模型交付自动化</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ML CI/CD增加了数据验证和模型训练环节</li>
+            <li>• 持续训练(CT)实现模型的自动更新</li>
+            <li>• 蓝绿部署和金丝雀发布是常用的部署策略</li>
+            <li>• 多种触发条件确保模型持续保持最优状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-3-模型版本控制.html">← 上一节</a>
+      <a href="40-5-模型监控.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

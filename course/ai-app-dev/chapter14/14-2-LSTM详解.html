@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.2 LSTM详解 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-RNN基本原理.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.2 LSTM详解</h1>
+      <p class="subtitle">长短期记忆网络的门控机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解LSTM的设计动机与核心思想</li>
+        <li>掌握三个门控结构的作用机制</li>
+        <li>理解细胞状态的信息流动过程</li>
+        <li>能够用PyTorch实现LSTM模型</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据流动概念图" class="card-image">
+      <h3 class="card-title">LSTM简介</h3>
+      <p class="card-text">
+        <strong>长短期记忆网络（Long Short-Term Memory，LSTM）</strong>由Hochreiter和Schmidhuber于1997年提出，
+        是一种特殊的RNN架构，专门设计用于解决标准RNN的梯度消失问题。LSTM通过精巧的门控机制，
+        能够学习长期依赖关系，是自然语言处理领域最重要的突破之一。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚪</span> LSTM的三个门控结构</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div>
+          <h3 class="card-title">遗忘门</h3>
+          <p class="card-text">决定从细胞状态中丢弃哪些信息</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">➕</div>
+          <h3 class="card-title">输入门</h3>
+          <p class="card-text">决定哪些新信息将被存储</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📤</div>
+          <h3 class="card-title">输出门</h3>
+          <p class="card-text">决定输出什么信息</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> LSTM的数学公式</h2>
+      <div class="code-block">
+<span class="comment"># LSTM核心公式</span>
+
+<span class="comment"># 1. 遗忘门：决定丢弃哪些信息</span>
+f<t> = σ(W<sub>f</sub> * [h<t-1>, x<t>] + b<sub>f</sub>)
+
+<span class="comment"># 2. 输入门：决定存储哪些新信息</span>
+i<t> = σ(W<sub>i</sub> * [h<t-1>, x<t>] + b<sub>i</sub>)
+<span class="comment"># 候选细胞状态</span>
+C̃<t> = tanh(W<sub>C</sub> * [h<t-1>, x<t>] + b<sub>C</sub>)
+
+<span class="comment"># 3. 更新细胞状态</span>
+C<t> = f<t> * C<t-1> + i<t> * C̃<t>
+
+<span class="comment"># 4. 输出门：决定输出值</span>
+o<t> = σ(W<sub>o</sub> * [h<t-1>, x<t>] + b<sub>o</sub>)
+h<t> = o<t> * tanh(C<t>)
+
+<span class="comment"># σ = sigmoid激活函数</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> PyTorch实现LSTM</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+
+<span class="keyword">class</span> <span class="function">LSTMModel</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, vocab_size, embed_dim, hidden_dim, output_dim):
+        <span class="function">super</span>().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim,
+                           num_layers=<span class="number">2</span>,
+                           batch_first=<span class="keyword">True</span>,
+                           dropout=<span class="number">0.3</span>,
+                           bidirectional=<span class="keyword">True</span>)
+        self.fc = nn.Linear(hidden_dim * <span class="number">2</span>, output_dim)
+        self.dropout = nn.Dropout(<span class="number">0.5</span>)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, text):
+        <span class="comment"># 词嵌入</span>
+        embedded = self.dropout(self.embedding(text))
+        <span class="comment"># LSTM处理</span>
+        output, (hidden, cell) = self.lstm(embedded)
+        <span class="comment"># 拼接最后隐藏状态</span>
+        hidden = torch.cat((hidden[-<span class="number">2</span>, :, :], hidden[-<span class="number">1</span>, :, :]), dim=<span class="number">1</span>)
+        <span class="keyword">return</span> self.fc(self.dropout(hidden))
+
+<span class="comment"># 使用示例</span>
+model = <span class="function">LSTMModel</span>(vocab_size=<span class="number">10000</span>, embed_dim=<span class="number">128</span>,
+                hidden_dim=<span class="number">256</span>, output_dim=<span class="number">2</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> LSTM vs 标准RNN对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>标准RNN</th>
+            <th>LSTM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>记忆机制</td>
+            <td>单一隐藏状态</td>
+            <td>细胞状态 + 隐藏状态</td>
+          </tr>
+          <tr>
+            <td>门控结构</td>
+            <td>无</td>
+            <td>遗忘门、输入门、输出门</td>
+          </tr>
+          <tr>
+            <td>长距离依赖</td>
+            <td>效果差</td>
+            <td>效果好</td>
+          </tr>
+          <tr>
+            <td>梯度流动</td>
+            <td>容易消失</td>
+            <td>通过细胞状态保持</td>
+          </tr>
+          <tr>
+            <td>参数量</td>
+            <td>较少</td>
+            <td>约为RNN的4倍</td>
+          </tr>
+          <tr>
+            <td>训练速度</td>
+            <td>较快</td>
+            <td>相对较慢</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=800" alt="网络结构可视化">
+      <div class="caption">图：LSTM单元内部结构示意图</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> LSTM的变体</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Peephole LSTM</h3>
+          <p class="card-text">门控层可以"窥视"细胞状态</p>
+          <div class="code-block">
+<span class="comment"># 增加细胞状态到门控输入</span>
+f<t> = σ(W<sub>f</sub> * [C<t-1>, h<t-1>, x<t>] + b<sub>f</sub>)
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">双向LSTM</h3>
+          <p class="card-text">同时考虑前向和后向信息</p>
+          <div class="code-block">
+<span class="comment"># PyTorch双向LSTM</span>
+lstm = nn.LSTM(hidden_dim, hidden_dim,
+               bidirectional=<span class="keyword">True</span>)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">实践建议</div>
+        <p>在实际应用中，推荐使用<strong>双向LSTM</strong>处理文本任务，因为它能同时捕捉前后文信息。对于长文档，可以考虑使用多层LSTM增加模型表达能力。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• LSTM通过门控机制解决了RNN的梯度消失问题</li>
+            <li>• 三个门控：遗忘门、输入门、输出门协同工作</li>
+            <li>• 细胞状态是信息传递的高速公路</li>
+            <li>• 双向LSTM能更好地捕捉上下文信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-1-RNN基本原理.html">← 上一节</a>
+      <a href="14-3-GRU架构.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

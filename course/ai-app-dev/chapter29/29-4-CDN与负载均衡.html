@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.4 CDN与负载均衡 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-云服务商选择.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.4 CDN与负载均衡</h1>
+      <p class="subtitle">AI应用的高可用与性能优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解CDN的工作原理和应用场景</li>
+        <li>掌握负载均衡的类型和配置</li>
+        <li>学会为AI应用设计高可用架构</li>
+        <li>了解全球加速和边缘计算</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络架构" class="card-image">
+      <h3 class="card-title">为什么需要CDN与负载均衡？</h3>
+      <p class="card-text">
+        <strong>CDN（内容分发网络）</strong>和<strong>负载均衡</strong>是构建高可用、高性能AI应用的关键基础设施。CDN加速静态资源和模型文件的分发，负载均衡确保请求均匀分布到多个服务器，提升系统的可用性和响应速度。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> CDN工作原理</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>说明</th>
+            <th>AI应用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>边缘节点缓存</td>
+            <td>就近响应用户请求</td>
+            <td>模型文件、静态资源加速</td>
+          </tr>
+          <tr>
+            <td>智能路由</td>
+            <td>选择最优节点响应</td>
+            <td>全球用户访问优化</td>
+          </tr>
+          <tr>
+            <td>带宽优化</td>
+            <td>减少源站压力</td>
+            <td>大模型分发</td>
+          </tr>
+          <tr>
+            <td>DDoS防护</td>
+            <td>边缘节点吸收攻击</td>
+            <td>保护AI服务安全</td>
+          </tr>
+          <tr>
+            <td>SSL卸载</td>
+            <td>边缘处理HTTPS</td>
+            <td>减轻推理服务器负担</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 负载均衡类型</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">Layer 4</h3>
+          <p class="card-text">传输层负载均衡，基于IP和端口分发，性能高</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🌐</div>
+          <h3 class="card-title">Layer 7</h3>
+          <p class="card-text">应用层负载均衡，基于URL、Header路由，灵活</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🌍</div>
+          <h3 class="card-title">全局负载均衡</h3>
+          <p class="card-text">跨区域分发，实现就近访问和灾备切换</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="网络拓扑">
+      <div class="caption">图：CDN与负载均衡协同工作提供高可用服务</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI应用负载均衡配置</h2>
+      <div class="code-block">
+<pre># AWS Application Load Balancer配置
+resource "aws_lb" "ai_inference_alb" {
+  name               = "ai-inference-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = aws_subnet.public[*].id
+
+  enable_deletion_protection = true
+}
+
+# 目标组
+resource "aws_lb_target_group" "inference_tg" {
+  name     = "inference-targets"
+  port     = 8000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/health"
+    interval            = 30
+    timeout             = 10
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
+
+# 路由规则（基于路径）
+resource "aws_lb_listener_rule" "api_route" {
+  listener_arn = aws_lb_listener.main.arn
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.inference_tg.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/v1/*"]
+    }
+  }
+}
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 负载均衡算法</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">常用算法</h3>
+          <ul class="feature-list">
+            <li><strong>轮询(Round Robin)</strong> - 依次分发</li>
+            <li><strong>加权轮询</strong> - 按权重分发</li>
+            <li><strong>最少连接</strong> - 分发到连接最少的服务器</li>
+            <li><strong>IP哈希</strong> - 同一IP固定服务器</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">AI场景建议</h3>
+          <ul class="feature-list">
+            <li>推理服务使用<strong>最少连接</strong>算法</li>
+            <li>训练服务使用<strong>轮询</strong>算法</li>
+            <li>会话相关服务使用<strong>IP哈希</strong></li>
+            <li>异构服务器使用<strong>加权轮询</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> CloudFront CDN配置</h2>
+      <div class="code-block">
+<pre># CloudFront分发配置
+resource "aws_cloudfront_distribution" "ai_cdn" {
+  origin {
+    domain_name = aws_s3_bucket.models.bucket_regional_domain_name
+    origin_id   = "models-origin"
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  price_class         = "PriceClass_100"
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "models-origin"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 86400
+    max_ttl                = 31536000
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn = aws_acm_certificate.cert.arn
+    ssl_support_method  = "sni-only"
+  }
+}
+</pre>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">边缘计算新趋势</div>
+        <p>云厂商正在推出<strong>边缘推理</strong>服务，如AWS Lambda@Edge、Cloudflare Workers AI，可以在CDN边缘节点直接运行AI模型，实现超低延迟响应。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CDN通过边缘节点缓存加速内容分发，降低延迟和源站压力</li>
+            <li>• 负载均衡分为L4、L7和全局负载均衡，AI场景常用L7</li>
+            <li>• 推理服务推荐使用最少连接算法，配合健康检查</li>
+            <li>• 边缘计算是新趋势，可在CDN节点直接运行AI推理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-3-Serverless架构.html">← 上一节</a>
+      <a href="29-5-成本优化策略.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.4 A/B测试 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="42-1-产品需求分析.html">第四十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>42.4 A/B测试</h1>
+      <p class="subtitle">AI产品的数据驱动决策方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解A/B测试在AI产品中的应用场景</li>
+        <li>掌握实验设计和统计分析方法</li>
+        <li>学会处理AI特有的测试挑战</li>
+        <li>了解多臂老虎机等高级测试策略</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="A/B测试概念图" class="card-image">
+      <h3 class="card-title">AI产品的A/B测试</h3>
+      <p class="card-text">
+        A/B测试通过<strong>随机对照实验</strong>比较不同方案的效果差异。在AI产品中，A/B测试常用于比较不同模型、不同提示词、不同参数设置的效果，是数据驱动迭代的核心方法。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> A/B测试核心概念</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🎲</div>
+          <h3 class="card-title">随机分流</h3>
+          <p class="card-text">用户随机分配到实验组和对照组</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📏</div>
+          <h3 class="card-title">统计显著性</h3>
+          <p class="card-text">判断差异是否具有统计学意义</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">效果指标</h3>
+          <p class="card-text">定义清晰的衡量标准</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> AI测试场景</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>测试对象</th>
+            <th>变量</th>
+            <th>指标</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>模型版本</td>
+            <td>GPT-3.5 vs GPT-4</td>
+            <td>准确率、满意度、成本</td>
+          </tr>
+          <tr>
+            <td>提示词</td>
+            <td>不同prompt模板</td>
+            <td>输出质量、一致性</td>
+          </tr>
+          <tr>
+            <td>温度参数</td>
+            <td>temperature 0.0-1.0</td>
+            <td>多样性、相关性</td>
+          </tr>
+          <tr>
+            <td>检索策略</td>
+            <td>不同检索算法</td>
+            <td>命中率、答案质量</td>
+          </tr>
+          <tr>
+            <td>UI交互</td>
+            <td>不同展示方式</td>
+            <td>点击率、使用时长</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 实验设计实现</h2>
+      <div class="code-block">
+import hashlib
+import numpy as np
+from scipy import stats
+
+class ABTestFramework:
+    """A/B测试框架"""
+
+    def __init__(self, experiment_name, variants):
+        self.experiment_name = experiment_name
+        self.variants = variants  # {"control": 0.5, "treatment": 0.5}
+
+    def get_variant(self, user_id):
+        """根据用户ID确定分组"""
+        hash_input = f"{self.experiment_name}:{user_id}"
+        hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+        bucket = (hash_value % 100) / 100
+
+        cumulative = 0
+        for variant, ratio in self.variants.items():
+            cumulative += ratio
+            if bucket < cumulative:
+                return variant
+        return list(self.variants.keys())[-1]
+
+    def analyze_results(self, control_data, treatment_data):
+        """分析实验结果"""
+        control_mean = np.mean(control_data)
+        treatment_mean = np.mean(treatment_data)
+
+        # t检验
+        t_stat, p_value = stats.ttest_ind(control_data, treatment_data)
+
+        # 效应量 (Cohen's d)
+        pooled_std = np.sqrt(
+            (np.var(control_data) + np.var(treatment_data)) / 2
+        )
+        effect_size = (treatment_mean - control_mean) / pooled_std
+
+        return {
+            "control_mean": control_mean,
+            "treatment_mean": treatment_mean,
+            "lift": (treatment_mean - control_mean) / control_mean,
+            "p_value": p_value,
+            "significant": p_value < 0.05,
+            "effect_size": effect_size
+        }
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">样本量计算</div>
+        <p>样本量取决于<strong>期望检测的最小效果</strong>、<strong>显著性水平</strong>和<strong>统计功效</strong>。效果越微小需要越大样本量。可使用在线计算器提前估算所需样本。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 多臂老虎机测试</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Epsilon-Greedy策略</h3>
+          <div class="code-block">
+import random
+
+class EpsilonGreedy:
+    """探索与利用的平衡"""
+
+    def __init__(self, arms, epsilon=0.1):
+        self.arms = arms
+        self.epsilon = epsilon
+        self.counts = {arm: 0 for arm in arms}
+        self.values = {arm: 0.0 for arm in arms}
+
+    def select_arm(self):
+        """选择一个arm"""
+        if random.random() < self.epsilon:
+            # 探索：随机选择
+            return random.choice(self.arms)
+        else:
+            # 利用：选择最优
+            return max(self.values, key=self.values.get)
+
+    def update(self, arm, reward):
+        """更新arm的估计值"""
+        self.counts[arm] += 1
+        n = self.counts[arm]
+        value = self.values[arm]
+        # 增量更新均值
+        self.values[arm] = ((n - 1) / n) * value + (1 / n) * reward
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Thompson Sampling</h3>
+          <div class="code-block">
+import numpy as np
+from scipy.stats import beta
+
+class ThompsonSampling:
+    """贝叶斯老虎机算法"""
+
+    def __init__(self, arms):
+        self.arms = arms
+        # Beta分布参数
+        self.alpha = {arm: 1 for arm in arms}
+        self.beta_param = {arm: 1 for arm in arms}
+
+    def select_arm(self):
+        """从后验分布采样选择"""
+        samples = {}
+        for arm in self.arms:
+            samples[arm] = beta.rvs(
+                self.alpha[arm],
+                self.beta_param[arm]
+            )
+        return max(samples, key=samples.get)
+
+    def update(self, arm, reward):
+        """更新后验分布"""
+        if reward == 1:  # 成功
+            self.alpha[arm] += 1
+        else:  # 失败
+            self.beta_param[arm] += 1
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> AI特有挑战</h2>
+      <div class="code-block">
+# AI产品A/B测试的挑战与解决方案
+
+challenges = {
+    "随机性": {
+        "问题": "模型输出具有随机性",
+        "解决": "固定随机种子或多次采样取平均"
+    },
+    "延迟反馈": {
+        "问题": "用户满意度需要时间积累",
+        "解决": "设置足够长的观察窗口"
+    },
+    "成本问题": {
+        "问题": "大模型调用成本高",
+        "解决": "先用小模型预筛选，减少全量测试"
+    },
+    "样本污染": {
+        "问题": "同一用户可能看到不同版本",
+        "解决": "用户级别而非请求级别分流"
+    },
+    "新奇效应": {
+        "问题": "用户对变化敏感但不持久",
+        "解决": "设置预热期，排除初始数据"
+    }
+}
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="数据分析">
+      <div class="caption">图：科学的A/B测试让产品迭代有据可依</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• A/B测试是AI产品迭代的核心方法</li>
+            <li>• 需要关注统计显著性和实际意义</li>
+            <li>• 多臂老虎机算法平衡探索与利用</li>
+            <li>• AI随机性和成本是测试特有挑战</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="42-3-性能优化.html">← 上一节</a>
+      <a href="42-5-迭代策略.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.2 网格搜索与随机搜索 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="9-1-交叉验证技术.html">第九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>9.2 网格搜索与随机搜索</h1>
+      <p class="subtitle">超参数调优的经典方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解超参数调优的重要性</li>
+        <li>掌握GridSearchCV的使用方法</li>
+        <li>掌握RandomizedSearchCV的使用方法</li>
+        <li>了解两种方法的优缺点及适用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="参数搜索概念图" class="card-image">
+      <h3 class="card-title">什么是超参数调优</h3>
+      <p class="card-text">
+        <strong>超参数</strong>是在模型训练前需要设置的参数，如学习率、树的数量、正则化系数等。
+        超参数调优就是寻找让模型性能最优的超参数组合，是机器学习模型优化的重要环节。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> Grid Search vs Random Search</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">网格搜索 (Grid Search)</h3>
+          <ul class="feature-list">
+            <li>遍历所有参数组合</li>
+            <li>保证找到最优组合</li>
+            <li>计算量大，耗时长</li>
+            <li>适合小参数空间</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">随机搜索 (Random Search)</h3>
+          <ul class="feature-list">
+            <li>随机采样参数组合</li>
+            <li>可能错过最优组合</li>
+            <li>计算效率高</li>
+            <li>适合大参数空间</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 网格搜索实现</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> GridSearchCV
+<span class="keyword">from</span> sklearn.ensemble <span class="keyword">import</span> RandomForestClassifier
+<span class="keyword">from</span> sklearn.datasets <span class="keyword">import</span> load_iris
+
+<span class="comment"># 定义参数网格</span>
+param_grid = {
+    <span class="string">'n_estimators'</span>: [<span class="number">50</span>, <span class="number">100</span>, <span class="number">200</span>],
+    <span class="string">'max_depth'</span>: [<span class="number">3</span>, <span class="number">5</span>, <span class="number">10</span>, <span class="keyword">None</span>],
+    <span class="string">'min_samples_split'</span>: [<span class="number">2</span>, <span class="number">5</span>, <span class="number">10</span>]
+}
+
+<span class="comment"># 创建模型和网格搜索</span>
+model = RandomForestClassifier(random_state=<span class="number">42</span>)
+grid_search = GridSearchCV(
+    model,
+    param_grid,
+    cv=<span class="number">5</span>,
+    scoring=<span class="string">'accuracy'</span>,
+    n_jobs=-<span class="number">1</span>,  <span class="comment"># 使用所有CPU核心</span>
+    verbose=<span class="number">1</span>
+)
+
+<span class="comment"># 执行搜索</span>
+grid_search.fit(X, y)
+
+<span class="comment"># 查看结果</span>
+<span class="keyword">print</span>(<span class="string">f'最佳参数: {grid_search.best_params_}'</span>)
+<span class="keyword">print</span>(<span class="string">f'最佳得分: {grid_search.best_score_:.4f}'</span>)
+<span class="keyword">print</span>(<span class="string">f'最佳模型: {grid_search.best_estimator_}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎲</span> 随机搜索实现</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> RandomizedSearchCV
+<span class="keyword">from</span> scipy.stats <span class="keyword">import</span> randint, uniform
+
+<span class="comment"># 定义参数分布</span>
+param_distributions = {
+    <span class="string">'n_estimators'</span>: randint(<span class="number">50</span>, <span class="number">500</span>),
+    <span class="string">'max_depth'</span>: randint(<span class="number">3</span>, <span class="number">20</span>),
+    <span class="string">'min_samples_split'</span>: randint(<span class="number">2</span>, <span class="number">20</span>),
+    <span class="string">'max_features'</span>: uniform(<span class="number">0.5</span>, <span class="number">0.5</span>)  <span class="comment"># 0.5-1.0之间均匀分布</span>
+}
+
+<span class="comment"># 创建随机搜索</span>
+random_search = RandomizedSearchCV(
+    model,
+    param_distributions,
+    n_iter=<span class="number">50</span>,  <span class="comment"># 采样次数</span>
+    cv=<span class="number">5</span>,
+    scoring=<span class="string">'accuracy'</span>,
+    n_jobs=-<span class="number">1</span>,
+    random_state=<span class="number">42</span>
+)
+
+random_search.fit(X, y)
+<span class="keyword">print</span>(<span class="string">f'最佳参数: {random_search.best_params_}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 方法对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>Grid Search</th>
+            <th>Random Search</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>搜索方式</td>
+            <td>穷举所有组合</td>
+            <td>随机采样</td>
+          </tr>
+          <tr>
+            <td>参数空间</td>
+            <td>离散值列表</td>
+            <td>支持连续分布</td>
+          </tr>
+          <tr>
+            <td>时间复杂度</td>
+            <td>O(组合数 × CV)</td>
+            <td>O(迭代次数 × CV)</td>
+          </tr>
+          <tr>
+            <td>最优保证</td>
+            <td>保证找到网格中最优</td>
+            <td>可能错过最优</td>
+          </tr>
+          <tr>
+            <td>推荐场景</td>
+            <td>参数空间小</td>
+            <td>参数空间大</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">实践建议</div>
+        <p>先用<strong>随机搜索</strong>快速探索参数空间，找到大致范围后，再用<strong>网格搜索</strong>在最优区域精细搜索。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="参数搜索对比">
+      <div class="caption">图：网格搜索vs随机搜索的参数空间探索方式</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 超参数调优是提升模型性能的关键步骤</li>
+            <li>• 网格搜索穷举所有组合，保证最优但耗时</li>
+            <li>• 随机搜索高效灵活，适合大参数空间</li>
+            <li>• 推荐先随机搜索粗调，再网格搜索精调</li>
+            <li>• sklearn的GridSearchCV和RandomizedSearchCV是常用工具</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="9-1-交叉验证技术.html">← 上一节</a>
+      <a href="9-3-贝叶斯优化.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

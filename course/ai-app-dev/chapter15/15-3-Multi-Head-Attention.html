@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.3 Multi-Head Attention - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-注意力机制原理.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.3 Multi-Head Attention</h1>
+      <p class="subtitle">多头注意力的并行表示学习</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解多头注意力的设计动机</li>
+        <li>掌握多头注意力的计算流程</li>
+        <li>理解不同头学习不同表示的原理</li>
+        <li>能够实现多头注意力层</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=800" alt="多头概念图" class="card-image">
+      <h3 class="card-title">什么是多头注意力</h3>
+      <p class="card-text">
+        <strong>多头注意力（Multi-Head Attention）</strong>是Transformer的关键创新之一。
+        它将注意力计算并行地在多个"头"中进行，每个头可以学习关注输入的不同方面，
+        最后将所有头的输出合并。这种设计让模型能够同时捕捉多种类型的依赖关系。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 为什么需要多头</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🎭</div>
+          <h3 class="card-title">多视角关注</h3>
+          <p class="card-text">不同头关注不同的语义关系</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🧩</div>
+          <h3 class="card-title">子空间表示</h3>
+          <p class="card-text">每个头在独立的子空间中学习</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">并行计算</h3>
+          <p class="card-text">所有头可同时计算</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> Multi-Head Attention公式</h2>
+      <div class="code-block">
+<span class="comment"># Multi-Head Attention核心公式</span>
+
+<span class="comment"># 定义</span>
+head<sub>i</sub> = Attention(Q · W<sub>i</sub><sup>Q</sup>, K · W<sub>i</sub><sup>K</sup>, V · W<sub>i</sub><sup>V</sup>)
+
+<span class="comment"># 拼接所有头的输出</span>
+MultiHead(Q, K, V) = Concat(head<sub>1</sub>, ..., head<sub>h</sub>) · W<sup>O</sup>
+
+<span class="comment"># 其中：</span>
+<span class="comment"># h - 头的数量</span>
+<span class="comment"># W<sub>i</sub><sup>Q</sup>, W<sub>i</sub><sup>K</sup>, W<sub>i</sub><sup>V</sup> - 第i个头的投影矩阵</span>
+<span class="comment"># W<sup>O</sup> - 输出投影矩阵</span>
+
+<span class="comment"># 维度设计</span>
+<span class="comment"># 通常 d_k = d_v = d_model / h</span>
+<span class="comment"># 例如：d_model=512, h=8, 则 d_k = d_v = 64</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> PyTorch实现Multi-Head Attention</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">import</span> math
+
+<span class="keyword">class</span> <span class="function">MultiHeadAttention</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, d_model, num_heads):
+        <span class="function">super</span>().__init__()
+        <span class="keyword">assert</span> d_model % num_heads == <span class="number">0</span>
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+
+        <span class="comment"># 所有头的Q、K、V投影（合并为一个矩阵）</span>
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+
+        <span class="comment"># 输出投影</span>
+        self.W_o = nn.Linear(d_model, d_model)
+
+    <span class="keyword">def</span> <span class="function">scaled_dot_product_attention</span>(self, Q, K, V, mask=<span class="keyword">None</span>):
+        <span class="comment"># Q, K, V: [batch, num_heads, seq_len, d_k]</span>
+        scores = torch.matmul(Q, K.transpose(-<span class="number">2</span>, -<span class="number">1</span>)) / math.sqrt(self.d_k)
+
+        <span class="keyword">if</span> mask <span class="keyword">is not None</span>:
+            scores = scores.masked_fill(mask == <span class="number">0</span>, -<span class="number">1e9</span>)
+
+        attention = torch.softmax(scores, dim=-<span class="number">1</span>)
+        output = torch.matmul(attention, V)
+        <span class="keyword">return</span> output, attention
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x, mask=<span class="keyword">None</span>):
+        batch_size, seq_len, _ = x.size()
+
+        <span class="comment"># 线性投影</span>
+        Q = self.W_q(x)  <span class="comment"># [batch, seq, d_model]</span>
+        K = self.W_k(x)
+        V = self.W_v(x)
+
+        <span class="comment"># 重塑为多头格式 [batch, num_heads, seq_len, d_k]</span>
+        Q = Q.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(<span class="number">1</span>, <span class="number">2</span>)
+        K = K.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(<span class="number">1</span>, <span class="number">2</span>)
+        V = V.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(<span class="number">1</span>, <span class="number">2</span>)
+
+        <span class="comment"># 计算注意力</span>
+        output, attention = self.scaled_dot_product_attention(Q, K, V, mask)
+
+        <span class="comment"># 合并多头 [batch, seq, d_model]</span>
+        output = output.transpose(<span class="number">1</span>, <span class="number">2</span>).contiguous().view(batch_size, seq_len, self.d_model)
+
+        <span class="comment"># 输出投影</span>
+        output = self.W_o(output)
+
+        <span class="keyword">return</span> output, attention
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 头数量选择指南</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>头数量</th>
+            <th>d_model</th>
+            <th>d_k</th>
+            <th>特点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>4</td>
+            <td>256</td>
+            <td>64</td>
+            <td>小模型，速度快</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>512</td>
+            <td>64</td>
+            <td>标准配置（Transformer原版）</td>
+          </tr>
+          <tr>
+            <td>12</td>
+            <td>768</td>
+            <td>64</td>
+            <td>BERT-Base配置</td>
+          </tr>
+          <tr>
+            <td>16</td>
+            <td>1024</td>
+            <td>64</td>
+            <td>BERT-Large配置</td>
+          </tr>
+          <tr>
+            <td>32</td>
+            <td>2048</td>
+            <td>64</td>
+            <td>GPT-3配置</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=800" alt="多头注意力可视化">
+      <div class="caption">图：多头注意力 - 不同头关注不同的语义关系</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔬</span> 不同头的学习模式</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Head 1-2：句法关系</h3>
+          <p class="card-text">关注主谓宾等语法结构</p>
+          <div class="code-block">
+<span class="comment"># "The cat sat on the mat"</span>
+<span class="comment"># Head 1关注：cat → sat</span>
+<span class="comment"># Head 2关注：sat → mat</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Head 3-4：语义关系</h3>
+          <p class="card-text">关注词汇语义相似性</p>
+          <div class="code-block">
+<span class="comment"># "The bank of the river"</span>
+<span class="comment"># Head 3关注：bank → river</span>
+<span class="comment"># 帮助消歧义</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Head 5-6：位置关系</h3>
+          <p class="card-text">关注相邻或特定距离的词</p>
+          <div class="code-block">
+<span class="comment"># 捕捉局部上下文</span>
+<span class="comment"># 类似n-gram效果</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Head 7-8：特殊模式</h3>
+          <p class="card-text">学习任务特定的模式</p>
+          <div class="code-block">
+<span class="comment"># 如指代消解</span>
+<span class="comment"># "He looked at her"</span>
+<span class="comment"># Head关注He/She关系</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">实践建议</div>
+        <p>研究表明，并非所有头都同样重要。部分头可以进行<strong>剪枝</strong>而不显著影响性能。
+        在资源受限场景，可以尝试减少头数量或使用<strong>分组查询注意力</strong>来优化。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 多头注意力并行学习多种表示</li>
+            <li>• 每个头在独立的子空间中工作</li>
+            <li>• 标准配置：8头，d_model=512</li>
+            <li>• 不同头学习不同类型的依赖关系</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-2-Self-Attention详解.html">← 上一节</a>
+      <a href="15-4-Transformer完整架构.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

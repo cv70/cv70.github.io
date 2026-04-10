@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.2 Dockerfile编写 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-Docker基础.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.2 Dockerfile编写</h1>
+      <p class="subtitle">构建高效、可维护的容器镜像</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Dockerfile的基本结构和语法</li>
+        <li>掌握常用指令的使用方法</li>
+        <li>学会编写AI应用的Dockerfile</li>
+        <li>了解镜像优化最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="代码编写概念图" class="card-image">
+      <h3 class="card-title">什么是Dockerfile？</h3>
+      <p class="card-text">
+        <strong>Dockerfile</strong>是一个文本文件，包含了构建Docker镜像所需的所有命令。通过Dockerfile，我们可以自动化地创建自定义镜像，确保环境配置的可重复性和一致性。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> Dockerfile常用指令</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指令</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FROM</td>
+            <td>指定基础镜像</td>
+            <td>FROM python:3.10</td>
+          </tr>
+          <tr>
+            <td>WORKDIR</td>
+            <td>设置工作目录</td>
+            <td>WORKDIR /app</td>
+          </tr>
+          <tr>
+            <td>COPY</td>
+            <td>复制文件到镜像</td>
+            <td>COPY . /app</td>
+          </tr>
+          <tr>
+            <td>ADD</td>
+            <td>复制并解压文件</td>
+            <td>ADD app.tar.gz /app</td>
+          </tr>
+          <tr>
+            <td>RUN</td>
+            <td>执行命令</td>
+            <td>RUN pip install flask</td>
+          </tr>
+          <tr>
+            <td>CMD</td>
+            <td>容器启动命令</td>
+            <td>CMD ["python", "app.py"]</td>
+          </tr>
+          <tr>
+            <td>ENTRYPOINT</td>
+            <td>容器入口点</td>
+            <td>ENTRYPOINT ["python"]</td>
+          </tr>
+          <tr>
+            <td>ENV</td>
+            <td>设置环境变量</td>
+            <td>ENV MODEL_PATH=/models</td>
+          </tr>
+          <tr>
+            <td>EXPOSE</td>
+            <td>声明暴露端口</td>
+            <td>EXPOSE 8080</td>
+          </tr>
+          <tr>
+            <td>VOLUME</td>
+            <td>创建挂载点</td>
+            <td>VOLUME /data</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI应用Dockerfile示例</h2>
+      <div class="code-block">
+<pre># 基础镜像：使用NVIDIA CUDA镜像
+FROM nvidia/cuda:11.8-cudnn8-runtime-ubuntu22.04
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV MODEL_PATH=/app/models
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装Python依赖
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY src/ ./src/
+COPY config/ ./config/
+
+# 创建模型目录
+RUN mkdir -p /app/models
+
+# 暴露端口
+EXPOSE 8000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 启动命令
+CMD ["python3", "src/main.py"]
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800" alt="开发环境">
+      <div class="caption">图：编写Dockerfile是容器化应用的第一步</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 多阶段构建优化</h2>
+      <div class="code-block">
+<pre># 第一阶段：构建阶段
+FROM python:3.10 AS builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+# 第二阶段：运行阶段
+FROM python:3.10-slim
+WORKDIR /app
+
+# 只复制必要的文件
+COPY --from=builder /root/.local /root/.local
+COPY src/ ./src/
+
+ENV PATH=/root/.local/bin:$PATH
+CMD ["python", "src/main.py"]
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 镜像大小对比</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">未优化镜像</h3>
+          <ul class="feature-list">
+            <li>基础镜像: python:3.10 (约900MB)</li>
+            <li>包含构建工具</li>
+            <li>缓存未清理</li>
+            <li><strong>总大小: ~2GB</strong></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">优化后镜像</h3>
+          <ul class="feature-list">
+            <li>基础镜像: python:3.10-slim (约150MB)</li>
+            <li>多阶段构建</li>
+            <li>清理缓存</li>
+            <li><strong>总大小: ~400MB</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>避免在Dockerfile中硬编码敏感信息（如API密钥、密码）。应使用环境变量或Docker Secrets来管理敏感配置。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Dockerfile是构建镜像的自动化脚本</li>
+            <li>• 常用指令：FROM、WORKDIR、COPY、RUN、CMD、ENV、EXPOSE</li>
+            <li>• 多阶段构建可显著减小镜像体积</li>
+            <li>• 遵循最佳实践：使用.slim镜像、清理缓存、不硬编码敏感信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-1-Docker基础.html">← 上一节</a>
+      <a href="28-3-Docker-Compose.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.5 文本分类应用 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-RNN基本原理.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.5 文本分类应用</h1>
+      <p class="subtitle">构建情感分析系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握文本分类的完整流程</li>
+        <li>学会使用词嵌入处理文本</li>
+        <li>构建基于RNN的情感分析模型</li>
+        <li>理解注意力机制在文本分类中的应用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800" alt="文本分析概念" class="card-image">
+      <h3 class="card-title">文本分类概述</h3>
+      <p class="card-text">
+        <strong>文本分类</strong>是自然语言处理中最基础也是最重要的任务之一。它包括情感分析、新闻分类、垃圾邮件检测等广泛应用。
+        本节将以情感分析为例，展示如何使用RNN构建一个完整的文本分类系统。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 文本分类流程</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 0.5rem;">📝</div>
+          <h3 class="card-title">文本数据</h3>
+          <p class="card-text">原始文本收集</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔧</div>
+          <h3 class="card-title">预处理</h3>
+          <p class="card-text">分词、清洗、编码</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 0.5rem;">🧠</div>
+          <h3 class="card-title">模型训练</h3>
+          <p class="card-text">RNN分类器</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 0.5rem;">📊</div>
+          <h3 class="card-title">评估部署</h3>
+          <p class="card-text">性能优化</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 步骤一：数据预处理</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">from</span> torchtext.data.utils <span class="keyword">import</span> get_tokenizer
+<span class="keyword">from</span> torchtext.vocab <span class="keyword">import</span> build_vocab_from_iterator
+
+<span class="comment"># 分词器</span>
+tokenizer = <span class="function">get_tokenizer</span>(<span class="string">'basic_english'</span>)
+
+<span class="keyword">def</span> <span class="function">yield_tokens</span>(data_iter):
+    <span class="keyword">for</span> text, _ <span class="keyword">in</span> data_iter:
+        <span class="keyword">yield</span> tokenizer(text)
+
+<span class="comment"># 构建词汇表</span>
+vocab = <span class="function">build_vocab_from_iterator</span>(
+    yield_tokens(train_iter),
+    specials=[<span class="string">'<unk>'</span>, <span class="string">'<pad>'</span>],
+    max_tokens=<span class="number">25000</span>
+)
+vocab.set_default_index(vocab[<span class="string">'<unk>'</span>])
+
+<span class="comment"># 文本处理管道</span>
+text_pipeline = <span class="keyword">lambda</span> x: vocab(tokenizer(x))
+label_pipeline = <span class="keyword">lambda</span> x: int(x)
+
+<span class="comment"># 批处理函数</span>
+<span class="keyword">def</span> <span class="function">collate_batch</span>(batch):
+    texts, labels = [], []
+    <span class="keyword">for</span> text, label <span class="keyword">in</span> batch:
+        processed_text = torch.tensor(text_pipeline(text), dtype=torch.int64)
+        texts.append(processed_text)
+        labels.append(label_pipeline(label))
+
+    <span class="comment"># 填充序列</span>
+    texts = nn.utils.rnn.pad_sequence(texts, batch_first=<span class="keyword">True</span>)
+    labels = torch.tensor(labels, dtype=torch.int64)
+    <span class="keyword">return</span> texts, labels
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 步骤二：构建分类模型</h2>
+      <div class="code-block">
+<span class="keyword">class</span> <span class="function">SentimentClassifier</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, vocab_size, embed_dim, hidden_dim,
+                 output_dim, n_layers=<span class="number">2</span>, dropout=<span class="number">0.5</span>):
+        <span class="function">super</span>().__init__()
+
+        <span class="comment"># 词嵌入层</span>
+        self.embedding = nn.Embedding(vocab_size, embed_dim,
+                                       padding_idx=vocab[<span class="string">'<pad>'</span>])
+
+        <span class="comment"># 双向LSTM</span>
+        self.lstm = nn.LSTM(embed_dim, hidden_dim,
+                           num_layers=n_layers,
+                           bidirectional=<span class="keyword">True</span>,
+                           dropout=dropout,
+                           batch_first=<span class="keyword">True</span>)
+
+        <span class="comment"># 注意力层</span>
+        self.attention = nn.Linear(hidden_dim * <span class="number">2</span>, <span class="number">1</span>)
+
+        <span class="comment"># 分类头</span>
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_dim * <span class="number">2</span>, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim)
+        )
+
+    <span class="keyword">def</span> <span class="function">attention_pooling</span>(self, lstm_out):
+        <span class="comment"># 计算注意力权重</span>
+        weights = torch.softmax(self.attention(lstm_out), dim=<span class="number">1</span>)
+        <span class="comment"># 加权求和</span>
+        context = torch.sum(weights * lstm_out, dim=<span class="number">1</span>)
+        <span class="keyword">return</span> context
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, text):
+        embedded = self.embedding(text)
+        lstm_out, _ = self.lstm(embedded)
+        <span class="comment"># 注意力池化</span>
+        pooled = self.attention_pooling(lstm_out)
+        <span class="keyword">return</span> self.fc(pooled)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏋️</span> 步骤三：训练与评估</h2>
+      <div class="code-block">
+<span class="keyword">def</span> <span class="function">train_epoch</span>(model, dataloader, optimizer, criterion):
+    model.train()
+    total_loss, total_correct, total = <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>
+
+    <span class="keyword">for</span> texts, labels <span class="keyword">in</span> dataloader:
+        optimizer.zero_grad()
+        predictions = model(texts)
+        loss = criterion(predictions, labels)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        total_correct += (predictions.argmax(<span class="number">1</span>) == labels).sum().item()
+        total += labels.size(<span class="number">0</span>)
+
+    <span class="keyword">return</span> total_loss / len(dataloader), total_correct / total
+
+<span class="keyword">def</span> <span class="function">evaluate</span>(model, dataloader, criterion):
+    model.eval()
+    total_loss, total_correct, total = <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>
+
+    <span class="keyword">with</span> torch.no_grad():
+        <span class="keyword">for</span> texts, labels <span class="keyword">in</span> dataloader:
+            predictions = model(texts)
+            loss = criterion(predictions, labels)
+
+            total_loss += loss.item()
+            total_correct += (predictions.argmax(<span class="number">1</span>) == labels).sum().item()
+            total += labels.size(<span class="number">0</span>)
+
+    <span class="keyword">return</span> total_loss / len(dataloader), total_correct / total
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 不同模型架构对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>模型</th>
+            <th>优点</th>
+            <th>缺点</th>
+            <th>准确率参考</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Simple RNN</td>
+            <td>结构简单，速度快</td>
+            <td>长距离依赖差</td>
+            <td>82%</td>
+          </tr>
+          <tr>
+            <td>Bidirectional LSTM</td>
+            <td>双向上下文，长依赖好</td>
+            <td>参数多，训练慢</td>
+            <td>87%</td>
+          </tr>
+          <tr>
+            <td>LSTM + Attention</td>
+            <td>关注重点词，可解释</td>
+            <td>额外计算开销</td>
+            <td>89%</td>
+          </tr>
+          <tr>
+            <td>BERT Fine-tuning</td>
+            <td>预训练优势，效果最佳</td>
+            <td>资源消耗大</td>
+            <td>94%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据分析">
+      <div class="caption">图：注意力权重可视化 - 模型关注的词汇</div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">注意力机制的优势</div>
+        <p>加入注意力机制后，模型可以自动学习关注文本中的关键词汇。这不仅提升了性能，还提供了<strong>可解释性</strong>，
+        我们可以通过可视化注意力权重来理解模型的决策依据。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 文本分类需要完整的预处理管道（分词、编码、填充）</li>
+            <li>• 词嵌入将离散词汇转换为稠密向量表示</li>
+            <li>• 双向LSTM能更好地捕捉上下文信息</li>
+            <li>• 注意力机制提升了性能和可解释性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-4-序列建模实战.html">← 上一节</a>
+      <a href="../chapter15/15-1-注意力机制原理.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

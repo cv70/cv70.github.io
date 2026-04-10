@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.2 图像分割 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="#">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.2 图像分割</h1>
+      <p class="subtitle">像素级的图像理解技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解图像分割的分类与定义</li>
+        <li>掌握语义分割与实例分割的区别</li>
+        <li>了解U-Net、Mask R-CNN等经典模型</li>
+        <li>学会评估分割质量的方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1507290439931-a861b5ca382f?w=800" alt="图像分割概念图" class="card-image">
+      <h3 class="card-title">什么是图像分割</h3>
+      <p class="card-text">
+        <strong>图像分割（Image Segmentation）</strong>是将图像划分为多个有意义的区域或对象的过程。与目标检测不同，分割在像素级别对图像进行分类，提供更精细的图像理解能力。图像分割广泛应用于医学影像分析、自动驾驶、遥感图像处理等领域。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> 分割类型对比</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🎨</div>
+          <h3 class="card-title">语义分割</h3>
+          <p class="card-text">每个像素分配类别标签<br>同类物体不区分个体</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">👤</div>
+          <h3 class="card-title">实例分割</h3>
+          <p class="card-text">区分同类不同个体<br>每个实例独立标识</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">全景分割</div>
+          <h3 class="card-title">全景分割</h3>
+          <p class="card-text">语义+实例分割结合<br>每个像素完整标注</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 经典分割模型对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>模型</th>
+            <th>类型</th>
+            <th>核心思想</th>
+            <th>应用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FCN</td>
+            <td>语义分割</td>
+            <td>全卷积网络，端到端预测</td>
+            <td>通用场景分割</td>
+          </tr>
+          <tr>
+            <td>U-Net</td>
+            <td>语义分割</td>
+            <td>编码器-解码器+跳跃连接</td>
+            <td>医学影像分割</td>
+          </tr>
+          <tr>
+            <td>DeepLab</td>
+            <td>语义分割</td>
+            <td>空洞卷积+ASPP模块</td>
+            <td>高精度分割</td>
+          </tr>
+          <tr>
+            <td>Mask R-CNN</td>
+            <td>实例分割</td>
+            <td>Faster R-CNN+分割分支</td>
+            <td>实例级分割</td>
+          </tr>
+          <tr>
+            <td>Segment Anything</td>
+            <td>通用分割</td>
+            <td>大规模预训练+提示学习</td>
+            <td>零样本分割</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 代码示例：使用Segment Anything进行分割</h2>
+      <div class="code-block">
+<pre>
+from segment_anything import sam_model_registry, SamPredictor
+import numpy as np
+import cv2
+
+# 加载SAM模型
+sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h_4b8939.pth")
+sam.to(device="cuda")
+predictor = SamPredictor(sam)
+
+# 设置图像
+image = cv2.imread("dog.jpg")
+predictor.set_image(image)
+
+# 使用点提示进行分割
+input_point = np.array([[500, 375]])  # 图像中的点坐标
+input_label = np.array([1])  # 1表示前景点
+
+masks, scores, logits = predictor.predict(
+    point_coords=input_point,
+    point_labels=input_label,
+    multimask_output=True
+)
+
+# 选择最佳mask
+best_mask = masks[np.argmax(scores)]
+print(f"分割区域面积: {best_mask.sum()} 像素")
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> U-Net架构详解</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">编码器路径</h3>
+          <ul class="feature-list">
+            <li>逐层下采样，提取高层特征</li>
+            <li>卷积+池化操作</li>
+            <li>感受野逐渐增大</li>
+            <li>捕获全局上下文信息</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">解码器路径</h3>
+          <ul class="feature-list">
+            <li>逐层上采样，恢复空间分辨率</li>
+            <li>跳跃连接融合多尺度特征</li>
+            <li>精确定位边界</li>
+            <li>输出与输入同尺寸的分割图</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">评估指标</div>
+        <p><strong>IoU(Intersection over Union)</strong>和<strong>Dice系数</strong>是图像分割的核心评估指标。IoU计算预测区域与真实区域的交并比，Dice系数则更关注重叠程度。医学影像分割中Dice系数更为常用。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800" alt="医学影像概念图">
+      <div class="caption">图：图像分割在医学影像诊断中发挥关键作用</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 图像分割在像素级别理解图像内容</li>
+            <li>• 语义分割不区分类内实例，实例分割区分个体</li>
+            <li>• U-Net是医学影像分割的经典架构</li>
+            <li>• Segment Anything实现了通用的零样本分割能力</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-1-目标检测.html">← 上一节</a>
+      <a href="32-3-人脸识别.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

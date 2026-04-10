@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.3 模型持久化 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Scikit-learn-API设计.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.3 模型持久化</h1>
+      <p class="subtitle">保存与加载训练好的模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解模型持久化的重要性</li>
+        <li>掌握joblib和pickle的使用方法</li>
+        <li>了解模型版本管理最佳实践</li>
+        <li>学会保存和加载完整Pipeline</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=800" alt="模型保存概念图" class="card-image">
+      <h3 class="card-title">为什么需要模型持久化</h3>
+      <p class="card-text">
+        训练好的模型需要保存以便后续使用。<strong>模型持久化</strong>将训练好的模型保存到磁盘，
+        避免重复训练，便于部署和分享。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 常用保存方法</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">joblib（推荐）</h3>
+          <ul class="feature-list">
+            <li>sklearn官方推荐</li>
+            <li>对大型NumPy数组效率高</li>
+            <li>支持压缩</li>
+            <li>适合保存sklearn模型</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">pickle</h3>
+          <ul class="feature-list">
+            <li>Python标准库</li>
+            <li>通用序列化工具</li>
+            <li>兼容性好</li>
+            <li>适合一般Python对象</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 使用joblib保存模型</h2>
+      <div class="code-block">
+<span class="keyword">import</span> joblib
+<span class="keyword">from</span> sklearn.ensemble <span class="keyword">import</span> RandomForestClassifier
+
+<span class="comment"># 训练模型</span>
+model = RandomForestClassifier(n_estimators=<span class="number">100</span>)
+model.fit(X_train, y_train)
+
+<span class="comment"># 保存模型</span>
+joblib.dump(model, <span class="string">'model.joblib'</span>)
+
+<span class="comment"># 保存为压缩文件</span>
+joblib.dump(model, <span class="string">'model_compressed.joblib'</span>, compress=<span class="number">3</span>)
+
+<span class="comment"># 加载模型</span>
+loaded_model = joblib.load(<span class="string">'model.joblib'</span>)
+
+<span class="comment"># 使用加载的模型</span>
+predictions = loaded_model.predict(X_test)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 保存完整Pipeline</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.pipeline <span class="keyword">import</span> Pipeline
+<span class="keyword">import</span> joblib
+
+<span class="comment"># 创建并训练Pipeline</span>
+pipeline = Pipeline([
+    (<span class="string">'scaler'</span>, StandardScaler()),
+    (<span class="string">'classifier'</span>, RandomForestClassifier())
+])
+pipeline.fit(X_train, y_train)
+
+<span class="comment"># 保存完整Pipeline</span>
+joblib.dump(pipeline, <span class="string">'pipeline.joblib'</span>)
+
+<span class="comment"># 加载并直接使用</span>
+loaded_pipeline = joblib.load(<span class="string">'pipeline.joblib'</span>)
+predictions = loaded_pipeline.predict(X_new)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 模型元数据管理</h2>
+      <div class="code-block">
+<span class="keyword">import</span> json
+<span class="keyword">from</span> datetime <span class="keyword">import</span> datetime
+
+<span class="comment"># 创建模型元数据</span>
+metadata = {
+    <span class="string">'model_name'</span>: <span class="string">'random_forest_classifier'</span>,
+    <span class="string">'version'</span>: <span class="string">'1.0.0'</span>,
+    <span class="string">'created_at'</span>: datetime.now().isoformat(),
+    <span class="string">'sklearn_version'</span>: sklearn.__version__,
+    <span class="string">'features'</span>: feature_names,
+    <span class="string">'metrics'</span>: {
+        <span class="string">'accuracy'</span>: <span class="number">0.95</span>,
+        <span class="string">'f1_score'</span>: <span class="number">0.93</span>
+    },
+    <span class="string">'parameters'</span>: model.get_params()
+}
+
+<span class="comment"># 保存元数据</span>
+<span class="keyword">with</span> <span class="keyword">open</span>(<span class="string">'model_metadata.json'</span>, <span class="string">'w'</span>) <span class="keyword">as</span> f:
+    json.dump(metadata, f, indent=<span class="number">2</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 安全注意事项</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全警告</div>
+          <p>pickle和joblib文件可能包含恶意代码。仅加载<strong>可信来源</strong>的模型文件，不要加载来历不明的模型。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="模型持久化">
+      <div class="caption">图：模型持久化确保训练成果可复用</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 模型持久化保存训练结果，避免重复训练</li>
+            <li>• joblib是sklearn推荐的保存方法</li>
+            <li>• 保存完整Pipeline确保预处理一致性</li>
+            <li>• 应保存模型元数据便于版本管理</li>
+            <li>• 注意安全性，只加载可信模型文件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-2-Pipeline构建.html">← 上一节</a>
+      <a href="10-4-完整机器学习项目流程.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.5 安全审计 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="30-1-日志系统设计.html">第三十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.5 安全审计</h1>
+      <p class="subtitle">AI应用的安全防护与审计实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解AI应用的安全威胁和防护措施</li>
+        <li>掌握身份认证和访问控制</li>
+        <li>学会数据安全和隐私保护</li>
+        <li>了解安全审计和合规要求</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800" alt="安全防护" class="card-image">
+      <h3 class="card-title">AI应用安全的重要性</h3>
+      <p class="card-text">
+        <strong>AI应用安全</strong>涉及模型安全、数据安全、API安全等多个层面。随着AI应用的普及，模型可能被攻击（对抗样本）、数据可能泄露、API可能被滥用。完善的安全审计机制是保障AI应用可信、可靠的关键。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> AI安全威胁类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>威胁类型</th>
+            <th>说明</th>
+            <th>防护措施</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>对抗攻击</td>
+            <td>精心构造输入欺骗模型</td>
+            <td>对抗训练、输入验证</td>
+          </tr>
+          <tr>
+            <td>模型窃取</td>
+            <td>通过API查询窃取模型</td>
+            <td>查询限制、差分隐私</td>
+          </tr>
+          <tr>
+            <td>数据投毒</td>
+            <td>污染训练数据</td>
+            <td>数据验证、异常检测</td>
+          </tr>
+          <tr>
+            <td>成员推断</td>
+            <td>推断数据是否在训练集</td>
+            <td>差分隐私、正则化</td>
+          </tr>
+          <tr>
+            <td>API滥用</td>
+            <td>恶意调用消耗资源</td>
+            <td>限流、认证授权</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 身份认证与访问控制</h2>
+      <div class="code-block">
+<pre># API认证中间件示例
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import APIKeyHeader
+import jwt
+
+app = FastAPI()
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+# API Key认证
+async def verify_api_key(api_key: str = Depends(api_key_header)):
+    if not is_valid_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return api_key
+
+# JWT认证
+async def verify_jwt_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+
+# RBAC权限控制
+def check_permission(resource: str, action: str):
+    def decorator(func):
+        async def wrapper(*args, user=Depends(get_current_user), **kwargs):
+            if not has_permission(user.role, resource, action):
+                raise HTTPException(status_code=403, detail="Permission denied")
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+@app.post("/predict")
+@check_permission("model", "inference")
+async def predict(request: PredictRequest, api_key: str = Depends(verify_api_key)):
+    return model.predict(request.data)
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800" alt="安全架构">
+      <div class="caption">图：完善的安全防护保障AI应用可信可靠</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 数据安全保护</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">数据加密</h3>
+          <ul class="feature-list">
+            <li>传输加密(TLS/SSL)</li>
+            <li>存储加密(AES-256)</li>
+            <li>密钥管理(KMS)</li>
+            <li>字段级加密</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">隐私保护</h3>
+          <ul class="feature-list">
+            <li>数据脱敏处理</li>
+            <li>差分隐私技术</li>
+            <li>联邦学习</li>
+            <li>数据最小化原则</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 审计日志设计</h2>
+      <div class="code-block">
+<pre># 审计日志记录
+import logging
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class AuditLog:
+    timestamp: str
+    user_id: str
+    action: str
+    resource: str
+    resource_id: Optional[str]
+    ip_address: str
+    user_agent: str
+    status: str
+    details: dict
+
+class AuditLogger:
+    def __init__(self):
+        self.logger = logging.getLogger("audit")
+        self.logger.setLevel(logging.INFO)
+
+    def log_model_access(self, user_id, model_name, action, status, details=None):
+        """记录模型访问审计"""
+        audit_entry = AuditLog(
+            timestamp=datetime.utcnow().isoformat(),
+            user_id=user_id,
+            action=action,
+            resource=f"model/{model_name}",
+            resource_id=None,
+            ip_address=get_request_ip(),
+            user_agent=get_user_agent(),
+            status=status,
+            details=details or {}
+        )
+        self.logger.info(audit_entry.__dict__)
+
+    def log_data_access(self, user_id, dataset_name, action, records_accessed):
+        """记录数据访问审计"""
+        self.logger.info({
+            "event": "data_access",
+            "user_id": user_id,
+            "dataset": dataset_name,
+            "action": action,
+            "records": records_accessed,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+# 使用示例
+audit = AuditLogger()
+audit.log_model_access(
+    user_id="user-123",
+    model_name="gpt-model",
+    action="inference",
+    status="success",
+    details={"tokens_used": 500}
+)
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 安全合规要求</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>合规标准</th>
+            <th>适用场景</th>
+            <th>关键要求</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GDPR</td>
+            <td>欧盟用户数据</td>
+            <td>数据主体权利、被遗忘权</td>
+          </tr>
+          <tr>
+            <td>CCPA</td>
+            <td>加州用户数据</td>
+            <td>数据披露、删除权</td>
+          </tr>
+          <tr>
+            <td>HIPAA</td>
+            <td>医疗健康数据</td>
+            <td>PHI保护、审计追踪</td>
+          </tr>
+          <tr>
+            <td>SOC 2</td>
+            <td>云服务提供商</td>
+            <td>安全控制、可用性</td>
+          </tr>
+          <tr>
+            <td>等保2.0</td>
+            <td>中国网络安全</td>
+            <td>等级保护、安全审计</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">AI安全特别提示</div>
+        <p>AI应用需要注意：<strong>模型文件可能包含训练数据痕迹</strong>，发布前需检查是否泄露敏感信息；<strong>API响应可能暴露模型细节</strong>，需过滤敏感字段；<strong>日志不应记录原始输入</strong>，避免数据泄露风险。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• AI安全威胁包括对抗攻击、模型窃取、数据投毒等</li>
+            <li>• 身份认证(API Key/JWT)和访问控制(RBAC)是基础防护</li>
+            <li>• 数据安全包括加密存储、传输和隐私保护技术</li>
+            <li>• 审计日志记录所有操作，满足合规要求</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-4-自动化运维.html">← 上一节</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

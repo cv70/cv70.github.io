@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.3 GRU架构 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-RNN基本原理.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.3 GRU架构</h1>
+      <p class="subtitle">门控循环单元的简化设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解GRU的设计思想与简化策略</li>
+        <li>掌握GRU两个门控的工作机制</li>
+        <li>能够比较GRU与LSTM的异同</li>
+        <li>学会在PyTorch中使用GRU</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据流概念图" class="card-image">
+      <h3 class="card-title">GRU简介</h3>
+      <p class="card-text">
+        <strong>门控循环单元（Gated Recurrent Unit，GRU）</strong>由Cho等人在2014年提出，
+        是LSTM的一种简化变体。GRU将LSTM的三个门控简化为两个（更新门和重置门），
+        在保持相近性能的同时减少了参数量，训练效率更高，成为序列建模的常用选择。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚪</span> GRU的两个门控</h2>
+      <div class="grid grid-2">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">更新门（Update Gate）</h3>
+          <p class="card-text">决定当前状态保留多少历史信息，合并了LSTM的遗忘门和输入门功能</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🗑️</div>
+          <h3 class="card-title">重置门（Reset Gate）</h3>
+          <p class="card-text">控制如何将新输入与历史信息结合，决定"遗忘"历史信息的程度</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> GRU的数学公式</h2>
+      <div class="code-block">
+<span class="comment"># GRU核心公式（更简洁！）</span>
+
+<span class="comment"># 1. 重置门：控制历史信息的重要性</span>
+r<t> = σ(W<sub>r</sub> * [h<t-1>, x<t>] + b<sub>r</sub>)
+
+<span class="comment"># 2. 更新门：控制新旧信息的混合比例</span>
+z<t> = σ(W<sub>z</sub> * [h<t-1>, x<t>] + b<sub>z</sub>)
+
+<span class="comment"># 3. 候选隐藏状态</span>
+h̃<t> = tanh(W * [r<t> * h<t-1>, x<t>] + b)
+
+<span class="comment"># 4. 最终隐藏状态</span>
+h<t> = (1 - z<t>) * h<t-1> + z<t> * h̃<t>
+
+<span class="comment"># 注意：z<t>接近1时更依赖新信息</span>
+<span class="comment">#      z<t>接近0时更依赖历史信息</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> PyTorch实现GRU</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+
+<span class="keyword">class</span> <span class="function">GRUModel</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, vocab_size, embed_dim, hidden_dim, output_dim):
+        <span class="function">super</span>().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.gru = nn.GRU(embed_dim, hidden_dim,
+                         num_layers=<span class="number">2</span>,
+                         batch_first=<span class="keyword">True</span>,
+                         dropout=<span class="number">0.3</span>,
+                         bidirectional=<span class="keyword">True</span>)
+        self.fc = nn.Linear(hidden_dim * <span class="number">2</span>, output_dim)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, text):
+        <span class="comment"># 词嵌入</span>
+        embedded = self.embedding(text)
+        <span class="comment"># GRU前向传播</span>
+        output, hidden = self.gru(embedded)
+        <span class="comment"># 拼接双向最后隐藏状态</span>
+        hidden = torch.cat((hidden[-<span class="number">2</span>, :, :], hidden[-<span class="number">1</span>, :, :]), dim=<span class="number">1</span>)
+        <span class="keyword">return</span> self.fc(hidden)
+
+<span class="comment"># 使用示例</span>
+model = <span class="function">GRUModel</span>(vocab_size=<span class="number">10000</span>, embed_dim=<span class="number">128</span>,
+               hidden_dim=<span class="number">256</span>, output_dim=<span class="number">2</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> GRU vs LSTM 详细对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>LSTM</th>
+            <th>GRU</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>门控数量</td>
+            <td>3个（遗忘、输入、输出）</td>
+            <td>2个（更新、重置）</td>
+          </tr>
+          <tr>
+            <td>状态数量</td>
+            <td>2个（细胞状态、隐藏状态）</td>
+            <td>1个（隐藏状态）</td>
+          </tr>
+          <tr>
+            <td>参数量</td>
+            <td>4 * hidden_dim * (hidden_dim + input_dim + 1)</td>
+            <td>3 * hidden_dim * (hidden_dim + input_dim + 1)</td>
+          </tr>
+          <tr>
+            <td>计算复杂度</td>
+            <td>较高</td>
+            <td>较低</td>
+          </tr>
+          <tr>
+            <td>训练速度</td>
+            <td>较慢</td>
+            <td>较快</td>
+          </tr>
+          <tr>
+            <td>长序列表现</td>
+            <td>略优</td>
+            <td>相当</td>
+          </tr>
+          <tr>
+            <td>小数据集</td>
+            <td>可能过拟合</td>
+            <td>更合适</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=800" alt="神经网络架构">
+      <div class="caption">图：GRU单元结构相比LSTM更加简洁</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔬</span> 选择建议</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">推荐使用LSTM</h3>
+          <ul class="feature-list">
+            <li>超长序列数据</li>
+            <li>需要精确控制信息流</li>
+            <li>计算资源充足</li>
+            <li>任务对精度要求极高</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">推荐使用GRU</h3>
+          <ul class="feature-list">
+            <li>中小规模数据集</li>
+            <li>需要快速训练迭代</li>
+            <li>计算资源有限</li>
+            <li>实时性要求高</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">实践经验</div>
+        <p>在很多实际任务中，GRU和LSTM的性能差异很小。建议<strong>先用GRU</strong>进行快速实验，如果效果不理想再尝试LSTM。双向结构通常能带来显著提升。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• GRU是LSTM的简化版本，只有两个门控</li>
+            <li>• 更新门控制新旧信息混合比例</li>
+            <li>• 重置门控制历史信息的保留程度</li>
+            <li>• GRU参数少、训练快，适合大多数场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-2-LSTM详解.html">← 上一节</a>
+      <a href="14-4-序列建模实战.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

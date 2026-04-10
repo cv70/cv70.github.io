@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.4 序列建模实战 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-RNN基本原理.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.4 序列建模实战</h1>
+      <p class="subtitle">从零构建序列预测模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握序列数据的预处理方法</li>
+        <li>学会构建完整的序列建模流程</li>
+        <li>理解序列填充与打包技术</li>
+        <li>完成时间序列预测实战项目</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据分析可视化" class="card-image">
+      <h3 class="card-title">序列建模概述</h3>
+      <p class="card-text">
+        序列建模是深度学习中最具挑战性的任务之一。无论是预测股票走势、生成文本，还是语音识别，
+        都需要处理具有时间依赖关系的数据。本节将通过一个完整的实战项目，带你掌握序列建模的核心技术。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 项目：股价趋势预测</h2>
+      <div class="steps">
+        <div class="step completed">
+          <div class="step-number">1</div>
+          <div class="step-label">数据准备</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">2</div>
+          <div class="step-label">模型构建</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">3</div>
+          <div class="step-label">训练验证</div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-label">预测评估</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 步骤一：数据预处理</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+<span class="keyword">from</span> sklearn.preprocessing <span class="keyword">import</span> MinMaxScaler
+
+<span class="keyword">class</span> <span class="function">StockDataset</span>(torch.utils.data.Dataset):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, data, seq_length=<span class="number">60</span>):
+        self.data = data
+        self.seq_length = seq_length
+        self.scaler = MinMaxScaler()
+        self.scaled_data = self.scaler.fit_transform(data.reshape(-<span class="number">1</span>, <span class="number">1</span>))
+
+    <span class="keyword">def</span> <span class="function">__len__</span>(self):
+        <span class="keyword">return</span> len(self.scaled_data) - self.seq_length
+
+    <span class="keyword">def</span> <span class="function">__getitem__</span>(self, idx):
+        <span class="comment"># 获取序列窗口</span>
+        x = self.scaled_data[idx:idx + self.seq_length]
+        <span class="comment"># 预测下一个值</span>
+        y = self.scaled_data[idx + self.seq_length]
+        <span class="keyword">return</span> torch.FloatTensor(x), torch.FloatTensor(y)
+
+<span class="comment"># 加载和准备数据</span>
+<span class="keyword">def</span> <span class="function">prepare_data</span>(prices, train_ratio=<span class="number">0.8</span>):
+    train_size = int(len(prices) * train_ratio)
+    train_data = prices[:train_size]
+    test_data = prices[train_size:]
+
+    train_dataset = <span class="function">StockDataset</span>(train_data)
+    test_dataset = <span class="function">StockDataset</span>(test_data)
+
+    <span class="keyword">return</span> train_dataset, test_dataset
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 步骤二：构建LSTM模型</h2>
+      <div class="code-block">
+<span class="keyword">class</span> <span class="function">StockPredictor</span>(torch.nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, input_size=<span class="number">1</span>, hidden_size=<span class="number">64</span>,
+                 num_layers=<span class="number">2</span>, dropout=<span class="number">0.2</span>):
+        <span class="function">super</span>().__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        <span class="comment"># LSTM层</span>
+        self.lstm = torch.nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=<span class="keyword">True</span>,
+            dropout=dropout
+        )
+
+        <span class="comment"># 全连接层</span>
+        self.fc1 = torch.nn.Linear(hidden_size, <span class="number">32</span>)
+        self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(<span class="number">32</span>, <span class="number">1</span>)
+        self.dropout = torch.nn.Dropout(dropout)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x):
+        <span class="comment"># LSTM处理</span>
+        lstm_out, _ = self.lstm(x)
+        <span class="comment"># 取最后一个时间步</span>
+        out = lstm_out[:, -<span class="number">1</span>, :]
+        <span class="comment"># 全连接预测</span>
+        out = self.dropout(self.relu(self.fc1(out)))
+        out = self.fc2(out)
+        <span class="keyword">return</span> out
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏋️</span> 步骤三：训练循环</h2>
+      <div class="code-block">
+<span class="keyword">def</span> <span class="function">train_model</span>(model, train_loader, epochs=<span class="number">100</span>, lr=<span class="number">0.001</span>):
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, patience=<span class="number">5</span>, factor=<span class="number">0.5</span>
+    )
+
+    model.train()
+    <span class="keyword">for</span> epoch <span class="keyword">in</span> range(epochs):
+        total_loss = <span class="number">0</span>
+        <span class="keyword">for</span> batch_x, batch_y <span class="keyword">in</span> train_loader:
+            optimizer.zero_grad()
+            predictions = model(batch_x)
+            loss = criterion(predictions.squeeze(), batch_y)
+            loss.backward()
+            <span class="comment"># 梯度裁剪防止爆炸</span>
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=<span class="number">1.0</span>)
+            optimizer.step()
+            total_loss += loss.item()
+
+        avg_loss = total_loss / len(train_loader)
+        scheduler.step(avg_loss)
+
+        <span class="keyword">if</span> (epoch + <span class="number">1</span>) % <span class="number">10</span> == <span class="number">0</span>:
+            print(f<span class="string">'Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 步骤四：预测与评估</h2>
+      <div class="code-block">
+<span class="keyword">def</span> <span class="function">evaluate_and_predict</span>(model, test_dataset, scaler):
+    model.eval()
+    predictions = []
+    actuals = []
+
+    <span class="keyword">with</span> torch.no_grad():
+        <span class="keyword">for</span> i <span class="keyword">in</span> range(len(test_dataset)):
+            x, y = test_dataset[i]
+            x = x.unsqueeze(<span class="number">0</span>)  <span class="comment"># 添加batch维度</span>
+            pred = model(x)
+            predictions.append(pred.item())
+            actuals.append(y.item())
+
+    <span class="comment"># 反归一化</span>
+    predictions = scaler.inverse_transform(
+        np.array(predictions).reshape(-<span class="number">1</span>, <span class="number">1</span>)
+    )
+    actuals = scaler.inverse_transform(
+        np.array(actuals).reshape(-<span class="number">1</span>, <span class="number">1</span>)
+    )
+
+    <span class="comment"># 计算评估指标</span>
+    mse = np.mean((predictions - actuals) ** <span class="number">2</span>)
+    mae = np.mean(np.abs(predictions - actuals))
+    rmse = np.sqrt(mse)
+
+    print(f<span class="string">'MSE: {mse:.4f}, MAE: {mae:.4f}, RMSE: {rmse:.4f}'</span>)
+    <span class="keyword">return</span> predictions, actuals
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 序列填充技术对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>技术</th>
+            <th>描述</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Zero Padding</td>
+            <td>用0填充短序列</td>
+            <td>简单快速，适合均匀分布长度</td>
+          </tr>
+          <tr>
+            <td>PackedSequence</td>
+            <td>打包变长序列，跳过填充</td>
+            <td>PyTorch推荐，节省计算</td>
+          </tr>
+          <tr>
+            <td>Masking</td>
+            <td>使用掩码标记有效位置</td>
+            <td>灵活，适合复杂模型</td>
+          </tr>
+          <tr>
+            <td>Truncation</td>
+            <td>截断超长序列</td>
+            <td>固定长度需求</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="数据可视化">
+      <div class="caption">图：序列模型训练过程可视化</div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>处理变长序列时，务必使用<strong>PackedSequence</strong>配合<code>pack_padded_sequence</code>和<code>pad_packed_sequence</code>，
+        这样可以避免在填充位置进行无效计算，显著提升训练效率。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 序列建模需要合理的数据预处理和归一化</li>
+            <li>• 使用滑动窗口构建训练样本</li>
+            <li>• 梯度裁剪是防止梯度爆炸的重要技术</li>
+            <li>• PackedSequence可有效处理变长序列</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-3-GRU架构.html">← 上一节</a>
+      <a href="14-5-文本分类应用.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

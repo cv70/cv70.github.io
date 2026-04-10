@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.5 视频分析 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="#">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.5 视频分析</h1>
+      <p class="subtitle">理解动态视觉世界的智能技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解视频分析的基本概念与技术栈</li>
+        <li>掌握动作识别与行为分析的核心方法</li>
+        <li>了解视频目标检测与跟踪技术</li>
+        <li>认识视频分析的典型应用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1536240478700-b869070f9279?w=800" alt="视频分析概念图" class="card-image">
+      <h3 class="card-title">什么是视频分析</h3>
+      <p class="card-text">
+        <strong>视频分析（Video Analysis）</strong>是指利用计算机视觉和深度学习技术对视频数据进行理解和分析的技术。相比图像分析，视频分析额外考虑了时序信息，能够理解动作、行为、事件等动态内容。视频分析广泛应用于智能监控、体育分析、内容审核、自动驾驶等领域。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> 视频分析任务分类</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🏃</div>
+          <h3 class="card-title">动作识别</h3>
+          <p class="card-text">识别视频中的人体动作</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">目标跟踪</h3>
+          <p class="card-text">连续帧中追踪目标</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎬</div>
+          <h3 class="card-title">视频检测</h3>
+          <p class="card-text">检测视频中目标及时刻</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+          <h3 class="card-title">视频理解</h3>
+          <p class="card-text">理解视频语义内容</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 视频分析方法对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>核心思想</th>
+            <th>优点</th>
+            <th>局限性</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>2D CNN+RNN</td>
+            <td>每帧用CNN提取特征，RNN建模时序</td>
+            <td>利用成熟图像模型</td>
+            <td>长时依赖建模弱</td>
+          </tr>
+          <tr>
+            <td>3D CNN</td>
+            <td>同时在时空维度卷积</td>
+            <td>时空特征联合学习</td>
+            <td>计算量大，训练难</td>
+          </tr>
+          <tr>
+            <td>Two-Stream</td>
+            <td>RGB流+光流流双路径</td>
+            <td>运动信息建模好</td>
+            <td>光流计算耗时</td>
+          </tr>
+          <tr>
+            <td>Video Transformer</td>
+            <td>注意力机制建模时空关系</td>
+            <td>长距离依赖建模强</td>
+            <td>计算复杂度高</td>
+          </tr>
+          <tr>
+            <td>VideoMAE</td>
+            <td>掩码自编码器预训练</td>
+            <td>数据效率高，效果好</td>
+            <td>预训练成本高</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 代码示例：使用VideoMAE进行动作识别</h2>
+      <div class="code-block">
+<pre>
+from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
+import numpy as np
+import av
+
+# 加载预训练模型
+model_name = "MCG-NJU/videomae-base-finetuned-kinetics"
+processor = VideoMAEImageProcessor.from_pretrained(model_name)
+model = VideoMAEForVideoClassification.from_pretrained(model_name)
+
+# 读取视频帧
+def read_video_pyav(container, indices):
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame.to_ndarray(format="rgb24"))
+    return np.array(frames)
+
+# 处理视频
+container = av.open("action_video.mp4")
+indices = np.arange(0, 16) * 2  # 采样16帧
+video = read_video_pyav(container, indices)
+
+# 预测动作类别
+inputs = processor(list(video), return_tensors="pt")
+outputs = model(**inputs)
+predicted_class = outputs.logits.argmax(-1).item()
+
+print(f"预测动作: {model.config.id2label[predicted_class]}")
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 视频目标跟踪</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">单目标跟踪(SOT)</h3>
+          <ul class="feature-list">
+            <li>第一帧标注目标位置</li>
+            <li>后续帧持续追踪</li>
+            <li>代表方法：SiamFC, SiamRPN</li>
+            <li>应用：无人机跟踪、运动员追踪</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多目标跟踪(MOT)</h3>
+          <ul class="feature-list">
+            <li>检测+关联两阶段</li>
+            <li>维护目标ID一致性</li>
+            <li>代表方法：DeepSORT, ByteTrack</li>
+            <li>应用：人群监控、交通流量统计</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">技术挑战</div>
+        <p>视频分析面临的主要挑战：<strong>数据量大</strong>（视频比图像大几个数量级）、<strong>标注成本高</strong>（时序标注复杂）、<strong>计算资源需求大</strong>、<strong>长视频理解难</strong>。解决方案包括帧采样策略、时空分离架构、自监督预训练等。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800" alt="监控分析概念图">
+      <div class="caption">图：视频分析在智能监控中发挥重要作用</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 视频分析在图像分析基础上增加了时序建模</li>
+            <li>• 3D CNN和Video Transformer是主流架构</li>
+            <li>• 目标跟踪分为单目标跟踪和多目标跟踪</li>
+            <li>• 自监督预训练是解决标注数据不足的有效方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-4-OCR文字识别.html">← 上一节</a>
+      <a href="../chapter33/33-1-语音识别ASR.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

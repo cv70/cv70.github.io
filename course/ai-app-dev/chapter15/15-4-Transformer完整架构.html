@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.4 Transformer完整架构 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-注意力机制原理.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.4 Transformer完整架构</h1>
+      <p class="subtitle">深度理解Transformer的设计精髓</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Transformer的整体架构设计</li>
+        <li>掌握编码器和解码器的结构</li>
+        <li>理解残差连接和层归一化的作用</li>
+        <li>能够实现完整的Transformer模型</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800" alt="Transformer架构" class="card-image">
+      <h3 class="card-title">Transformer概述</h3>
+      <p class="card-text">
+        <strong>Transformer</strong>是Google在2017年论文"Attention is All You Need"中提出的革命性架构。
+        它完全抛弃了循环和卷积结构，仅依靠注意力机制实现序列建模，在机器翻译任务上取得了SOTA效果，
+        并成为BERT、GPT等现代大语言模型的基础架构。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> Transformer架构组成</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">编码器（Encoder）</h3>
+          <ul class="feature-list">
+            <li>6个相同的编码器层堆叠</li>
+            <li>每层包含：多头自注意力 + 前馈网络</li>
+            <li>残差连接 + 层归一化</li>
+            <li>输入：词嵌入 + 位置编码</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">解码器（Decoder）</h3>
+          <ul class="feature-list">
+            <li>6个相同的解码器层堆叠</li>
+            <li>每层包含：掩码自注意力 + 交叉注意力 + 前馈网络</li>
+            <li>掩码确保只看到之前的位置</li>
+            <li>交叉注意力连接编码器输出</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> 编码器层实现</h2>
+      <div class="code-block">
+<span class="keyword">class</span> <span class="function">EncoderLayer</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, d_model, num_heads, d_ff, dropout=<span class="number">0.1</span>):
+        <span class="function">super</span>().__init__()
+
+        <span class="comment"># 多头自注意力</span>
+        self.self_attn = MultiHeadAttention(d_model, num_heads)
+
+        <span class="comment"># 前馈网络</span>
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.ReLU(),
+            nn.Linear(d_ff, d_model)
+        )
+
+        <span class="comment"># 层归一化</span>
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+
+        <span class="comment"># Dropout</span>
+        self.dropout = nn.Dropout(dropout)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x, mask=<span class="keyword">None</span>):
+        <span class="comment"># 多头注意力 + 残差 + LayerNorm</span>
+        attn_out, _ = self.self_attn(x, mask)
+        x = self.norm1(x + self.dropout(attn_out))
+
+        <span class="comment"># 前馈网络 + 残差 + LayerNorm</span>
+        ffn_out = self.ffn(x)
+        x = self.norm2(x + self.dropout(ffn_out))
+
+        <span class="keyword">return</span> x
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> 解码器层实现</h2>
+      <div class="code-block">
+<span class="keyword">class</span> <span class="function">DecoderLayer</span>(nn.Module):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, d_model, num_heads, d_ff, dropout=<span class="number">0.1</span>):
+        <span class="function">super</span>().__init__()
+
+        <span class="comment"># 掩码自注意力</span>
+        self.self_attn = MultiHeadAttention(d_model, num_heads)
+
+        <span class="comment"># 交叉注意力</span>
+        self.cross_attn = MultiHeadAttention(d_model, num_heads)
+
+        <span class="comment"># 前馈网络</span>
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.ReLU(),
+            nn.Linear(d_ff, d_model)
+        )
+
+        <span class="comment"># 层归一化</span>
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+
+        self.dropout = nn.Dropout(dropout)
+
+    <span class="keyword">def</span> <span class="function">forward</span>(self, x, enc_output, tgt_mask, src_mask):
+        <span class="comment"># 掩码自注意力</span>
+        attn_out, _ = self.self_attn(x, tgt_mask)
+        x = self.norm1(x + self.dropout(attn_out))
+
+        <span class="comment"># 交叉注意力（Query来自解码器，K/V来自编码器）</span>
+        cross_out, _ = self.cross_attn(x, enc_output, enc_output, src_mask)
+        x = self.norm2(x + self.dropout(cross_out))
+
+        <span class="comment"># 前馈网络</span>
+        ffn_out = self.ffn(x)
+        x = self.norm3(x + self.dropout(ffn_out))
+
+        <span class="keyword">return</span> x
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> Transformer vs RNN架构对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>RNN/LSTM</th>
+            <th>Transformer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>并行化</td>
+            <td>难以并行（顺序计算）</td>
+            <td>完全并行</td>
+          </tr>
+          <tr>
+            <td>长距离依赖</td>
+            <td>需要多步传递</td>
+            <td>一步直达（O(1)）</td>
+          </tr>
+          <tr>
+            <td>计算复杂度</td>
+            <td>O(n·d²)</td>
+            <td>O(n²·d)</td>
+          </tr>
+          <tr>
+            <td>路径长度</td>
+            <td>O(n)</td>
+            <td>O(1)</td>
+          </tr>
+          <tr>
+            <td>训练速度</td>
+            <td>较慢</td>
+            <td>显著更快</td>
+          </tr>
+          <tr>
+            <td>可扩展性</td>
+            <td>有限</td>
+            <td>优秀（支持超大模型）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="架构可视化">
+      <div class="caption">图：Transformer编码器-解码器架构图</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 关键设计：残差与归一化</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">残差连接（Residual）</h3>
+          <p class="card-text">解决深层网络退化问题</p>
+          <div class="code-block">
+<span class="comment"># 残差连接公式</span>
+output = LayerNorm(x + Sublayer(x))
+
+<span class="comment"># 优势：</span>
+<span class="comment"># 1. 梯度直通，缓解梯度消失</span>
+<span class="comment"># 2. 允许跳过某些层</span>
+<span class="comment"># 3. 便于训练深层网络</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">层归一化（LayerNorm）</h3>
+          <p class="card-text">稳定训练过程</p>
+          <div class="code-block">
+<span class="comment"># LayerNorm vs BatchNorm</span>
+<span class="comment"># BatchNorm：在batch维度归一化</span>
+<span class="comment"># LayerNorm：在特征维度归一化</span>
+
+<span class="comment"># Transformer使用LayerNorm</span>
+<span class="comment"># 因为序列长度可变，batch内不一致</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Transformer超参数配置</h2>
+      <div class="code-block">
+<span class="comment"># 标准Transformer配置（base）</span>
+d_model = <span class="number">512</span>      <span class="comment"># 模型维度</span>
+d_ff = <span class="number">2048</span>       <span class="comment"># 前馈网络维度</span>
+num_heads = <span class="number">8</span>     <span class="comment"># 注意力头数</span>
+num_layers = <span class="number">6</span>   <span class="comment"># 编码器/解码器层数</span>
+dropout = <span class="number">0.1</span>     <span class="comment"># Dropout率</span>
+
+<span class="comment"># Transformer Big配置</span>
+d_model = <span class="number">1024</span>
+d_ff = <span class="number">4096</span>
+num_heads = <span class="number">16</span>
+num_layers = <span class="number">6</span>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">架构变体</div>
+        <p>Transformer有三种常见使用方式：<strong>Encoder-only</strong>（BERT，用于理解任务）、
+        <strong>Decoder-only</strong>（GPT，用于生成任务）、<strong>Encoder-Decoder</strong>（T5，用于序列到序列任务）。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Transformer由编码器和解码器组成</li>
+            <li>• 每层包含注意力、前馈网络、残差和归一化</li>
+            <li>• 残差连接解决梯度消失，LayerNorm稳定训练</li>
+            <li>• 完全并行化是其相比RNN的核心优势</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-3-Multi-Head-Attention.html">← 上一节</a>
+      <a href="15-5-位置编码.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

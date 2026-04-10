@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.3 Docker Compose - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-Docker基础.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.3 Docker Compose</h1>
+      <p class="subtitle">多容器应用的高效编排工具</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Docker Compose的作用和优势</li>
+        <li>掌握docker-compose.yml文件编写</li>
+        <li>学会部署多服务AI应用</li>
+        <li>了解网络和数据卷配置</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="服务器架构" class="card-image">
+      <h3 class="card-title">什么是Docker Compose？</h3>
+      <p class="card-text">
+        <strong>Docker Compose</strong>是一个用于定义和运行多容器Docker应用的工具。通过一个YAML文件配置应用的服务、网络和数据卷，然后使用单个命令创建和启动所有服务。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Docker vs Docker Compose</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>Docker</th>
+            <th>Docker Compose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>管理对象</td>
+            <td>单个容器</td>
+            <td>多容器应用</td>
+          </tr>
+          <tr>
+            <td>配置方式</td>
+            <td>命令行参数</td>
+            <td>YAML配置文件</td>
+          </tr>
+          <tr>
+            <td>服务编排</td>
+            <td>手动管理依赖</td>
+            <td>自动处理服务依赖</td>
+          </tr>
+          <tr>
+            <td>网络配置</td>
+            <td>需手动创建网络</td>
+            <td>自动创建网络</td>
+          </tr>
+          <tr>
+            <td>适用场景</td>
+            <td>简单应用</td>
+            <td>微服务架构</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI服务编排示例</h2>
+      <div class="code-block">
+<pre>version: '3.8'
+
+services:
+  # AI推理服务
+  ai-inference:
+    build:
+      context: ./inference
+      dockerfile: Dockerfile
+    container_name: ai-inference
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/models
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ./models:/models
+      - ./config:/app/config
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - ai-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Web前端服务
+  web-app:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: web-app
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://ai-inference:8000
+    depends_on:
+      - ai-inference
+    networks:
+      - ai-network
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - ai-network
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_DB: aidb
+      POSTGRES_USER: aiuser
+      POSTGRES_PASSWORD: aipassword
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 核心配置项</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔧</div>
+          <h3 class="card-title">build</h3>
+          <p class="card-text">指定构建配置，包括上下文路径和Dockerfile位置</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔌</div>
+          <h3 class="card-title">ports</h3>
+          <p class="card-text">端口映射，格式为"主机端口:容器端口"</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📁</div>
+          <h3 class="card-title">volumes</h3>
+          <p class="card-text">数据卷挂载，实现数据持久化和共享</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据中心">
+      <div class="caption">图：Docker Compose简化了多服务应用的部署流程</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 常用命令</h2>
+      <div class="code-block">
+<pre># 启动所有服务
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看服务日志
+docker-compose logs -f
+
+# 停止所有服务
+docker-compose down
+
+# 停止并删除数据卷
+docker-compose down -v
+
+# 重新构建服务
+docker-compose build
+
+# 扩展服务实例
+docker-compose up -d --scale ai-inference=3
+
+# 进入服务容器
+docker-compose exec ai-inference bash
+</pre>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">生产环境建议</div>
+        <p>在生产环境中，建议使用<strong>docker-compose.prod.yml</strong>单独配置，通过<code>docker-compose -f docker-compose.yml -f docker-compose.prod.yml up</code>覆盖开发配置。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Docker Compose用于定义和运行多容器应用</li>
+            <li>• 通过YAML文件配置服务、网络和数据卷</li>
+            <li>• depends_on定义服务启动依赖顺序</li>
+            <li>• 支持GPU资源分配和服务扩展</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-2-Dockerfile编写.html">← 上一节</a>
+      <a href="28-4-Kubernetes入门.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

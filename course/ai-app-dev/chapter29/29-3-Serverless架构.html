@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.3 Serverless架构 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-云服务商选择.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.3 Serverless架构</h1>
+      <p class="subtitle">无服务器架构在AI应用中的应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Serverless架构的核心概念</li>
+        <li>掌握主流Serverless平台的使用</li>
+        <li>学会部署AI推理函数</li>
+        <li>了解Serverless的优缺点和适用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="Serverless架构" class="card-image">
+      <h3 class="card-title">什么是Serverless？</h3>
+      <p class="card-text">
+        <strong>Serverless（无服务器）</strong>是一种云计算执行模型，云提供商动态分配机器资源，用户只需为代码执行的实际用量付费。Serverless让开发者专注于业务逻辑，无需管理服务器基础设施。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 传统架构 vs Serverless</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>传统架构</th>
+            <th>Serverless架构</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>服务器管理</td>
+            <td>需要自行管理</td>
+            <td>完全由云平台管理</td>
+          </tr>
+          <tr>
+            <td>资源付费</td>
+            <td>按配置付费（持续）</td>
+            <td>按执行量付费（按需）</td>
+          </tr>
+          <tr>
+            <td>扩展方式</td>
+            <td>手动或自动扩容</td>
+            <td>自动弹性扩展</td>
+          </tr>
+          <tr>
+            <td>冷启动</td>
+            <td>无冷启动</td>
+            <td>可能有冷启动延迟</td>
+          </tr>
+          <tr>
+            <td>部署速度</td>
+            <td>较慢（分钟级）</td>
+            <td>快速（秒级）</td>
+          </tr>
+          <tr>
+            <td>运维复杂度</td>
+            <td>高</td>
+            <td>低</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">☁️</span> 主流Serverless平台</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🟠</div>
+          <h3 class="card-title">AWS Lambda</h3>
+          <p class="card-text">最成熟的Serverless平台，支持多种运行时，可集成AWS AI服务</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔵</div>
+          <h3 class="card-title">GCP Cloud Functions</h3>
+          <p class="card-text">与GCP AI服务深度集成，支持Python、Node.js等</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔷</div>
+          <h3 class="card-title">Azure Functions</h3>
+          <p class="card-text">支持GPU推理预览版，与Azure ML紧密集成</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI推理函数示例</h2>
+      <div class="code-block">
+<pre># AWS Lambda AI推理函数
+import json
+import boto3
+import base64
+from PIL import Image
+import io
+
+# 初始化客户端（在handler外部初始化，利用容器复用）
+sagemaker_runtime = boto3.client('runtime.sagemaker')
+s3_client = boto3.client('s3')
+
+def lambda_handler(event, context):
+    """处理图像推理请求"""
+
+    # 获取输入图像
+    if 'body' in event:
+        image_data = base64.b64decode(event['body'])
+    else:
+        return {'statusCode': 400, 'body': 'No image data'}
+
+    # 调用SageMaker端点
+    response = sagemaker_runtime.invoke_endpoint(
+        EndpointName='my-inference-endpoint',
+        ContentType='image/jpeg',
+        Body=image_data
+    )
+
+    # 解析结果
+    result = json.loads(response['Body'].read().decode())
+
+    return {
+        'statusCode': 200,
+        'headers': {'Content-Type': 'application/json'},
+        'body': json.dumps(result)
+    }
+
+# 预处理函数（减少冷启动影响）
+def preprocess_image(image_bytes):
+    image = Image.open(io.BytesIO(image_bytes))
+    image = image.resize((224, 224))
+    return image
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="云计算">
+      <div class="caption">图：Serverless架构简化了AI应用的部署和运维</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Lambda容器镜像支持</h2>
+      <div class="code-block">
+<pre># Dockerfile for Lambda Container Image
+FROM public.ecr.aws/lambda/python:3.10
+
+# 安装依赖
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# 复制模型和代码
+COPY model/ /opt/ml/model/
+COPY app/ /var/task/
+
+# 设置处理函数
+CMD ["handler.lambda_handler"]
+
+# 部署命令
+aws lambda create-function \
+    --function-name ai-inference \
+    --package-type Image \
+    --code ImageUri=123456789.dkr.ecr.us-east-1.amazonaws.com/ai-lambda:v1 \
+    --role arn:aws:iam::123456789:role/lambda-execution-role \
+    --timeout 30 \
+    --memory-size 4096
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 冷启动优化策略</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">优化方法</h3>
+          <ul class="feature-list">
+            <li>使用Provisioned Concurrency预热</li>
+            <li>减少依赖包大小</li>
+            <li>使用容器镜像部署</li>
+            <li>保持函数简单轻量</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">适用场景</h3>
+          <ul class="feature-list">
+            <li>API后端服务</li>
+            <li>事件驱动处理</li>
+            <li>定时任务</li>
+            <li>轻量级推理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Serverless AI最佳实践</div>
+        <p>对于<strong>低延迟要求</strong>的AI推理，建议使用Provisioned Concurrency或专用推理端点。对于<strong>批量处理</strong>场景，Serverless可以显著降低成本。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Serverless按执行量付费，自动弹性扩展，无需管理服务器</li>
+            <li>• 主流平台：AWS Lambda、GCP Cloud Functions、Azure Functions</li>
+            <li>• 可通过容器镜像部署AI推理函数</li>
+            <li>• 冷启动是主要挑战，可通过Provisioned Concurrency优化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-2-GPU实例部署.html">← 上一节</a>
+      <a href="29-4-CDN与负载均衡.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

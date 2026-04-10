@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>41.1 Function Calling - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="41-1-Function-Calling.html">第四十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>41.1 Function Calling</h1>
+      <p class="subtitle">让大模型调用外部工具的能力</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Function Calling的工作原理</li>
+        <li>掌握函数定义和调用的标准格式</li>
+        <li>学会设计有效的工具函数</li>
+        <li>了解多轮对话中的函数调用流程</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800" alt="Function Calling概念图" class="card-image">
+      <h3 class="card-title">什么是Function Calling</h3>
+      <p class="card-text">
+        <strong>Function Calling</strong>是大模型的一项核心能力，允许模型在对话过程中调用预定义的外部函数。模型会根据用户输入生成结构化的函数调用参数，应用程序执行函数后，将结果返回给模型继续处理。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 工作流程</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">1️⃣</div>
+          <h3 class="card-title">定义函数</h3>
+          <p class="card-text">描述函数名称、参数和用途</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">2️⃣</div>
+          <h3 class="card-title">模型决策</h3>
+          <p class="card-text">模型判断是否需要调用函数</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">3️⃣</div>
+          <h3 class="card-title">执行返回</h3>
+          <p class="card-text">应用执行函数并返回结果</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 主流平台对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>OpenAI</th>
+            <th>Anthropic</th>
+            <th>Google Gemini</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>调用方式</td>
+            <td>function_call / tool_choice</td>
+            <td>tool_use</td>
+            <td>function_declarations</td>
+          </tr>
+          <tr>
+            <td>并行调用</td>
+            <td>支持</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+          <tr>
+            <td>参数验证</td>
+            <td>JSON Schema</td>
+            <td>JSON Schema</td>
+            <td>JSON Schema</td>
+          </tr>
+          <tr>
+            <td>流式输出</td>
+            <td>支持</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> OpenAI Function Calling示例</h2>
+      <div class="code-block">
+from openai import OpenAI
+
+client = OpenAI()
+
+# 定义可用函数
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "获取指定城市的天气信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "城市名称，如'北京'"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "温度单位"
+                    }
+                },
+                "required": ["city"]
+            }
+        }
+    }
+]
+
+# 发送请求
+response = client.chat.completions.create(
+    model="gpt-4-turbo-preview",
+    messages=[
+        {"role": "user", "content": "北京今天天气怎么样？"}
+    ],
+    tools=tools,
+    tool_choice="auto"
+)
+
+# 检查是否需要调用函数
+if response.choices[0].message.tool_calls:
+    tool_call = response.choices[0].message.tool_calls[0]
+    function_name = tool_call.function.name
+    arguments = json.loads(tool_call.function.arguments)
+
+    # 执行函数
+    if function_name == "get_weather":
+        result = get_weather(arguments["city"])
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">设计原则</div>
+        <p>函数描述应该<strong>清晰准确</strong>，让模型能正确理解函数用途。参数的description字段非常重要，帮助模型正确填充参数值。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整调用流程</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">函数执行与返回</h3>
+          <div class="code-block">
+def handle_function_call(response, messages):
+    """处理函数调用并返回结果"""
+    message = response.choices[0].message
+    messages.append(message)
+
+    # 执行所有工具调用
+    for tool_call in message.tool_calls:
+        function_name = tool_call.function.name
+        arguments = json.loads(
+            tool_call.function.arguments
+        )
+
+        # 执行对应函数
+        result = execute_function(
+            function_name, arguments
+        )
+
+        # 添加函数结果到消息
+        messages.append({
+            "tool_call_id": tool_call.id,
+            "role": "tool",
+            "name": function_name,
+            "content": json.dumps(result)
+        })
+
+    # 继续对话
+    return client.chat.completions.create(
+        model="gpt-4-turbo-preview",
+        messages=messages,
+        tools=tools
+    )
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多函数并行调用</h3>
+          <div class="code-block">
+# 定义多个工具
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "搜索网络信息"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "获取天气信息"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_email",
+            "description": "发送邮件"
+        }
+    }
+]
+
+# 模型可以并行调用多个函数
+# 例如：同时查询天气和搜索相关信息
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Anthropic Tool Use示例</h2>
+      <div class="code-block">
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-3-opus-20240229",
+    max_tokens=1024,
+    tools=[
+        {
+            "name": "get_weather",
+            "description": "获取指定城市的当前天气",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "城市名称"
+                    }
+                },
+                "required": ["city"]
+            }
+        }
+    ],
+    messages=[
+        {"role": "user", "content": "上海和北京哪个城市现在更热？"}
+    ]
+)
+
+# 处理工具使用
+for block in response.content:
+    if block.type == "tool_use":
+        print(f"Tool: {block.name}")
+        print(f"Input: {block.input}")
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="函数调用流程">
+      <div class="caption">图：Function Calling让大模型能够与外部世界交互</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Function Calling使大模型能够调用外部工具</li>
+            <li>• 使用JSON Schema定义函数参数结构</li>
+            <li>• 模型生成调用参数，应用执行并返回结果</li>
+            <li>• 支持并行调用多个函数以提高效率</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter40/40-5-模型监控.html">← 上一章</a>
+      <a href="41-2-Structured-Output.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

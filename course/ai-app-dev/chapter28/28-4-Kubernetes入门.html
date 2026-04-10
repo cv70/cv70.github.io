@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.4 Kubernetes入门 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-Docker基础.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.4 Kubernetes入门</h1>
+      <p class="subtitle">容器编排平台的核心概念与实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Kubernetes的架构和核心概念</li>
+        <li>掌握Pod、Service、Deployment等基本对象</li>
+        <li>学会部署AI应用到Kubernetes</li>
+        <li>了解GPU调度和资源管理</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="云计算概念图" class="card-image">
+      <h3 class="card-title">什么是Kubernetes？</h3>
+      <p class="card-text">
+        <strong>Kubernetes（K8s）</strong>是Google开源的容器编排平台，用于自动化部署、扩展和管理容器化应用。它提供了服务发现、负载均衡、存储编排、自动滚动更新和回滚等企业级特性。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> Kubernetes架构</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">控制平面 (Control Plane)</h3>
+          <ul class="feature-list">
+            <li><strong>API Server</strong> - 集群统一入口</li>
+            <li><strong>etcd</strong> - 键值存储数据库</li>
+            <li><strong>Scheduler</strong> - 调度Pod到节点</li>
+            <li><strong>Controller Manager</strong> - 控制器管理</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">工作节点 (Worker Node)</h3>
+          <ul class="feature-list">
+            <li><strong>kubelet</strong> - 节点代理</li>
+            <li><strong>kube-proxy</strong> - 网络代理</li>
+            <li><strong>Container Runtime</strong> - 容器运行时</li>
+            <li><strong>Pod</strong> - 最小部署单元</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 核心概念</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>说明</th>
+            <th>类比</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Pod</td>
+            <td>最小部署单元，一个或多个容器</td>
+            <td>应用实例</td>
+          </tr>
+          <tr>
+            <td>Deployment</td>
+            <td>管理Pod副本和更新策略</td>
+            <td>应用管理器</td>
+          </tr>
+          <tr>
+            <td>Service</td>
+            <td>提供稳定的访问入口</td>
+            <td>负载均衡器</td>
+          </tr>
+          <tr>
+            <td>ConfigMap</td>
+            <td>配置数据存储</td>
+            <td>配置文件</td>
+          </tr>
+          <tr>
+            <td>Secret</td>
+            <td>敏感数据存储</td>
+            <td>密码管理器</td>
+          </tr>
+          <tr>
+            <td>PersistentVolume</td>
+            <td>持久化存储</td>
+            <td>硬盘</td>
+          </tr>
+          <tr>
+            <td>Namespace</td>
+            <td>资源隔离</td>
+            <td>文件夹</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI应用部署示例</h2>
+      <div class="code-block">
+<pre>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-inference
+  namespace: ai-system
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-inference
+  template:
+    metadata:
+      labels:
+        app: ai-inference
+    spec:
+      containers:
+      - name: inference
+        image: myregistry/ai-inference:v1.0
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "8Gi"
+            cpu: "4"
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+        env:
+        - name: MODEL_PATH
+          value: "/models"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: model-pvc
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Kubernetes架构">
+      <div class="caption">图：Kubernetes集群架构示意图</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖥️</span> Service配置</h2>
+      <div class="code-block">
+<pre>apiVersion: v1
+kind: Service
+metadata:
+  name: ai-inference-service
+  namespace: ai-system
+spec:
+  selector:
+    app: ai-inference
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-inference-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-inference
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+</pre>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">GPU调度</div>
+        <p>Kubernetes通过<strong>设备插件(Device Plugin)</strong>机制支持GPU调度。需要安装NVIDIA设备插件：<code>kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/nvidia-device-plugin.yml</code></p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Kubernetes是企业级容器编排平台</li>
+            <li>• 核心概念：Pod、Deployment、Service、ConfigMap、Secret</li>
+            <li>• 支持GPU调度和自动扩缩容(HPA)</li>
+            <li>• 通过YAML文件声明式管理资源</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-3-Docker-Compose.html">← 上一节</a>
+      <a href="28-5-GPU容器化.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

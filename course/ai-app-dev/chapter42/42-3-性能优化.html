@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.3 性能优化 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="42-1-产品需求分析.html">第四十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>42.3 性能优化</h1>
+      <p class="subtitle">提升AI应用的响应速度与吞吐量</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解AI应用性能瓶颈的来源</li>
+        <li>掌握模型推理优化技术</li>
+        <li>学会缓存和批处理策略</li>
+        <li>了解成本与性能的权衡方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="性能优化概念图" class="card-image">
+      <h3 class="card-title">AI应用性能挑战</h3>
+      <p class="card-text">
+        AI应用面临<strong>延迟高</strong>、<strong>成本高</strong>、<strong>资源消耗大</strong>等性能挑战。特别是大模型推理，单个请求可能需要数秒甚至更长时间。性能优化直接影响用户体验和运营成本。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 性能优化方向</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">延迟优化</h3>
+          <p class="card-text">减少单请求响应时间</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">吞吐优化</h3>
+          <p class="card-text">提升系统并发处理能力</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">💰</div>
+          <h3 class="card-title">成本优化</h3>
+          <p class="card-text">降低单位请求成本</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 优化技术对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>优化技术</th>
+            <th>原理</th>
+            <th>效果</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>模型量化</td>
+            <td>降低参数精度</td>
+            <td>速度提升2-4x</td>
+            <td>边缘部署、实时推理</td>
+          </tr>
+          <tr>
+            <td>模型蒸馏</td>
+            <td>大模型训练小模型</td>
+            <td>速度提升10x+</td>
+            <td>高频低延迟场景</td>
+          </tr>
+          <tr>
+            <td>批处理</td>
+            <td>合并多个请求</td>
+            <td>吞吐提升3-5x</td>
+            <td>离线处理、高并发</td>
+          </tr>
+          <tr>
+            <td>缓存</td>
+            <td>存储常用结果</td>
+            <td>命中时延迟近0</td>
+            <td>重复查询多</td>
+          </tr>
+          <tr>
+            <td>流式输出</td>
+            <td>逐步返回结果</td>
+            <td>体感延迟降低</td>
+            <td>生成式任务</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 缓存策略实现</h2>
+      <div class="code-block">
+import hashlib
+from functools import lru_cache
+import redis
+
+class AIResponseCache:
+    """AI响应缓存系统"""
+
+    def __init__(self, redis_client):
+        self.redis = redis_client
+        self.ttl = 3600  # 1小时过期
+
+    def get_cache_key(self, prompt, model, params):
+        """生成缓存键"""
+        content = f"{prompt}|{model}|{sorted(params.items())}"
+        return f"ai_cache:{hashlib.md5(content.encode()).hexdigest()}"
+
+    def get(self, prompt, model, params):
+        """获取缓存结果"""
+        key = self.get_cache_key(prompt, model, params)
+        cached = self.redis.get(key)
+        if cached:
+            return json.loads(cached)
+        return None
+
+    def set(self, prompt, model, params, response):
+        """设置缓存"""
+        key = self.get_cache_key(prompt, model, params)
+        self.redis.setex(key, self.ttl, json.dumps(response))
+
+    def get_or_compute(self, prompt, model, params, compute_fn):
+        """缓存穿透查询"""
+        cached = self.get(prompt, model, params)
+        if cached:
+            return cached
+
+        result = compute_fn()
+        self.set(prompt, model, params, result)
+        return result
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">缓存粒度选择</div>
+        <p>缓存粒度影响命中率和存储成本。<strong>粗粒度缓存</strong>（完整查询）命中率高但灵活性低；<strong>细粒度缓存</strong>（如embedding）灵活性高但命中率低。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 批处理与并发</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">动态批处理</h3>
+          <div class="code-block">
+import asyncio
+from collections import deque
+
+class DynamicBatcher:
+    """动态批处理请求"""
+
+    def __init__(self, batch_size=10, timeout=0.1):
+        self.batch_size = batch_size
+        self.timeout = timeout
+        self.queue = deque()
+        self.results = {}
+
+    async def submit(self, request):
+        """提交请求到批处理队列"""
+        request_id = id(request)
+        self.queue.append((request_id, request))
+
+        # 等待结果
+        while request_id not in self.results:
+            await asyncio.sleep(0.001)
+
+        return self.results.pop(request_id)
+
+    async def process_batch(self):
+        """处理一批请求"""
+        batch = []
+        while len(batch) < self.batch_size:
+            if self.queue:
+                batch.append(self.queue.popleft())
+            else:
+                await asyncio.sleep(self.timeout)
+                break
+
+        if batch:
+            # 批量推理
+            results = await batch_inference(batch)
+            for (req_id, _), result in zip(batch, results):
+                self.results[req_id] = result
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">流式输出</h3>
+          <div class="code-block">
+async def stream_response(prompt):
+    """流式返回生成内容"""
+
+    response = await client.chat.completions.create(
+        model="gpt-4-turbo-preview",
+        messages=[{"role": "user", "content": prompt}],
+        stream=True  # 启用流式
+    )
+
+    async for chunk in response:
+        if chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+# FastAPI流式响应
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+
+app = FastAPI()
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    return StreamingResponse(
+        stream_response(request.prompt),
+        media_type="text/event-stream"
+    )
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 模型优化技术</h2>
+      <div class="code-block">
+# 模型量化示例
+import torch
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+# 4-bit量化配置
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True
+)
+
+# 加载量化模型
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-2-7b-hf",
+    quantization_config=quantization_config,
+    device_map="auto"
+)
+
+# 量化效果
+# - 模型大小: 减少约75%
+# - 显存占用: 大幅降低
+# - 推理速度: 略有提升
+# - 精度损失: 轻微
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="性能监控">
+      <div class="caption">图：持续的性能监控和优化是产品成功的关键</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• AI应用性能优化涉及延迟、吞吐和成本三方面</li>
+            <li>• 缓存是降低延迟和成本的最有效手段</li>
+            <li>• 批处理提升吞吐量但增加延迟</li>
+            <li>• 流式输出改善用户体感延迟</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="42-2-用户体验设计.html">← 上一节</a>
+      <a href="42-4-AB测试.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

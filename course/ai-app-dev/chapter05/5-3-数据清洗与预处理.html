@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.3 数据清洗与预处理 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="5-1-NumPy数组操作.html">第五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>5.3 数据清洗与预处理</h1>
+      <p class="subtitle">数据质量决定模型效果</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握常见数据质量问题</li>
+        <li>学会数据标准化与归一化</li>
+        <li>掌握特征编码技术</li>
+        <li>了解数据分割策略</li>
+      </ul>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">数据预处理的重要性</div>
+        <p>数据科学家80%的时间花在数据清洗上。高质量数据是模型成功的基础："Garbage in, garbage out"</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 数据标准化与归一化</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">标准化 (Z-Score)</h3>
+          <p class="card-text">转换为均值为0、标准差为1的分布</p>
+          <div class="code-block">
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+data = np.array([[1, 100],
+                 [2, 200],
+                 [3, 300],
+                 [4, 400]])
+
+scaler = StandardScaler()
+scaled = scaler.fit_transform(data)
+
+# 均值≈0，标准差≈1
+print(f"均值: {scaled.mean(axis=0)}")
+print(f"标准差: {scaled.std(axis=0)}")
+
+# 反向转换
+original = scaler.inverse_transform(scaled)
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">归一化 (Min-Max)</h3>
+          <p class="card-text">缩放到[0, 1]区间</p>
+          <div class="code-block">
+from sklearn.preprocessing import MinMaxScaler
+
+data = np.array([[1, 100],
+                 [2, 200],
+                 [3, 300],
+                 [4, 400]])
+
+scaler = MinMaxScaler()
+normalized = scaler.fit_transform(data)
+
+# 范围[0, 1]
+print(f"最小值: {normalized.min(axis=0)}")
+print(f"最大值: {normalized.max(axis=0)}")
+
+# 自定义范围
+scaler = MinMaxScaler(feature_range=(-1, 1))
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> 特征编码</h2>
+      <div class="code-block">
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+import pandas as pd
+
+df = pd.DataFrame({
+    'color': ['red', 'blue', 'green', 'blue', 'red'],
+    'size': ['S', 'M', 'L', 'M', 'S']
+})
+
+# 标签编码（有序类别）
+le = LabelEncoder()
+df['size_encoded'] = le.fit_transform(df['size'])
+# S→2, M→1, L→0
+
+# 独热编码（无序类别）
+df_encoded = pd.get_dummies(df, columns=['color'])
+# color_red, color_blue, color_green
+
+# 使用sklearn
+ohe = OneHotEncoder(sparse_output=False)
+color_encoded = ohe.fit_transform(df[['color']])
+          </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✂️</span> 数据分割</h2>
+      <div class="card">
+        <h3 class="card-title">训练集/验证集/测试集划分</h3>
+        <div class="code-block">
+from sklearn.model_selection import train_test_split
+import numpy as np
+
+X = np.random.randn(1000, 10)
+y = np.random.randint(0, 2, 1000)
+
+# 先分出测试集
+X_temp, X_test, y_temp, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# 再从剩余数据中分出验证集
+X_train, X_val, y_train, y_val = train_test_split(
+    X_temp, y_temp, test_size=0.25, random_state=42
+)
+
+# 最终比例: 60% train, 20% val, 20% test
+print(f"训练集: {len(X_train)}")
+print(f"验证集: {len(X_val)}")
+print(f"测试集: {len(X_test)}")
+        </div>
+      </div>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">分层采样</div>
+          <p>分类问题中使用<code>stratify=y</code>确保各类别比例一致。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 特征工程技巧</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">缺失值填充策略</h3>
+          <div class="code-block">
+from sklearn.impute import SimpleImputer
+
+# 均值填充
+imp_mean = SimpleImputer(strategy='mean')
+
+# 中位数填充
+imp_median = SimpleImputer(strategy='median')
+
+# 众数填充
+imp_mode = SimpleImputer(strategy='most_frequent')
+
+# 常数填充
+imp_const = SimpleImputer(strategy='constant',
+                          fill_value=0)
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">异常值处理</h3>
+          <div class="code-block">
+import numpy as np
+
+def remove_outliers(df, column, n_std=3):
+    mean = df[column].mean()
+    std = df[column].std()
+    return df[
+        (df[column] >= mean - n_std * std) &
+        (df[column] <= mean + n_std * std)
+    ]
+
+# IQR方法
+def remove_outliers_iqr(df, column):
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+    return df[
+        (df[column] >= Q1 - 1.5 * IQR) &
+        (df[column] <= Q3 + 1.5 * IQR)
+    ]
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 数据清洗是机器学习的重要步骤</li>
+            <li>• 标准化/归一化让特征在同一尺度</li>
+            <li>• 类别特征需要编码为数值</li>
+            <li>• 合理分割数据避免数据泄露</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="5-2-Pandas数据分析.html">← 上一节</a>
+      <a href="5-4-数据可视化.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

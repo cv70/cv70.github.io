@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.4 流式响应处理 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-OpenAI-API使用.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.4 流式响应处理</h1>
+      <p class="subtitle">实现实时输出的用户体验</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解流式响应的原理和优势</li>
+        <li>掌握各平台流式API的使用方法</li>
+        <li>学会处理流式数据的异常情况</li>
+        <li>能够在前端实现流式显示</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据流概念图" class="card-image">
+      <h3 class="card-title">什么是流式响应</h3>
+      <p class="card-text">
+        <strong>流式响应（Streaming）</strong>是指模型生成内容时，逐token或逐块返回结果，而不是等待全部生成完毕后一次性返回。这种方式让用户能够<strong>实时看到生成过程</strong>，大幅提升用户体验。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 流式 vs 非流式对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>流式响应</th>
+            <th>非流式响应</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>首字响应时间</td>
+            <td>极快（几百毫秒）</td>
+            <td>慢（需等待全部生成）</td>
+          </tr>
+          <tr>
+            <td>用户感知</td>
+            <td>实时反馈，体验好</td>
+            <td>等待感强，体验差</td>
+          </tr>
+          <tr>
+            <td>错误处理</td>
+            <td>复杂，需要中断机制</td>
+            <td>简单，一次返回</td>
+          </tr>
+          <tr>
+            <td>适用场景</td>
+            <td>对话、实时生成</td>
+            <td>批处理、后台任务</td>
+          </tr>
+          <tr>
+            <td>token统计</td>
+            <td>需要累计计算</td>
+            <td>直接返回总数</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800" alt="实时通信概念图">
+      <div class="caption">图：流式响应让用户实时看到内容生成过程</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> OpenAI流式调用</h2>
+      <div class="card">
+        <div class="code-block">
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> OpenAI
+
+client = OpenAI(api_key=<span style="color: #ce9178;">"your-api-key"</span>)
+
+<span style="color: #6a9955;"># 流式调用</span>
+stream = client.chat.completions.create(
+    model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+    messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"写一首关于春天的诗"</span>}],
+    stream=<span style="color: #569cd6;">True</span>
+)
+
+<span style="color: #6a9955;"># 逐块处理</span>
+<span style="color: #c586c0;">for</span> chunk <span style="color: #c586c0;">in</span> stream:
+    <span style="color: #c586c0;">if</span> chunk.choices[<span style="color: #b5cea8;">0</span>].delta.content:
+        <span style="color: #569cd6;">print</span>(chunk.choices[<span style="color: #b5cea8;">0</span>].delta.content, end=<span style="color: #ce9178;">""</span>, flush=<span style="color: #569cd6;">True</span>)
+
+<span style="color: #6a9955;"># 使用迭代器方式</span>
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">stream_chat</span>(messages):
+    response = client.chat.completions.create(
+        model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+        messages=messages,
+        stream=<span style="color: #569cd6;">True</span>
+    )
+
+    <span style="color: #c586c0;">for</span> chunk <span style="color: #c586c0;">in</span> response:
+        content = chunk.choices[<span style="color: #b5cea8;">0</span>].delta.content
+        <span style="color: #c586c0;">if</span> content:
+            <span style="color: #c586c0;">yield</span> content
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌊</span> Claude流式调用</h2>
+      <div class="card">
+        <div class="code-block">
+<span style="color: #c586c0;">import</span> anthropic
+
+client = anthropic.Anthropic(api_key=<span style="color: #ce9178;">"your-api-key"</span>)
+
+<span style="color: #6a9955;"># 流式调用</span>
+<span style="color: #c586c0;">with</span> client.messages.stream(
+    model=<span style="color: #ce9178;">"claude-3-5-sonnet-20241022"</span>,
+    max_tokens=<span style="color: #b5cea8;">1024</span>,
+    messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"写一首诗"</span>}]
+) <span style="color: #c586c0;">as</span> stream:
+    <span style="color: #c586c0;">for</span> text <span style="color: #c586c0;">in</span> stream.text_stream:
+        <span style="color: #569cd6;">print</span>(text, end=<span style="color: #ce9178;">""</span>, flush=<span style="color: #569cd6;">True</span>)
+
+<span style="color: #6a9955;"># 获取完整响应</span>
+final_message = stream.get_final_message()
+<span style="color: #569cd6;">print</span>(<span style="color: #ce9178;">f"\n总token数: {final_message.usage.input_tokens + final_message.output_tokens}"</span>)
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 国产模型流式调用</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">通义千问</h3>
+          <div class="code-block">
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> OpenAI
+
+client = OpenAI(
+    api_key=<span style="color: #ce9178;">"your-key"</span>,
+    base_url=<span style="color: #ce9178;">"https://dashscope.aliyuncs.com/compatible-mode/v1"</span>
+)
+
+stream = client.chat.completions.create(
+    model=<span style="color: #ce9178;">"qwen-turbo"</span>,
+    messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"你好"</span>}],
+    stream=<span style="color: #569cd6;">True</span>
+)
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">DeepSeek</h3>
+          <div class="code-block">
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> OpenAI
+
+client = OpenAI(
+    api_key=<span style="color: #ce9178;">"your-key"</span>,
+    base_url=<span style="color: #ce9178;">"https://api.deepseek.com"</span>
+)
+
+stream = client.chat.completions.create(
+    model=<span style="color: #ce9178;">"deepseek-chat"</span>,
+    messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"你好"</span>}],
+    stream=<span style="color: #569cd6;">True</span>
+)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> Web应用流式实现</h2>
+      <div class="card">
+        <h3 class="card-title">FastAPI后端</h3>
+        <div class="code-block">
+<span style="color: #c586c0;">from</span> fastapi <span style="color: #c586c0;">import</span> FastAPI
+<span style="color: #c586c0;">from</span> fastapi.responses <span style="color: #c586c0;">import</span> StreamingResponse
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> OpenAI
+
+app = FastAPI()
+client = OpenAI()
+
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">generate_stream</span>(prompt: str):
+    stream = client.chat.completions.create(
+        model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+        messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: prompt}],
+        stream=<span style="color: #569cd6;">True</span>
+    )
+
+    <span style="color: #c586c0;">for</span> chunk <span style="color: #c586c0;">in</span> stream:
+        content = chunk.choices[<span style="color: #b5cea8;">0</span>].delta.content
+        <span style="color: #c586c0;">if</span> content:
+            <span style="color: #c586c0;">yield</span> <span style="color: #ce9178;">f"data: {content}\n\n"</span>
+
+    <span style="color: #c586c0;">yield</span> <span style="color: #ce9178;">"data: [DONE]\n\n"</span>
+
+<span style="color: #6a9955;"># SSE (Server-Sent Events) 端点</span>
+@app.get(<span style="color: #ce9178;">"/chat/stream"</span>)
+<span style="color: #569cd6;">async</span> <span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">chat_stream</span>(prompt: str):
+    <span style="color: #c586c0;">return</span> StreamingResponse(
+        generate_stream(prompt),
+        media_type=<span style="color: #ce9178;">"text/event-stream"</span>
+    )
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 前端流式接收</h2>
+      <div class="card">
+        <div class="code-block">
+<span style="color: #6a9955;">// 使用 EventSource 或 fetch API</span>
+<span style="color: #569cd6;">async function</span> <span style="color: #dcdcaa;">streamChat</span>(prompt) {
+    <span style="color: #569cd6;">const</span> response = <span style="color: #c586c0;">await</span> fetch(<span style="color: #ce9178;">`/chat/stream?prompt=${prompt}`</span>);
+    <span style="color: #569cd6;">const</span> reader = response.body.getReader();
+    <span style="color: #569cd6;">const</span> decoder = <span style="color: #569cd6;">new</span> TextDecoder();
+
+    <span style="color: #c586c0;">while</span> (<span style="color: #569cd6;">true</span>) {
+        <span style="color: #569cd6;">const</span> { done, value } = <span style="color: #c586c0;">await</span> reader.read();
+        <span style="color: #c586c0;">if</span> (done) <span style="color: #c586c0;">break</span>;
+
+        <span style="color: #569cd6;">const</span> chunk = decoder.decode(value);
+        <span style="color: #6a9955;">// 解析 SSE 格式: "data: content\n\n"</span>
+        <span style="color: #569cd6;">const</span> lines = chunk.split(<span style="color: #ce9178;">'\n'</span>);
+        <span style="color: #c586c0;">for</span> (<span style="color: #569cd6;">const</span> line <span style="color: #c586c0;">of</span> lines) {
+            <span style="color: #c586c0;">if</span> (line.startsWith(<span style="color: #ce9178;">'data: '</span>)) {
+                <span style="color: #569cd6;">const</span> content = line.slice(<span style="color: #b5cea8;">6</span>);
+                <span style="color: #c586c0;">if</span> (content !== <span style="color: #ce9178;">'[DONE]'</span>) {
+                    <span style="color: #6a9955;">// 更新UI显示内容</span>
+                    appendToOutput(content);
+                }
+            }
+        }
+    }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 流式响应异常处理</h2>
+      <div class="card">
+        <div class="code-block">
+<span style="color: #569cd6;">async def</span> <span style="color: #dcdcaa;">safe_stream</span>(prompt: str):
+    full_content = []
+    <span style="color: #569cd6;">try</span>:
+        stream = client.chat.completions.create(
+            model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+            messages=[{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: prompt}],
+            stream=<span style="color: #569cd6;">True</span>,
+            timeout=<span style="color: #b5cea8;">30</span>  <span style="color: #6a9955;"># 设置超时</span>
+        )
+
+        <span style="color: #569cd6;">for</span> chunk <span style="color: #c586c0;">in</span> stream:
+            content = chunk.choices[<span style="color: #b5cea8;">0</span>].delta.content
+            <span style="color: #c586c0;">if</span> content:
+                full_content.append(content)
+                <span style="color: #569cd6;">yield</span> content
+
+    <span style="color: #569cd6;">except</span> Exception <span style="color: #569cd6;">as</span> e:
+        <span style="color: #6a9955;"># 异常时返回已接收内容</span>
+        <span style="color: #569cd6;">yield</span> <span style="color: #ce9178;">f"\n[错误: {str(e)}]"</span>
+        <span style="color: #6a9955;"># 可以选择保存已接收内容用于恢复</span>
+        save_partial(<span style="color: #ce9178;">""</span>.join(full_content))
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>对于<strong>对话类应用</strong>，强烈推荐使用流式响应。实现时注意：<strong>设置合理的超时时间</strong>、<strong>保存部分内容用于断点续传</strong>、<strong>提供取消机制</strong>让用户可以中断生成。</p>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>流式响应时<strong>token统计需要累计计算</strong>，不是一次性返回。另外，部分API在流式模式下<strong>不支持某些参数</strong>（如logprobs），需要查阅文档确认。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 流式响应实时返回内容，提升用户体验</li>
+            <li>• OpenAI通过stream=True启用流式模式</li>
+            <li>• 使用SSE协议实现Web端流式传输</li>
+            <li>• 需要处理连接中断和异常恢复</li>
+            <li>• 流式模式下token统计需要累计计算</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="18-3-国产大模型API.html">← 上一节</a>
+      <a href="18-5-错误处理与重试.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

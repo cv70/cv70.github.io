@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.5 特征选择方法 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="9-1-交叉验证技术.html">第九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>9.5 特征选择方法</h1>
+      <p class="subtitle">提升模型性能的关键技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解特征选择的重要性</li>
+        <li>掌握过滤法、包装法、嵌入法</li>
+        <li>学会使用sklearn进行特征选择</li>
+        <li>了解不同方法的适用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="特征选择概念图" class="card-image">
+      <h3 class="card-title">为什么需要特征选择</h3>
+      <p class="card-text">
+        并非所有特征都对预测有帮助。<strong>特征选择</strong>可以去除无关或冗余特征，
+        降低维度、减少计算量、提高模型性能、增强模型可解释性。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 三大类特征选择方法</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+          <h3 class="card-title">过滤法 (Filter)</h3>
+          <p class="card-text">基于统计指标评估特征，与模型无关</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📦</div>
+          <h3 class="card-title">包装法 (Wrapper)</h3>
+          <p class="card-text">基于模型性能评估特征子集</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🧠</div>
+          <h3 class="card-title">嵌入法 (Embedded)</h3>
+          <p class="card-text">训练过程中自动选择特征</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 过滤法实现</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.feature_selection <span class="keyword">import</span> (
+    SelectKBest, f_classif, mutual_info_classif,
+    VarianceThreshold, chi2
+)
+
+<span class="comment"># 方差阈值过滤（去除方差小的特征）</span>
+selector = VarianceThreshold(threshold=<span class="number">0.1</span>)
+X_high_var = selector.fit_transform(X)
+
+<span class="comment"># 选择K个最佳特征（基于ANOVA F值）</span>
+selector = SelectKBest(f_classif, k=<span class="number">10</span>)
+X_selected = selector.fit_transform(X, y)
+
+<span class="comment"># 查看被选中的特征</span>
+selected_features = selector.get_support(indices=<span class="keyword">True</span>)
+<span class="keyword">print</span>(<span class="string">f'选中的特征索引: {selected_features}'</span>)
+
+<span class="comment"># 互信息法（捕获非线性关系）</span>
+selector = SelectKBest(mutual_info_classif, k=<span class="number">10</span>)
+X_selected = selector.fit_transform(X, y)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 包装法实现</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.feature_selection <span class="keyword">import</span> RFE, RFECV
+<span class="keyword">from</span> sklearn.ensemble <span class="keyword">import</span> RandomForestClassifier
+
+<span class="comment"># 递归特征消除 (RFE)</span>
+model = RandomForestClassifier(n_estimators=<span class="number">100</span>, random_state=<span class="number">42</span>)
+rfe = RFE(model, n_features_to_select=<span class="number">10</span>)
+X_selected = rfe.fit_transform(X, y)
+
+<span class="comment"># 查看特征排名</span>
+<span class="keyword">print</span>(<span class="string">f'特征排名: {rfe.ranking_}'</span>)
+
+<span class="comment"># 带交叉验证的RFE（自动确定最佳特征数）</span>
+rfecv = RFECV(model, cv=<span class="number">5</span>, scoring=<span class="string">'accuracy'</span>)
+X_selected = rfecv.fit_transform(X, y)
+<span class="keyword">print</span>(<span class="string">f'最佳特征数: {rfecv.n_features_}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧠</span> 嵌入法实现</h2>
+      <div class="code-block">
+<span class="keyword">from</span> sklearn.feature_selection <span class="keyword">import</span> SelectFromModel
+<span class="keyword">from</span> sklearn.linear_model <span class="keyword">import</span> Lasso
+
+<span class="comment"># 基于Lasso的特征选择</span>
+lasso = Lasso(alpha=<span class="number">0.01</span>)
+selector = SelectFromModel(lasso)
+X_selected = selector.fit_transform(X, y)
+
+<span class="comment"># 基于树模型的特征重要性</span>
+rf = RandomForestClassifier(n_estimators=<span class="number">100</span>)
+selector = SelectFromModel(rf, threshold=<span class="string">'median'</span>)
+X_selected = selector.fit_transform(X, y)
+
+<span class="comment"># 查看特征重要性</span>
+rf.fit(X, y)
+<span class="keyword">import</span> pandas <span class="keyword">as</span> pd
+importance = pd.Series(rf.feature_importances_, index=feature_names)
+<span class="keyword">print</span>(importance.sort_values(ascending=<span class="keyword">False</span>).head(<span class="number">10</span>))
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 方法对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>优点</th>
+            <th>缺点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>过滤法</td>
+            <td>快速、简单</td>
+            <td>忽略特征交互</td>
+            <td>初步筛选、高维数据</td>
+          </tr>
+          <tr>
+            <td>包装法</td>
+            <td>考虑特征组合</td>
+            <td>计算量大</td>
+            <td>小规模、精确选择</td>
+          </tr>
+          <tr>
+            <td>嵌入法</td>
+            <td>效率与效果平衡</td>
+            <td>依赖模型类型</td>
+            <td>大多数场景</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">实践建议</div>
+        <p>先用<strong>过滤法</strong>快速去除无关特征，再用<strong>嵌入法</strong>精细选择。对于最终模型，可以尝试<strong>包装法</strong>获得最优特征子集。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="特征选择">
+      <div class="caption">图：特征选择去除冗余，保留关键信息</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 特征选择降低维度、提升性能、增强可解释性</li>
+            <li>• 过滤法基于统计指标，快速但忽略特征交互</li>
+            <li>• 包装法基于模型性能，效果最好但计算量大</li>
+            <li>• 嵌入法在训练中自动选择，效率与效果平衡</li>
+            <li>• 实践中可组合使用不同方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="9-4-正则化技术.html">← 上一节</a>
+      <a href="../chapter10/10-1-Scikit-learn-API设计.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

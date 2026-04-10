@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.2 自动求导机制 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="12-1-Tensor操作基础.html">第十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>12.2 自动求导机制</h1>
+      <p class="subtitle">Autograd：深度学习的核心引擎</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解自动求导的基本原理和计算图</li>
+        <li>掌握requires_grad属性的使用方法</li>
+        <li>熟练运用backward()进行反向传播</li>
+        <li>了解梯度计算的注意事项和常见问题</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800" alt="计算图概念" class="card-image">
+      <h3 class="card-title">Autograd简介</h3>
+      <p class="card-text">
+        <strong>Autograd</strong>是PyTorch的自动微分引擎，它能够自动追踪所有操作并构建计算图，
+        在反向传播时自动计算梯度。这使得我们无需手动推导和编写复杂的梯度计算代码，
+        大大简化了深度学习模型的训练过程。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 计算图原理</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">前向传播</h3>
+          <p class="card-text">从输入到输出，记录所有操作</p>
+          <div class="code-block">
+<span class="comment"># 构建计算图</span>
+x = torch.tensor([<span class="number">2.0</span>], requires_grad=<span class="keyword">True</span>)
+y = x ** <span class="number">2</span>      <span class="comment"># y = x²</span>
+z = y + <span class="number">3</span>      <span class="comment"># z = x² + 3</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">反向传播</h3>
+          <p class="card-text">从输出到输入，自动计算梯度</p>
+          <div class="code-block">
+<span class="comment"># 反向传播计算梯度</span>
+z.backward()
+<span class="keyword">print</span>(x.grad)  <span class="comment"># dz/dx = 2x = 4</span>
+
+<span class="comment"># 计算链: dz/dy=1, dy/dx=2x</span>
+<span class="comment"># dz/dx = dz/dy * dy/dx = 4</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔑</span> requires_grad属性</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+
+<span class="comment"># 设置requires_grad=True追踪梯度</span>
+x = torch.tensor([<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>], requires_grad=<span class="keyword">True</span>)
+<span class="keyword">print</span>(x.requires_grad)  <span class="comment"># True</span>
+
+<span class="comment"># 任何对x的操作都会被追踪</span>
+y = x * <span class="number">2</span>
+z = y.mean()
+<span class="keyword">print</span>(z.requires_grad)  <span class="comment"># True (继承自x)</span>
+
+<span class="comment"># 在不需要梯度时禁用追踪</span>
+<span class="keyword">with</span> torch.no_grad():
+    w = x * <span class="number">3</span>
+    <span class="keyword">print</span>(w.requires_grad)  <span class="comment"># False</span>
+
+<span class="comment"># 使用detach()分离张量</span>
+detached = x.detach()
+<span class="keyword">print</span>(detached.requires_grad)  <span class="comment"># False</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> backward()方法详解</h2>
+      <div class="code-block">
+<span class="comment"># 标量输出的反向传播</span>
+x = torch.randn(<span class="number">3</span>, requires_grad=<span class="keyword">True</span>)
+y = x.sum()
+y.backward()  <span class="comment"># 自动计算梯度</span>
+<span class="keyword">print</span>(x.grad)  <span class="comment"># tensor([1., 1., 1.])</span>
+
+<span class="comment"># 向量输出的反向传播（需要传入gradient参数）</span>
+x = torch.randn(<span class="number">3</span>, requires_grad=<span class="keyword">True</span>)
+y = x * <span class="number">2</span>
+<span class="comment"># 传入与y形状相同的权重向量</span>
+y.backward(torch.tensor([<span class="number">1.0</span>, <span class="number">1.0</span>, <span class="number">1.0</span>]))
+<span class="keyword">print</span>(x.grad)  <span class="comment"># tensor([2., 2., 2.])</span>
+
+<span class="comment"># 梯度累加问题</span>
+x = torch.tensor([<span class="number">1.0</span>], requires_grad=<span class="keyword">True</span>)
+y = x * <span class="number">2</span>
+y.backward()
+<span class="keyword">print</span>(x.grad)  <span class="comment"># tensor([2.])</span>
+
+z = x * <span class="number">3</span>
+z.backward()
+<span class="keyword">print</span>(x.grad)  <span class="comment"># tensor([5.]) 梯度累加!</span>
+
+<span class="comment"># 需要清零梯度</span>
+x.grad.zero_()
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 常用梯度操作对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>操作</th>
+            <th>作用</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>backward()</code></td>
+            <td>执行反向传播计算梯度</td>
+            <td>训练时计算损失对参数的梯度</td>
+          </tr>
+          <tr>
+            <td><code>grad.zero_()</code></td>
+            <td>清零梯度值</td>
+            <td>每次迭代前清空上轮梯度</td>
+          </tr>
+          <tr>
+            <td><code>torch.no_grad()</code></td>
+            <td>禁用梯度追踪上下文</td>
+            <td>模型评估、推理阶段</td>
+          </tr>
+          <tr>
+            <td><code>detach()</code></td>
+            <td>返回不需要梯度的新张量</td>
+            <td>将张量从计算图中分离</td>
+          </tr>
+          <tr>
+            <td><code>requires_grad_()</code></td>
+            <td>原地修改requires_grad属性</td>
+            <td>动态启用/禁用梯度追踪</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧮</span> 实战示例：线性回归</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+
+<span class="comment"># 准备数据</span>
+x_train = torch.tensor([[<span class="number">1.0</span>], [<span class="number">2.0</span>], [<span class="number">3.0</span>], [<span class="number">4.0</span>]])
+y_train = torch.tensor([[<span class="number">2.0</span>], [<span class="number">4.0</span>], [<span class="number">6.0</span>], [<span class="number">8.0</span>]])
+
+<span class="comment"># 初始化参数（需要梯度）</span>
+W = torch.randn(<span class="number">1</span>, <span class="number">1</span>, requires_grad=<span class="keyword">True</span>)
+b = torch.randn(<span class="number">1</span>, requires_grad=<span class="keyword">True</span>)
+
+<span class="comment"># 超参数</span>
+learning_rate = <span class="number">0.01</span>
+epochs = <span class="number">1000</span>
+
+<span class="keyword">for</span> epoch <span class="keyword">in</span> range(epochs):
+    <span class="comment"># 前向传播</span>
+    y_pred = x_train @ W + b
+    loss = ((y_pred - y_train) ** <span class="number">2</span>).mean()
+
+    <span class="comment"># 反向传播</span>
+    loss.backward()
+
+    <span class="comment"># 更新参数（不追踪梯度）</span>
+    <span class="keyword">with</span> torch.no_grad():
+        W -= learning_rate * W.grad
+        b -= learning_rate * b.grad
+
+        <span class="comment"># 清零梯度</span>
+        W.grad.zero_()
+        b.grad.zero_()
+
+<span class="keyword">print</span>(<span class="string">f'W = {W.item():.4f}, b = {b.item():.4f}'</span>)
+<span class="comment"># W ≈ 2.0, b ≈ 0.0</span>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>PyTorch默认会累加梯度，每次backward()后需要手动清零梯度。忘记清零会导致梯度累积，影响训练效果。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="神经网络计算图">
+      <div class="caption">图：计算图是自动求导的基础数据结构</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Autograd自动追踪Tensor操作并构建计算图</li>
+            <li>• requires_grad=True启用梯度追踪</li>
+            <li>• backward()执行反向传播计算梯度</li>
+            <li>• torch.no_grad()用于禁用梯度追踪</li>
+            <li>• 梯度会累加，需要手动调用grad.zero_()清零</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="12-1-Tensor操作基础.html">← 上一节</a>
+      <a href="12-3-构建神经网络.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.4 实时语音处理 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="#">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.4 实时语音处理</h1>
+      <p class="subtitle">低延迟语音交互的关键技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解实时语音处理的技术要求与挑战</li>
+        <li>掌握流式语音识别的实现方法</li>
+        <li>了解语音活动检测(VAD)与降噪技术</li>
+        <li>学会构建低延迟语音处理流水线</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1588196749597-9ff075ee6b5b?w=800" alt="实时语音处理概念图" class="card-image">
+      <h3 class="card-title">什么是实时语音处理</h3>
+      <p class="card-text">
+        <strong>实时语音处理</strong>是指在语音输入的同时进行处理并输出结果，要求系统具有极低的延迟（通常<300ms）。实时语音处理是语音助手、实时翻译、会议字幕、在线教育等应用的核心技术支撑。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 实时处理关键指标</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">⏱️</div>
+          <h3 class="card-title">延迟</h3>
+          <p class="card-text">端到端响应时间<br>目标: <300ms</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">准确率</h3>
+          <p class="card-text">识别/处理精度<br>WER < 10%</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">实时率</h3>
+          <p class="card-text">处理时间/音频时长<br>RTF < 1.0</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">💾</div>
+          <h3 class="card-title">资源占用</h3>
+          <p class="card-text">CPU/内存消耗<br>端侧可部署</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 流式ASR方法对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>原理</th>
+            <th>延迟</th>
+            <th>特点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>分块处理</td>
+            <td>固定窗口处理</td>
+            <td>中等</td>
+            <td>实现简单，边界处理难</td>
+          </tr>
+          <tr>
+            <td>流式CTC</td>
+            <td>在线CTC解码</td>
+            <td>低</td>
+            <td>无需lookahead，延迟可控</td>
+          </tr>
+          <tr>
+            <td>流式Transducer</td>
+            <td>RNN-T在线推理</td>
+            <td>低</td>
+            <td>效果好，工业主流</td>
+          </tr>
+          <tr>
+            <td>因果注意力</td>
+            <td>因果掩码Transformer</td>
+            <td>低</td>
+            <td>模型容量大，效果好</td>
+          </tr>
+          <tr>
+            <td>WeNet/Paraformer</td>
+            <td>流式+非流式统一</td>
+            <td>可调</td>
+            <td>灵活切换，实用性强</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 代码示例：流式语音识别实现</h2>
+      <div class="code-block">
+<pre>
+import webrtcvad
+import numpy as np
+import threading
+import queue
+
+class StreamingASR:
+    def __init__(self, model, sample_rate=16000):
+        self.model = model
+        self.sample_rate = sample_rate
+        self.vad = webrtcvad.Vad(3)  # VAD激进度
+        self.audio_queue = queue.Queue()
+        self.result_queue = queue.Queue()
+
+    def audio_callback(self, audio_chunk):
+        """接收音频数据的回调函数"""
+        # 语音活动检测
+        is_speech = self.vad.is_speech(audio_chunk, self.sample_rate)
+        if is_speech:
+            self.audio_queue.put(audio_chunk)
+
+    def process_stream(self):
+        """流式处理线程"""
+        buffer = []
+        while True:
+            chunk = self.audio_queue.get()
+            buffer.append(chunk)
+
+            # 累积足够数据后进行识别
+            if len(buffer) >= 10:  # 约1秒数据
+                audio = np.concatenate(buffer)
+                # 流式ASR推理
+                result = self.model.transcribe(audio)
+                self.result_queue.put(result)
+                buffer = []
+
+# 使用示例
+asr = StreamingASR(model)
+thread = threading.Thread(target=asr.process_stream)
+thread.daemon = True
+thread.start()
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 前端处理技术</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">语音活动检测(VAD)</h3>
+          <ul class="feature-list">
+            <li>WebRTC VAD：轻量高效</li>
+            <li>Silero VAD：基于深度学习</li>
+            <li>能量检测法：简单但受噪声影响</li>
+            <li>作用：节省计算资源，提升响应</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">噪声抑制</h3>
+          <ul class="feature-list">
+            <li>传统方法：谱减法、维纳滤波</li>
+            <li>深度学习：DNS模型、RNNoise</li>
+            <li>实时要求：低延迟算法</li>
+            <li>作用：提升识别准确率</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">优化策略</div>
+        <p>实时语音处理的优化技巧：<strong>模型压缩</strong>（量化、剪枝、蒸馏）、<strong>流式架构</strong>（避免全局依赖）、<strong>并行计算</strong>（GPU/NNAPI加速）、<strong>延迟隐藏</strong>（推测性解码）、<strong>边缘部署</strong>（减少网络延迟）。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800" alt="实时通信概念图">
+      <div class="caption">图：实时语音处理是流畅语音交互的基础</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 实时语音处理要求延迟<300ms</li>
+            <li>• 流式ASR使用因果架构避免未来帧依赖</li>
+            <li>• VAD和降噪是关键的前端处理模块</li>
+            <li>• 模型压缩和边缘部署是优化方向</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-3-声音克隆.html">← 上一节</a>
+      <a href="33-5-语音助手开发.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

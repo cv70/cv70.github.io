@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.3 模型版本控制 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-MLOps概述.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.3 模型版本控制</h1>
+      <p class="subtitle">模型资产的全生命周期管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解模型版本控制的核心概念</li>
+        <li>掌握模型注册中心的使用方法</li>
+        <li>学会设计模型生命周期管理流程</li>
+        <li>了解模型血缘与可追溯性</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=800" alt="版本控制概念图" class="card-image">
+      <h3 class="card-title">什么是模型版本控制</h3>
+      <p class="card-text">
+        <strong>模型版本控制</strong>是对机器学习模型进行系统化管理的过程，包括模型的存储、版本标记、阶段转换和变更追踪。它确保团队可以追溯每个模型的来源、训练过程和部署状态。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 模型版本控制核心要素</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🏷️</div>
+          <h3 class="card-title">版本标识</h3>
+          <p class="card-text">唯一标识每个模型版本</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">阶段管理</h3>
+          <p class="card-text">管理模型的生命周期阶段</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📋</div>
+          <h3 class="card-title">元数据</h3>
+          <p class="card-text">记录模型的相关信息</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 模型生命周期阶段</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>说明</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>None/Archive</td>
+            <td>初始状态或已归档</td>
+            <td>注册新模型</td>
+          </tr>
+          <tr>
+            <td>Staging</td>
+            <td>预发布阶段，进行验证测试</td>
+            <td>测试验证、性能评估</td>
+          </tr>
+          <tr>
+            <td>Production</td>
+            <td>生产环境运行中</td>
+            <td>流量服务、监控告警</td>
+          </tr>
+          <tr>
+            <td>Archived</td>
+            <td>已下线，保留历史记录</td>
+            <td>回滚、审计追溯</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> MLflow模型注册中心</h2>
+      <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 注册新模型
+model_uri = "runs:/abc123/model"
+model_version = mlflow.register_model(
+    model_uri=model_uri,
+    name="sentiment_classifier"
+)
+
+# 添加模型描述
+client.update_model_version(
+    name="sentiment_classifier",
+    version=model_version.version,
+    description="基于BERT的情感分类模型，准确率95.2%"
+)
+
+# 阶段转换
+client.transition_model_version_stage(
+    name="sentiment_classifier",
+    version=model_version.version,
+    stage="Staging"
+)
+
+# 获取生产环境模型
+production_versions = client.get_latest_versions(
+    "sentiment_classifier",
+    stages=["Production"]
+)
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">模型血缘追溯</div>
+        <p>每个模型版本应记录完整的<strong>血缘信息</strong>：训练数据版本、代码commit hash、超参数配置、基础模型等。这些信息对于问题排查和审计至关重要。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 模型元数据标准</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">必填元数据</h3>
+          <div class="code-block">
+{
+  "model_name": "sentiment_classifier",
+  "version": "5",
+  "stage": "Production",
+  "training_data": "data_v3.2",
+  "metrics": {
+    "accuracy": 0.952,
+    "f1_score": 0.948
+  },
+  "created_at": "2024-01-15T10:30:00Z",
+  "created_by": "data_team"
+}
+          </div>
+          <ul class="feature-list">
+            <li>模型名称和版本号</li>
+            <li>训练数据引用</li>
+            <li>核心性能指标</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">推荐元数据</h3>
+          <div class="code-block">
+{
+  "base_model": "bert-base-chinese",
+  "framework": "pytorch",
+  "code_version": "git:abc123",
+  "hyperparameters": {
+    "learning_rate": 2e-5,
+    "epochs": 3,
+    "batch_size": 32
+  },
+  "dependencies": {
+    "torch": "2.0.1",
+    "transformers": "4.35.0"
+  }
+}
+          </div>
+          <ul class="feature-list">
+            <li>基础模型信息</li>
+            <li>代码版本关联</li>
+            <li>依赖环境记录</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 模型回滚策略</h2>
+      <div class="code-block">
+# 自动化回滚脚本示例
+def rollback_model(model_name, target_version, reason):
+    """回滚模型到指定版本"""
+    client = MlflowClient()
+
+    # 获取当前生产版本
+    current = client.get_latest_versions(
+        model_name, stages=["Production"]
+    )[0]
+
+    # 将当前版本归档
+    client.transition_model_version_stage(
+        name=model_name,
+        version=current.version,
+        stage="Archived"
+    )
+
+    # 恢复目标版本到生产
+    client.transition_model_version_stage(
+        name=model_name,
+        version=target_version,
+        stage="Production"
+    )
+
+    # 记录回滚原因
+    client.update_model_version(
+        name=model_name,
+        version=target_version,
+        description=f"Rollback from v{current.version}. Reason: {reason}"
+    )
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="模型管理流程">
+      <div class="caption">图：完善的模型版本控制是MLOps的基础设施</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 模型版本控制管理模型的完整生命周期</li>
+            <li>• 核心阶段包括Staging、Production和Archived</li>
+            <li>• 元数据记录确保模型可追溯和可审计</li>
+            <li>• 回滚机制保障生产环境的稳定性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-2-实验管理.html">← 上一节</a>
+      <a href="40-4-CI-CD流水线.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

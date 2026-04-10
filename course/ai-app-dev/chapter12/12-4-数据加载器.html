@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.4 数据加载器 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="12-1-Tensor操作基础.html">第十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>12.4 数据加载器</h1>
+      <p class="subtitle">高效的数据管道构建</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Dataset和DataLoader的作用与区别</li>
+        <li>掌握自定义Dataset的创建方法</li>
+        <li>学会使用DataLoader进行批量数据加载</li>
+        <li>了解数据增强和预处理技术</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据处理管道" class="card-image">
+      <h3 class="card-title">数据加载概述</h3>
+      <p class="card-text">
+        在深度学习中，<strong>高效的数据加载</strong>至关重要。PyTorch提供了Dataset和DataLoader两个核心类，
+        Dataset负责定义数据集的访问方式，DataLoader负责批量加载、打乱顺序、并行处理等。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Dataset vs DataLoader</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Dataset</h3>
+          <p class="card-text">数据集的抽象基类，定义如何获取单个样本</p>
+          <ul class="feature-list">
+            <li>实现__len__方法返回数据集大小</li>
+            <li>实现__getitem__方法获取单个样本</li>
+            <li>支持索引访问数据</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">DataLoader</h3>
+          <p class="card-text">数据加载器，负责批量加载和迭代</p>
+          <ul class="feature-list">
+            <li>批量处理（Batching）</li>
+            <li>数据打乱（Shuffling）</li>
+            <li>并行加载（多进程）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 自定义Dataset</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> Dataset, DataLoader
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">class</span> <span class="function">CustomDataset</span>(Dataset):
+    <span class="string">"""自定义数据集类"""</span>
+
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, data, labels, transform=<span class="keyword">None</span>):
+        <span class="string">"""
+        Args:
+            data: 数据数组
+            labels: 标签数组
+            transform: 可选的数据预处理
+        """</span>
+        self.data = torch.tensor(data, dtype=torch.float32)
+        self.labels = torch.tensor(labels, dtype=torch.long)
+        self.transform = transform
+
+    <span class="keyword">def</span> <span class="function">__len__</span>(self):
+        <span class="string">"""返回数据集大小"""</span>
+        <span class="keyword">return</span> len(self.data)
+
+    <span class="keyword">def</span> <span class="function">__getitem__</span>(self, idx):
+        <span class="string">"""获取单个样本"""</span>
+        sample = self.data[idx]
+        label = self.labels[idx]
+
+        <span class="keyword">if</span> self.transform:
+            sample = self.transform(sample)
+
+        <span class="keyword">return</span> sample, label
+
+<span class="comment"># 使用示例</span>
+data = np.random.randn(<span class="number">1000</span>, <span class="number">10</span>)  <span class="comment"># 1000个样本，每个10维</span>
+labels = np.random.randint(<span class="number">0</span>, <span class="number">2</span>, <span class="number">1000</span>)  <span class="comment"># 二分类标签</span>
+
+dataset = CustomDataset(data, labels)
+<span class="keyword">print</span>(<span class="string">f'数据集大小: {len(dataset)}'</span>)
+<span class="keyword">print</span>(<span class="string">f'第一个样本: {dataset[0]}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> DataLoader使用</h2>
+      <div class="code-block">
+<span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> DataLoader
+
+<span class="comment"># 创建DataLoader</span>
+dataloader = DataLoader(
+    dataset=dataset,
+    batch_size=<span class="number">32</span>,        <span class="comment"># 批量大小</span>
+    shuffle=<span class="keyword">True</span>,         <span class="comment"># 是否打乱数据</span>
+    num_workers=<span class="number">4</span>,        <span class="comment"># 并行加载进程数</span>
+    pin_memory=<span class="keyword">True</span>,      <span class="comment"># 锁页内存（GPU训练时加速）</span>
+    drop_last=<span class="keyword">False</span>       <span class="comment"># 是否丢弃不完整批次</span>
+)
+
+<span class="comment"># 迭代获取数据</span>
+<span class="keyword">for</span> batch_idx, (data, labels) <span class="keyword">in</span> enumerate(dataloader):
+    <span class="keyword">print</span>(<span class="string">f'Batch {batch_idx}: data.shape = {data.shape}'</span>)
+    <span class="keyword">if</span> batch_idx >= <span class="number">2</span>:
+        <span class="keyword">break</span>
+
+<span class="comment"># 获取单个批次</span>
+data, labels = next(iter(dataloader))
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> DataLoader参数详解</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>参数</th>
+            <th>说明</th>
+            <th>建议值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>batch_size</td>
+            <td>每批样本数量</td>
+            <td>32/64/128（根据GPU内存调整）</td>
+          </tr>
+          <tr>
+            <td>shuffle</td>
+            <td>是否每轮打乱数据顺序</td>
+            <td>训练集True，验证/测试集False</td>
+          </tr>
+          <tr>
+            <td>num_workers</td>
+            <td>数据加载的子进程数</td>
+            <td>CPU核心数（通常4-8）</td>
+          </tr>
+          <tr>
+            <td>pin_memory</td>
+            <td>使用锁页内存</td>
+            <td>GPU训练时设为True</td>
+          </tr>
+          <tr>
+            <td>drop_last</td>
+            <td>丢弃最后不完整的批次</td>
+            <td>需要固定批次大小时True</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖼️</span> 图像数据增强</h2>
+      <div class="code-block">
+<span class="keyword">from</span> torchvision <span class="keyword">import</span> transforms
+
+<span class="comment"># 定义训练数据预处理</span>
+train_transform = transforms.Compose([
+    transforms.Resize((<span class="number">256</span>, <span class="number">256</span>)),
+    transforms.RandomCrop(<span class="number">224</span>),              <span class="comment"># 随机裁剪</span>
+    transforms.RandomHorizontalFlip(),       <span class="comment"># 随机水平翻转</span>
+    transforms.RandomRotation(<span class="number">15</span>),          <span class="comment"># 随机旋转</span>
+    transforms.ColorJitter(                  <span class="comment"># 颜色抖动</span>
+        brightness=<span class="number">0.2</span>,
+        contrast=<span class="number">0.2</span>,
+        saturation=<span class="number">0.2</span>
+    ),
+    transforms.ToTensor(),                   <span class="comment"># 转为Tensor</span>
+    transforms.Normalize(                    <span class="comment"># 标准化</span>
+        mean=[<span class="number">0.485</span>, <span class="number">0.456</span>, <span class="number">0.406</span>],
+        std=[<span class="number">0.229</span>, <span class="number">0.224</span>, <span class="number">0.225</span>]
+    )
+])
+
+<span class="comment"># 验证/测试数据预处理（不增强）</span>
+val_transform = transforms.Compose([
+    transforms.Resize((<span class="number">224</span>, <span class="number">224</span>)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[<span class="number">0.485</span>, <span class="number">0.456</span>, <span class="number">0.406</span>],
+        std=[<span class="number">0.229</span>, <span class="number">0.224</span>, <span class="number">0.225</span>]
+    )
+])
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 使用内置数据集</h2>
+      <div class="code-block">
+<span class="keyword">from</span> torchvision.datasets <span class="keyword">import</span> MNIST, CIFAR10, ImageFolder
+<span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> random_split
+
+<span class="comment"># MNIST数据集</span>
+train_dataset = MNIST(
+    root=<span class="string">'./data'</span>,
+    train=<span class="keyword">True</span>,
+    download=<span class="keyword">True</span>,
+    transform=transforms.ToTensor()
+)
+
+<span class="comment"># 划分训练集和验证集</span>
+train_size = int(<span class="number">0.8</span> * len(train_dataset))
+val_size = len(train_dataset) - train_size
+train_set, val_set = random_split(
+    train_dataset,
+    [train_size, val_size]
+)
+
+<span class="comment"># 创建DataLoader</span>
+train_loader = DataLoader(train_set, batch_size=<span class="number">64</span>, shuffle=<span class="keyword">True</span>)
+val_loader = DataLoader(val_set, batch_size=<span class="number">64</span>, shuffle=<span class="keyword">False</span>)
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">Windows注意事项</div>
+        <p>在Windows系统上使用num_workers > 0时，需要将数据加载代码放在if __name__ == '__main__':块中，否则可能产生多进程错误。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据处理流程">
+      <div class="caption">图：数据从磁盘到模型的高效流转</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Dataset定义数据集的访问方式，需实现__len__和__getitem__</li>
+            <li>• DataLoader负责批量加载、打乱、并行处理数据</li>
+            <li>• 合理设置batch_size和num_workers可提升训练效率</li>
+            <li>• transforms模块提供了丰富的图像预处理和数据增强方法</li>
+            <li>• torchvision.datasets包含常用内置数据集</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="12-3-构建神经网络.html">← 上一节</a>
+      <a href="12-5-训练循环实现.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

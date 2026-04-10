@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>41.3 长文本处理 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="41-1-Function-Calling.html">第四十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>41.3 长文本处理</h1>
+      <p class="subtitle">突破上下文限制的技巧与策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解大模型上下文窗口的限制</li>
+        <li>掌握文本分块和检索增强技术</li>
+        <li>学会选择合适的长文本处理策略</li>
+        <li>了解长上下文模型的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1456324504439-367cee3b3c32?w=800" alt="长文本处理概念图" class="card-image">
+      <h3 class="card-title">长文本处理挑战</h3>
+      <p class="card-text">
+        大模型存在<strong>上下文窗口限制</strong>，无法一次性处理超长文本。长文本处理技术旨在让模型能够理解和处理超过上下文限制的文档，如完整书籍、法律文件或代码库。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 主流模型上下文窗口</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📘</div>
+          <h3 class="card-title">GPT-4 Turbo</h3>
+          <p class="card-text">128K tokens</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🤖</div>
+          <h3 class="card-title">Claude 3</h3>
+          <p class="card-text">200K tokens</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">💎</div>
+          <h3 class="card-title">Gemini 1.5 Pro</h3>
+          <p class="card-text">1M+ tokens</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 长文本处理策略对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>原理</th>
+            <th>优点</th>
+            <th>缺点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>分块处理</td>
+            <td>将文本切分为小块分别处理</td>
+            <td>简单、通用</td>
+            <td>丢失全局上下文</td>
+          </tr>
+          <tr>
+            <td>检索增强(RAG)</td>
+            <td>检索相关段落后处理</td>
+            <td>高效、精准</td>
+            <td>需要向量索引</td>
+          </tr>
+          <tr>
+            <td>摘要压缩</td>
+            <td>先压缩再处理</td>
+            <td>保留核心信息</td>
+            <td>可能丢失细节</td>
+          </tr>
+          <tr>
+            <td>长上下文模型</td>
+            <td>使用支持长文本的模型</td>
+            <td>保留完整上下文</td>
+            <td>成本较高</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 文本分块示例</h2>
+      <div class="code-block">
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+def chunk_text(text, chunk_size=1000, overlap=200):
+    """智能分块，保持语义完整性"""
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=overlap,
+        length_function=len,
+        separators=["\n\n", "\n", "。", "！", "？", "；", " ", ""]
+    )
+
+    chunks = text_splitter.split_text(text)
+    return chunks
+
+# 处理长文档
+long_document = open("document.txt").read()
+chunks = chunk_text(long_document)
+
+# 分别处理每个块
+results = []
+for i, chunk in enumerate(chunks):
+    response = client.chat.completions.create(
+        model="gpt-4-turbo-preview",
+        messages=[
+            {"role": "system", "content": "请总结以下文本"},
+            {"role": "user", "content": chunk}
+        ]
+    )
+    results.append(response.choices[0].message.content)
+
+# 合并结果
+final_summary = "\n".join(results)
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">分块策略选择</div>
+        <p>分块大小需要平衡<strong>上下文完整性</strong>和<strong>处理效率</strong>。一般建议chunk_size为500-1500 tokens，overlap为chunk_size的10-20%。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 检索增强生成(RAG)</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">向量检索</h3>
+          <div class="code-block">
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+
+# 创建向量索引
+embeddings = OpenAIEmbeddings()
+vectorstore = Chroma.from_texts(
+    texts=chunks,
+    embedding=embeddings
+)
+
+# 检索相关内容
+def retrieve_and_answer(query, k=5):
+    # 检索最相关的k个块
+    docs = vectorstore.similarity_search(
+        query, k=k
+    )
+
+    # 构建上下文
+    context = "\n\n".join(
+        doc.page_content for doc in docs
+    )
+
+    # 使用检索到的上下文回答
+    response = client.chat.completions.create(
+        model="gpt-4-turbo-preview",
+        messages=[
+            {"role": "system", "content": f"基于以下内容回答：{context}"},
+            {"role": "user", "content": query}
+        ]
+    )
+    return response.choices[0].message.content
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">混合检索策略</h3>
+          <div class="code-block">
+def hybrid_search(query, vectorstore, k=5):
+    """结合语义检索和关键词检索"""
+
+    # 语义检索
+    semantic_results = vectorstore
+        .similarity_search(query, k=k)
+
+    # 关键词检索 (BM25)
+    keyword_results = bm25_search(
+        query, documents, k=k
+    )
+
+    # 重排序合并
+    combined = merge_and_rerank(
+        semantic_results,
+        keyword_results,
+        weights=[0.7, 0.3]
+    )
+
+    return combined[:k]
+
+# 使用重排序模型提升精度
+def rerank_results(query, docs):
+    from sentence_transformers import CrossEncoder
+    model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+    scores = model.predict([
+        [query, doc] for doc in docs
+    ])
+
+    # 按分数排序
+    return [
+        doc for _, doc in sorted(
+            zip(scores, docs), reverse=True
+        )
+    ]
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 地图-归约(Map-Reduce)模式</h2>
+      <div class="code-block">
+from langchain.chains import MapReduceDocumentsChain
+
+def map_reduce_summarize(long_text):
+    """Map-Reduce长文本摘要"""
+
+    # Map阶段：每个块独立处理
+    map_template = """总结以下文本的要点：
+    {content}
+    要点："""
+
+    # Reduce阶段：合并所有要点
+    reduce_template = """将以下要点整合成完整摘要：
+    {content}
+    摘要："""
+
+    chain = MapReduceDocumentsChain.from_params(
+        llm=llm,
+        map_template=map_template,
+        reduce_template=reduce_template
+    )
+
+    return chain.run(long_text)
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1504868584819-f8e8b4b64979?w=800" alt="长文本处理">
+      <div class="caption">图：合理的策略让模型能够处理任意长度的文本</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 大模型存在上下文窗口限制</li>
+            <li>• 分块和RAG是处理长文本的常用策略</li>
+            <li>• Map-Reduce适合需要全局理解的任务</li>
+            <li>• 长上下文模型为复杂任务提供新选择</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="41-2-Structured-Output.html">← 上一节</a>
+      <a href="41-4-多模态理解.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

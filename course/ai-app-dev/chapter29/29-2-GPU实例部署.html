@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.2 GPU实例部署 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-云服务商选择.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.2 GPU实例部署</h1>
+      <p class="subtitle">云端GPU计算资源的配置与管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解GPU实例的类型和选择</li>
+        <li>掌握主流云平台的GPU实例创建</li>
+        <li>学会配置GPU运行环境</li>
+        <li>了解Spot实例降低成本的方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?w=800" alt="GPU计算" class="card-image">
+      <h3 class="card-title">GPU实例概述</h3>
+      <p class="card-text">
+        <strong>GPU实例</strong>是配备GPU加速器的云计算虚拟机，适用于深度学习训练、推理、科学计算等场景。选择合适的GPU实例需要考虑显存大小、计算性能、网络带宽和成本等因素。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎮</span> GPU类型对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>GPU型号</th>
+            <th>显存</th>
+            <th>适用场景</th>
+            <th>性价比</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>T4</td>
+            <td>16GB</td>
+            <td>推理、轻量训练</td>
+            <td>高</td>
+          </tr>
+          <tr>
+            <td>V100</td>
+            <td>16/32GB</td>
+            <td>中等规模训练</td>
+            <td>中</td>
+          </tr>
+          <tr>
+            <td>A10</td>
+            <td>24GB</td>
+            <td>推理、工作站</td>
+            <td>高</td>
+          </tr>
+          <tr>
+            <td>A100</td>
+            <td>40/80GB</td>
+            <td>大规模训练、大模型</td>
+            <td>中</td>
+          </tr>
+          <tr>
+            <td>H100</td>
+            <td>80GB</td>
+            <td>超大模型训练</td>
+            <td>低(高性能)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">☁️</span> AWS GPU实例创建</h2>
+      <div class="code-block">
+<pre># AWS CLI创建GPU实例
+aws ec2 run-instances \
+    --image-id ami-0c55b159cbfafe1f0 \
+    --instance-type g4dn.xlarge \
+    --key-name my-key-pair \
+    --security-group-ids sg-12345678 \
+    --block-device-mappings '[{
+        "DeviceName": "/dev/sda1",
+        "Ebs": {
+            "VolumeSize": 100,
+            "VolumeType": "gp3"
+        }
+    }]' \
+    --user-data '#!/bin/bash
+        sudo yum install -y docker
+        sudo service docker start
+        sudo usermod -a -G docker ec2-user
+    '
+
+# GPU实例类型
+# g4dn.xlarge  - 1x T4 GPU, 4 vCPU, 16GB RAM
+# g4dn.2xlarge - 1x T4 GPU, 8 vCPU, 32GB RAM
+# p3.2xlarge   - 1x V100 GPU, 8 vCPU, 61GB RAM
+# p4d.24xlarge - 8x A100 GPU, 96 vCPU, 1152GB RAM
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔵</span> GCP GPU实例创建</h2>
+      <div class="code-block">
+<pre># GCP创建GPU实例
+gcloud compute instances create gpu-instance \
+    --zone=us-central1-a \
+    --machine-type=n1-standard-8 \
+    --accelerator="type=nvidia-tesla-v100,count=1" \
+    --image-family="ubuntu-2204-lts" \
+    --image-project="ubuntu-os-cloud" \
+    --boot-disk-size=200GB \
+    --maintenance-policy=TERMINATE \
+    --restart-on-failure
+
+# 安装NVIDIA驱动
+gcloud compute ssh gpu-instance --zone=us-central1-a
+sudo apt-get update
+sudo apt-get install -y cuda-drivers
+sudo reboot
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="云服务器">
+      <div class="caption">图：云端GPU实例为AI应用提供弹性计算能力</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💰</span> Spot实例省钱策略</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">AWS Spot实例</h3>
+          <div class="code-block">
+<pre># 创建Spot实例
+aws ec2 run-instances \
+    --instance-type p3.2xlarge \
+    --instance-market-options '{
+        "MarketType": "spot",
+        "SpotOptions": {
+            "MaxPrice": "1.5",
+            "SpotInstanceType": "one-time"
+        }
+    }'
+
+# 节省高达70%成本
+</pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">GCP Preemptible实例</h3>
+          <div class="code-block">
+<pre># 创建Preemptible实例
+gcloud compute instances create gpu-spot \
+    --preemptible \
+    --accelerator="type=nvidia-tesla-v100,count=1"
+
+# 节省高达60%成本
+# 最长运行24小时
+</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">Spot实例注意事项</div>
+        <p>Spot实例可能被随时回收，适合有状态检查点的训练任务。建议实现<strong>定期保存检查点</strong>和<strong>自动恢复机制</strong>，确保任务可以从中断处继续。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• GPU实例类型包括T4、V100、A100、H100等，根据显存和性能需求选择</li>
+            <li>• AWS使用p3/p4/g4系列，GCP使用n1/n2系列加accelerator</li>
+            <li>• Spot/Preemptible实例可节省60-70%成本，但需实现断点恢复</li>
+            <li>• 部署后需安装NVIDIA驱动和CUDA工具包</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-1-云服务商选择.html">← 上一节</a>
+      <a href="29-3-Serverless架构.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

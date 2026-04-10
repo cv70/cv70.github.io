@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.5 GPU容器化 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-Docker基础.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.5 GPU容器化</h1>
+      <p class="subtitle">深度学习应用的GPU容器化部署</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解GPU容器化的原理和优势</li>
+        <li>掌握NVIDIA Container Toolkit配置</li>
+        <li>学会构建GPU加速的Docker镜像</li>
+        <li>了解多GPU和分布式训练的容器化</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?w=800" alt="GPU计算概念图" class="card-image">
+      <h3 class="card-title">为什么需要GPU容器化？</h3>
+      <p class="card-text">
+        <strong>GPU容器化</strong>解决了深度学习应用部署中的环境一致性问题。通过容器，开发者可以将CUDA、cuDNN、PyTorch/TensorFlow等复杂的GPU环境打包，实现"一次构建，到处运行"，避免环境配置带来的各种问题。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> GPU容器化架构</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>层级</th>
+            <th>组件</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>硬件层</td>
+            <td>NVIDIA GPU</td>
+            <td>提供并行计算能力</td>
+          </tr>
+          <tr>
+            <td>驱动层</td>
+            <td>NVIDIA Driver</td>
+            <td>GPU驱动程序（宿主机安装）</td>
+          </tr>
+          <tr>
+            <td>运行时层</td>
+            <td>NVIDIA Container Toolkit</td>
+            <td>容器GPU访问接口</td>
+          </tr>
+          <tr>
+            <td>容器层</td>
+            <td>CUDA/cuDNN</td>
+            <td>GPU计算库（容器内）</td>
+          </tr>
+          <tr>
+            <td>应用层</td>
+            <td>PyTorch/TensorFlow</td>
+            <td>深度学习框架</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> NVIDIA Container Toolkit安装</h2>
+      <div class="code-block">
+<pre># 添加NVIDIA包仓库
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+    sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+
+# 安装NVIDIA Container Toolkit
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+
+# 配置Docker运行时
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 验证安装
+sudo docker run --rm --gpus all nvidia/cuda:11.8-base nvidia-smi
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> GPU镜像构建示例</h2>
+      <div class="code-block">
+<pre># PyTorch GPU镜像
+FROM nvidia/cuda:11.8-cudnn8-devel-ubuntu22.04
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+
+# 安装Python和依赖
+RUN apt-get update && apt-get install -y \
+    python3.10 python3-pip git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装PyTorch（GPU版本）
+RUN pip3 install --no-cache-dir \
+    torch==2.0.1 \
+    torchvision==0.15.2 \
+    torchaudio==2.0.2 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# 安装其他依赖
+RUN pip3 install --no-cache-dir \
+    transformers==4.30.0 \
+    accelerate==0.20.3 \
+    datasets==2.13.0
+
+WORKDIR /app
+COPY . /app
+
+CMD ["python3", "train.py"]
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1555617981-dac3880eac6e?w=800" alt="深度学习">
+      <div class="caption">图：GPU容器化让深度学习部署更加便捷</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> GPU容器运行</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">单GPU运行</h3>
+          <div class="code-block">
+<pre># 使用所有GPU
+docker run --gpus all myapp:gpu
+
+# 使用指定GPU
+docker run --gpus '"device=0"' myapp:gpu
+
+# 使用多个GPU
+docker run --gpus '"device=0,1"' myapp:gpu
+</pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多GPU运行</h3>
+          <div class="code-block">
+<pre># 限制GPU内存
+docker run --gpus all \
+  --shm-size=16g \
+  -e CUDA_VISIBLE_DEVICES=0,1 \
+  myapp:gpu
+
+# 分布式训练
+docker run --gpus all \
+  --network host \
+  -e MASTER_ADDR=master \
+  -e MASTER_PORT=29500 \
+  myapp:gpu
+</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> GPU资源监控</h2>
+      <div class="code-block">
+<pre># 容器内监控GPU
+docker exec -it &lt;container_id&gt; nvidia-smi
+
+# 实时监控
+watch -n 1 docker exec &lt;container_id&gt; nvidia-smi
+
+# Python代码中监控
+import torch
+print(f"GPU数量: {torch.cuda.device_count()}")
+print(f"当前GPU: {torch.cuda.current_device()}")
+print(f"GPU名称: {torch.cuda.get_device_name(0)}")
+print(f"GPU内存: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+</pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>多GPU分布式训练时，需要设置<code>--shm-size</code>参数增加共享内存，否则PyTorch DataLoader可能会报错。建议设置为16GB或更多。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• GPU容器化解决深度学习环境一致性问题</li>
+            <li>• NVIDIA Container Toolkit是GPU容器化的核心组件</li>
+            <li>• 使用nvidia/cuda镜像作为基础镜像</li>
+            <li>• 通过--gpus参数控制GPU访问，分布式训练需要增加共享内存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-4-Kubernetes入门.html">← 上一节</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

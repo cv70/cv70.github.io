@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.3 告警机制 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="30-1-日志系统设计.html">第三十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.3 告警机制</h1>
+      <p class="subtitle">构建及时有效的AI应用告警体系</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解告警设计原则和告警分级</li>
+        <li>掌握Prometheus告警规则配置</li>
+        <li>学会使用Alertmanager管理告警</li>
+        <li>了解AI场景的特殊告警需求</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="告警系统" class="card-image">
+      <h3 class="card-title">为什么需要告警机制？</h3>
+      <p class="card-text">
+        <strong>告警机制</strong>是保障系统稳定性的重要防线。通过及时发现问题、快速响应处理，可以最小化故障影响。对于AI应用，告警不仅关注系统可用性，还需要关注模型性能和数据质量。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 告警级别定义</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>级别</th>
+            <th>严重程度</th>
+            <th>响应时间</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0 - 紧急</td>
+            <td>服务不可用</td>
+            <td>立即响应</td>
+            <td>推理服务宕机、GPU故障</td>
+          </tr>
+          <tr>
+            <td>P1 - 严重</td>
+            <td>核心功能受损</td>
+            <td>15分钟内</td>
+            <td>推理延迟超阈值、错误率上升</td>
+          </tr>
+          <tr>
+            <td>P2 - 警告</td>
+            <td>性能下降</td>
+            <td>1小时内</td>
+            <td>GPU内存不足、QPS下降</td>
+          </tr>
+          <tr>
+            <td>P3 - 提示</td>
+            <td>需要关注</td>
+            <td>24小时内</td>
+            <td>模型准确率轻微下降</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Prometheus告警规则</h2>
+      <div class="code-block">
+<pre># alert_rules.yml
+groups:
+  - name: ai_service_alerts
+    interval: 30s
+    rules:
+      # P0: 服务不可用告警
+      - alert: AIServiceDown
+        expr: up{job="ai-inference"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          priority: P0
+        annotations:
+          summary: "AI推理服务不可用"
+          description: "服务 {{ $labels.instance }} 已宕机超过1分钟"
+
+      # P1: 推理延迟告警
+      - alert: HighInferenceLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(ai_inference_latency_seconds_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+        annotations:
+          summary: "推理延迟过高"
+          description: "P99延迟 {{ $value | humanizeDuration }}"
+
+      # P2: GPU内存告警
+      - alert: GPUMemoryHigh
+        expr: |
+          (nvidia_gpu_memory_used_bytes / nvidia_gpu_memory_total_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+        annotations:
+          summary: "GPU内存使用率过高"
+          description: "GPU {{ $labels.gpu }} 内存使用率 {{ $value | humanizePercentage }}"
+
+      # AI特殊告警: 模型准确率下降
+      - alert: ModelAccuracyDrop
+        expr: |
+          ai_model_accuracy < 0.85
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+        annotations:
+          summary: "模型准确率下降"
+          description: "模型 {{ $labels.model_name }} 准确率降至 {{ $value }}"
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="监控告警">
+      <div class="caption">图：合理的告警机制保障系统稳定性</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔔</span> Alertmanager配置</h2>
+      <div class="code-block">
+<pre># alertmanager.yml
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/xxx'
+
+route:
+  group_by: ['alertname', 'priority']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    # P0告警立即通知
+    - match:
+        priority: P0
+      receiver: 'critical'
+      continue: false
+    # P1告警工作时间通知
+    - match:
+        priority: P1
+      receiver: 'high'
+      active_time_intervals:
+        - 'business_hours'
+
+receivers:
+  - name: 'default'
+    slack_configs:
+      - channel: '#ai-alerts'
+        send_resolved: true
+
+  - name: 'critical'
+    slack_configs:
+      - channel: '#ai-critical'
+    pagerduty_configs:
+      - service_key: 'xxx'
+    webhook_configs:
+      - url: 'http://oncall-service/alert'
+
+  - name: 'high'
+    slack_configs:
+      - channel: '#ai-alerts'
+
+time_intervals:
+  - name: 'business_hours'
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '18:00'
+        weekdays: ['monday:friday']
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> AI场景特殊告警</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">模型性能告警</h3>
+          <ul class="feature-list">
+            <li>准确率/召回率下降</li>
+            <li>预测分布漂移</li>
+            <li>置信度异常分布</li>
+            <li>模型版本不匹配</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">数据质量告警</h3>
+          <ul class="feature-list">
+            <li>输入数据缺失率</li>
+            <li>特征分布变化</li>
+            <li>异常数据比例</li>
+            <li>数据延迟/延迟</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">告警疲劳</div>
+        <p>避免设置过多无效告警导致<strong>告警疲劳</strong>。建议：1) 合理设置阈值和持续时间 2) 定期审查告警规则 3) 区分真实问题和噪声 4) 实现告警静默机制</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 告警按严重程度分为P0-P3四级，对应不同响应时间</li>
+            <li>• Prometheus AlertRules定义告警条件，Alertmanager管理通知</li>
+            <li>• AI场景需额外关注模型性能和数据质量告警</li>
+            <li>• 避免告警疲劳，合理设置阈值和告警静默</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-2-性能监控.html">← 上一节</a>
+      <a href="30-4-自动化运维.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

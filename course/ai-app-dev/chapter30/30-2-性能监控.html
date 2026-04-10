@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.2 性能监控 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="30-1-日志系统设计.html">第三十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.2 性能监控</h1>
+      <p class="subtitle">AI应用的实时性能观测与分析</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解性能监控的关键指标</li>
+        <li>掌握Prometheus+Grafana监控栈</li>
+        <li>学会监控GPU和模型性能</li>
+        <li>了解分布式追踪技术</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="性能监控" class="card-image">
+      <h3 class="card-title">什么是性能监控？</h3>
+      <p class="card-text">
+        <strong>性能监控</strong>是实时收集、分析和展示应用性能指标的过程。对于AI应用，除了常规的系统指标外，还需要监控GPU利用率、模型推理延迟、预测准确率等AI特有指标。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 关键监控指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>类别</th>
+            <th>指标</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>系统资源</td>
+            <td>CPU/内存使用率</td>
+            <td>基础资源消耗</td>
+          </tr>
+          <tr>
+            <td>GPU资源</td>
+            <td>GPU利用率/显存</td>
+            <td>GPU计算和存储使用</td>
+          </tr>
+          <tr>
+            <td>服务性能</td>
+            <td>QPS/延迟/P99</td>
+            <td>请求处理能力</td>
+          </tr>
+          <tr>
+            <td>模型性能</td>
+            <td>推理时间/准确率</td>
+            <td>模型效果和效率</td>
+          </tr>
+          <tr>
+            <td>业务指标</td>
+            <td>预测分布/错误率</td>
+            <td>业务层面表现</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> Prometheus监控配置</h2>
+      <div class="code-block">
+<pre># prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # AI推理服务监控
+  - job_name: 'ai-inference'
+    static_configs:
+      - targets: ['inference-service:8000']
+    metrics_path: '/metrics'
+
+  # GPU监控 (DCGM Exporter)
+  - job_name: 'gpu-metrics'
+    static_configs:
+      - targets: ['dcgm-exporter:9400']
+
+  # Node Exporter (系统指标)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+# 自定义AI指标示例
+# Python代码中暴露指标
+from prometheus_client import Counter, Histogram, Gauge
+
+# 推理请求计数
+inference_requests = Counter(
+    'ai_inference_requests_total',
+    'Total inference requests',
+    ['model_name', 'status']
+)
+
+# 推理延迟直方图
+inference_latency = Histogram(
+    'ai_inference_latency_seconds',
+    'Inference latency in seconds',
+    ['model_name']
+)
+
+# GPU显存使用
+gpu_memory_used = Gauge(
+    'ai_gpu_memory_used_bytes',
+    'GPU memory used in bytes',
+    ['gpu_id']
+)
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="监控仪表板">
+      <div class="caption">图：Grafana仪表板展示AI应用性能指标</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎮</span> GPU监控</h2>
+      <div class="code-block">
+<pre># 使用DCGM Exporter监控GPU
+# 部署DCGM Exporter
+docker run -d --gpus all \
+  --name dcgm-exporter \
+  -p 9400:9400 \
+  nvcr.io/nvidia/k8s/dcgm-exporter:3.1.7-3.1.4-ubuntu20.04
+
+# 关键GPU指标
+# DCGM_FI_DEV_GPU_UTIL        - GPU利用率
+# DCGM_FI_DEV_MEM_COPY_UTIL   - 内存带宽利用率
+# DCGM_FI_DEV_FB_FREE         - 空闲显存
+# DCGM_FI_DEV_FB_USED         - 已用显存
+# DCGM_FI_DEV_GPU_TEMP        - GPU温度
+# DCGM_FI_DEV_POWER_USAGE     - 功耗
+
+# Python中获取GPU指标
+import pynvml
+
+def get_gpu_metrics():
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+
+    return {
+        'utilization': pynvml.nvmlDeviceGetUtilizationRates(handle).gpu,
+        'memory_used': pynvml.nvmlDeviceGetMemoryInfo(handle).used,
+        'temperature': pynvml.nvmlDeviceGetTemperature(handle, 0),
+        'power': pynvml.nvmlDeviceGetPowerUsage(handle) / 1000
+    }
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> Grafana仪表板配置</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">系统仪表板</h3>
+          <ul class="feature-list">
+            <li>CPU/内存趋势图</li>
+            <li>网络I/O统计</li>
+            <li>磁盘使用率</li>
+            <li>容器资源消耗</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">AI专用仪表板</h3>
+          <ul class="feature-list">
+            <li>GPU利用率热力图</li>
+            <li>推理延迟P50/P99</li>
+            <li>模型QPS趋势</li>
+            <li>预测错误率</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 分布式追踪</h2>
+      <div class="code-block">
+<pre># 使用OpenTelemetry进行分布式追踪
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.exporter.jaeger import JaegerExporter
+
+# 配置追踪
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+
+jaeger_exporter = JaegerExporter(
+    agent_host_name="jaeger",
+    agent_port=6831,
+)
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(jaeger_exporter)
+)
+
+# AI推理追踪
+def inference_with_tracing(input_data):
+    with tracer.start_as_current_span("inference") as span:
+        span.set_attribute("model.name", "gpt-model")
+        span.set_attribute("input.shape", str(input_data.shape))
+
+        with tracer.start_as_current_span("preprocessing"):
+            processed = preprocess(input_data)
+
+        with tracer.start_as_current_span("model_forward"):
+            output = model(processed)
+
+        span.set_attribute("output.confidence", output.confidence)
+        return output
+</pre>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">监控最佳实践</div>
+        <p>建立<strong>RED指标</strong>（Rate请求率、Errors错误率、Duration延迟）作为服务健康的核心指标。对于AI服务，建议增加<strong>模型性能指标</strong>（准确率、漂移检测）。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 性能监控包括系统、GPU、服务、模型四个层面</li>
+            <li>• Prometheus+Grafana是主流监控栈</li>
+            <li>• 使用DCGM Exporter监控GPU指标</li>
+            <li>• OpenTelemetry实现分布式追踪，定位性能瓶颈</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-1-日志系统设计.html">← 上一节</a>
+      <a href="30-3-告警机制.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

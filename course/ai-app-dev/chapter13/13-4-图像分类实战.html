@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.4 图像分类实战 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="13-1-卷积操作原理.html">第十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>13.4 图像分类实战</h1>
+      <p class="subtitle">从零构建完整的图像分类系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握图像分类任务的完整流程</li>
+        <li>学会数据预处理和数据增强技术</li>
+        <li>实现完整的训练和评估流程</li>
+        <li>掌握模型调优和结果可视化方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="图像分类流程" class="card-image">
+      <h3 class="card-title">图像分类流程</h3>
+      <p class="card-text">
+        构建一个完整的图像分类系统需要经历<strong>数据准备、模型构建、训练优化、评估测试</strong>四个阶段。
+        本节将基于CIFAR-10数据集，使用ResNet架构实现一个端到端的图像分类项目。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 项目流程概览</h2>
+      <div class="steps">
+        <div class="step active">
+          <div class="step-number">1</div>
+          <div class="step-label">数据准备</div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-label">模型构建</div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-label">训练优化</div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-label">评估部署</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 数据准备</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torchvision
+<span class="keyword">import</span> torchvision.transforms <span class="keyword">as</span> transforms
+<span class="keyword">from</span> torch.utils.data <span class="keyword">import</span> DataLoader
+
+<span class="comment"># 训练数据增强</span>
+train_transform = transforms.Compose([
+    transforms.RandomCrop(<span class="number">32</span>, padding=<span class="number">4</span>),      <span class="comment"># 随机裁剪</span>
+    transforms.RandomHorizontalFlip(),       <span class="comment"># 随机水平翻转</span>
+    transforms.RandomRotation(<span class="number">15</span>),          <span class="comment"># 随机旋转</span>
+    transforms.ColorJitter(                  <span class="comment"># 颜色抖动</span>
+        brightness=<span class="number">0.2</span>,
+        contrast=<span class="number">0.2</span>,
+        saturation=<span class="number">0.2</span>
+    ),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=(<span class="number">0.4914</span>, <span class="number">0.4822</span>, <span class="number">0.4465</span>),
+        std=(<span class="number">0.2023</span>, <span class="number">0.1994</span>, <span class="number">0.2010</span>)
+    )
+])
+
+<span class="comment"># 测试数据预处理（不增强）</span>
+test_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=(<span class="number">0.4914</span>, <span class="number">0.4822</span>, <span class="number">0.4465</span>),
+        std=(<span class="number">0.2023</span>, <span class="number">0.1994</span>, <span class="number">0.2010</span>)
+    )
+])
+
+<span class="comment"># 加载CIFAR-10数据集</span>
+train_dataset = torchvision.datasets.CIFAR10(
+    root=<span class="string">'./data'</span>, train=<span class="keyword">True</span>,
+    download=<span class="keyword">True</span>, transform=train_transform
+)
+
+test_dataset = torchvision.datasets.CIFAR10(
+    root=<span class="string">'./data'</span>, train=<span class="keyword">False</span>,
+    download=<span class="keyword">True</span>, transform=test_transform
+)
+
+<span class="comment"># 创建DataLoader</span>
+train_loader = DataLoader(train_dataset, batch_size=<span class="number">128</span>,
+                          shuffle=<span class="keyword">True</span>, num_workers=<span class="number">4</span>)
+test_loader = DataLoader(test_dataset, batch_size=<span class="number">100</span>,
+                         shuffle=<span class="keyword">False</span>, num_workers=<span class="number">4</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 模型构建</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">import</span> torchvision.models <span class="keyword">as</span> models
+
+<span class="comment"># 使用预训练ResNet-18</span>
+model = models.resnet18(pretrained=<span class="keyword">False</span>)
+
+<span class="comment"># 修改第一层适应CIFAR-10的32x32输入</span>
+model.conv1 = nn.Conv2d(<span class="number">3</span>, <span class="number">64</span>, kernel_size=<span class="number">3</span>,
+                       stride=<span class="number">1</span>, padding=<span class="number">1</span>, bias=<span class="keyword">False</span>)
+
+<span class="comment"># 修改最后一层为10分类</span>
+model.fc = nn.Linear(model.fc.in_features, <span class="number">10</span>)
+
+<span class="comment"># 移除maxpool层（CIFAR图像太小）</span>
+model.maxpool = nn.Identity()
+
+<span class="comment"># 将模型移到GPU</span>
+device = torch.device(<span class="string">'cuda'</span> <span class="keyword">if</span> torch.cuda.is_available() <span class="keyword">else</span> <span class="string">'cpu'</span>)
+model = model.to(device)
+<span class="keyword">print</span>(model)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 训练配置</h2>
+      <div class="code-block">
+<span class="keyword">import</span> torch.optim <span class="keyword">as</span> optim
+
+<span class="comment"># 损失函数</span>
+criterion = nn.CrossEntropyLoss()
+
+<span class="comment"># 优化器：带动量的SGD</span>
+optimizer = optim.SGD(
+    model.parameters(),
+    lr=<span class="number">0.1</span>,
+    momentum=<span class="number">0.9</span>,
+    weight_decay=<span class="number">5e-4</span>  <span class="comment"># L2正则化</span>
+)
+
+<span class="comment"># 学习率调度器</span>
+scheduler = optim.lr_scheduler.MultiStepLR(
+    optimizer,
+    milestones=[<span class="number">60</span>, <span class="number">120</span>, <span class="number">160</span>],  <span class="comment"># 在这些epoch降低学习率</span>
+    gamma=<span class="number">0.2</span>  <span class="comment"># 学习率衰减因子</span>
+)
+
+<span class="comment"># 训练参数</span>
+num_epochs = <span class="number">200</span>
+best_acc = <span class="number">0.0</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 训练与评估函数</h2>
+      <div class="code-block">
+<span class="keyword">def</span> <span class="function">train</span>(epoch):
+    model.train()
+    train_loss = <span class="number">0</span>
+    correct = <span class="number">0</span>
+    total = <span class="number">0</span>
+
+    <span class="keyword">for</span> batch_idx, (inputs, targets) <span class="keyword">in</span> enumerate(train_loader):
+        inputs, targets = inputs.to(device), targets.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item()
+        _, predicted = outputs.max(<span class="number">1</span>)
+        total += targets.size(<span class="number">0</span>)
+        correct += predicted.eq(targets).sum().item()
+
+    <span class="keyword">print</span>(<span class="string">f'Epoch: {epoch} | Train Loss: {train_loss/(batch_idx+1):.3f} | '</span>
+          <span class="string">f'Acc: {100.*correct/total:.3f}%'</span>)
+
+<span class="keyword">def</span> <span class="function">test</span>(epoch):
+    <span class="keyword">global</span> best_acc
+    model.eval()
+    test_loss = <span class="number">0</span>
+    correct = <span class="number">0</span>
+    total = <span class="number">0</span>
+
+    <span class="keyword">with</span> torch.no_grad():
+        <span class="keyword">for</span> inputs, targets <span class="keyword">in</span> test_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+
+            test_loss += loss.item()
+            _, predicted = outputs.max(<span class="number">1</span>)
+            total += targets.size(<span class="number">0</span>)
+            correct += predicted.eq(targets).sum().item()
+
+    acc = <span class="number">100.</span> * correct / total
+    <span class="keyword">print</span>(<span class="string">f'Test Loss: {test_loss/(len(test_loader)):.3f} | Acc: {acc:.3f}%'</span>)
+
+    <span class="comment"># 保存最佳模型</span>
+    <span class="keyword">if</span> acc > best_acc:
+        best_acc = acc
+        torch.save(model.state_dict(), <span class="string">'best_model.pth'</span>)
+
+<span class="comment"># 主训练循环</span>
+<span class="keyword">for</span> epoch <span class="keyword">in</span> range(num_epochs):
+    train(epoch)
+    test(epoch)
+    scheduler.step()
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 结果可视化</h2>
+      <div class="code-block">
+<span class="keyword">import</span> matplotlib.pyplot <span class="keyword">as</span> plt
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="comment"># CIFAR-10类别名称</span>
+classes = (<span class="string">'plane'</span>, <span class="string">'car'</span>, <span class="string">'bird'</span>, <span class="string">'cat'</span>,
+           <span class="string">'deer'</span>, <span class="string">'dog'</span>, <span class="string">'frog'</span>, <span class="string">'horse'</span>, <span class="string">'ship'</span>, <span class="string">'truck'</span>)
+
+<span class="keyword">def</span> <span class="function">imshow</span>(img):
+    img = img / <span class="number">2</span> + <span class="number">0.5</span>  <span class="comment"># 反归一化</span>
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (<span class="number">1</span>, <span class="number">2</span>, <span class="number">0</span>)))
+    plt.show()
+
+<span class="comment"># 显示预测结果</span>
+dataiter = iter(test_loader)
+images, labels = next(dataiter)
+outputs = model(images.to(device))
+_, predicted = torch.max(outputs, <span class="number">1</span>)
+
+<span class="comment"># 打印预测结果</span>
+<span class="keyword">print</span>(<span class="string">'GroundTruth: '</span>, <span class="string">' '</span>.join(<span class="string">f'{classes[labels[j]]}'</span> <span class="keyword">for</span> j <span class="keyword">in</span> range(<span class="number">4</span>)))
+<span class="keyword">print</span>(<span class="string">'Predicted: '</span>, <span class="string">' '</span>.join(<span class="string">f'{classes[predicted[j]]}'</span> <span class="keyword">for</span> j <span class="keyword">in</span> range(<span class="number">4</span>)))
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 训练技巧总结</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>技巧</th>
+            <th>作用</th>
+            <th>推荐设置</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>数据增强</td>
+            <td>增加数据多样性，防止过拟合</td>
+            <td>RandomCrop, RandomFlip</td>
+          </tr>
+          <tr>
+            <td>学习率衰减</td>
+            <td>精细调优，提高最终精度</td>
+            <td>MultiStepLR或CosineAnnealing</td>
+          </tr>
+          <tr>
+            <td>权重衰减</td>
+            <td>L2正则化，防止过拟合</td>
+            <td>1e-4 ~ 5e-4</td>
+          </tr>
+          <tr>
+            <td>动量SGD</td>
+            <td>加速收敛，跳出局部最优</td>
+            <td>momentum=0.9</td>
+          </tr>
+          <tr>
+            <td>Label Smoothing</td>
+            <td>防止过度自信</td>
+            <td>smoothing=0.1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">常见问题</div>
+        <p>训练不收敛时检查：1) 学习率是否过大；2) 数据预处理是否正确；3) 模型结构是否匹配输入尺寸；4) 标签是否正确。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1527474305487-b87b222841cc?w=800" alt="图像分类应用">
+      <div class="caption">图：图像分类是计算机视觉的基础任务</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 数据增强是提升模型泛化能力的关键</li>
+            <li>• 使用预训练模型可加速收敛</li>
+            <li>• 学习率调度对最终精度影响显著</li>
+            <li>• 权重衰减防止过拟合，提升泛化</li>
+            <li>• 训练完成后需在测试集上验证最终效果</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="13-3-经典CNN架构.html">← 上一节</a>
+      <a href="13-5-迁移学习应用.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

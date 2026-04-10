@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.3 贝叶斯优化 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="9-1-交叉验证技术.html">第九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>9.3 贝叶斯优化</h1>
+      <p class="subtitle">智能化的超参数调优方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解贝叶斯优化的基本原理</li>
+        <li>掌握Optuna库的使用方法</li>
+        <li>了解采集函数的作用</li>
+        <li>学会在实际项目中应用贝叶斯优化</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800" alt="优化概念图" class="card-image">
+      <h3 class="card-title">什么是贝叶斯优化</h3>
+      <p class="card-text">
+        <strong>贝叶斯优化（Bayesian Optimization）</strong>是一种基于概率模型的全局优化方法。
+        它通过构建目标函数的代理模型（如高斯过程），利用已有评估结果指导后续搜索，
+        以最少的评估次数找到最优参数。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔬</span> 核心思想</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">代理模型</h3>
+          <p class="card-text">用高斯过程等拟合目标函数</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">采集函数</h3>
+          <p class="card-text">平衡探索与利用</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">迭代更新</h3>
+          <p class="card-text">新结果更新代理模型</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 优势对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>网格搜索</th>
+            <th>随机搜索</th>
+            <th>贝叶斯优化</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>搜索效率</td>
+            <td>低</td>
+            <td>中</td>
+            <td>高</td>
+          </tr>
+          <tr>
+            <td>评估次数</td>
+            <td>多</td>
+            <td>中</td>
+            <td>少</td>
+          </tr>
+          <tr>
+            <td>利用历史</td>
+            <td>否</td>
+            <td>否</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td>连续参数</td>
+            <td>不支持</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+          <tr>
+            <td>实现复杂度</td>
+            <td>简单</td>
+            <td>简单</td>
+            <td>中等</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Optuna实现</h2>
+      <div class="code-block">
+<span class="keyword">import</span> optuna
+<span class="keyword">from</span> sklearn.ensemble <span class="keyword">import</span> RandomForestClassifier
+<span class="keyword">from</span> sklearn.model_selection <span class="keyword">import</span> cross_val_score
+
+<span class="keyword">def</span> <span class="function">objective</span>(trial):
+    <span class="comment"># 定义搜索空间</span>
+    n_estimators = trial.suggest_int(<span class="string">'n_estimators'</span>, <span class="number">50</span>, <span class="number">500</span>)
+    max_depth = trial.suggest_int(<span class="string">'max_depth'</span>, <span class="number">3</span>, <span class="number">20</span>)
+    min_samples_split = trial.suggest_int(<span class="string">'min_samples_split'</span>, <span class="number">2</span>, <span class="number">20</span>)
+    max_features = trial.suggest_float(<span class="string">'max_features'</span>, <span class="number">0.5</span>, <span class="number">1.0</span>)
+
+    <span class="comment"># 创建模型</span>
+    model = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_split=min_samples_split,
+        max_features=max_features,
+        random_state=<span class="number">42</span>
+    )
+
+    <span class="comment"># 返回验证分数</span>
+    score = cross_val_score(model, X, y, cv=<span class="number">5</span>).mean()
+    <span class="keyword">return</span> score
+
+<span class="comment"># 创建study并优化</span>
+study = optuna.create_study(direction=<span class="string">'maximize'</span>)
+study.optimize(objective, n_trials=<span class="number">100</span>)
+
+<span class="keyword">print</span>(<span class="string">f'最佳参数: {study.best_params}'</span>)
+<span class="keyword">print</span>(<span class="string">f'最佳得分: {study.best_value:.4f}'</span>)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 常用采集函数</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">期望改进 (EI)</h3>
+          <p class="card-text">计算当前最优改进的期望值，平衡探索与利用</p>
+          <div class="code-block">EI(x) = E[max(f(x) - f*, 0)]</div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">上置信界 (UCB)</h3>
+          <p class="card-text">结合均值和不确定性，控制探索程度</p>
+          <div class="code-block">UCB(x) = μ(x) + β * σ(x)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Optuna优势</div>
+        <p>Optuna支持<strong>剪枝（Pruning）</strong>：提前终止表现不佳的试验，节省计算资源。还支持分布式优化和多种采样算法。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="贝叶斯优化">
+      <div class="caption">图：贝叶斯优化通过代理模型高效探索参数空间</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 贝叶斯优化利用历史评估结果指导搜索</li>
+            <li>• 通过代理模型和采集函数高效探索参数空间</li>
+            <li>• 相比网格/随机搜索，评估次数更少</li>
+            <li>• Optuna是流行的贝叶斯优化库，易用且功能强大</li>
+            <li>• 支持剪枝、分布式优化等高级功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="9-2-网格搜索与随机搜索.html">← 上一节</a>
+      <a href="9-4-正则化技术.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

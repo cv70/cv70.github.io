@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.4 自动化运维 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="30-1-日志系统设计.html">第三十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.4 自动化运维</h1>
+      <p class="subtitle">AI应用的自动化部署与运维实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解自动化运维的重要性和核心理念</li>
+        <li>掌握CI/CD流水线设计</li>
+        <li>学会使用IaC管理基础设施</li>
+        <li>了解AI应用的MLOps实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="自动化运维" class="card-image">
+      <h3 class="card-title">什么是自动化运维？</h3>
+      <p class="card-text">
+        <strong>自动化运维</strong>是通过工具和平台实现运维任务的自动化执行，包括自动部署、自动扩缩容、自动故障恢复等。自动化运维可以减少人为错误、提高效率、保障系统稳定性。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> CI/CD流水线</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>任务</th>
+            <th>工具</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>代码提交</td>
+            <td>触发构建、代码检查</td>
+            <td>Git、GitHub/GitLab</td>
+          </tr>
+          <tr>
+            <td>持续集成</td>
+            <td>单元测试、集成测试</td>
+            <td>Jenkins、GitHub Actions</td>
+          </tr>
+          <tr>
+            <td>构建镜像</td>
+            <td>打包Docker镜像</td>
+            <td>Docker、Kaniko</td>
+          </tr>
+          <tr>
+            <td>持续部署</td>
+            <td>更新K8s部署</td>
+            <td>ArgoCD、Flux</td>
+          </tr>
+          <tr>
+            <td>验证发布</td>
+            <td>健康检查、冒烟测试</td>
+            <td>自定义脚本</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> GitHub Actions CI/CD示例</h2>
+      <div class="code-block">
+<pre># .github/workflows/ai-deploy.yml
+name: AI Model Deployment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        run: |
+          pytest tests/ --cov=src --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/ai-inference:${{ github.sha }}
+            ${{ env.REGISTRY }}/ai-inference:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl set image deployment/ai-inference \
+            inference=${{ env.REGISTRY }}/ai-inference:${{ github.sha }}
+          kubectl rollout status deployment/ai-inference
+</pre>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="自动化流水线">
+      <div class="caption">图：CI/CD流水线实现代码到部署的自动化</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 基础设施即代码(IaC)</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Terraform示例</h3>
+          <div class="code-block">
+<pre># 定义GPU实例
+resource "aws_instance" "gpu" {
+  ami           = var.gpu_ami
+  instance_type = "g4dn.xlarge"
+
+  tags = {
+    Name = "ai-inference-gpu"
+  }
+}
+
+# 定义EKS集群
+resource "aws_eks_cluster" "ai" {
+  name     = "ai-cluster"
+  role_arn = aws_iam_role.cluster.arn
+
+  vpc_config {
+    subnet_ids = aws_subnet.main[*].id
+  }
+}
+</pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">IaC优势</h3>
+          <ul class="feature-list">
+            <li>版本控制基础设施变更</li>
+            <li>环境一致性保障</li>
+            <li>快速复制和恢复</li>
+            <li>代码审查变更</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> GitOps实践</h2>
+      <div class="code-block">
+<pre># ArgoCD Application配置
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-inference
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/org/ai-infra
+    targetRevision: main
+    path: k8s/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤖</span> MLOps核心实践</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📦</div>
+          <h3 class="card-title">模型版本管理</h3>
+          <p class="card-text">MLflow、DVC管理模型版本和实验记录</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">模型部署流水线</h3>
+          <p class="card-text">自动训练、测试、部署模型</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">模型监控</h3>
+          <p class="card-text">性能监控、漂移检测、自动重训练</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">自动化运维最佳实践</div>
+        <p>1. <strong>小步快跑</strong>：频繁发布小版本，降低风险<br>
+        2. <strong>可回滚</strong>：每次部署都能快速回滚<br>
+        3. <strong>金丝雀发布</strong>：先部署小流量验证，再全量发布<br>
+        4. <strong>可观测性</strong>：部署后自动验证系统健康</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CI/CD流水线实现代码到部署的自动化</li>
+            <li>• IaC(Terraform)实现基础设施版本化管理</li>
+            <li>• GitOps(ArgoCD)以Git为单一事实来源</li>
+            <li>• MLOps扩展自动化到模型生命周期管理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-3-告警机制.html">← 上一节</a>
+      <a href="30-5-安全审计.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

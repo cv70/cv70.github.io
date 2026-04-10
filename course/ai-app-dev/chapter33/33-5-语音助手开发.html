@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.5 语音助手开发 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="#">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.5 语音助手开发</h1>
+      <p class="subtitle">构建智能语音交互系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解语音助手的系统架构与核心组件</li>
+        <li>掌握意图识别与槽位填充技术</li>
+        <li>了解对话管理与上下文处理方法</li>
+        <li>学会构建完整的语音助手应用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1543512214-318c7553f230?w=800" alt="语音助手概念图" class="card-image">
+      <h3 class="card-title">什么是语音助手</h3>
+      <p class="card-text">
+        <strong>语音助手</strong>是能够通过语音进行交互的智能系统，能够理解用户意图、执行相应任务并以语音形式反馈结果。从Siri、Alexa到ChatGPT Voice，语音助手正在改变人机交互方式，成为智能家居、车载系统、客服机器人的核心入口。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 语音助手架构</h2>
+      <div class="grid grid-5">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎤</div>
+          <h3 class="card-title">ASR</h3>
+          <p class="card-text">语音转文字</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🧠</div>
+          <h3 class="card-title">NLU</h3>
+          <p class="card-text">理解意图</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">💬</div>
+          <h3 class="card-title">DM</h3>
+          <p class="card-text">对话管理</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📝</div>
+          <h3 class="card-title">NLG</h3>
+          <p class="card-text">生成回复</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔊</div>
+          <h3 class="card-title">TTS</h3>
+          <p class="card-text">文字转语音</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> NLU技术对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>技术</th>
+            <th>任务</th>
+            <th>方法</th>
+            <th>应用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>意图识别</td>
+            <td>分类用户目标</td>
+            <td>文本分类模型</td>
+            <td>播放音乐、设置闹钟</td>
+          </tr>
+          <tr>
+            <td>槽位填充</td>
+            <td>提取关键参数</td>
+            <td>序列标注(NER)</td>
+            <td>歌曲名、时间、地点</td>
+          </tr>
+          <tr>
+            <td>实体链接</td>
+            <td>关联知识库</td>
+            <td>实体消歧</td>
+            <td>歌手名→数据库ID</td>
+          </tr>
+          <tr>
+            <td>大语言模型</td>
+            <td>端到端理解</td>
+            <td>Function Calling</td>
+            <td>复杂指令理解</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 代码示例：语音助手核心逻辑</h2>
+      <div class="code-block">
+<pre>
+import whisper
+from transformers import pipeline
+import edge_tts
+import asyncio
+
+class VoiceAssistant:
+    def __init__(self):
+        # 初始化各模块
+        self.asr = whisper.load_model("base")
+        self.nlu = pipeline("text-classification",
+                           model="intent-model")
+        self.skills = {
+            "play_music": self.play_music,
+            "set_alarm": self.set_alarm,
+            "weather": self.get_weather
+        }
+
+    async def process_voice(self, audio_path):
+        # 1. 语音识别
+        text = self.asr.transcribe(audio_path)["text"]
+
+        # 2. 意图识别
+        intent_result = self.nlu(text)[0]
+        intent = intent_result["label"]
+
+        # 3. 槽位提取（简化示例）
+        slots = self.extract_slots(text, intent)
+
+        # 4. 执行技能
+        response = await self.skills[intent](slots)
+
+        # 5. 语音合成
+        await self.speak(response)
+        return response
+
+    async def speak(self, text):
+        communicate = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+        await communicate.save("response.mp3")
+        # 播放音频...
+
+    def extract_slots(self, text, intent):
+        # 基于规则或模型的槽位提取
+        slots = {}
+        if intent == "play_music":
+            # 提取歌曲名
+            slots["song"] = self.extract_song_name(text)
+        return slots
+
+# 使用示例
+assistant = VoiceAssistant()
+response = asyncio.run(assistant.process_voice("user_audio.wav"))
+</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💬</span> 对话管理</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">状态追踪</h3>
+          <ul class="feature-list">
+            <li>维护对话状态信息</li>
+            <li>槽位填充进度跟踪</li>
+            <li>多轮对话上下文管理</li>
+            <li>用户画像与偏好记忆</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">策略学习</h3>
+          <ul class="feature-list">
+            <li>基于规则：预定义对话流程</li>
+            <li>强化学习：最优动作选择</li>
+            <li>大模型规划：动态生成策略</li>
+            <li>混合方法：规则兜底+AI增强</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">大语言模型时代</div>
+        <p>LLM正在重塑语音助手开发范式：<strong>统一理解</strong>（一个模型完成NLU所有任务）、<strong>上下文记忆</strong>（长对话历史理解）、<strong>知识整合</strong>（内置世界知识）、<strong>多轮推理</strong>（复杂任务分解）。通过Function Calling可实现与外部系统的灵活对接。</p>
+      </div>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1531746790731-6c087fecd65a?w=800" alt="智能助手概念图">
+      <div class="caption">图：语音助手正在成为人机交互的核心入口</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 语音助手由ASR→NLU→DM→NLG→TTS流水线组成</li>
+            <li>• 意图识别和槽位填充是NLU的核心任务</li>
+            <li>• 对话管理维护状态并决定系统行为</li>
+            <li>• 大语言模型正在革新语音助手的实现方式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-4-实时语音处理.html">← 上一节</a>
+      <a href="../chapter34/34-1-推荐系统基础.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.5 错误处理与重试 - AI应用开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🤖 AI应用开发课程</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-OpenAI-API使用.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.5 错误处理与重试</h1>
+      <p class="subtitle">构建健壮的API调用系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解大模型API常见错误类型</li>
+        <li>掌握重试策略的设计方法</li>
+        <li>学会实现健壮的错误处理机制</li>
+        <li>能够设计高可用的API调用架构</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="系统架构概念图" class="card-image">
+      <h3 class="card-title">为什么需要错误处理</h3>
+      <p class="card-text">
+        大模型API调用过程中可能遇到<strong>网络错误、速率限制、服务不可用</strong>等各种问题。良好的错误处理和重试机制能够提高系统的<strong>可靠性和用户体验</strong>，避免因临时故障导致服务中断。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 常见错误类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>错误类型</th>
+            <th>HTTP状态码</th>
+            <th>原因</th>
+            <th>处理策略</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>认证错误</td>
+            <td>401</td>
+            <td>API密钥无效或过期</td>
+            <td>检查密钥，联系管理员</td>
+          </tr>
+          <tr>
+            <td>权限不足</td>
+            <td>403</td>
+            <td>账户权限或配额限制</td>
+            <td>检查账户权限</td>
+          </tr>
+          <tr>
+            <td>资源不存在</td>
+            <td>404</td>
+            <td>模型或端点不存在</td>
+            <td>检查模型名称</td>
+          </tr>
+          <tr>
+            <td>速率限制</td>
+            <td>429</td>
+            <td>请求过于频繁</td>
+            <td>指数退避重试</td>
+          </tr>
+          <tr>
+            <td>服务端错误</td>
+            <td>500/502/503</td>
+            <td>服务器临时故障</td>
+            <td>重试或切换服务</td>
+          </tr>
+          <tr>
+            <td>超时错误</td>
+            <td>-</td>
+            <td>请求处理时间过长</td>
+            <td>调整超时设置</td>
+          </tr>
+          <tr>
+            <td>内容过滤</td>
+            <td>400</td>
+            <td>触发内容审核</td>
+            <td>修改输入内容</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="image-container">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="监控分析概念图">
+      <div class="caption">图：完善的错误处理机制确保服务稳定运行</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 重试策略设计</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">固定间隔重试</h3>
+          <p class="card-text">每次重试间隔固定时间，简单但不高效。</p>
+          <div class="code-block">
+<span style="color: #c586c0;">import</span> time
+
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">retry_fixed</span>(func, max_retries=<span style="color: #b5cea8;">3</span>, delay=<span style="color: #b5cea8;">1</span>):
+    <span style="color: #c586c0;">for</span> attempt <span style="color: #c586c0;">in</span> range(max_retries):
+        <span style="color: #569cd6;">try</span>:
+            <span style="color: #c586c0;">return</span> func()
+        <span style="color: #569cd6;">except</span> Exception <span style="color: #569cd6;">as</span> e:
+            <span style="color: #c586c0;">if</span> attempt == max_retries - <span style="color: #b5cea8;">1</span>:
+                <span style="color: #c586c0;">raise</span>
+            time.sleep(delay)
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">指数退避重试</h3>
+          <p class="card-text">间隔时间指数增长，推荐用于速率限制。</p>
+          <div class="code-block">
+<span style="color: #c586c0;">import</span> time
+
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">retry_exponential</span>(func, max_retries=<span style="color: #b5cea8;">5</span>):
+    <span style="color: #c586c0;">for</span> attempt <span style="color: #c586c0;">in</span> range(max_retries):
+        <span style="color: #569cd6;">try</span>:
+            <span style="color: #c586c0;">return</span> func()
+        <span style="color: #569cd6;">except</span> Exception <span style="color: #569cd6;">as</span> e:
+            <span style="color: #c586c0;">if</span> attempt == max_retries - <span style="color: #b5cea8;">1</span>:
+                <span style="color: #c586c0;">raise</span>
+            delay = (<span style="color: #b5cea8;">2</span> ** attempt) + random.random()
+            time.sleep(delay)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 完整错误处理实现</h2>
+      <div class="card">
+        <div class="code-block">
+<span style="color: #c586c0;">import</span> time
+<span style="color: #c586c0;">import</span> random
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> OpenAI, APIError, RateLimitError, APIConnectionError
+
+client = OpenAI()
+
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">chat_with_retry</span>(
+    messages,
+    model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+    max_retries=<span style="color: #b5cea8;">5</span>,
+    base_delay=<span style="color: #b5cea8;">1</span>,
+    max_delay=<span style="color: #b5cea8;">60</span>
+):
+    <span style="color: #ce9178;">"""
+    带重试机制的API调用
+
+    Args:
+        messages: 对话消息列表
+        model: 模型名称
+        max_retries: 最大重试次数
+        base_delay: 基础延迟秒数
+        max_delay: 最大延迟秒数
+    """</span>
+    last_error = <span style="color: #569cd6;">None</span>
+
+    <span style="color: #c586c0;">for</span> attempt <span style="color: #c586c0;">in</span> range(max_retries):
+        <span style="color: #569cd6;">try</span>:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                timeout=<span style="color: #b5cea8;">30</span>
+            )
+            <span style="color: #c586c0;">return</span> response.choices[<span style="color: #b5cea8;">0</span>].message.content
+
+        <span style="color: #569cd6;">except</span> RateLimitError <span style="color: #569cd6;">as</span> e:
+            last_error = e
+            <span style="color: #6a9955;"># 速率限制，使用指数退避</span>
+            delay = min(base_delay * (<span style="color: #b5cea8;">2</span> ** attempt), max_delay)
+            delay = delay + random.uniform(<span style="color: #b5cea8;">0</span>, <span style="color: #b5cea8;">1</span>)  <span style="color: #6a9955;"># 添加随机抖动</span>
+            <span style="color: #569cd6;">print</span>(<span style="color: #ce9178;">f"速率限制，{delay:.1f}秒后重试..."</span>)
+            time.sleep(delay)
+
+        <span style="color: #569cd6;">except</span> APIConnectionError <span style="color: #569cd6;">as</span> e:
+            last_error = e
+            <span style="color: #6a9955;"># 连接错误，快速重试</span>
+            time.sleep(base_delay)
+
+        <span style="color: #569cd6;">except</span> APIError <span style="color: #569cd6;">as</span> e:
+            <span style="color: #6a9955;"># 服务器错误，检查状态码</span>
+            <span style="color: #c586c0;">if</span> e.status_code <span style="color: #c586c0;">in</span> [<span style="color: #b5cea8;">500</span>, <span style="color: #b5cea8;">502</span>, <span style="color: #b5cea8;">503</span>]:
+                last_error = e
+                time.sleep(base_delay * (<span style="color: #b5cea8;">2</span> ** attempt))
+            <span style="color: #c586c0;">else</span>:
+                <span style="color: #6a9955;"># 其他错误不重试</span>
+                <span style="color: #c586c0;">raise</span>
+
+    <span style="color: #6a9955;"># 重试耗尽</span>
+    <span style="color: #c586c0;">raise</span> Exception(<span style="color: #ce9178;">f"重试{max_retries}次后仍失败: {last_error}"</span>)
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 使用tenacity库</h2>
+      <div class="card">
+        <p class="card-text">tenacity是Python专业的重试库，提供更灵活的重试策略。</p>
+        <div class="code-block">
+<span style="color: #c586c0;">from</span> tenacity <span style="color: #c586c0;">import</span> retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+<span style="color: #c586c0;">from</span> openai <span style="color: #c586c0;">import</span> RateLimitError, APIConnectionError
+
+<span style="color: #6a9955;"># 装饰器方式配置重试</span>
+@retry(
+    stop=stop_after_attempt(<span style="color: #b5cea8;">5</span>),
+    wait=wait_exponential(multiplier=<span style="color: #b5cea8;">1</span>, min=<span style="color: #b5cea8;">1</span>, max=<span style="color: #b5cea8;">60</span>),
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
+    before_sleep=<span style="color: #569cd6;">lambda</span> x: <span style="color: #569cd6;">print</span>(<span style="color: #ce9178;">f"第{x.attempt_number}次重试..."</span>)
+)
+<span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">call_api</span>(messages):
+    <span style="color: #c586c0;">return</span> client.chat.completions.create(
+        model=<span style="color: #ce9178;">"gpt-4o-mini"</span>,
+        messages=messages
+    )
+
+<span style="color: #6a9955;"># 使用</span>
+result = call_api([{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"你好"</span>}])
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 降级与故障转移</h2>
+      <div class="card">
+        <h3 class="card-title">多模型备份策略</h3>
+        <div class="code-block">
+<span style="color: #569cd6;">class</span> <span style="color: #4ec9b0;">LLMFailover</span>:
+    <span style="color: #ce9178;">"""多模型故障转移"""</span>
+
+    <span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">__init__</span>(self, providers: list[dict]):
+        self.providers = providers
+        self.current_index = <span style="color: #b5cea8;">0</span>
+
+    <span style="color: #569cd6;">def</span> <span style="color: #dcdcaa;">call</span>(self, messages, max_retries=<span style="color: #b5cea8;">3</span>):
+        errors = []
+
+        <span style="color: #c586c0;">for</span> i <span style="color: #c586c0;">in</span> range(len(self.providers)):
+            provider = self.providers[(self.current_index + i) % len(self.providers)]
+
+            <span style="color: #c586c0;">try</span>:
+                <span style="color: #c586c0;">return</span> self._call_provider(provider, messages)
+            <span style="color: #569cd6;">except</span> Exception <span style="color: #569cd6;">as</span> e:
+                errors.append((provider[<span style="color: #ce9178;">'name'</span>], str(e)))
+                <span style="color: #569cd6;">print</span>(<span style="color: #ce9178;">f"{provider['name']} 调用失败: {e}"</span>)
+
+        <span style="color: #c586c0;">raise</span> Exception(<span style="color: #ce9178;">f"所有提供商均失败: {errors}"</span>)
+
+<span style="color: #6a9955;"># 配置多个提供商</span>
+providers = [
+    {<span style="color: #ce9178;">"name"</span>: <span style="color: #ce9178;">"OpenAI"</span>, <span style="color: #ce9178;">"client"</span>: openai_client, <span style="color: #ce9178;">"model"</span>: <span style="color: #ce9178;">"gpt-4o-mini"</span>},
+    {<span style="color: #ce9178;">"name"</span>: <span style="color: #ce9178;">"DeepSeek"</span>, <span style="color: #ce9178;">"client"</span>: deepseek_client, <span style="color: #ce9178;">"model"</span>: <span style="color: #ce9178;">"deepseek-chat"</span>},
+    {<span style="color: #ce9178;">"name"</span>: <span style="color: #ce9178;">"Qwen"</span>, <span style="color: #ce9178;">"client"</span>: qwen_client, <span style="color: #ce9178;">"model"</span>: <span style="color: #ce9178;">"qwen-turbo"</span>}
+]
+
+llm = LLMFailover(providers)
+result = llm.call([{<span style="color: #ce9178;">"role"</span>: <span style="color: #ce9178;">"user"</span>, <span style="color: #ce9178;">"content"</span>: <span style="color: #ce9178;">"你好"</span>}])
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 监控与告警</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">关键监控指标</h3>
+          <ul class="feature-list">
+            <li><strong>请求成功率</strong>：成功/总请求</li>
+            <li><strong>平均响应时间</strong>：P50/P95/P99</li>
+            <li><strong>错误分布</strong>：按类型统计</li>
+            <li><strong>重试次数</strong>：平均重试次数</li>
+            <li><strong>Token使用量</strong>：输入/输出</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">告警规则示例</h3>
+          <ul class="feature-list">
+            <li>成功率低于95%</li>
+            <li>P95延迟超过10秒</li>
+            <li>429错误频率过高</li>
+            <li>连续失败超过N次</li>
+            <li>Token使用量异常</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>针对<strong>速率限制(429)</strong>使用指数退避重试；针对<strong>服务器错误(5xx)</strong>可重试但设置上限；针对<strong>认证错误(401)</strong>不重试直接报警；针对<strong>内容过滤</strong>需修改输入而非重试。</p>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>重试会增加<strong>请求延迟</strong>，设置合理的最大重试次数。注意<strong>幂等性</strong>，避免重复执行产生副作用。对于用户交互场景，提供<strong>取消重试</strong>的选项。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 常见错误包括认证、速率限制、服务器错误等</li>
+            <li>• 指数退避是处理速率限制的标准策略</li>
+            <li>• 使用tenacity等库简化重试逻辑</li>
+            <li>• 多模型故障转移提高系统可用性</li>
+            <li>• 完善监控和告警机制保障服务质量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="18-4-流式响应处理.html">← 上一节</a>
+      <a href="../chapter19/19-1-向量数据库入门.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>
