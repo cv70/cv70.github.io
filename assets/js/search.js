@@ -39,7 +39,7 @@ const SearchEngine = {
         { title: 'JSON 代码生成', url: '/tool/json-to-code/', category: '工具', desc: 'JSON 转代码工具' },
         { title: 'AI 应用开发', url: '/course/ai-app-dev/', category: '课程', desc: '从零到实战的AI开发课程' },
         { title: 'AI 产品经理', url: '/course/ai-pm/', category: '课程', desc: '从产品思维到AI落地的全能型AI产品经理课程' },
-        { title: 'Node.js 全栈', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
+        { title: '全栈应用开发', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
     ],
 
     search(query) {
