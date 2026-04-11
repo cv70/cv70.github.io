@@ -37,9 +37,9 @@ const SearchEngine = {
         { title: 'CSV 转 JSON', url: '/tool/csv-to-json/', category: '工具', desc: 'CSV 数据转 JSON' },
         { title: 'SQL 格式化', url: '/tool/sql-formatter/', category: '工具', desc: 'SQL 语句格式化' },
         { title: 'JSON 代码生成', url: '/tool/json-to-code/', category: '工具', desc: 'JSON 转代码工具' },
-        { title: 'AI 应用开发', url: '/course/ai-app-dev/', category: '课程', desc: '从零到实战的AI开发课程' },
-        { title: 'AI 产品经理', url: '/course/ai-pm/', category: '课程', desc: '从产品思维到AI落地的全能型AI产品经理课程' },
-        { title: '全栈应用开发', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
+        { title: 'AI应用开发修炼手册', url: '/course/ai-app-dev/', category: '课程', desc: '从零到实战的AI开发课程' },
+        { title: 'AI产品经理修炼手册', url: '/course/ai-pm/', category: '课程', desc: '从产品思维到AI落地的全能型AI产品经理课程' },
+        { title: '全栈应用开发修炼手册', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
     ],
 
     search(query) {

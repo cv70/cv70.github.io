@@ -43,6 +43,20 @@
                         } catch(e) {}
                     }
                 });
+
+                // 折叠目录：点击章节标题切换展开/收起
+                sidebarContainer.querySelectorAll('.toc-section-title').forEach(function(title) {
+                    title.addEventListener('click', function() {
+                        this.parentElement.classList.toggle('open');
+                    });
+                });
+
+                // 自动展开当前页面所在的章节
+                var activeLink = sidebarContainer.querySelector('.toc-nav a.active');
+                if (activeLink) {
+                    var activeSection = activeLink.closest('.toc-section');
+                    if (activeSection) activeSection.classList.add('open');
+                }
             }
 
             // 生成移动端目录弹窗
@@ -75,6 +89,20 @@
                         toggleMobileToc();
                     });
                 });
+
+                // 移动端折叠目录：点击章节标题切换展开/收起
+                mobileNav.querySelectorAll('.toc-section-title').forEach(function(title) {
+                    title.addEventListener('click', function() {
+                        this.parentElement.classList.toggle('open');
+                    });
+                });
+
+                // 移动端自动展开当前页面所在的章节
+                var mobileActive = mobileNav.querySelector('a.active');
+                if (mobileActive) {
+                    var mobileActiveSection = mobileActive.closest('.toc-section');
+                    if (mobileActiveSection) mobileActiveSection.classList.add('open');
+                }
                 mobileModal.querySelector('.mobile-toc-content').appendChild(mobileNav);
                 document.body.appendChild(mobileModal);
             }
