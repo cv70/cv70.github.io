@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.5 广播消息 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.5 广播消息</h1>
+      <p class="subtitle">Socket.IO 消息广播策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Socket.IO 的广播机制</li>
+        <li>掌握各种广播方式的区别和使用场景</li>
+        <li>学会使用 volatile 消息</li>
+        <li>了解广播的性能优化技巧</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是广播</h3>
+      <p class="card-text">
+        <strong>广播（Broadcast）</strong> 是指向多个客户端同时发送消息的机制。Socket.IO 提供了多种广播方式，可以精确控制消息的接收范围。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 广播方式详解</h2>
+
+      <div class="card">
+        <h3 class="card-title">1. 全局广播</h3>
+        <div class="code-block">
+// 向所有连接的客户端发送
+io.emit('announcement', '服务器维护通知');
+
+// 等同于
+io.of('/').emit('announcement', '服务器维护通知');
+
+// 使用场景：系统公告、全局通知
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">2. 排除发送者广播</h3>
+        <div class="code-block">
+// 向除发送者外的所有客户端发送
+socket.broadcast.emit('user-connected', {
+  userId: socket.id,
+  username: socket.data.username
+});
+
+// 使用场景：用户上线通知、状态更新
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">3. 房间广播</h3>
+        <div class="code-block">
+// 向房间内所有客户端发送（包括发送者）
+io.to('room1').emit('message', '房间消息');
+
+// 向房间内除发送者外的客户端发送
+socket.to('room1').emit('message', '有人发送了消息');
+
+// 向多个房间广播
+io.to('room1').to('room2').emit('announcement', '多房间广播');
+
+// 使用场景：聊天室、游戏房间、协作编辑
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">4. 排除特定客户端</h3>
+        <div class="code-block">
+// 排除单个 socket
+io.except(socket.id).emit('message', '排除发送者');
+
+// 排除房间内的特定 socket
+io.to('room1').except(socket.id).emit('message', '排除指定用户');
+
+// 排除多个 socket
+io.except(['socket1', 'socket2']).emit('message', '排除多个');
+
+// 使用场景：私聊排除、黑名单用户
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">5. 命名空间广播</h3>
+        <div class="code-block">
+// 向命名空间内所有客户端发送
+io.of('/chat').emit('message', '聊天频道消息');
+
+// 向命名空间内的房间发送
+io.of('/chat').to('room1').emit('message', '聊天室消息');
+
+// 使用场景：多频道应用、模块化通信
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Volatile 消息</h2>
+      <p class="card-text">Volatile 消息是一类"可以丢失"的消息。当网络不稳定或客户端来不及处理时，这类消息会被丢弃，不会阻塞后续消息。</p>
+
+      <div class="code-block">
+// 发送 volatile 消息
+socket.volatile.emit('ping', Date.now());
+
+// volatile 广播
+io.volatile.emit('system-status', { cpu: 50, memory: 60 });
+
+// volatile 房间广播
+io.to('game-room').volatile.emit('position', { x: 100, y: 200 });
+
+// 使用场景：
+// - 实时位置同步（游戏、地图）
+// - 实时数据监控（股票、仪表盘）
+// - 音视频流的实时性要求
+      </div>
+
+      <div class="tip-box info" style="margin-top: 1rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Volatile 消息特点</div>
+          <p>如果客户端正在重连或缓冲区已满，volatile 消息会被跳过。适合高频、可丢失的数据，如实时位置、帧数据等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 广播方式对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方式</th>
+            <th>API</th>
+            <th>包括发送者</th>
+            <th>典型场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>全局广播</td>
+            <td><code>io.emit()</code></td>
+            <td>是</td>
+            <td>系统公告</td>
+          </tr>
+          <tr>
+            <td>排除发送者</td>
+            <td><code>socket.broadcast.emit()</code></td>
+            <td>否</td>
+            <td>用户上线通知</td>
+          </tr>
+          <tr>
+            <td>房间广播</td>
+            <td><code>io.to('room').emit()</code></td>
+            <td>是</td>
+            <td>聊天室消息</td>
+          </tr>
+          <tr>
+            <td>房间排除发送者</td>
+            <td><code>socket.to('room').emit()</code></td>
+            <td>否</td>
+            <td>群聊消息</td>
+          </tr>
+          <tr>
+            <td>排除特定客户端</td>
+            <td><code>io.except(id).emit()</code></td>
+            <td>否</td>
+            <td>黑名单过滤</td>
+          </tr>
+          <tr>
+            <td>Volatile</td>
+            <td><code>socket.volatile.emit()</code></td>
+            <td>是</td>
+            <td>实时位置</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 实际应用示例</h2>
+
+      <div class="card">
+        <h3 class="card-title">聊天室广播</h3>
+        <div class="code-block">
+interface Message {
+  id: string;
+  userId: string;
+  username: string;
+  content: string;
+  timestamp: number;
+}
+
+io.on('connection', (socket) => {
+  // 用户加入聊天室
+  socket.on('join-room', (roomId: string) => {
+    socket.join(roomId);
+
+    // 向房间内其他人广播用户加入
+    socket.to(roomId).emit('user-joined', {
+      userId: socket.data.userId,
+      username: socket.data.username
+    });
+
+    // 向加入者发送欢迎消息（仅发给该 socket）
+    socket.emit('welcome', {
+      message: `欢迎来到房间 ${roomId}`
+    });
+  });
+
+  // 发送消息
+  socket.on('send-message', (roomId: string, content: string) => {
+    const message: Message = {
+      id: generateId(),
+      userId: socket.data.userId,
+      username: socket.data.username,
+      content,
+      timestamp: Date.now()
+    };
+
+    // 向房间所有人广播消息
+    io.to(roomId).emit('new-message', message);
+  });
+
+  // 用户正在输入
+  socket.on('typing', (roomId: string) => {
+    // 只向房间内其他人广播
+    socket.to(roomId).emit('user-typing', {
+      userId: socket.data.userId,
+      username: socket.data.username
+    });
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">实时游戏位置同步</h3>
+        <div class="code-block">
+interface PlayerPosition {
+  playerId: string;
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+// 游戏房间
+io.on('connection', (socket) => {
+  socket.on('join-game', (gameId: string) => {
+    socket.join(`game:${gameId}`);
+
+    // 向房间内其他人广播新玩家加入
+    socket.to(`game:${gameId}`).emit('player-joined', {
+      playerId: socket.id,
+      position: { x: 0, y: 0 }
+    });
+  });
+
+  // 玩家位置更新 - 高频、可丢失
+  socket.on('update-position', (gameId: string, position: PlayerPosition) => {
+    // 使用 volatile 广播，避免阻塞
+    socket.volatile.to(`game:${gameId}`).emit('player-moved', {
+      playerId: socket.id,
+      ...position
+    });
+  });
+
+  // 重要事件 - 不能丢失
+  socket.on('player-action', (gameId: string, action: any) => {
+    // 普通广播，确保送达
+    io.to(`game:${gameId}`).emit('player-action', {
+      playerId: socket.id,
+      ...action
+    });
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">实时数据仪表盘</h3>
+        <div class="code-block">
+// 定时向所有连接的仪表盘推送数据
+setInterval(async () => {
+  const stats = await getSystemStats();
+
+  // volatile 广播，丢失也不影响
+  io.volatile.emit('stats-update', {
+    cpu: stats.cpu,
+    memory: stats.memory,
+    activeUsers: stats.activeUsers,
+    timestamp: Date.now()
+  });
+}, 1000);
+
+// 重要告警 - 使用普通广播确保送达
+async function sendAlert(alert: Alert) {
+  // 全局广播告警
+  io.emit('system-alert', {
+    level: alert.level,
+    message: alert.message,
+    timestamp: Date.now()
+  });
+
+  // 同时存入数据库
+  await saveAlert(alert);
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化技巧</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">压缩大消息</h3>
+          <div class="code-block">
+import { createGzip } from 'zlib';
+
+// 对大消息启用压缩
+const io = new Server(httpServer, {
+  perMessageDeflate: {
+    threshold: 1024  // 超过 1KB 压缩
+  }
+});
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">批量发送</h3>
+          <div class="code-block">
+// 避免高频单独发送
+let pendingUpdates = [];
+
+setInterval(() => {
+  if (pendingUpdates.length > 0) {
+    io.emit('batch-update', pendingUpdates);
+    pendingUpdates = [];
+  }
+}, 50);
+
+socket.on('update', (data) => {
+  pendingUpdates.push(data);
+});
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• <code>io.emit()</code> 全局广播，<code>socket.broadcast.emit()</code> 排除发送者</li>
+            <li>• <code>io.to('room')</code> 向房间发送，包括发送者</li>
+            <li>• <code>socket.to('room')</code> 向房间发送，排除发送者</li>
+            <li>• <code>volatile</code> 消息可丢失，适合高频实时数据</li>
+            <li>• 合理选择广播方式，避免不必要的消息发送</li>
+            <li>• 高频数据使用批量发送和压缩优化性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="64-4-事件处理.html">← 上一节</a>
+      <a href="64-6-私聊实现.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

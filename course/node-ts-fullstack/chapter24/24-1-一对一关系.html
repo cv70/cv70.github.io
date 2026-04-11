@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.1 一对一关系 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="24-1-一对一关系.html">第二十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>24.1 一对一关系</h1>
+      <p class="subtitle">定义实体间的一对一关联</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解一对一关系的概念</li>
+        <li>掌握 @OneToOne 装饰器使用</li>
+        <li>学会配置 @JoinColumn</li>
+        <li>了解双向关系的定义</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 一对一关系概述</h2>
+      <p>一对一关系是指两个实体之间 A 包含一个 B，B 也只属于一个 A。例如：一个用户有一个用户详情，一个用户有一个头像。</p>
+
+      <div class="code-block">
+数据库表结构：
+
+users 表                     user_profiles 表
+┌─────┬──────────┬─────┐    ┌─────┬────────┬─────────┬─────────┐
+│ id  │ username │ age │    │ id  │ bio    │ avatar  │ user_id │
+├─────┼──────────┼─────┤    ├─────┼────────┼─────────┼─────────┤
+│  1  │ alice    │ 25  │    │  1  │ Hello  │ pic.jpg │    1    │
+│  2  │ bob      │ 30  │    │  2  │ Hi     │ pic.jpg │    2    │
+└─────┴──────────┴─────┘    └─────┴────────┴─────────┴─────────┘
+                                    ↑
+                              外键关联 users.id
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 单向一对一关系</h2>
+      <div class="code-block">
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn } from 'typeorm';
+
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+}
+
+@Entity()
+export class Profile {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  bio: string;
+
+  @Column()
+  avatar: string;
+
+  // 定义一对一关系
+  @OneToOne(() => User)
+  @JoinColumn()  // 指定外键列在此表中
+  user: User;
+}
+
+// 使用
+const profile = await profileRepository.findOne({
+  where: { id: 1 },
+  relations: ['user'],
+});
+console.log(profile.user.username);
+
+// 不使用 JoinColumn 时的默认外键列名
+// 默认为：relationName + referencedColumnName = user_id
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">@JoinColumn 说明</div>
+          <p>@JoinColumn 指定外键所在的表。在单向关系中，哪一方有 @JoinColumn，外键就在哪一方的表中。只能在一方添加 @JoinColumn。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 双向一对一关系</h2>
+      <div class="code-block">
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+
+  // 反向引用，没有 @JoinColumn
+  @OneToOne(() => Profile, (profile) => profile.user)
+  profile: Profile;
+}
+
+@Entity()
+export class Profile {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  bio: string;
+
+  @Column()
+  avatar: string;
+
+  // 拥有外键的一方
+  @OneToOne(() => User, (user) => user.profile)
+  @JoinColumn()
+  user: User;
+}
+
+// 使用 - 从用户查详情
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['profile'],
+});
+console.log(user.profile.bio);
+
+// 使用 - 从详情查用户
+const profile = await profileRepository.findOne({
+  where: { id: 1 },
+  relations: ['user'],
+});
+console.log(profile.user.username);
+
+// 类型安全的关联查询
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: {
+    profile: true,
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 关系选项配置</h2>
+      <div class="code-block">
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @OneToOne(() => Profile, {
+    // 级联操作
+    cascade: true,  // 或 ['insert', 'update']
+
+    // 渴望加载（自动关联查询）
+    eager: true,
+
+    // 懒加载
+    lazy: true,
+
+    // 删除行为
+    onDelete: 'CASCADE',  // 删除用户时级联删除详情
+    onUpdate: 'CASCADE',
+
+    // 是否可为空
+    nullable: true,
+
+    // 主键引用
+    referencedColumnName: 'id',
+  })
+  @JoinColumn()
+  profile: Profile;
+}
+
+// 自定义外键列名
+@OneToOne(() => User)
+@JoinColumn({ name: 'user_id', referencedColumnName: 'id' })
+user: User;
+
+// 自定义外键约束名称
+@OneToOne(() => User)
+@JoinColumn({
+  name: 'user_id',
+  foreignKeyConstraintName: 'fk_profile_user'
+})
+user: User;
+
+// 级联保存示例
+const user = new User();
+user.username = 'alice';
+
+const profile = new Profile();
+profile.bio = 'Hello World';
+
+user.profile = profile;
+
+await userRepository.save(user);  // 同时保存 user 和 profile
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 一对一关系使用 @OneToOne 装饰器定义</li>
+            <li>• @JoinColumn 指定外键所在表</li>
+            <li>• 双向关系需要双方互相引用</li>
+            <li>• cascade 选项支持级联保存和删除</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter23/23-4-基本crud.html">← 上一章：基本 CRUD</a>
+      <a href="24-2-一对多关系.html">下一节：一对多关系 →</a>
+    </div>
+  </div>
+</body>
+</html>

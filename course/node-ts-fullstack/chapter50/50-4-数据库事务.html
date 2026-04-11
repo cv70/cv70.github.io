@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.4 数据库事务 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="50-1-TypeORM集成.html">第五十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>50.4 数据库事务</h1>
+      <p class="subtitle">保证数据操作的原子性和一致性</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解事务的概念和作用</li>
+        <li>掌握 TypeORM 事务处理</li>
+        <li>掌握 Prisma 事务处理</li>
+        <li>了解事务隔离级别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是事务？</h2>
+      <p>事务是一组数据库操作的逻辑单元，要么全部成功，要么全部失败。事务保证数据的 ACID 特性：原子性、一致性、隔离性、持久性。</p>
+
+      <div class="code-block">
+事务示例：转账操作
+
+1. 从账户A扣款 100 元
+2. 向账户B加款 100 元
+
+如果没有事务，步骤1成功后系统崩溃，
+账户A扣款了但账户B没有收到，
+导致数据不一致。
+
+使用事务，如果步骤2失败，
+步骤1会自动回滚，
+保证数据一致性。
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeORM 事务</h2>
+      <div class="code-block">
+// 方式1：使用 @Transaction() 装饰器（已弃用）
+
+// 方式2：使用 DataSource.transaction()
+import { Injectable } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { User } from './user.entity';
+import { Order } from './order.entity';
+
+@Injectable()
+export class OrderService {
+  constructor(
+    @InjectDataSource()
+    private dataSource: DataSource,
+  ) {}
+
+  async createOrder(userId: number, items: OrderItem[]) {
+    // 使用事务
+    return this.dataSource.transaction(async (manager) => {
+      // 创建订单
+      const order = manager.create(Order, {
+        userId,
+        total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+        status: 'pending',
+      });
+      await manager.save(order);
+
+      // 扣减库存
+      for (const item of items) {
+        const product = await manager.findOne(Product, {
+          where: { id: item.productId },
+          lock: { mode: 'pessimistic_write' },  // 悲观锁
+        });
+
+        if (product.stock < item.quantity) {
+          throw new Error('Insufficient stock');
+        }
+
+        product.stock -= item.quantity;
+        await manager.save(product);
+      }
+
+      // 扣减用户余额
+      const user = await manager.findOne(User, { where: { id: userId } });
+      if (user.balance < order.total) {
+        throw new Error('Insufficient balance');
+      }
+      user.balance -= order.total;
+      await manager.save(user);
+
+      return order;
+    });
+  }
+}
+
+// 方式3：使用 QueryRunner
+async createOrderWithQueryRunner() {
+  const queryRunner = this.dataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+
+  try {
+    // 执行操作
+    await queryRunner.manager.save(Order, orderData);
+    await queryRunner.manager.update(User, userId, { balance: newBalance });
+
+    await queryRunner.commitTransaction();
+  } catch (err) {
+    await queryRunner.rollbackTransaction();
+    throw err;
+  } finally {
+    await queryRunner.release();
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">事务管理器</div>
+          <p>transaction() 方法自动管理事务的开始、提交和回滚。如果回调函数抛出异常，事务会自动回滚。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Prisma 事务</h2>
+      <div class="code-block">
+// 方式1：交互式事务
+@Injectable()
+export class OrderService {
+  constructor(private prisma: PrismaService) {}
+
+  async createOrder(userId: number, items: OrderItem[]) {
+    return this.prisma.$transaction(async (tx) => {
+      // 创建订单
+      const order = await tx.order.create({
+        data: {
+          userId,
+          total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+          status: 'pending',
+          items: {
+            create: items.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+            })),
+          },
+        },
+      });
+
+      // 扣减库存
+      for (const item of items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+        });
+
+        if (product.stock < item.quantity) {
+          throw new Error('Insufficient stock');
+        }
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
+
+      // 扣减用户余额
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (user.balance < order.total) {
+        throw new Error('Insufficient balance');
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { balance: { decrement: order.total } },
+      });
+
+      return order;
+    });
+  }
+}
+
+// 方式2：批量事务
+const result = await prisma.$transaction([
+  prisma.user.update({
+    where: { id: 1 },
+    data: { balance: { decrement: 100 } },
+  }),
+  prisma.user.update({
+    where: { id: 2 },
+    data: { balance: { increment: 100 } },
+  }),
+]);
+
+// 设置事务超时
+await prisma.$transaction(
+  async (tx) => {
+    // 事务操作
+  },
+  {
+    maxWait: 5000,  // 最大等待时间
+    timeout: 10000, // 事务超时时间
+  },
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 事务隔离级别</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>隔离级别</th>
+            <th>脏读</th>
+            <th>不可重复读</th>
+            <th>幻读</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Read Uncommitted</td>
+            <td>可能</td>
+            <td>可能</td>
+            <td>可能</td>
+          </tr>
+          <tr>
+            <td>Read Committed</td>
+            <td>不会</td>
+            <td>可能</td>
+            <td>可能</td>
+          </tr>
+          <tr>
+            <td>Repeatable Read</td>
+            <td>不会</td>
+            <td>不会</td>
+            <td>可能</td>
+          </tr>
+          <tr>
+            <td>Serializable</td>
+            <td>不会</td>
+            <td>不会</td>
+            <td>不会</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">事务最佳实践</div>
+          <p>事务应尽量简短，避免长时间占用数据库连接。对于复杂的业务逻辑，考虑使用分布式事务或最终一致性方案。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 事务保证操作的原子性</li>
+            <li>• TypeORM 使用 transaction() 方法</li>
+            <li>• Prisma 支持 $transaction() 事务</li>
+            <li>• 选择合适的隔离级别</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-3-Mongoose集成.html">← 上一节：Mongoose 集成</a>
+      <a href="50-5-多数据库配置.html">下一节：多数据库配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

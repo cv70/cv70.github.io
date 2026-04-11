@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.4 事件处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.4 事件处理</h1>
+      <p class="subtitle">Socket.IO 事件驱动编程</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Socket.IO 事件监听和触发</li>
+        <li>理解消息确认机制</li>
+        <li>学会处理各种数据类型</li>
+        <li>了解事件处理的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 事件监听</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本事件监听</h3>
+        <div class="code-block">
+io.on('connection', (socket) => {
+  // 监听简单事件
+  socket.on('message', (data) => {
+    console.log('收到消息:', data);
+  });
+
+  // 监听多个参数
+  socket.on('chat', (room, message, timestamp) => {
+    console.log(`房间 ${room}: ${message} at ${timestamp}`);
+  });
+
+  // 监听对象数据
+  socket.on('user-action', (action) => {
+    console.log('用户行为:', action.type, action.data);
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">TypeScript 类型定义</h3>
+        <div class="code-block">
+// 定义事件类型
+interface ServerToClientEvents {
+  message: (data: { id: string; content: string }) => void;
+  notification: (title: string, body: string) => void;
+}
+
+interface ClientToServerEvents {
+  'send-message': (data: { content: string; room?: string }) => void;
+  'join-room': (roomId: string) => void;
+  typing: (isTyping: boolean) => void;
+}
+
+// 应用类型
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+
+io.on('connection', (socket) => {
+  // 类型安全的事件监听
+  socket.on('send-message', (data) => {
+    // data 自动推断为 { content: string; room?: string }
+    console.log(data.content);
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">使用事件映射器</h3>
+        <div class="code-block">
+// events.ts
+export interface ChatEvents {
+  message: (content: string) => void;
+  'join-room': (roomId: string) => void;
+  'leave-room': (roomId: string) => void;
+  typing: (isTyping: boolean) => void;
+}
+
+// 服务端
+import { ChatEvents } from './events';
+
+function setupChatHandlers(socket: Socket&lt;ChatEvents&gt;) {
+  socket.on('message', (content) => {
+    // 处理消息
+  });
+
+  socket.on('join-room', (roomId) => {
+    socket.join(roomId);
+  });
+}
+
+io.on('connection', (socket) => {
+  setupChatHandlers(socket);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 发送事件</h2>
+
+      <div class="code-block">
+// ==================== 基本发送 ====================
+// 向当前 socket 发送
+socket.emit('message', 'Hello!');
+
+// 发送对象
+socket.emit('notification', {
+  title: '系统通知',
+  body: '您有新消息'
+});
+
+// 发送多个参数
+socket.emit('chat', 'room1', 'Hello Room', Date.now());
+
+// ==================== 广播发送 ====================
+// 向所有客户端发送
+io.emit('announcement', '系统公告');
+
+// 向所有客户端广播（除发送者）
+socket.broadcast.emit('message', '有人上线了');
+
+// ==================== 房间发送 ====================
+// 向房间发送（包括发送者）
+io.to('room1').emit('message', '房间消息');
+
+// 向房间发送（排除发送者）
+socket.to('room1').emit('message', '有人加入了');
+
+// ==================== 组合发送 ====================
+// 向多个房间发送
+io.to('room1').to('room2').emit('message', '群发');
+
+// 排除特定 socket
+io.to('room1').except(socket.id).emit('message', '排除发送者');
+
+// 跨命名空间发送
+io.of('/chat').emit('message', '跨命名空间消息');
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 消息确认机制</h2>
+      <p class="card-text">Socket.IO 支持消息确认（Acknowledgement），让发送者知道消息已被接收处理：</p>
+
+      <div class="card">
+        <h3 class="card-title">服务端确认</h3>
+        <div class="code-block">
+// 客户端发送消息并等待确认
+socket.emit('save-data', { key: 'value' }, (response) => {
+  console.log('服务端确认:', response);
+});
+
+// 服务端处理并返回确认
+socket.on('save-data', (data, callback) => {
+  try {
+    // 保存数据
+    saveToDatabase(data);
+
+    // 成功确认
+    callback({ success: true, message: '保存成功' });
+  } catch (error) {
+    // 错误确认
+    callback({ success: false, error: error.message });
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">客户端确认</h3>
+        <div class="code-block">
+// 服务端发送需要确认的消息
+socket.emit('important-notification', {
+  title: '重要通知',
+  body: '请确认已阅读'
+}, (ack) => {
+  console.log('客户端已确认:', ack);
+});
+
+// 客户端确认
+socket.on('important-notification', (data, callback) => {
+  // 显示通知
+  showNotification(data);
+
+  // 用户确认后回调
+  document.getElementById('confirmBtn').onclick = () => {
+    callback({ confirmed: true, timestamp: Date.now() });
+  };
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">异步确认</h3>
+        <div class="code-block">
+// 客户端
+socket.emit('get-user-data', { userId: '123' }, async (response) => {
+  if (response.success) {
+    console.log('用户数据:', response.data);
+  } else {
+    console.error('获取失败:', response.error);
+  }
+});
+
+// 服务端异步处理
+socket.on('get-user-data', async (query, callback) => {
+  try {
+    const user = await User.findById(query.userId);
+    callback({ success: true, data: user });
+  } catch (error) {
+    callback({ success: false, error: error.message });
+  }
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 数据类型处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">文本和对象</h3>
+        <div class="code-block">
+// 发送文本
+socket.emit('text', 'Hello World');
+
+// 发送对象
+socket.emit('object', { name: 'Alice', age: 25 });
+
+// 发送数组
+socket.emit('list', [1, 2, 3, 4, 5]);
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">二进制数据</h3>
+        <div class="code-block">
+// 发送 Buffer
+const buffer = Buffer.from('Hello', 'utf8');
+socket.emit('binary', buffer);
+
+// 发送 ArrayBuffer
+const arrayBuffer = new ArrayBuffer(10);
+socket.emit('array-buffer', arrayBuffer);
+
+// 发送 Blob（客户端）
+const blob = new Blob(['Hello'], { type: 'text/plain' });
+socket.emit('blob', blob);
+
+// 发送 File（客户端）
+const file = document.querySelector('input[type="file"]').files[0];
+socket.emit('file', file);
+
+// 混合发送
+socket.emit('mixed', {
+  text: 'Hello',
+  buffer: Buffer.from('World'),
+  number: 123
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">文件传输示例</h3>
+        <div class="code-block">
+// 客户端 - 分片上传
+async function uploadFile(file: File) {
+  const chunkSize = 64 * 1024; // 64KB
+  const totalChunks = Math.ceil(file.size / chunkSize);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
+    const chunk = file.slice(start, end);
+
+    const arrayBuffer = await chunk.arrayBuffer();
+
+    socket.emit('file-chunk', {
+      name: file.name,
+      index: i,
+      total: totalChunks,
+      data: arrayBuffer
+    });
+
+    // 等待确认
+    await new Promise(resolve => {
+      socket.once('chunk-received', resolve);
+    });
+  }
+
+  socket.emit('file-complete', { name: file.name });
+}
+
+// 服务端 - 接收分片
+const fileChunks = new Map&lt;string, Buffer[]&gt;();
+
+socket.on('file-chunk', (chunk, callback) => {
+  const { name, index, total, data } = chunk;
+
+  if (!fileChunks.has(name)) {
+    fileChunks.set(name, []);
+  }
+
+  fileChunks.get(name)![index] = Buffer.from(data);
+
+  // 确认接收
+  callback({ received: true });
+  socket.emit('chunk-received', { index });
+});
+
+socket.on('file-complete', async ({ name }) => {
+  const chunks = fileChunks.get(name);
+  const completeFile = Buffer.concat(chunks!);
+
+  // 保存文件
+  await saveFile(name, completeFile);
+
+  socket.emit('file-saved', { name, size: completeFile.length });
+  fileChunks.delete(name);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 事件处理最佳实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">模块化事件处理</h3>
+          <div class="code-block">
+// handlers/chat.ts
+export function registerChatHandlers(socket) {
+  socket.on('join', handleJoin);
+  socket.on('leave', handleLeave);
+  socket.on('message', handleMessage);
+}
+
+function handleJoin(roomId: string) {
+  // ...
+}
+
+// 主文件
+io.on('connection', (socket) => {
+  registerChatHandlers(socket);
+  registerNotificationHandlers(socket);
+  registerGameHandlers(socket);
+});
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">错误处理</h3>
+          <div class="code-block">
+socket.on('action', (data, callback) => {
+  try {
+    // 业务逻辑
+    const result = doSomething(data);
+
+    callback({ success: true, result });
+  } catch (error) {
+    console.error('处理错误:', error);
+
+    callback({
+      success: false,
+      error: error.message
+    });
+  }
+});
+          </div>
+        </div>
+      </div>
+
+      <div class="tip-box warning" style="margin-top: 1rem;">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>避免事件名冲突，使用命名前缀如 <code>chat:message</code></li>
+            <li>大数据传输考虑分片，避免阻塞</li>
+            <li>回调函数只执行一次，不要重复调用</li>
+            <li>服务端要验证客户端发送的数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 <code>socket.on()</code> 监听，<code>socket.emit()</code> 发送</li>
+            <li>• TypeScript 支持完整的事件类型定义</li>
+            <li>• 回调函数实现消息确认机制</li>
+            <li>• 支持文本、对象、二进制等多种数据类型</li>
+            <li>• 大文件传输使用分片机制</li>
+            <li>• 模块化组织事件处理器，便于维护</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="64-3-房间Room.html">← 上一节</a>
+      <a href="64-5-广播消息.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

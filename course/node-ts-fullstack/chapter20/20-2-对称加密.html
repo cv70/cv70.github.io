@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.2 对称加密 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="20-1-哈希算法.html">第二十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>20.2 对称加密</h1>
+      <p class="subtitle">使用相同密钥加密解密</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解对称加密原理</li>
+        <li>掌握 createCipheriv 方法</li>
+        <li>学会加密和解密操作</li>
+        <li>了解加密模式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本加密解密</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 对称加密：加密和解密使用相同密钥
+
+// 生成密钥和 IV（初始化向量）
+const algorithm = 'aes-256-cbc';
+const key = crypto.randomBytes(32);  // 256 位密钥
+const iv = crypto.randomBytes(16);   // 128 位 IV
+
+// 加密
+function encrypt(text, key, iv) {
+  const cipher = crypto.createCipheriv(algorithm, key, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
+}
+
+// 解密
+function decrypt(encrypted, key, iv) {
+  const decipher = crypto.createDecipheriv(algorithm, key, iv);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
+// 使用
+const plaintext = 'Hello World!';
+const encrypted = encrypt(plaintext, key, iv);
+console.log('加密:', encrypted);
+
+const decrypted = decrypt(encrypted, key, iv);
+console.log('解密:', decrypted);
+
+// 注意：密钥和 IV 需要安全存储和传输
+console.log('密钥:', key.toString('hex'));
+console.log('IV:', iv.toString('hex'));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用密码派生密钥</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 从密码派生密钥
+function deriveKey(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+}
+
+// 加密函数
+function encryptWithPassword(plaintext, password) {
+  const salt = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(16);
+  const key = deriveKey(password, salt);
+
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+
+  // 返回 salt:iv:encrypted
+  return `${salt.toString('hex')}:${iv.toString('hex')}:${encrypted}`;
+}
+
+// 解密函数
+function decryptWithPassword(encryptedData, password) {
+  const [saltHex, ivHex, encrypted] = encryptedData.split(':');
+  const salt = Buffer.from(saltHex, 'hex');
+  const iv = Buffer.from(ivHex, 'hex');
+  const key = deriveKey(password, salt);
+
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
+// 使用
+const secret = 'my-secret-password';
+const encrypted = encryptWithPassword('机密数据', secret);
+console.log('加密结果:', encrypted);
+
+const decrypted = decryptWithPassword(encrypted, secret);
+console.log('解密结果:', decrypted);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 加密模式</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 常见加密模式
+const modes = {
+  'CBC': 'aes-256-cbc',   // 需要填充，需要 IV
+  'GCM': 'aes-256-gcm',   // 认证加密，需要 IV 和 authTag
+  'CTR': 'aes-256-ctr',   // 流密码模式，需要 IV
+  'ECB': 'aes-256-ecb'    // 不推荐，相同明文产生相同密文
+};
+
+// GCM 模式（推荐）
+function encryptGCM(plaintext, key) {
+  const iv = crypto.randomBytes(12);  // GCM 推荐 12 字节 IV
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+
+  const authTag = cipher.getAuthTag();
+
+  return {
+    iv: iv.toString('hex'),
+    encrypted,
+    authTag: authTag.toString('hex')
+  };
+}
+
+function decryptGCM(data, key) {
+  const iv = Buffer.from(data.iv, 'hex');
+  const authTag = Buffer.from(data.authTag, 'hex');
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(data.encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
+// 使用 GCM
+const key = crypto.randomBytes(32);
+const gcmEncrypted = encryptGCM('Hello GCM', key);
+console.log('GCM 加密:', gcmEncrypted);
+
+const gcmDecrypted = decryptGCM(gcmEncrypted, key);
+console.log('GCM 解密:', gcmDecrypted);
+
+// 查看支持的加密算法
+console.log(crypto.getCiphers());
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">推荐模式</div>
+          <p>GCM 模式提供认证加密，可同时验证数据完整性和真实性，是现代应用的首选。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 完整加密工具</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+class SymmetricCrypto {
+  constructor(algorithm = 'aes-256-gcm') {
+    this.algorithm = algorithm;
+  }
+
+  // 生成随机密钥
+  generateKey() {
+    return crypto.randomBytes(32);
+  }
+
+  // 加密
+  encrypt(plaintext, key) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(this.algorithm, key, iv);
+
+    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    if (this.algorithm.includes('gcm')) {
+      const authTag = cipher.getAuthTag();
+      return {
+        iv: iv.toString('hex'),
+        data: encrypted,
+        tag: authTag.toString('hex')
+      };
+    }
+
+    return {
+      iv: iv.toString('hex'),
+      data: encrypted
+    };
+  }
+
+  // 解密
+  decrypt(encrypted, key) {
+    const iv = Buffer.from(encrypted.iv, 'hex');
+    const decipher = crypto.createDecipheriv(this.algorithm, key, iv);
+
+    if (encrypted.tag) {
+      decipher.setAuthTag(Buffer.from(encrypted.tag, 'hex'));
+    }
+
+    let decrypted = decipher.update(encrypted.data, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  }
+
+  // 加密对象
+  encryptObject(obj, key) {
+    const json = JSON.stringify(obj);
+    return this.encrypt(json, key);
+  }
+
+  // 解密对象
+  decryptObject(encrypted, key) {
+    const json = this.decrypt(encrypted, key);
+    return JSON.parse(json);
+  }
+}
+
+// 使用
+const cryptoUtil = new SymmetricCrypto();
+const key = cryptoUtil.generateKey();
+
+const encrypted = cryptoUtil.encrypt('敏感数据', key);
+console.log('加密:', encrypted);
+
+const decrypted = cryptoUtil.decrypt(encrypted, key);
+console.log('解密:', decrypted);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 对称加密使用相同密钥加密和解密</li>
+            <li>• createCipheriv/createDecipheriv 加密解密</li>
+            <li>• 密钥和 IV 需要安全存储</li>
+            <li>• GCM 模式提供认证加密</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="20-1-哈希算法.html">← 上一节：哈希算法</a>
+      <a href="20-3-非对称加密.html">下一节：非对称加密 →</a>
+    </div>
+  </div>
+</body>
+</html>

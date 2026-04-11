@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.3 useContext - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="76-1-useState.html">第七十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>76.3 useContext</h1>
+      <p class="subtitle">跨组件共享数据</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Context 的作用</li>
+        <li>掌握 createContext 和 useContext</li>
+        <li>学会创建和使用 Context</li>
+        <li>了解 Context 的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Context 基础</h2>
+      <div class="code-block">
+// 问题：props 逐层传递（prop drilling）
+function App() {
+  const user = { name: 'Alice' };
+  return &lt;Header user={user} /&gt;;  // 传递给 Header
+}
+
+function Header({ user }) {
+  return &lt;Navigation user={user} /&gt;;  // 再传递给 Navigation
+}
+
+function Navigation({ user }) {
+  return &lt;UserMenu user={user} /&gt;;  // 继续传递
+}
+
+function UserMenu({ user }) {
+  return &lt;div&gt;{user.name}&lt;/div&gt;;  // 终于使用
+}
+
+// 解决：使用 Context
+import { createContext, useContext } from 'react';
+
+// 1. 创建 Context
+const UserContext = createContext&lt;User | null&gt;(null);
+
+// 2. 提供 Context
+function App() {
+  const user = { name: 'Alice', email: 'alice@example.com' };
+
+  return (
+    &lt;UserContext.Provider value={user}&gt;
+      &lt;Header /&gt;
+    &lt;/UserContext.Provider&gt;
+  );
+}
+
+// 3. 消费 Context
+function Header() {
+  return &lt;Navigation /&gt;;  // 不需要传递 props
+}
+
+function Navigation() {
+  return &lt;UserMenu /&gt;;  // 不需要传递 props
+}
+
+function UserMenu() {
+  const user = useContext(UserContext);  // 直接获取
+  return &lt;div&gt;{user?.name}&lt;/div&gt;;
+}
+
+interface User {
+  name: string;
+  email: string;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整 Context 示例</h2>
+      <div class="code-block">
+// Theme Context 示例
+import { createContext, useContext, useState, ReactNode } from 'react';
+
+type Theme = 'light' | 'dark';
+
+interface ThemeContextType {
+  theme: Theme;
+  toggleTheme: () =&gt; void;
+}
+
+// 创建 Context
+const ThemeContext = createContext&lt;ThemeContextType | undefined&gt;(undefined);
+
+// Provider 组件
+function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState&lt;Theme&gt;('light');
+
+  const toggleTheme = () =&gt; {
+    setTheme(prev =&gt; prev === 'light' ? 'dark' : 'light');
+  };
+
+  return (
+    &lt;ThemeContext.Provider value={{ theme, toggleTheme }}&gt;
+      {children}
+    &lt;/ThemeContext.Provider&gt;
+  );
+}
+
+// 自定义 Hook
+function useTheme() {
+  const context = useContext(ThemeContext);
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+}
+
+// 使用
+function App() {
+  return (
+    &lt;ThemeProvider&gt;
+      &lt;Header /&gt;
+      &lt;Main /&gt;
+    &lt;/ThemeProvider&gt;
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    &lt;button onClick={toggleTheme}&gt;
+      Current: {theme}
+    &lt;/button&gt;
+  );
+}
+
+function ThemedCard() {
+  const { theme } = useTheme();
+
+  return (
+    &lt;div className={`card card-${theme}`}&gt;
+      Themed content
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Context 最佳实践</h2>
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Context 使用建议</div>
+          <p>1. 将 Provider 放在合适的层级<br>
+          2. 提供默认值或使用 undefined 检查<br>
+          3. 创建自定义 Hook 封装 useContext<br>
+          4. 避免过度使用，适合全局状态<br>
+          5. 将 Context 拆分，避免单一 Context 过大</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Context 解决 prop drilling 问题</li>
+            <li>• 使用 createContext 创建 Context</li>
+            <li>• Provider 提供数据，useContext 消费数据</li>
+            <li>• 创建自定义 Hook 封装 Context 逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-2-useEffect.html">← 上一节：useEffect</a>
+      <a href="76-4-useReducer.html">下一节：useReducer →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>100.4 自动化测试集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="100-1-CICD概念.html">第100章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>100.4 自动化测试集成</h1>
+      <p class="subtitle">在 CI/CD 流水线中集成自动化测试</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解测试金字塔在 CI 中的应用</li>
+        <li>掌握单元测试、集成测试的自动化配置</li>
+        <li>学会生成和上报测试报告</li>
+        <li>了解 E2E 测试的 CI 集成方案</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="Automated Testing" class="card-image">
+      <h3 class="card-title">测试金字塔</h3>
+      <p class="card-text">
+        在 CI 流水线中，应该按照测试金字塔原则配置测试：单元测试数量最多、执行最快；集成测试次之；E2E 测试最少但最接近真实场景。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 测试层级</h2>
+      <div class="code-block">
+        ═══════════════════════════════
+              E2E 测试 (端到端)
+        ───────────────────────────────
+              数量少 | 执行慢 | 成本高
+        ═══════════════════════════════
+             集成测试 (API/数据库)
+        ───────────────────────────────
+              数量中 | 执行中 | 成本中
+        ═══════════════════════════════
+             单元测试 (函数/模块)
+        ───────────────────────────────
+              数量多 | 执行快 | 成本低
+        ═══════════════════════════════
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> 单元测试配置</h2>
+      <div class="code-block">
+<span class="comment"># .github/workflows/test.yml</span>
+<span class="keyword">name</span>: <span class="string">Test</span>
+
+<span class="keyword">on</span>: [<span class="string">push</span>, <span class="string">pull_request</span>]
+
+<span class="keyword">jobs</span>:
+  <span class="keyword">unit-test</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Setup Node.js</span>
+        <span class="keyword">uses</span>: <span class="string">actions/setup-node@v4</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">node-version</span>: <span class="string">'20'</span>
+          <span class="keyword">cache</span>: <span class="string">'npm'</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install dependencies</span>
+        <span class="keyword">run</span>: <span class="string">npm ci</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run unit tests</span>
+        <span class="keyword">run</span>: <span class="string">npm run test:unit -- --coverage</span>
+
+      - <span class="keyword">name</span>: <span class="string">Upload coverage</span>
+        <span class="keyword">uses</span>: <span class="string">codecov/codecov-action@v3</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">token</span>: <span class="string">${{ secrets.CODECOV_TOKEN }}</span>
+          <span class="keyword">files</span>: <span class="string">./coverage/lcov.info</span>
+          <span class="keyword">fail_ci_if_error</span>: <span class="string">true</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 集成测试配置</h2>
+      <div class="code-block">
+<span class="keyword">jobs</span>:
+  <span class="keyword">integration-test</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+
+    <span class="keyword">services</span>:
+      <span class="keyword">postgres</span>:
+        <span class="keyword">image</span>: <span class="string">postgres:15-alpine</span>
+        <span class="keyword">env</span>:
+          <span class="keyword">POSTGRES_USER</span>: <span class="string">test</span>
+          <span class="keyword">POSTGRES_PASSWORD</span>: <span class="string">test</span>
+          <span class="keyword">POSTGRES_DB</span>: <span class="string">test_db</span>
+        <span class="keyword">ports</span>:
+          - <span class="string">5432:5432</span>
+        <span class="keyword">options</span>: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      <span class="keyword">redis</span>:
+        <span class="keyword">image</span>: <span class="string">redis:7-alpine</span>
+        <span class="keyword">ports</span>:
+          - <span class="string">6379:6379</span>
+        <span class="keyword">options</span>: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    <span class="keyword">env</span>:
+      <span class="keyword">DATABASE_URL</span>: <span class="string">postgresql://test:test@localhost:5432/test_db</span>
+      <span class="keyword">REDIS_URL</span>: <span class="string">redis://localhost:6379</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Setup Node.js</span>
+        <span class="keyword">uses</span>: <span class="string">actions/setup-node@v4</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">node-version</span>: <span class="string">'20'</span>
+          <span class="keyword">cache</span>: <span class="string">'npm'</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install dependencies</span>
+        <span class="keyword">run</span>: <span class="string">npm ci</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run database migrations</span>
+        <span class="keyword">run</span>: <span class="string">npm run db:migrate</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run integration tests</span>
+        <span class="keyword">run</span>: <span class="string">npm run test:integration</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎭</span> E2E 测试配置</h2>
+      <div class="code-block">
+<span class="keyword">jobs</span>:
+  <span class="keyword">e2e-test</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Setup Node.js</span>
+        <span class="keyword">uses</span>: <span class="string">actions/setup-node@v4</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">node-version</span>: <span class="string">'20'</span>
+          <span class="keyword">cache</span>: <span class="string">'npm'</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install dependencies</span>
+        <span class="keyword">run</span>: <span class="string">npm ci</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install Playwright</span>
+        <span class="keyword">run</span>: <span class="string">npx playwright install --with-deps</span>
+
+      - <span class="keyword">name</span>: <span class="string">Build application</span>
+        <span class="keyword">run</span>: <span class="string">npm run build</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run E2E tests</span>
+        <span class="keyword">run</span>: <span class="string">npx playwright test</span>
+
+      - <span class="keyword">name</span>: <span class="string">Upload test results</span>
+        <span class="keyword">uses</span>: <span class="string">actions/upload-artifact@v4</span>
+        <span class="keyword">if</span>: <span class="string">always()</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">name</span>: <span class="string">playwright-report</span>
+          <span class="keyword">path</span>: <span class="string">playwright-report/</span>
+          <span class="keyword">retention-days</span>: <span class="string">30</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 测试报告与覆盖率</h2>
+      <h3>Jest 配置</h3>
+      <div class="code-block">
+<span class="comment">// jest.config.js</span>
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80
+    }
+  },
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: './reports',
+      outputName: 'junit.xml'
+    }]
+  ]
+};
+      </div>
+
+      <h3>package.json 脚本</h3>
+      <div class="code-block">
+{
+  "scripts": {
+    "test": "jest",
+    "test:unit": "jest --testPathPattern=unit",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:e2e": "jest --testPathPattern=e2e",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 并行测试优化</h2>
+      <div class="code-block">
+<span class="comment"># GitHub Actions 矩阵并行</span>
+<span class="keyword">jobs</span>:
+  <span class="keyword">test</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">strategy</span>:
+      <span class="keyword">fail-fast</span>: <span class="string">false</span>
+      <span class="keyword">matrix</span>:
+        <span class="keyword">shard</span>: [<span class="string">1/4</span>, <span class="string">2/4</span>, <span class="string">3/4</span>, <span class="string">4/4</span>]
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">name</span>: <span class="string">Run tests</span>
+        <span class="keyword">run</span>: <span class="string">npx jest --shard=${{ matrix.shard }}</span>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">测试优化建议</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用测试缓存减少重复运行</li>
+          <li>按修改文件智能选择测试</li>
+          <li>使用分片并行执行大型测试集</li>
+          <li>设置测试超时防止无限等待</li>
+          <li>失败时保留测试产物便于调试</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 按测试金字塔配置测试层级</li>
+            <li>• 单元测试应快速完成并上报覆盖率</li>
+            <li>• 集成测试使用 Service 容器模拟依赖</li>
+            <li>• E2E 测试需要完整环境，可使用 Playwright</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="100-3-GitLab-CI.html">← 上一节</a>
+      <a href="100-5-自动化部署.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

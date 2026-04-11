@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.4 索引优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="22-1-mysql安装配置.html">第二十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>22.4 索引优化</h1>
+      <p class="subtitle">提升数据库查询性能</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解索引的工作原理</li>
+        <li>掌握索引的类型和使用场景</li>
+        <li>学会使用 EXPLAIN 分析查询</li>
+        <li>了解索引优化最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 索引类型</h2>
+      <div class="code-block">
+MySQL 索引类型：
+
+1. 主键索引（PRIMARY KEY）
+   ├── 自动创建，每表只能有一个
+   ├── 值唯一且不为 NULL
+   └── 使用 B+ 树结构
+
+2. 唯一索引（UNIQUE）
+   ├── 值唯一，允许一个 NULL
+   └── CREATE UNIQUE INDEX idx_email ON users(email);
+
+3. 普通索引（INDEX）
+   ├── 最基本的索引类型
+   └── CREATE INDEX idx_name ON users(username);
+
+4. 组合索引
+   ├── 多列组合的索引
+   └── CREATE INDEX idx_user_status ON users(status, created_at);
+
+5. 全文索引（FULLTEXT）
+   ├── 用于全文搜索
+   └── CREATE FULLTEXT INDEX idx_content ON articles(content);
+
+6. 空间索引（SPATIAL）
+   ├── 用于地理数据类型
+   └── CREATE SPATIAL INDEX idx_location ON stores(location);
+
+索引存储结构：
+├── B+ 树索引：默认结构，适合范围查询
+└── Hash 索引：Memory 引擎，只支持等值查询
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 索引操作</h2>
+      <div class="code-block">
+-- 创建索引
+CREATE INDEX idx_email ON users(email);
+CREATE INDEX idx_name_age ON users(lastname, age);
+
+-- 建表时创建索引
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  email VARCHAR(100),
+  INDEX idx_email (email),
+  UNIQUE INDEX idx_unique_email (email)
+);
+
+-- 删除索引
+DROP INDEX idx_email ON users;
+ALTER TABLE users DROP INDEX idx_email;
+
+-- 查看索引
+SHOW INDEX FROM users;
+
+-- 强制使用索引
+SELECT * FROM users FORCE INDEX (idx_email) WHERE email = 'test@mail.com';
+
+-- 忽略索引
+SELECT * FROM users IGNORE INDEX (idx_email) WHERE email = 'test@mail.com';
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">最左前缀原则</div>
+          <p>组合索引 (a, b, c) 可以支持 a、(a,b)、(a,b,c) 的查询，但不能直接支持 b 或 c 的查询。索引按从左到右的顺序使用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> EXPLAIN 分析</h2>
+      <div class="code-block">
+-- 使用 EXPLAIN 分析查询计划
+EXPLAIN SELECT * FROM users WHERE email = 'test@mail.com';
+
+-- 输出结果解读
++----+-------------+-------+------+---------------+------+---------+------+------+-------------+
+| id | select_type | table | type | possible_keys | key  | key_len | ref  | rows | Extra       |
++----+-------------+-------+------+---------------+------+---------+------+------+-------------+
+|  1 | SIMPLE      | users | ref  | idx_email     | idx_email | 103 | const|    1 | Using index |
++----+-------------+-------+------+---------------+------+---------+------+------+-------------+
+
+关键字段说明：
+├── type：访问类型
+│   ├── system/const：最优，单行
+│   ├── eq_ref：主键或唯一索引
+│   ├── ref：非唯一索引
+│   ├── range：范围扫描
+│   ├── index：全索引扫描
+│   └── ALL：全表扫描（最差）
+│
+├── key：实际使用的索引
+├── rows：预估扫描行数
+└── Extra：额外信息
+    ├── Using index：覆盖索引
+    ├── Using where：WHERE 过滤
+    └── Using filesort：需要额外排序（需优化）
+
+-- 示例：分析复杂查询
+EXPLAIN SELECT u.username, o.total_amount
+FROM users u
+JOIN orders o ON u.id = o.user_id
+WHERE u.status = 'active'
+ORDER BY o.created_at DESC
+LIMIT 10;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 索引优化策略</h2>
+      <div class="code-block">
+适合创建索引的场景：
+├── WHERE 条件频繁使用的列
+├── JOIN 连接的列
+├── ORDER BY / GROUP BY 的列
+├── 区分度高的列（如 email > status）
+└── 组合查询的多个列（创建组合索引）
+
+不适合创建索引的场景：
+├── 区分度低的列（如 gender、status）
+├── 频繁更新的列
+├── 数据量小的表
+└── 很少使用的列
+
+索引优化技巧：
+├── 使用覆盖索引避免回表
+├── 避免 SELECT *
+├── 避免索引列上使用函数
+├── 避免隐式类型转换
+└── 组合索引遵循最左前缀
+
+-- 反例：索引失效
+SELECT * FROM users WHERE YEAR(created_at) = 2024;  -- 函数导致索引失效
+SELECT * FROM users WHERE email = 123;  -- 类型转换导致索引失效
+SELECT * FROM users WHERE name LIKE '%abc';  -- 前缀通配符导致索引失效
+
+-- 正例：索引有效
+SELECT * FROM users WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';
+SELECT * FROM users WHERE email = '123@mail.com';
+SELECT * FROM users WHERE name LIKE 'abc%';
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 索引加速查询但会增加写入开销</li>
+            <li>• 组合索引遵循最左前缀原则</li>
+            <li>• 使用 EXPLAIN 分析查询执行计划</li>
+            <li>• 避免索引列使用函数和隐式类型转换</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="22-3-数据库设计.html">← 上一节：数据库设计</a>
+      <a href="../chapter23/23-1-typeorm简介.html">下一章：TypeORM 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

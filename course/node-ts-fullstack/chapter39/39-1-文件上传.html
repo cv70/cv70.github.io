@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>39.1 文件上传 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="39-1-文件上传.html">第三十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>39.1 文件上传</h1>
+      <p class="subtitle">处理文件上传和存储</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会使用 koa-body 处理文件上传</li>
+        <li>掌握文件上传的验证和限制</li>
+        <li>了解文件存储策略</li>
+        <li>学会多文件上传处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装和配置</h2>
+      <div class="code-block">
+# 安装 koa-body
+npm install koa-body
+      </div>
+
+      <div class="code-block">
+const Koa = require('koa');
+const { koaBody } = require('koa-body');
+const path = require('path');
+
+const app = new Koa();
+
+// 配置 koa-body
+app.use(koaBody({
+  multipart: true,  // 启用文件上传
+  formidable: {
+    uploadDir: path.join(__dirname, 'uploads'),  // 上传目录
+    keepExtensions: true,  // 保留文件扩展名
+    maxFileSize: 10 * 1024 * 1024,  // 最大文件大小 10MB
+    maxFieldsSize: 2 * 1024 * 1024,  // 最大表单大小 2MB
+  }
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 单文件上传</h2>
+      <div class="code-block">
+// 前端表单
+/*
+<form action="/upload" method="POST" enctype="multipart/form-data">
+  <input type="file" name="avatar" />
+  <button type="submit">上传</button>
+</form>
+*/
+
+// 后端处理
+router.post('/upload', async ctx => {
+  const file = ctx.request.files.avatar;
+
+  if (!file) {
+    ctx.status = 400;
+    ctx.body = { error: 'No file uploaded' };
+    return;
+  }
+
+  // 文件信息
+  console.log('文件名:', file.originalFilename);
+  console.log('文件大小:', file.size);
+  console.log('文件类型:', file.mimetype);
+  console.log('存储路径:', file.filepath);
+  console.log('新文件名:', file.newFilename);
+
+  ctx.body = {
+    success: true,
+    file: {
+      name: file.originalFilename,
+      size: file.size,
+      type: file.mimetype,
+      path: file.newFilename
+    }
+  };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 多文件上传</h2>
+      <div class="code-block">
+// 前端表单
+/*
+<form action="/upload/multiple" method="POST" enctype="multipart/form-data">
+  <input type="file" name="photos" multiple />
+  <button type="submit">上传</button>
+</form>
+*/
+
+// 后端处理
+router.post('/upload/multiple', async ctx => {
+  const files = ctx.request.files.photos;
+
+  // 多文件时，files 是数组
+  const fileList = Array.isArray(files) ? files : [files];
+
+  const results = fileList.map(file => ({
+    name: file.originalFilename,
+    size: file.size,
+    type: file.mimetype,
+    path: file.newFilename
+  }));
+
+  ctx.body = {
+    success: true,
+    count: results.length,
+    files: results
+  };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 文件类型验证</h2>
+      <div class="code-block">
+// 允许的文件类型
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif'];
+
+function validateFile(file) {
+  const errors = [];
+
+  // 检查 MIME 类型
+  if (!ALLOWED_TYPES.includes(file.mimetype)) {
+    errors.push(`不支持的文件类型: ${file.mimetype}`);
+  }
+
+  // 检查扩展名
+  const ext = path.extname(file.originalFilename).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    errors.push(`不支持的扩展名: ${ext}`);
+  }
+
+  // 检查文件大小
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    errors.push(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+  }
+
+  return errors;
+}
+
+router.post('/upload/avatar', async ctx => {
+  const file = ctx.request.files.avatar;
+
+  if (!file) {
+    ctx.status = 400;
+    ctx.body = { error: 'No file uploaded' };
+    return;
+  }
+
+  const errors = validateFile(file);
+  if (errors.length > 0) {
+    // 删除无效文件
+    fs.unlinkSync(file.filepath);
+    ctx.status = 400;
+    ctx.body = { errors };
+    return;
+  }
+
+  ctx.body = { success: true, file: file.newFilename };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 文件存储管理</h2>
+      <div class="code-block">
+const fs = require('fs');
+const path = require('path');
+
+// 按日期创建目录
+function getUploadDir() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  const dir = path.join(__dirname, 'uploads', `${year}`, `${month}`, `${day}`);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  return dir;
+}
+
+// 重命名文件
+async function saveFile(file, customName) {
+  const uploadDir = getUploadDir();
+  const ext = path.extname(file.originalFilename);
+  const filename = customName || `${Date.now()}${ext}`;
+  const filepath = path.join(uploadDir, filename);
+
+  // 移动文件
+  await fs.promises.rename(file.filepath, filepath);
+
+  return {
+    filename,
+    filepath,
+    relativePath: path.relative(path.join(__dirname, 'uploads'), filepath)
+  };
+}
+
+router.post('/upload', async ctx => {
+  const file = ctx.request.files.avatar;
+  const result = await saveFile(file);
+
+  ctx.body = { success: true, path: result.relativePath };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">☁️</span> 上传到云存储</h2>
+      <div class="code-block">
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY,
+  secretAccessKey: process.env.AWS_SECRET_KEY
+});
+
+async function uploadToS3(file) {
+  const stream = fs.createReadStream(file.filepath);
+
+  const params = {
+    Bucket: 'my-bucket',
+    Key: `uploads/${Date.now()}_${file.originalFilename}`,
+    Body: stream,
+    ContentType: file.mimetype
+  };
+
+  const result = await s3.upload(params).promise();
+
+  // 删除临时文件
+  fs.unlinkSync(file.filepath);
+
+  return result.Location;
+}
+
+router.post('/upload/cloud', async ctx => {
+  const file = ctx.request.files.file;
+  const url = await uploadToS3(file);
+
+  ctx.body = { success: true, url };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖼️</span> 图片处理</h2>
+      <div class="code-block">
+const sharp = require('sharp');
+
+async function processImage(file) {
+  const outputPath = path.join(
+    path.dirname(file.filepath),
+    `thumb_${file.newFilename}`
+  );
+
+  // 缩略图
+  await sharp(file.filepath)
+    .resize(200, 200, { fit: 'cover' })
+    .toFile(outputPath);
+
+  // 获取图片信息
+  const metadata = await sharp(file.filepath).metadata();
+
+  return {
+    width: metadata.width,
+    height: metadata.height,
+    format: metadata.format,
+    thumbnail: `thumb_${file.newFilename}`
+  };
+}
+
+router.post('/upload/image', async ctx => {
+  const file = ctx.request.files.image;
+
+  // 验证图片类型
+  if (!file.mimetype.startsWith('image/')) {
+    ctx.status = 400;
+    ctx.body = { error: 'Please upload an image' };
+    return;
+  }
+
+  const info = await processImage(file);
+
+  ctx.body = {
+    success: true,
+    original: file.newFilename,
+    ...info
+  };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整上传服务</h2>
+      <div class="code-block">
+// services/uploadService.js
+const fs = require('fs').promises;
+const path = require('path');
+const sharp = require('sharp');
+
+class UploadService {
+  constructor(options = {}) {
+    this.uploadDir = options.uploadDir || './uploads';
+    this.maxSize = options.maxSize || 10 * 1024 * 1024;
+    this.allowedTypes = options.allowedTypes || ['image/jpeg', 'image/png'];
+  }
+
+  async save(file, options = {}) {
+    // 验证
+    this.validate(file);
+
+    // 生成文件名
+    const filename = options.filename || this.generateFilename(file);
+    const dir = this.getDailyDir();
+    const filepath = path.join(dir, filename);
+
+    // 移动文件
+    await fs.rename(file.filepath, filepath);
+
+    return { filename, filepath, url: `/uploads/${filename}` };
+  }
+
+  validate(file) {
+    if (file.size > this.maxSize) {
+      throw new Error(`File too large: ${file.size} bytes`);
+    }
+
+    if (!this.allowedTypes.includes(file.mimetype)) {
+      throw new Error(`Type not allowed: ${file.mimetype}`);
+    }
+  }
+
+  generateFilename(file) {
+    const ext = path.extname(file.originalFilename);
+    return `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+  }
+
+  getDailyDir() {
+    const date = new Date();
+    const dir = path.join(
+      this.uploadDir,
+      `${date.getFullYear()}`,
+      `${date.getMonth() + 1}`.padStart(2, '0')
+    );
+
+    fs.mkdir(dir, { recursive: true }).catch(() => {});
+    return dir;
+  }
+
+  async createThumbnail(filepath, size = 200) {
+    const dir = path.dirname(filepath);
+    const name = path.basename(filepath);
+    const thumbPath = path.join(dir, `thumb_${name}`);
+
+    await sharp(filepath)
+      .resize(size, size, { fit: 'cover' })
+      .toFile(thumbPath);
+
+    return thumbPath;
+  }
+}
+
+module.exports = UploadService;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 koa-body 处理文件上传</li>
+            <li>• 验证文件类型和大小</li>
+            <li>• 按日期组织文件存储目录</li>
+            <li>• 使用 sharp 处理图片缩略图</li>
+            <li>• 可选择上传到云存储服务</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter38/38-5-错误处理中间件.html">← 上一节：错误处理中间件</a>
+      <a href="39-2-Session管理.html">下一节：Session 管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

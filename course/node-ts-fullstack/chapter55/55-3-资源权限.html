@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>55.3 资源权限 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="55-1-RBAC模型.html">第五十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>55.3 资源权限</h1>
+      <p class="subtitle">细粒度的资源级权限控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解资源级权限控制的概念</li>
+        <li>掌握所有权检查的实现方式</li>
+        <li>学会实现数据行级权限控制</li>
+        <li>实现资源访问授权管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 资源权限概述</h2>
+      <p>资源权限（Resource-Level Permission）是指对具体资源实例的访问控制。例如，用户只能编辑自己创建的文章，管理员可以编辑所有文章。这需要比角色权限更细粒度的控制。</p>
+
+      <div class="code-block">
+// 权限控制层级
+
+// 1. 功能权限（Function Level）
+// - 用户能否访问某个功能
+// - 如：article:create, article:delete
+
+// 2. 资源权限（Resource Level）
+// - 用户能否操作某个具体资源
+// - 如：能否编辑 ID=123 的文章
+
+// 3. 字段权限（Field Level）
+// - 用户能否访问某些字段
+// - 如：普通用户看不到用户手机号
+
+// 示例场景
+管理员 -> 可以删除任何文章
+普通用户 -> 只能删除自己的文章
+文章作者 -> 可以编辑自己的文章
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">设计原则</div>
+          <p>资源权限检查应在功能权限检查之后进行。先判断用户是否有操作权限，再判断是否有资源访问权限。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 所有权检查实现</h2>
+      <div class="code-block">
+// src/middleware/ownership.middleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+/**
+ * 检查文章所有权
+ */
+export async function checkArticleOwnership(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const userId = req.user?.id;
+  const articleId = parseInt(req.params.id);
+
+  if (!userId) {
+    return res.status(401).json({ message: '未认证' });
+  }
+
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+    select: { authorId: true }
+  });
+
+  if (!article) {
+    return res.status(404).json({ message: '文章不存在' });
+  }
+
+  // 检查是否是作者或管理员
+  const isOwner = article.authorId === userId;
+  const isAdmin = req.user?.roles.includes('admin');
+
+  if (!isOwner && !isAdmin) {
+    return res.status(403).json({ message: '无权访问此文章' });
+  }
+
+  // 将资源信息附加到请求对象
+  req.resource = { articleId, isOwner };
+  next();
+}
+
+/**
+ * 通用所有权检查工厂函数
+ */
+export function checkOwnership(options: {
+  resourceModel: string;      // Prisma 模型名
+  resourceIdParam: string;    // 路由参数名
+  ownerField: string;         // 所有者字段名
+  adminRoles?: string[];      // 管理员角色列表
+}) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.user?.id;
+    const resourceId = parseInt(req.params[options.resourceIdParam]);
+
+    if (!userId) {
+      return res.status(401).json({ message: '未认证' });
+    }
+
+    // 动态查询资源
+    const resource = await (prisma as any)[options.resourceModel].findUnique({
+      where: { id: resourceId },
+      select: { [options.ownerField]: true }
+    });
+
+    if (!resource) {
+      return res.status(404).json({ message: '资源不存在' });
+    }
+
+    const isOwner = resource[options.ownerField] === userId;
+    const isAdmin = options.adminRoles?.some(role =>
+      req.user?.roles.includes(role)
+    );
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: '无权访问此资源' });
+    }
+
+    next();
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 数据行级权限</h2>
+      <div class="code-block">
+// src/services/row-level-security.service.ts
+
+interface RowLevelFilter {
+  userId: number;
+  roles: string[];
+  model: string;
+}
+
+export class RowLevelSecurityService {
+  /**
+   * 根据用户权限生成查询过滤条件
+   */
+  static getArticleFilter(params: RowLevelFilter) {
+    const { userId, roles } = params;
+
+    // 管理员可以看到所有文章
+    if (roles.includes('admin')) {
+      return {}; // 无过滤条件
+    }
+
+    // 编辑可以看到已发布和自己草稿
+    if (roles.includes('editor')) {
+      return {
+        OR: [
+          { status: 'published' },
+          { authorId: userId }
+        ]
+      };
+    }
+
+    // 普通用户只能看到已发布的文章
+    return {
+      status: 'published'
+    };
+  }
+
+  /**
+   * 用户可操作的文章过滤
+   */
+  static getEditableArticleFilter(params: RowLevelFilter) {
+    const { userId, roles } = params;
+
+    if (roles.includes('admin')) {
+      return {}; // 管理员可编辑所有
+    }
+
+    // 只能编辑自己的文章
+    return {
+      authorId: userId
+    };
+  }
+}
+
+// 在 Controller 中使用
+export class ArticleController {
+  async getArticles(req: Request, res: Response) {
+    const filter = RowLevelSecurityService.getArticleFilter({
+      userId: req.user!.id,
+      roles: req.user!.roles,
+      model: 'article'
+    });
+
+    const articles = await prisma.article.findMany({
+      where: filter,
+      include: { author: { select: { id: true, name: true } } }
+    });
+
+    res.json(articles);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 资源授权管理</h2>
+      <div class="code-block">
+// Prisma Schema - 资源授权模型
+
+model ResourceGrant {
+  id           Int      @id @default(autoincrement())
+  resourceType String   // 资源类型：article, document, project
+  resourceId   Int      // 资源ID
+  userId       Int      // 被授权用户
+  permission   String   // 授权权限：view, edit, manage
+  grantedBy    Int      // 授权人
+  expiresAt    DateTime? // 过期时间
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+  granter      User     @relation("GrantedBy", fields: [grantedBy], references: [id])
+
+  @@unique([resourceType, resourceId, userId, permission])
+}
+
+// 授权服务
+export class ResourceGrantService {
+  /**
+   * 检查用户对特定资源的权限
+   */
+  async checkResourcePermission(
+    userId: number,
+    resourceType: string,
+    resourceId: number,
+    permission: string
+  ): Promise<boolean> {
+    // 检查是否有直接授权
+    const grant = await prisma.resourceGrant.findFirst({
+      where: {
+        userId,
+        resourceType,
+        resourceId,
+        permission,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
+        ]
+      }
+    });
+
+    if (grant) return true;
+
+    // 检查是否是资源所有者
+    return this.checkOwnership(userId, resourceType, resourceId);
+  }
+
+  /**
+   * 授权用户访问资源
+   */
+  async grantPermission(params: {
+    resourceType: string;
+    resourceId: number;
+    userId: number;
+    permission: string;
+    grantedBy: number;
+    expiresAt?: Date;
+  }) {
+    return prisma.resourceGrant.upsert({
+      where: {
+        resourceType_resourceId_userId_permission: {
+          resourceType: params.resourceType,
+          resourceId: params.resourceId,
+          userId: params.userId,
+          permission: params.permission
+        }
+      },
+      update: {
+        grantedBy: params.grantedBy,
+        expiresAt: params.expiresAt
+      },
+      create: params
+    });
+  }
+
+  /**
+   * 撤销授权
+   */
+  async revokePermission(
+    resourceType: string,
+    resourceId: number,
+    userId: number,
+    permission: string
+  ) {
+    return prisma.resourceGrant.delete({
+      where: {
+        resourceType_resourceId_userId_permission: {
+          resourceType,
+          resourceId,
+          userId,
+          permission
+        }
+      }
+    });
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全提示</div>
+          <p>资源授权应有审计日志，记录授权人、被授权人、时间和权限内容。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 资源权限实现细粒度的实例级访问控制</li>
+            <li>• 所有权检查是最常见的资源权限控制方式</li>
+            <li>• 行级权限通过查询条件实现数据隔离</li>
+            <li>• 资源授权支持临时授权和权限委托</li>
+            <li>• 资源权限检查应在功能权限检查之后进行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="55-2-权限中间件.html">← 上一节：权限中间件</a>
+      <a href="55-4-动态权限.html">下一节：动态权限 →</a>
+    </div>
+  </div>
+</body>
+</html>

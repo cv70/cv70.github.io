@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>94.2 敏感数据加密 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="94-1-文件上传安全.html">第九十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>94.2 敏感数据加密</h1>
+      <p class="subtitle">数据安全存储与传输</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解数据加密的基本概念</li>
+        <li>掌握密码安全存储方法</li>
+        <li>学会敏感数据加密</li>
+        <li>了解密钥管理最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 加密基础概念</h2>
+      <div class="code-block">
+# 加密类型
+
+## 对称加密
+- 使用相同密钥加密解密
+- 速度快，适合大量数据
+- 算法：AES、ChaCha20
+
+## 非对称加密
+- 公钥加密，私钥解密
+- 安全性高，速度较慢
+- 算法：RSA、ECC
+
+## 哈希函数
+- 单向转换，不可逆
+- 用于密码存储、数据校验
+- 算法：SHA-256、bcrypt、Argon2
+
+# 数据加密场景
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│     场景         │      方式        │       算法       │
+├─────────────────┼──────────────────┼──────────────────┤
+│ 密码存储        │ 哈希 + 盐        │ bcrypt, Argon2   │
+│ 敏感数据存储    │ 对称加密         │ AES-256-GCM      │
+│ 数据传输        │ TLS + 非对称     │ TLS 1.3, ECC     │
+│ 数字签名        │ 非对称加密       │ RSA, ECDSA       │
+│ 数据校验        │ 哈希             │ SHA-256          │
+└─────────────────┴──────────────────┴──────────────────┘
+
+# 加密原则
+1. 永远不要自己实现加密算法
+2. 使用经过验证的库和标准
+3. 密钥要安全存储
+4. 定期轮换密钥
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 密码安全存储</h2>
+      <div class="code-block">
+# 使用 bcrypt 存储密码
+
+import bcrypt from 'bcrypt';
+
+const SALT_ROUNDS = 12;
+
+// 哈希密码
+async function hashPassword(password: string): Promise&lt;string&gt; {
+  return bcrypt.hash(password, SALT_ROUNDS);
+}
+
+// 验证密码
+async function verifyPassword(
+  password: string,
+  hash: string
+): Promise&lt;boolean&gt; {
+  return bcrypt.compare(password, hash);
+}
+
+// 使用示例
+async function registerUser(email: string, password: string) {
+  const hashedPassword = await hashPassword(password);
+  await db.users.create({
+    email,
+    password: hashedPassword,
+  });
+}
+
+async function loginUser(email: string, password: string) {
+  const user = await db.users.findOne({ where: { email } });
+
+  if (!user) {
+    return null;
+  }
+
+  const isValid = await verifyPassword(password, user.password);
+
+  if (!isValid) {
+    return null;
+  }
+
+  return user;
+}
+
+# 使用 Argon2（更安全）
+
+import argon2 from 'argon2';
+
+// 哈希密码
+async function hashPassword(password: string): Promise&lt;string&gt; {
+  return argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 65536,  // 64MB
+    timeCost: 3,
+    parallelism: 4,
+    saltLength: 16,
+  });
+}
+
+// 验证密码
+async function verifyPassword(
+  password: string,
+  hash: string
+): Promise&lt;boolean&gt; {
+  try {
+    return await argon2.verify(hash, password);
+  } catch {
+    return false;
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">密码哈希要点</div>
+          <p>永远不要使用 MD5、SHA1 等快速哈希存储密码。使用 bcrypt 或 Argon2，它们专为密码设计，计算慢可以抵抗暴力破解。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 敏感数据加密</h2>
+      <div class="code-block">
+# AES 加密解密
+
+import crypto from 'crypto';
+
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16;
+const AUTH_TAG_LENGTH = 16;
+
+class EncryptionService {
+  private key: Buffer;
+
+  constructor(encryptionKey: string) {
+    // 从密钥字符串派生 256 位密钥
+    this.key = crypto
+      .createHash('sha256')
+      .update(encryptionKey)
+      .digest();
+  }
+
+  encrypt(plaintext: string): string {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv(ALGORITHM, this.key, iv);
+
+    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    // 格式: iv:authTag:encrypted
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  }
+
+  decrypt(encrypted: string): string {
+    const [ivHex, authTagHex, ciphertext] = encrypted.split(':');
+
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, this.key, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  }
+}
+
+// 使用示例
+const encryption = new EncryptionService(process.env.ENCRYPTION_KEY!);
+
+// 加密敏感数据
+const encryptedSsn = encryption.encrypt('123-45-6789');
+
+// 解密
+const ssn = encryption.decrypt(encryptedSsn);
+
+# 数据库字段加密
+
+// 存储前加密
+async function saveCreditCard(userId: string, cardNumber: string) {
+  const encrypted = encryption.encrypt(cardNumber);
+  await db.creditCards.create({
+    userId,
+    cardNumber: encrypted,
+  });
+}
+
+// 读取后解密
+async function getCreditCard(userId: string) {
+  const card = await db.creditCards.findOne({ where: { userId } });
+  if (!card) return null;
+
+  return {
+    ...card,
+    cardNumber: encryption.decrypt(card.cardNumber),
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 密钥管理</h2>
+      <div class="code-block">
+# 密钥管理最佳实践
+
+## 1. 环境变量存储
+// .env
+ENCRYPTION_KEY=your-256-bit-encryption-key
+JWT_SECRET=your-jwt-secret
+
+// 使用
+const key = process.env.ENCRYPTION_KEY;
+if (!key) throw new Error('ENCRYPTION_KEY not set');
+
+## 2. 使用密钥管理服务
+- AWS KMS
+- Google Cloud KMS
+- Azure Key Vault
+- HashiCorp Vault
+
+## 3. 密钥轮换
+定期更换密钥，支持多个版本
+
+class KeyManager {
+  private keys: Map&lt;string, Buffer&gt;;
+  private currentKeyId: string;
+
+  constructor() {
+    this.keys = new Map();
+    this.loadKeys();
+  }
+
+  private loadKeys() {
+    // 从环境或 KMS 加载密钥
+    // 支持多个版本的密钥
+  }
+
+  encrypt(plaintext: string): string {
+    const key = this.keys.get(this.currentKeyId);
+    // 加密时记录使用的 keyId
+    return `${this.currentKeyId}:${this.doEncrypt(key, plaintext)}`;
+  }
+
+  decrypt(encrypted: string): string {
+    const [keyId, ciphertext] = encrypted.split(':');
+    const key = this.keys.get(keyId);
+    // 根据记录的 keyId 解密
+    return this.doDecrypt(key, ciphertext);
+  }
+}
+
+# 安全配置检查清单
+
+□ 密钥不存储在代码中
+□ 密钥不提交到版本控制
+□ 使用强密钥（256 位以上）
+□ 定期轮换密钥
+□ 限制密钥访问权限
+□ 记录密钥使用日志
+□ 有密钥泄露应急计划
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 密码使用 bcrypt 或 Argon2 哈希存储</li>
+            <li>• 敏感数据使用 AES-256-GCM 加密</li>
+            <li>• 密钥存储在环境变量或 KMS</li>
+            <li>• 定期轮换密钥</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="94-1-文件上传安全.html">← 上一节：文件上传安全</a>
+      <a href="94-3-日志安全.html">下一节：日志安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23.1 TypeORM 简介 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="23-1-typeorm简介.html">第二十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>23.1 TypeORM 简介</h1>
+      <p class="subtitle">TypeScript 优先的 ORM 框架</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 ORM 的概念和优势</li>
+        <li>了解 TypeORM 的核心特性</li>
+        <li>学会安装和配置 TypeORM</li>
+        <li>掌握项目初始化方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是 ORM</h2>
+      <p>ORM（Object-Relational Mapping）对象关系映射，是一种将数据库表映射到程序对象的技术。开发者可以使用面向对象的方式操作数据库，无需编写 SQL 语句。</p>
+
+      <div class="code-block">
+ORM 的核心作用：
+├── 对象 ↔ 表：类对应数据库表
+├── 属性 ↔ 列：类的属性对应表的列
+├── 实例 ↔ 行：对象实例对应表中的行
+└── 方法 ↔ 操作：对象方法对应数据库操作
+
+传统方式：
+const result = await db.query(
+  'SELECT * FROM users WHERE id = ?',
+  [userId]
+);
+
+ORM 方式：
+const user = await userRepository.findOne({ where: { id: userId } });
+
+优势：
+├── 类型安全：TypeScript 类型推断
+├── 代码复用：封装通用操作
+├── 跨数据库：支持多种数据库
+└── 易于维护：业务逻辑与数据访问分离
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">ORM vs 原生 SQL</div>
+          <p>ORM 提供便利和类型安全，但复杂查询可能性能不如原生 SQL。实际项目中简单 CRUD 用 ORM，复杂查询可用 QueryBuilder 或原生 SQL。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeORM 特性</h2>
+      <div class="code-block">
+TypeORM 核心特性：
+
+1. TypeScript 优先
+   ├── 完整的类型支持
+   ├── 装饰器定义实体
+   └── 类型推断和自动补全
+
+2. 多数据库支持
+   ├── MySQL / MariaDB
+   ├── PostgreSQL
+   ├── SQLite
+   ├── SQL Server
+   ├── Oracle
+   └── MongoDB
+
+3. 两种开发模式
+   ├── Active Record：实体自带数据访问方法
+   └── Data Mapper：通过 Repository 操作
+
+4. 功能丰富
+   ├── 关系映射（一对一、一对多、多对多）
+   ├── 查询构建器（QueryBuilder）
+   ├── 数据库迁移（Migrations）
+   ├── 事务支持
+   └── 监听器和订阅者
+
+5. 框架集成
+   ├── NestJS（推荐）
+   ├── Express
+   ├── Koa
+   └── Fastify
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装配置</h2>
+      <div class="code-block">
+# 安装依赖
+npm install typeorm reflect-metadata mysql2
+
+# 或使用 PostgreSQL
+npm install typeorm reflect-metadata pg
+
+# 安装 CLI（可选）
+npm install -g typeorm
+
+# 初始化项目
+typeorm init --name my-app --database mysql
+
+项目结构：
+my-app/
+├── src/
+│   ├── entity/          # 实体定义
+│   │   └── User.ts
+│   ├── migration/       # 数据库迁移
+│   ├── data-source.ts   # 数据源配置
+│   └── index.ts         # 入口文件
+├── ormconfig.json       # 配置文件（旧版）
+├── package.json
+└── tsconfig.json
+
+# tsconfig.json 需要启用装饰器
+{
+  "compilerOptions": {
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 数据源配置</h2>
+      <div class="code-block">
+// src/data-source.ts
+import { DataSource } from 'typeorm';
+import { User } from './entity/User';
+
+export const AppDataSource = new DataSource({
+  type: 'mysql',
+  host: 'localhost',
+  port: 3306,
+  username: 'root',
+  password: 'password',
+  database: 'myapp',
+  synchronize: process.env.NODE_ENV !== 'production', // 生产环境禁用
+  logging: true,
+  entities: [User],
+  migrations: ['src/migration/*.ts'],
+  subscribers: [],
+});
+
+// 初始化连接
+AppDataSource.initialize()
+  .then(() => {
+    console.log('Database connected successfully');
+  })
+  .catch((error) => {
+    console.error('Database connection error:', error);
+  });
+
+// 使用环境变量配置
+export const AppDataSource = new DataSource({
+  type: (process.env.DB_TYPE as any) || 'mysql',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT) || 3306,
+  username: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  entities: ['src/entity/*.ts'],
+  synchronize: false,
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ORM 将数据库表映射为程序对象</li>
+            <li>• TypeORM 是 TypeScript 优先的 ORM 框架</li>
+            <li>• 支持多种数据库和两种开发模式</li>
+            <li>• 需要启用装饰器和元数据反射</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter22/22-4-索引优化.html">← 上一章：索引优化</a>
+      <a href="23-2-实体定义.html">下一节：实体定义 →</a>
+    </div>
+  </div>
+</body>
+</html>

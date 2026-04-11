@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>112.4 富文本编辑 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="112-1-需求分析.html">第112章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>112.4 富文本编辑</h1>
+      <p class="subtitle">现代富文本编辑器的集成</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解富文本编辑器原理</li>
+        <li>掌握编辑器选型</li>
+        <li>学会图片上传处理</li>
+        <li>了解内容安全处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 编辑器选型</h2>
+      <div class="code-block">
+// 常见富文本编辑器
+
+const editors = {
+  Tiptap: {
+    type: '基于ProseMirror',
+    features: ['模块化', '可定制', 'TypeScript支持', '协作编辑'],
+    useCase: '现代Web应用'
+  },
+  Quill: {
+    type: 'API驱动',
+    features: ['跨平台', '丰富的API', '主题支持'],
+    useCase: '通用编辑场景'
+  },
+  Slate: {
+    type: 'React组件',
+    features: ['完全可定制', '嵌套文档', '复杂内容'],
+    useCase: 'React应用'
+  },
+  TinyMCE: {
+    type: '传统iframe',
+    features: ['功能完整', '插件丰富', '企业支持'],
+    useCase: '企业应用'
+  },
+  CKEditor: {
+    type: '现代框架',
+    features: ['协作编辑', '实时协作', '功能丰富'],
+    useCase: '企业CMS'
+  }
+};
+
+// 数据格式对比
+const dataFormats = {
+  HTML: '直接存储HTML，简单但难处理',
+  JSON: '结构化数据，易于处理和转换',
+  Markdown: '纯文本，适合开发者'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">选型建议</div>
+          <p>React项目推荐Tiptap/Slate；企业应用推荐TinyMCE/CKEditor。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Tiptap编辑器集成</h2>
+      <div class="code-block">
+// 安装依赖
+// npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-image
+
+// RichTextEditor.tsx
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+
+interface RichTextEditorProps {
+  content: string;
+  onChange: (content: string) => void;
+  placeholder?: string;
+}
+
+export default function RichTextEditor({
+  content,
+  onChange,
+  placeholder
+}: RichTextEditorProps) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Image.configure({
+        HTMLAttributes: {
+          class: 'rounded-lg max-w-full',
+        },
+      }),
+      Link.configure({
+        openOnClick: false,
+      }),
+      Placeholder.configure({
+        placeholder,
+      }),
+    ],
+    content,
+    onUpdate: ({ editor }) => {
+      onChange(editor.getHTML());
+    },
+  });
+
+  // 工具栏按钮
+  const addImage = async () => {
+    const url = await uploadImage();
+    if (url) {
+      editor.chain().focus().setImage({ src: url }).run();
+    }
+  };
+
+  if (!editor) {
+    return null;
+  }
+
+  return (
+    <div className="border rounded-lg">
+      {/* 工具栏 */}
+      <div className="flex gap-2 p-2 border-b bg-gray-50">
+        <button
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          className={editor.isActive('bold') ? 'bg-gray-200' : ''}
+        >
+          <b>B</b>
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          className={editor.isActive('italic') ? 'bg-gray-200' : ''}
+        >
+          <i>I</i>
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          className={editor.isActive('heading', { level: 2 }) ? 'bg-gray-200' : ''}
+        >
+          H2
+        </button>
+        <button
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          className={editor.isActive('bulletList') ? 'bg-gray-200' : ''}
+        >
+          列表
+        </button>
+        <button onClick={addImage}>
+          图片
+        </button>
+        <button
+          onClick={() => {
+            const url = prompt('输入链接');
+            if (url) {
+              editor.chain().focus().setLink({ href: url }).run();
+            }
+          }}
+        >
+          链接
+        </button>
+      </div>
+
+      {/* 编辑区域 */}
+      <EditorContent
+        editor={editor}
+        className="prose max-w-none p-4 min-h-[300px]"
+      />
+    </div>
+  );
+}
+
+// 图片上传处理
+async function uploadImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch('/api/media/upload', {
+    method: 'POST',
+    body: formData,
+  });
+
+  const data = await response.json();
+  return data.url;
+}
+
+// 后端图片上传接口
+// media.controller.ts
+@Controller('media')
+export class MediaController {
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 10 * 1024 * 1024 },  // 10MB
+    fileFilter: (req, file, cb) => {
+      if (!file.mimetype.startsWith('image/')) {
+        return cb(new BadRequestException('只能上传图片'), false);
+      }
+      cb(null, true);
+    },
+  }))
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    // 处理图片
+    const filename = `${Date.now()}-${file.originalname}`;
+    const filepath = path.join('uploads', filename);
+
+    // 图片压缩
+    await sharp(file.buffer)
+      .resize(1920, null, { withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(filepath);
+
+    return {
+      url: `/uploads/${filename}`,
+      filename,
+    };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Tiptap是现代React编辑器首选</li>
+            <li>• 存储HTML或JSON格式</li>
+            <li>• 图片上传需要后端配合</li>
+            <li>• 注意XSS安全处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="112-3-权限管理.html">← 上一节：权限管理</a>
+      <a href="112-5-媒体管理.html">下一节：媒体管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

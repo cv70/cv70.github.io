@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>103.4 性能监控 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="103-1-日志收集.html">第103章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>103.4 性能监控</h1>
+      <p class="subtitle">深入监控 Node.js 应用性能</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Node.js 性能监控的关键指标</li>
+        <li>学会使用 Node.js 内置诊断工具</li>
+        <li>掌握性能剖析和火焰图分析</li>
+        <li>了解数据库性能监控方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="Performance Monitoring" class="card-image">
+      <h3 class="card-title">Node.js 性能指标</h3>
+      <p class="card-text">
+        Node.js 应用性能监控需要关注事件循环延迟、内存使用、CPU 使用、
+        句柄数量等核心指标，及时发现性能瓶颈和潜在问题。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 关键性能指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>说明</th>
+            <th>健康阈值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Event Loop Lag</td>
+            <td>事件循环延迟</td>
+            <td>&lt; 100ms</td>
+          </tr>
+          <tr>
+            <td>Heap Used</td>
+            <td>堆内存使用</td>
+            <td>&lt; 75%</td>
+          </tr>
+          <tr>
+            <td>CPU Usage</td>
+            <td>CPU 使用率</td>
+            <td>&lt; 80%</td>
+          </tr>
+          <tr>
+            <td>Active Handles</td>
+            <td>活跃句柄数</td>
+            <td>无持续增长</td>
+          </tr>
+          <tr>
+            <td>GC Pause</td>
+            <td>GC 暂停时间</td>
+            <td>&lt; 100ms</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内置监控代码</h2>
+      <div class="code-block">
+<span class="comment">// src/utils/performance.ts</span>
+import { monitorEventLoopDelay, performance } from 'perf_hooks';
+import { freemem, totalmem, cpus } from 'os';
+
+<span class="comment">// 事件循环延迟监控</span>
+const histogram = monitorEventLoopDelay({
+  resolution: 10
+});
+histogram.enable();
+
+export const getPerformanceMetrics = () => {
+  const memUsage = process.memoryUsage();
+  const cpuUsage = process.cpuUsage();
+
+  return {
+    <span class="comment">// 内存指标</span>
+    memory: {
+      heapUsed: memUsage.heapUsed,
+      heapTotal: memUsage.heapTotal,
+      external: memUsage.external,
+      rss: memUsage.rss,
+      heapUsagePercent: (memUsage.heapUsed / memUsage.heapTotal * 100).toFixed(2)
+    },
+
+    <span class="comment">// CPU 指标</span>
+    cpu: {
+      user: cpuUsage.user,
+      system: cpuUsage.system,
+      percent: ((cpuUsage.user + cpuUsage.system) / 1000000).toFixed(2)
+    },
+
+    <span class="comment">// 事件循环延迟</span>
+    eventLoop: {
+      min: histogram.min,
+      max: histogram.max,
+      mean: histogram.mean,
+      p99: histogram.percentile(99),
+      p95: histogram.percentile(95)
+    },
+
+    <span class="comment">// 系统资源</span>
+    system: {
+      freeMemory: freemem(),
+      totalMemory: totalmem(),
+      cpuCount: cpus().length
+    },
+
+    <span class="comment">// Node.js 资源</span>
+    node: {
+      activeHandles: (process as any)._getActiveHandles().length,
+      activeRequests: (process as any)._getActiveRequests().length,
+      uptime: process.uptime()
+    }
+  };
+};
+
+<span class="comment">// 定期记录性能指标</span>
+setInterval(() => {
+  const metrics = getPerformanceMetrics();
+  logger.info('Performance metrics', { metrics });
+}, 60000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔥</span> 火焰图分析</h2>
+      <div class="code-block">
+<span class="comment"># 使用 clinic.js 进行性能分析</span>
+
+<span class="comment"># 安装 clinic.js</span>
+npm install -g clinic
+
+<span class="comment"># 运行应用并收集数据</span>
+clinic doctor -- node dist/index.js
+
+<span class="comment"># 生成火焰图</span>
+clinic flame -- node dist/index.js
+
+<span class="comment"># 分析事件循环问题</span>
+clinic bubbleprof -- node dist/index.js
+
+<span class="comment"># 使用 0x 进行剖析</span>
+npm install -g 0x
+0x -o dist/index.js
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> Node.js 内置诊断</h2>
+      <div class="code-block">
+<span class="comment"># 启用诊断报告</span>
+node --diagnostic-report-uncaught-exception \
+     --diagnostic-report-on-signal \
+     --diagnostic-report-on-fatalerror \
+     dist/index.js
+
+<span class="comment"># 运行时生成报告</span>
+kill -USR2 <pid>
+
+<span class="comment"># V8 性能分析</span>
+<span class="comment"># 启动时开启</span>
+node --prof dist/index.js
+
+<span class="comment"># 处理分析结果</span>
+node --prof-process isolate-*.log > profile.txt
+
+<span class="comment"># 生成 CPU Profile</span>
+node --cpu-prof dist/index.js
+
+<span class="comment"># 生成堆快照</span>
+node --heapsnapshot-signal=SIGUSR2 dist/index.js
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 内存泄漏检测</h2>
+      <div class="code-block">
+<span class="comment">// src/utils/heapMonitor.ts</span>
+import { writeHeapSnapshot } from 'v8';
+import { writeFileSync } from 'fs';
+
+let lastHeapSize = 0;
+let growthCount = 0;
+
+export const checkMemoryLeak = () => {
+  const currentHeap = process.memoryUsage().heapUsed;
+
+  if (currentHeap > lastHeapSize * 1.1) {
+    growthCount++;
+
+    if (growthCount >= 3) {
+      <span class="comment">// 生成堆快照用于分析</span>
+      const filename = `heapdump-${Date.now()}.heapsnapshot`;
+      writeHeapSnapshot(filename);
+
+      logger.warn('Potential memory leak detected', {
+        heapGrowth: currentHeap - lastHeapSize,
+        filename
+      });
+    }
+  } else {
+    growthCount = 0;
+  }
+
+  lastHeapSize = currentHeap;
+};
+
+<span class="comment"># 分析堆快照</span>
+<span class="comment"># 使用 Chrome DevTools > Memory > Load</span>
+<span class="comment"># 或使用 heapdump 模块</span>
+npm install heapdump
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗄️</span> 数据库性能监控</h2>
+      <div class="code-block">
+<span class="comment">// TypeORM 慢查询日志</span>
+import { DataSource } from 'typeorm';
+
+const dataSource = new DataSource({
+  type: 'postgres',
+  <span class="comment">// ... 其他配置</span>
+  logging: true,
+  logger: {
+    logQuery: (query: string, parameters?: any[]) => {
+      const start = Date.now();
+      <span class="comment">// 查询完成后</span>
+      const duration = Date.now() - start;
+      if (duration > 1000) {
+        logger.warn('Slow query detected', {
+          query,
+          parameters,
+          duration: `${duration}ms`
+        });
+      }
+    }
+  }
+});
+
+<span class="comment">// Mongoose 慢查询</span>
+mongoose.set('debug', (collectionName: string, method: string, query: any, doc: any) => {
+  logger.debug('MongoDB query', { collection: collectionName, method, query });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> APM 集成</h2>
+      <div class="code-block">
+<span class="comment">// 使用 Elastic APM</span>
+import apm from 'elastic-apm-node';
+
+apm.start({
+  serviceName: 'myapp',
+  serverUrl: 'http://apm-server:8200',
+  environment: 'production'
+});
+
+<span class="comment">// 使用 New Relic</span>
+import newrelic from 'newrelic';
+
+<span class="comment">// 自定义事务追踪</span>
+newrelic.startBackgroundTransaction('process-order', async () => {
+  <span class="comment">// 业务逻辑</span>
+  await processOrder(orderId);
+});
+
+<span class="comment">// 使用 Sentry 性能监控</span>
+import * as Sentry from '@sentry/node';
+
+Sentry.init({
+  dsn: 'your-dsn',
+  tracesSampleRate: 0.1 <span class="comment">// 10% 采样</span>
+});
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">性能监控建议</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>关注事件循环延迟，避免阻塞</li>
+          <li>定期生成堆快照分析内存泄漏</li>
+          <li>监控慢查询并优化索引</li>
+          <li>使用火焰图定位热点代码</li>
+          <li>生产环境保持适当的采样率</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Event Loop Lag 是 Node.js 最重要的性能指标</li>
+            <li>• 使用 clinic.js 和火焰图分析性能瓶颈</li>
+            <li>• 定期生成堆快照检测内存泄漏</li>
+            <li>• 监控数据库慢查询并优化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="103-3-应用监控.html">← 上一节</a>
+      <a href="103-5-告警系统.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

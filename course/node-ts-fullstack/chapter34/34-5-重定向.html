@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.5 重定向 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter34.html">第34章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>34.5 重定向</h1>
+      <p class="subtitle">掌握 Express 重定向的各种用法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 res.redirect() 的基本用法</li>
+        <li>理解不同重定向状态码的区别</li>
+        <li>学会相对路径和绝对路径重定向</li>
+        <li>了解"返回上一页"的实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> res.redirect() 基本用法</h2>
+
+      <div class="code-block">
+// 默认 302 临时重定向
+app.get('/old', (req, res) => {
+  res.redirect('/new');
+});
+
+// 指定状态码
+app.get('/permanent', (req, res) => {
+  res.redirect(301, '/new-location');  // 永久重定向
+});
+
+// 重定向到外部网站
+app.get('/google', (req, res) => {
+  res.redirect('https://www.google.com');
+});
+
+// 返回上一页
+app.get('/back', (req, res) => {
+  res.redirect('back');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 重定向状态码</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>状态码</th>
+            <th>名称</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>301</td>
+            <td>Moved Permanently</td>
+            <td>永久移动，SEO 权重转移</td>
+          </tr>
+          <tr>
+            <td>302</td>
+            <td>Found</td>
+            <td>临时移动（默认）</td>
+          </tr>
+          <tr>
+            <td>303</td>
+            <td>See Other</td>
+            <td>POST 后重定向到 GET</td>
+          </tr>
+          <tr>
+            <td>307</td>
+            <td>Temporary Redirect</td>
+            <td>临时重定向，保留请求方法</td>
+          </tr>
+          <tr>
+            <td>308</td>
+            <td>Permanent Redirect</td>
+            <td>永久重定向，保留请求方法</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// 301 永久重定向
+app.get('/old-page', (req, res) => {
+  res.redirect(301, '/new-page');
+});
+
+// 302 临时重定向（默认）
+app.get('/temp', (req, res) => {
+  res.redirect('/maintenance');
+});
+
+// 303 POST 后重定向
+app.post('/login', (req, res) => {
+  // 登录成功后重定向到首页
+  res.redirect(303, '/dashboard');
+});
+
+// 307 保留 POST 方法
+app.post('/submit', (req, res) => {
+  res.redirect(307, '/process');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛤️</span> 相对路径和绝对路径</h2>
+
+      <div class="code-block">
+// 相对于当前路径
+app.get('/admin/settings', (req, res) => {
+  res.redirect('./profile');  // /admin/profile
+});
+
+app.get('/admin/settings', (req, res) => {
+  res.redirect('../users');   // /admin/users
+});
+
+// 绝对路径
+app.get('/anywhere', (req, res) => {
+  res.redirect('/api/users');  // /api/users
+});
+
+// 完整 URL
+app.get('/external', (req, res) => {
+  res.redirect('https://api.example.com/v2/users');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 实际应用示例</h2>
+
+      <div class="code-block">
+// 登录后重定向
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (authenticate(username, password)) {
+    // 登录成功，重定向到仪表板
+    res.redirect('/dashboard');
+  } else {
+    // 登录失败，重定向回登录页
+    res.redirect('/login?error=1');
+  }
+});
+
+// 认证中间件重定向
+function requireAuth(req, res, next) {
+  if (!req.user) {
+    return res.redirect('/login?redirect=' + encodeURIComponent(req.originalUrl));
+  }
+  next();
+}
+
+app.get('/protected', requireAuth, (req, res) => {
+  res.send('Protected content');
+});
+
+// HTTP 到 HTTPS 重定向
+app.use((req, res, next) => {
+  if (req.protocol === 'http' && process.env.NODE_ENV === 'production') {
+    return res.redirect(301, 'https://' + req.headers.host + req.url);
+  }
+  next();
+});
+
+// www 到非 www 重定向
+app.use((req, res, next) => {
+  if (req.headers.host.startsWith('www.')) {
+    const host = req.headers.host.slice(4);
+    return res.redirect(301, req.protocol + '://' + host + req.url);
+  }
+  next();
+});
+
+// 模块化重定向
+app.get('/blog/:slug', (req, res) => {
+  const newSlug = getNewSlug(req.params.slug);
+  if (newSlug) {
+    res.redirect(301, `/posts/${newSlug}`);
+  } else {
+    res.status(404).send('Not found');
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>res.redirect() 默认 302 临时重定向</li>
+            <li>301 永久重定向用于 SEO 权重转移</li>
+            <li>POST 后重定向用 303 避免重复提交</li>
+            <li>支持相对路径、绝对路径和完整 URL</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="34-4-文件下载.html">← 上一节：文件下载</a>
+      <a href="34-6-模板渲染.html">下一节：模板渲染 →</a>
+    </div>
+  </div>
+</body>
+</html>

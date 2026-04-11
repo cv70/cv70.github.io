@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>116.5 事件驱动 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="116-1-DDD概念.html">第116章</a></li>
+    </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>116.5 事件驱动</h1>
+      <p class="subtitle">领域事件与事件溯源</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解领域事件的概念</li>
+        <li>掌握事件的发布订阅</li>
+        <li>学会事件溯源模式</li>
+        <li>了解事件驱动的优势</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 领域事件</h2>
+      <div class="code-block">
+// 领域事件：领域中发生的、对业务有意义的事情
+
+// 特点
+const characteristics = {
+  过去式命名: 'OrderCreated, PaymentCompleted',
+  不可变: '事件一旦发生不能修改',
+  包含上下文: '事件携带发生的上下文信息',
+  时间戳: '记录事件发生时间'
+};
+
+// 领域事件定义
+interface DomainEvent {
+  eventId: string;
+  eventType: string;
+  aggregateId: string;
+  occurredAt: Date;
+  payload: any;
+}
+
+class OrderCreatedEvent implements DomainEvent {
+  readonly eventType = 'order.created';
+  readonly eventId: string;
+  readonly occurredAt: Date;
+
+  constructor(
+    readonly aggregateId: string,
+    readonly payload: {
+      customerId: string;
+      items: OrderItemData[];
+      total: number;
+    }
+  ) {
+    this.eventId = uuidv4();
+    this.occurredAt = new Date();
+  }
+}
+
+class OrderConfirmedEvent implements DomainEvent {
+  readonly eventType = 'order.confirmed';
+  readonly eventId: string;
+  readonly occurredAt: Date;
+
+  constructor(
+    readonly aggregateId: string,
+    readonly payload: {
+      total: number;
+      shippingAddress: Address;
+    }
+  ) {
+    this.eventId = uuidv4();
+    this.occurredAt = new Date();
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">事件用途</div>
+          <p>解耦聚合、触发后续操作、审计日志、事件溯源。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 事件发布与处理</h2>
+      <div class="code-block">
+// 事件发布器
+interface EventPublisher {
+  publish(event: DomainEvent): Promise<void>;
+  publishAll(events: DomainEvent[]): Promise<void>;
+}
+
+@Injectable()
+class RabbitMQEventPublisher implements EventPublisher {
+  constructor(private channel: Channel) {}
+
+  async publish(event: DomainEvent): Promise<void> {
+    const message = JSON.stringify({
+      eventId: event.eventId,
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      occurredAt: event.occurredAt.toISOString(),
+      payload: event.payload
+    });
+
+    this.channel.publish(
+      'domain-events',
+      event.eventType,
+      Buffer.from(message)
+    );
+  }
+
+  async publishAll(events: DomainEvent[]): Promise<void> {
+    for (const event of events) {
+      await this.publish(event);
+    }
+  }
+}
+
+// 事件处理器
+interface EventHandler<T extends DomainEvent> {
+  eventType: string;
+  handle(event: T): Promise<void>;
+}
+
+// 订单确认处理器：通知库存
+@EventHandler('order.confirmed')
+class ReserveInventoryHandler implements EventHandler<OrderConfirmedEvent> {
+  eventType = 'order.confirmed';
+
+  constructor(private inventoryService: InventoryService) {}
+
+  async handle(event: OrderConfirmedEvent): Promise<void> {
+    // 预留库存
+    await this.inventoryService.reserveStock(
+      event.aggregateId,
+      event.payload.items
+    );
+  }
+}
+
+// 订单确认处理器：发送通知
+@EventHandler('order.confirmed')
+class SendOrderNotificationHandler implements EventHandler<OrderConfirmedEvent> {
+  eventType = 'order.confirmed';
+
+  constructor(private notificationService: NotificationService) {}
+
+  async handle(event: OrderConfirmedEvent): Promise<void> {
+    await this.notificationService.sendOrderConfirmation(
+      event.payload.customerId,
+      event.aggregateId
+    );
+  }
+}
+
+// 事件分发器
+@Injectable()
+class EventDispatcher {
+  private handlers: Map<string, EventHandler[]> = new Map();
+
+  register(handler: EventHandler): void {
+    const handlers = this.handlers.get(handler.eventType) || [];
+    handlers.push(handler);
+    this.handlers.set(handler.eventType, handlers);
+  }
+
+  async dispatch(event: DomainEvent): Promise<void> {
+    const handlers = this.handlers.get(event.eventType) || [];
+
+    await Promise.all(
+      handlers.map(handler => handler.handle(event as any))
+    );
+  }
+}
+
+// 聚合中使用事件
+abstract class AggregateRoot {
+  private events: DomainEvent[] = [];
+
+  protected addEvent(event: DomainEvent): void {
+    this.events.push(event);
+  }
+
+  pullEvents(): DomainEvent[] {
+    const events = [...this.events];
+    this.events = [];
+    return events;
+  }
+}
+
+class Order extends AggregateRoot {
+  confirm(address: Address): void {
+    // ... 验证和状态变更 ...
+
+    this.status = OrderStatus.CONFIRMED;
+
+    // 发布领域事件
+    this.addEvent(new OrderConfirmedEvent(this.id.value, {
+      total: this.total.getAmount(),
+      shippingAddress: address
+    }));
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 领域事件表示业务中发生的事情</li>
+            <li>• 事件解耦聚合间的通信</li>
+            <li>• 一个事件可以有多个处理器</li>
+            <li>• 事件溯源记录完整状态变更历史</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="116-4-仓储模式.html">← 上一节：仓储模式</a>
+      <a href="../chapter117/117-1-Express源码.html">下一章：Express 源码 →</a>
+    </div>
+  </div>
+</body>
+</html>

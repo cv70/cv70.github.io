@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>63.5 建立连接 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="63-1-WebSocket协议.html">第六十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>63.5 建立连接</h1>
+      <p class="subtitle">Socket.IO 连接建立与管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Socket.IO 服务端的多种初始化方式</li>
+        <li>理解连接建立过程和握手机制</li>
+        <li>学会处理连接和断开事件</li>
+        <li>了解连接认证的实现方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 服务端初始化方式</h2>
+
+      <div class="card">
+        <h3 class="card-title">方式一：与 Node.js HTTP 服务器集成</h3>
+        <div class="code-block">
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const httpServer = createServer((req, res) => {
+  // 可以处理普通的 HTTP 请求
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end('&lt;h1&gt;Hello World&lt;/h1&gt;');
+});
+
+const io = new Server(httpServer);
+
+httpServer.listen(3000);
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式二：与 Express 集成</h3>
+        <div class="code-block">
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer);
+
+// Express 路由
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+httpServer.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式三：与 NestJS 集成</h3>
+        <div class="code-block">
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useWebSocketAdapter(new IoAdapter(app));
+  await app.listen(3000);
+}
+bootstrap();
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式四：使用 HTTPS</h3>
+        <div class="code-block">
+import { createServer } from 'https';
+import { Server } from 'socket.io';
+import { readFileSync } from 'fs';
+
+const httpsServer = createServer({
+  key: readFileSync('private-key.pem'),
+  cert: readFileSync('certificate.pem')
+});
+
+const io = new Server(httpsServer, {
+  // 强制使用 WebSocket
+  transports: ['websocket']
+});
+
+httpsServer.listen(443);
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤝</span> 连接建立过程</h2>
+
+      <div class="steps">
+        <div class="step active">
+          <div class="step-number">1</div>
+          <div class="step-label">客户端发起连接</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">2</div>
+          <div class="step-label">握手协商</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">3</div>
+          <div class="step-label">传输测试</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">4</div>
+          <div class="step-label">连接建立</div>
+        </div>
+      </div>
+
+      <div class="tip-box info" style="margin-top: 2rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">握手过程</div>
+          <p>Socket.IO 首先通过 HTTP 请求进行握手，协商传输方式（WebSocket 或长轮询）。握手成功后，会进行传输测试，最终建立持久连接。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 客户端连接</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本连接</h3>
+        <div class="code-block">
+import { io } from 'socket.io-client';
+
+// 连接到默认命名空间
+const socket = io();
+
+// 连接到指定 URL
+const socket = io('http://localhost:3000');
+
+// 连接到指定命名空间
+const socket = io('http://localhost:3000/chat');
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">连接选项配置</h3>
+        <div class="code-block">
+const socket = io('http://localhost:3000', {
+  // 自动连接（默认 true）
+  autoConnect: true,
+
+  // 重连配置
+  reconnection: true,              // 是否自动重连
+  reconnectionAttempts: 10,        // 最大重连次数
+  reconnectionDelay: 1000,         // 重连延迟
+  reconnectionDelayMax: 5000,      // 最大重连延迟
+  randomizationFactor: 0.5,        // 随机化因子
+
+  // 超时配置
+  timeout: 20000,                  // 连接超时
+
+  // 传输方式
+  transports: ['websocket', 'polling'],
+
+  // 查询参数
+  query: {
+    token: 'my-token',
+    userId: '123'
+  },
+
+  // 认证信息
+  auth: {
+    token: 'my-auth-token'
+  },
+
+  // 额外请求头
+  extraHeaders: {
+    'X-Custom-Header': 'value'
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">延迟连接</h3>
+        <div class="code-block">
+// 禁用自动连接，手动控制连接时机
+const socket = io('http://localhost:3000', {
+  autoConnect: false
+});
+
+// 需要时手动连接
+document.getElementById('connectBtn').addEventListener('click', () => {
+  socket.connect();
+});
+
+// 手动断开
+socket.disconnect();
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 连接事件处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">服务端事件</h3>
+        <div class="code-block">
+io.on('connection', (socket) => {
+  // 新客户端连接
+  console.log('客户端连接:', socket.id);
+
+  // 获取握手信息
+  console.log('握手信息:', socket.handshake);
+
+  // 获取查询参数
+  console.log('查询参数:', socket.handshake.query);
+
+  // 获取认证信息
+  console.log('认证信息:', socket.handshake.auth);
+
+  // 获取请求头
+  console.log('请求头:', socket.handshake.headers);
+
+  // 获取客户端 IP
+  console.log('客户端 IP:', socket.handshake.address);
+
+  // 断开连接事件
+  socket.on('disconnect', (reason) => {
+    console.log('客户端断开:', socket.id, '原因:', reason);
+  });
+
+  // 断开原因说明：
+  // - 'client namespace disconnect' - 客户端主动断开
+  // - 'server namespace disconnect' - 服务端主动断开
+  // - 'ping timeout' - 心跳超时
+  // - 'transport close' - 传输关闭
+  // - 'transport error' - 传输错误
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">客户端事件</h3>
+        <div class="code-block">
+// 连接成功
+socket.on('connect', () => {
+  console.log('连接成功');
+  console.log('Socket ID:', socket.id);
+});
+
+// 连接错误
+socket.on('connect_error', (error) => {
+  console.error('连接错误:', error);
+});
+
+// 断开连接
+socket.on('disconnect', (reason) => {
+  console.log('断开连接:', reason);
+
+  // 如果需要手动重连
+  if (reason === 'io server disconnect') {
+    socket.connect();
+  }
+});
+
+// 重连尝试
+socket.on('reconnect_attempt', (attempt) => {
+  console.log('重连尝试:', attempt);
+});
+
+// 重连成功
+socket.on('reconnect', (attempt) => {
+  console.log('重连成功:', attempt);
+});
+
+// 重连失败
+socket.on('reconnect_failed', () => {
+  console.log('重连失败，已达到最大重连次数');
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 连接认证</h2>
+
+      <div class="card">
+        <h3 class="card-title">客户端发送认证信息</h3>
+        <div class="code-block">
+// 方式一：使用 auth 选项
+const socket = io('http://localhost:3000', {
+  auth: {
+    token: 'jwt-token-here'
+  }
+});
+
+// 方式二：使用查询参数
+const socket = io('http://localhost:3000', {
+  query: {
+    token: 'jwt-token-here'
+  }
+});
+
+// 动态更新认证信息
+socket.auth = { token: 'new-token' };
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">服务端验证</h3>
+        <div class="code-block">
+import { Server } from 'socket.io';
+
+const io = new Server(httpServer, {
+  // 中间件方式验证
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.query.token;
+
+  if (!token) {
+    return next(new Error('认证失败：缺少 token'));
+  }
+
+  try {
+    // 验证 JWT
+    const decoded = verifyJwtToken(token);
+    socket.data.user = decoded;
+    next();
+  } catch (error) {
+    next(new Error('认证失败：无效 token'));
+  }
+});
+
+io.on('connection', (socket) => {
+  // 中间件验证通过后的处理
+  console.log('用户已认证:', socket.data.user);
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">客户端处理认证错误</h3>
+        <div class="code-block">
+socket.on('connect_error', (error) => {
+  if (error.message === '认证失败：无效 token') {
+    // 清除无效 token，跳转登录
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Socket.IO 可与 HTTP 服务器、Express、NestJS 集成</li>
+            <li>• 连接建立包括握手、传输测试、建立持久连接</li>
+            <li>• 支持丰富的连接选项和重连策略配置</li>
+            <li>• 使用中间件实现连接认证</li>
+            <li>• 通过 connect_error 事件处理认证失败</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="63-4-Socket-IO-简介.html">← 上一节</a>
+      <a href="../chapter64/64-1-服务端初始化.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

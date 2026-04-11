@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>83.3 State 与 Getter - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>83.3 State 与 Getter</h1>
+      <p class="subtitle">Pinia 状态管理核心</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>State 是 Store 中存储数据的地方，Getter 类似于计算属性，用于派生状态。本节将详细介绍如何定义和使用 State 与 Getter。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 State 的定义和访问方式</li>
+        <li>学会修改 State 的多种方法</li>
+        <li>掌握 Getter 的定义和使用</li>
+        <li>了解 State 的订阅和重置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> State 定义</h2>
+
+      <h3>Options Store</h3>
+      <div class="code-block"><span class="keyword">interface</span> UserState {
+  name: <span class="keyword">string</span>;
+  age: <span class="keyword">number</span>;
+  email: <span class="keyword">string</span>;
+  preferences: {
+    theme: <span class="string">'light'</span> | <span class="string">'dark'</span>;
+    language: <span class="keyword">string</span>;
+  };
+}
+
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  <span class="comment">// state 必须是返回初始状态的函数</span>
+  state: (): UserState => ({
+    name: <span class="string">''</span>,
+    age: <span class="number">0</span>,
+    email: <span class="string">''</span>,
+    preferences: {
+      theme: <span class="string">'light'</span>,
+      language: <span class="string">'zh-CN'</span>
+    }
+  })
+});</div>
+
+      <h3>Setup Store</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="comment">// 使用 ref 或 reactive</span>
+  <span class="keyword">const</span> name = ref(<span class="string">''</span>);
+  <span class="keyword">const</span> age = ref(<span class="number">0</span>);
+  <span class="keyword">const</span> email = ref(<span class="string">''</span>);
+  <span class="keyword">const</span> preferences = reactive({
+    theme: <span class="string">'light'</span> <span class="keyword">as</span> <span class="string">'light'</span> | <span class="string">'dark'</span>,
+    language: <span class="string">'zh-CN'</span>
+  });
+
+  <span class="keyword">return</span> { name, age, email, preferences };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 访问 State</h2>
+      <div class="code-block">&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { useUserStore } <span class="keyword">from</span> <span class="string">'@/stores/user'</span>;
+<span class="keyword">import</span> { storeToRefs } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+
+<span class="keyword">const</span> userStore = useUserStore();
+
+<span class="comment">// 直接访问</span>
+console.log(userStore.name);
+console.log(userStore.age);
+
+<span class="comment">// 解构（需要使用 storeToRefs 保持响应性）</span>
+<span class="keyword">const</span> { name, age } = storeToRefs(userStore);
+
+<span class="comment">// 错误：直接解构会失去响应性</span>
+<span class="keyword">const</span> { name, age } = userStore; <span class="comment">// name, age 不是响应式的！</span>
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div&gt;
+    &lt;p&gt;Name: {{ userStore.name }}&lt;/p&gt;
+    &lt;p&gt;Age: {{ age }}&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✏️</span> 修改 State</h2>
+
+      <h3>直接修改</h3>
+      <div class="code-block"><span class="keyword">const</span> userStore = useUserStore();
+
+<span class="comment">// 直接修改</span>
+userStore.name = <span class="string">'John'</span>;
+userStore.age = <span class="number">25</span>;
+
+<span class="comment">// 修改嵌套对象</span>
+userStore.preferences.theme = <span class="string">'dark'</span>;</div>
+
+      <h3>$patch 批量修改</h3>
+      <div class="code-block"><span class="comment">// 使用对象批量修改</span>
+userStore.$patch({
+  name: <span class="string">'John'</span>,
+  age: <span class="number">25</span>,
+  email: <span class="string">'john@example.com'</span>
+});
+
+<span class="comment">// 使用函数批量修改（适合复杂逻辑）</span>
+userStore.$patch((state) => {
+  state.name = <span class="string">'John'</span>;
+  state.age = <span class="number">25</span>;
+  state.preferences.theme = <span class="string">'dark'</span>;
+  state.preferences.language = <span class="string">'en-US'</span>;
+});</div>
+
+      <h3>重置 State</h3>
+      <div class="code-block"><span class="comment">// 重置到初始状态（仅 Options Store）</span>
+userStore.$reset();
+
+<span class="comment">// Setup Store 需要自己实现重置</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">const</span> name = ref(<span class="string">''</span>);
+  <span class="keyword">const</span> age = ref(<span class="number">0</span>);
+
+  <span class="keyword">function</span> <span class="function">$reset</span>() {
+    name.value = <span class="string">''</span>;
+    age.value = <span class="number">0</span>;
+  }
+
+  <span class="keyword">return</span> { name, age, $reset };
+});</div>
+
+      <h3>替换整个 State</h3>
+      <div class="code-block">userStore.$state = {
+  name: <span class="string">'Jane'</span>,
+  age: <span class="number">30</span>,
+  email: <span class="string">'jane@example.com'</span>,
+  preferences: {
+    theme: <span class="string">'dark'</span>,
+    language: <span class="string">'zh-CN'</span>
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👂</span> 订阅 State 变化</h2>
+      <div class="code-block"><span class="comment">// 订阅 state 变化</span>
+userStore.$subscribe((mutation, state) => {
+  <span class="comment">// mutation.type: 'direct' | 'patch object' | 'patch function'</span>
+  <span class="comment">// mutation.storeId: store 的 id</span>
+  <span class="comment">// mutation.payload: $patch 的参数</span>
+
+  console.log(<span class="string">'Type:'</span>, mutation.type);
+  console.log(<span class="string">'Store ID:'</span>, mutation.storeId);
+
+  <span class="comment">// 持久化到 localStorage</span>
+  localStorage.setItem(<span class="string">'user'</span>, JSON.stringify(state));
+}, { detached: <span class="keyword">true</span> }); <span class="comment">// detached: 组件卸载后继续监听</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Getter 定义</h2>
+
+      <h3>Options Store</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    firstName: <span class="string">''</span>,
+    lastName: <span class="string">''</span>,
+    age: <span class="number">0</span>
+  }),
+
+  getters: {
+    <span class="comment">// 简单 getter</span>
+    <span class="function">fullName</span>(state): <span class="keyword">string</span> {
+      <span class="keyword">return</span> <span class="string">`${state.firstName} ${state.lastName}`</span>;
+    },
+
+    <span class="comment">// 使用 this 访问其他 getter</span>
+    <span class="function">greeting</span>(): <span class="keyword">string</span> {
+      <span class="keyword">return</span> <span class="string">`Hello, ${this.fullName}!`</span>;
+    },
+
+    <span class="comment">// 判断类 getter</span>
+    <span class="function">isAdult</span>(state): <span class="keyword">boolean</span> {
+      <span class="keyword">return</span> state.age >= <span class="number">18</span>;
+    }
+  }
+});</div>
+
+      <h3>Setup Store</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">const</span> firstName = ref(<span class="string">''</span>);
+  <span class="keyword">const</span> lastName = ref(<span class="string">''</span>);
+  <span class="keyword">const</span> age = ref(<span class="number">0</span>);
+
+  <span class="comment">// 使用 computed</span>
+  <span class="keyword">const</span> fullName = computed(() => <span class="string">`${firstName.value} ${lastName.value}`</span>);
+
+  <span class="keyword">const</span> greeting = computed(() => <span class="string">`Hello, ${fullName.value}!`</span>);
+
+  <span class="keyword">const</span> isAdult = computed(() => age.value >= <span class="number">18</span>);
+
+  <span class="keyword">return</span> { firstName, lastName, age, fullName, greeting, isAdult };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 访问 Getter</h2>
+      <div class="code-block"><span class="keyword">const</span> userStore = useUserStore();
+
+<span class="comment">// 直接访问</span>
+console.log(userStore.fullName);
+console.log(userStore.greeting);
+console.log(userStore.isAdult);
+
+<span class="comment">// 解构</span>
+<span class="keyword">const</span> { fullName, greeting } = storeToRefs(userStore);
+
+<span class="comment">&lt;!-- 模板中使用 --&gt;</span>
+&lt;template&gt;
+  &lt;div&gt;
+    &lt;p&gt;{{ userStore.fullName }}&lt;/p&gt;
+    &lt;p&gt;{{ userStore.greeting }}&lt;/p&gt;
+    &lt;p v-if=<span class="string">"userStore.isAdult"</span>&gt;成人&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Getter 传参</h2>
+      <div class="code-block"><span class="comment">// Options Store</span>
+<span class="keyword">export const</span> useProductsStore = defineStore(<span class="string">'products'</span>, {
+  state: () => ({
+    products: [] <span class="keyword">as</span> Product[]
+  }),
+
+  getters: {
+    <span class="comment">// 返回函数来实现传参</span>
+    <span class="function">getById</span>(state) {
+      <span class="keyword">return</span> (id: <span class="keyword">number</span>) => {
+        <span class="keyword">return</span> state.products.find(p => p.id === id);
+      };
+    },
+
+    <span class="function">filterByCategory</span>(state) {
+      <span class="keyword">return</span> (category: <span class="keyword">string</span>) => {
+        <span class="keyword">return</span> state.products.filter(p => p.category === category);
+      };
+    }
+  }
+});
+
+<span class="comment">// Setup Store</span>
+<span class="keyword">export const</span> useProductsStore = defineStore(<span class="string">'products'</span>, () => {
+  <span class="keyword">const</span> products = ref&lt;Product[]&gt;([]);
+
+  <span class="comment">// 普通函数即可</span>
+  <span class="keyword">function</span> <span class="function">getById</span>(id: <span class="keyword">number</span>) {
+    <span class="keyword">return</span> products.value.find(p => p.id === id);
+  }
+
+  <span class="keyword">function</span> <span class="function">filterByCategory</span>(category: <span class="keyword">string</span>) {
+    <span class="keyword">return</span> products.value.filter(p => p.category === category);
+  }
+
+  <span class="keyword">return</span> { products, getById, filterByCategory };
+});
+
+<span class="comment">// 使用</span>
+<span class="keyword">const</span> product = productsStore.getById(<span class="number">1</span>);
+<span class="keyword">const</span> electronics = productsStore.filterByCategory(<span class="string">'electronics'</span>);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>State 使用 state() 函数或 ref/reactive 定义</li>
+        <li>解构 State 需要使用 storeToRefs 保持响应性</li>
+        <li>修改 State 可以直接修改或使用 $patch</li>
+        <li>$reset 可以重置到初始状态</li>
+        <li>Getter 类似计算属性，支持传参</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="83-2-Store定义.html">← 上一节：Store 定义</a>
+      <a href="83-4-Actions.html">下一节：Actions →</a>
+    </div>
+  </div>
+</body>
+</html>

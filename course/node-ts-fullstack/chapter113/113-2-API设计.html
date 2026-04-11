@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>113.2 API 设计 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="113-1-平台架构.html">第113章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>113.2 API 设计</h1>
+      <p class="subtitle">开放API的设计规范与最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握开放API设计原则</li>
+        <li>学会API版本管理</li>
+        <li>理解错误码设计</li>
+        <li>了解API文档规范</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> API设计原则</h2>
+      <div class="code-block">
+// 开放API设计原则
+
+const principles = {
+  简洁性: '接口设计简单直观，降低学习成本',
+  一致性: '命名、参数、响应格式保持统一',
+  可预测性: '行为符合预期，减少意外情况',
+  向后兼容: '版本升级不破坏现有集成',
+  安全性: '认证授权、数据脱敏、访问控制'
+};
+
+// RESTful API设计示例
+
+// 资源命名
+const resourceNaming = {
+  good: [
+    'GET /api/v1/users',          // 获取用户列表
+    'GET /api/v1/users/:id',      // 获取单个用户
+    'POST /api/v1/users',         // 创建用户
+    'PUT /api/v1/users/:id',      // 更新用户
+    'DELETE /api/v1/users/:id'    // 删除用户
+  ],
+  bad: [
+    'GET /api/getUsers',          // 不应使用动词
+    'POST /api/createUser',       // 不应使用动词
+    'GET /api/user'               // 应该是复数
+  ]
+};
+
+// 统一响应格式
+interface ApiResponse<T> {
+  code: number;        // 业务状态码
+  message: string;     // 提示信息
+  data: T;             // 业务数据
+  requestId: string;   // 请求ID，用于追踪
+  timestamp: number;   // 响应时间戳
+}
+
+// 分页响应
+interface PagedResponse<T> extends ApiResponse<T[]> {
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">版本策略</div>
+          <p>URL路径版本（/v1/）、请求头版本、参数版本。推荐URL路径版本。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 错误码设计</h2>
+      <div class="code-block">
+// 错误码规范
+
+const errorCodes = {
+  // 通用错误 1xxxx
+  10001: '系统错误',
+  10002: '请求超时',
+  10003: '服务不可用',
+
+  // 认证错误 2xxxx
+  20001: 'API Key无效',
+  20002: '签名验证失败',
+  20003: 'Token过期',
+  20004: '权限不足',
+
+  // 参数错误 3xxxx
+  30001: '参数缺失',
+  30002: '参数格式错误',
+  30003: '参数值无效',
+
+  // 业务错误 4xxxx
+  40001: '资源不存在',
+  40002: '资源已存在',
+  40003: '操作失败',
+
+  // 限流错误 5xxxx
+  50001: '请求频率超限',
+  50002: '并发数超限',
+  50003: '配额用尽'
+};
+
+// 错误响应示例
+interface ErrorResponse {
+  code: number;
+  message: string;
+  details?: {
+    field: string;
+    message: string;
+  }[];
+  requestId: string;
+  timestamp: number;
+}
+
+// NestJS统一响应拦截器
+@Injectable()
+export class TransformInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+
+    return next.handle().pipe(
+      map(data => ({
+        code: 0,
+        message: 'success',
+        data,
+        requestId: request.id,
+        timestamp: Date.now(),
+      }))
+    );
+  }
+}
+
+// 异常过滤器
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: any, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest();
+
+    const status = exception.getStatus?.() || 500;
+    const error = exception.getResponse?.() || { message: 'Internal error' };
+
+    response.status(status).json({
+      code: error.code || status,
+      message: error.message,
+      details: error.details,
+      requestId: request.id,
+      timestamp: Date.now(),
+    });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• API设计遵循RESTful规范</li>
+            <li>• 统一响应格式便于处理</li>
+            <li>• 错误码要有清晰的分类</li>
+            <li>• 版本管理保证向后兼容</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="113-1-平台架构.html">← 上一节：平台架构</a>
+      <a href="113-3-开发者管理.html">下一节：开发者管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.4 跨平台路径处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-path基础方法.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.4 跨平台路径处理</h1>
+      <p class="subtitle">编写兼容 Windows 和 Unix 的代码</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Windows 和 Unix 路径差异</li>
+        <li>掌握 path.win32 和 path.posix</li>
+        <li>学会编写跨平台代码</li>
+        <li>了解常见跨平台问题</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 平台差异</h2>
+      <div class="code-block">
+// Windows 和 Unix 路径的主要差异
+
+// 1. 分隔符
+// Windows: \ (反斜杠)
+// Unix:    / (斜杠)
+
+// Windows 路径示例
+'C:\\Users\\Admin\\Documents\\file.txt'
+
+// Unix 路径示例
+'/home/user/docs/file.txt'
+
+// 2. 根目录
+// Windows: C:\, D:\ 等盘符
+// Unix:    / (单一根目录)
+
+// 3. PATH 分隔符
+// Windows: ;
+// Unix:    :
+
+// 4. 大小写敏感
+// Windows: 不敏感 (File.txt = file.txt)
+// Unix:    敏感 (File.txt != file.txt)
+
+// 查看当前平台的值
+const path = require('path');
+
+console.log('分隔符:', path.sep);
+console.log('PATH 分隔符:', path.delimiter);
+console.log('当前平台:', process.platform);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> path.win32 和 path.posix</h2>
+      <div class="code-block">
+const path = require('path');
+
+// path 默认使用当前平台的方法
+// path.win32 强制使用 Windows 方法
+// path.posix 强制使用 Unix 方法
+
+// 在任何平台上使用 Windows 路径
+const winPath = path.win32.join('C:\\Users', 'Admin', 'Documents');
+console.log(winPath);  // 'C:\\Users\\Admin\\Documents'
+
+console.log(path.win32.sep);       // '\\'
+console.log(path.win32.delimiter); // ';'
+
+console.log(path.win32.parse('C:\\Users\\file.txt'));
+// { root: 'C:\\', dir: 'C:\\Users', base: 'file.txt', ... }
+
+// 在任何平台上使用 Unix 路径
+const posixPath = path.posix.join('/home', 'user', 'docs');
+console.log(posixPath);  // '/home/user/docs'
+
+console.log(path.posix.sep);       // '/'
+console.log(path.posix.delimiter); // ':'
+
+console.log(path.posix.parse('/home/user/file.txt'));
+// { root: '/', dir: '/home/user', base: 'file.txt', ... }
+
+// 强制解析 URL 路径（总是用 POSIX）
+const urlPath = path.posix.join('assets', 'images', 'logo.png');
+console.log(urlPath);  // 'assets/images/logo.png'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 跨平台最佳实践</h2>
+      <div class="code-block">
+const path = require('path');
+const fs = require('fs');
+
+// ❌ 错误：硬编码路径分隔符
+const wrongPath = 'src' + '/' + 'components' + '/' + 'Button.js';
+
+// ✅ 正确：使用 path.join
+const rightPath = path.join('src', 'components', 'Button.js');
+
+// ❌ 错误：硬编码 PATH 分隔符
+const wrongPaths = '/usr/bin:/usr/local/bin';
+
+// ✅ 正确：使用 path.delimiter
+const rightPaths = `/usr/bin${path.delimiter}/usr/local/bin`;
+
+// ❌ 错误：假设盘符
+const wrongConfig = 'C:\\config\\app.json';
+
+// ✅ 正确：使用相对路径或 __dirname
+const rightConfig = path.join(__dirname, 'config', 'app.json');
+
+// ❌ 错误：拆分路径使用固定分隔符
+const wrongParts = filePath.split('/');
+
+// ✅ 正确：使用 path.sep 或 path 方法
+const rightParts = filePath.split(path.sep);
+
+// ✅ 正确：使用 path.parse 解析
+const { dir, base } = path.parse(filePath);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实用工具函数</h2>
+      <div class="code-block">
+const path = require('path');
+
+// 1. 安全路径拼接
+function safePath(...segments) {
+  return path.join(...segments);
+}
+
+// 2. 获取项目根目录
+function getProjectRoot() {
+  return path.resolve(__dirname, '..');
+}
+
+// 3. 跨平台路径转 URL 路径
+function pathToUrl(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+console.log(pathToUrl(path.join('assets', 'images', 'logo.png')));
+// 'assets/images/logo.png'
+
+// 4. URL 路径转系统路径
+function urlToPath(urlPath) {
+  return urlPath.split('/').join(path.sep);
+}
+
+// 5. 规范化用户输入路径
+function normalizeUserPath(userPath) {
+  // 处理 ~（仅 Unix）
+  if (userPath.startsWith('~')) {
+    const os = require('os');
+    userPath = path.join(os.homedir(), userPath.slice(1));
+  }
+
+  // 转换为绝对路径
+  return path.resolve(userPath);
+}
+
+// 6. 路径比较（跨平台）
+function areSamePath(path1, path2) {
+  return path.resolve(path1) === path.resolve(path2);
+}
+
+// Windows 还需要考虑大小写
+function areSamePathCrossPlatform(path1, path2) {
+  const p1 = path.resolve(path1);
+  const p2 = path.resolve(path2);
+
+  if (process.platform === 'win32') {
+    return p1.toLowerCase() === p2.toLowerCase();
+  }
+  return p1 === p2;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见陷阱</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 不要假设路径分隔符是 / 或 \</li>
+            <li>• 不要假设绝对路径以 / 开头（Windows 有盘符）</li>
+            <li>• 注意文件名大小写敏感性差异</li>
+            <li>• URL 路径总是用 /，使用 path.posix 处理</li>
+            <li>• 避免在路径中存储用户敏感信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Windows 使用 \ 分隔符，Unix 使用 /</li>
+            <li>• path.win32 和 path.posix 强制使用特定平台方法</li>
+            <li>• 始终使用 path.join 等方法拼接路径</li>
+            <li>• URL 路径使用 path.posix 或手动处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-3-路径解析.html">← 上一节：路径解析</a>
+      <a href="../chapter15/15-1-同步与异步操作.html">下一章：同步与异步操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

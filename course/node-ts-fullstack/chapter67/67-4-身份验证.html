@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>67.4 身份验证 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="67-1-WebSocketGateway装饰器.html">第六十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>67.4 身份验证</h1>
+      <p class="subtitle">NestJS WebSocket 认证实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 WebSocket 认证的挑战</li>
+        <li>掌握 JWT 在 WebSocket 中的应用</li>
+        <li>学会实现认证守卫</li>
+        <li>了解连接级别的认证处理</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">WebSocket 认证挑战</h3>
+      <p class="card-text">与 HTTP 不同，WebSocket 认证有其特殊性：</p>
+      <ul class="feature-list">
+        <li>连接建立时进行认证，之后持续保持</li>
+        <li>无法在请求头中传递 Token（需要使用 auth 或 query）</li>
+        <li>Token 可能过期，需要处理重连</li>
+        <li>需要区分连接认证和消息认证</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> JWT 认证实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">JWT 认证服务</h3>
+        <div class="code-block">
+// auth/auth.service.ts
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+
+interface JwtPayload {
+  sub: string;
+  username: string;
+  iat?: number;
+  exp?: number;
+}
+
+@Injectable()
+export class AuthService {
+  constructor(private readonly jwtService: JwtService) {}
+
+  // 验证 JWT Token
+  async validateToken(token: string): Promise&lt;any&gt; {
+    try {
+      const payload = await this.jwtService.verifyAsync(token);
+      return {
+        userId: payload.sub,
+        username: payload.username
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  // 生成 Token
+  async generateToken(userId: string, username: string): Promise&lt;string&gt; {
+    return this.jwtService.sign({
+      sub: userId,
+      username
+    });
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">WebSocket 认证守卫</h3>
+        <div class="code-block">
+// auth/ws-jwt.guard.ts
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { WsException } from '@nestjs/websockets';
+import { AuthService } from './auth.service';
+
+@Injectable()
+export class WsJwtGuard implements CanActivate {
+  constructor(private readonly authService: AuthService) {}
+
+  async canActivate(context: ExecutionContext): Promise&lt;boolean&gt; {
+    const client = context.switchToWs().getClient();
+
+    // 从多个位置获取 token
+    const token = this.extractToken(client);
+
+    if (!token) {
+      throw new WsException('Unauthorized: No token provided');
+    }
+
+    try {
+      const user = await this.authService.validateToken(token);
+      // 将用户信息附加到 client.data
+      client.data.user = user;
+      return true;
+    } catch (error) {
+      throw new WsException('Unauthorized: Invalid token');
+    }
+  }
+
+  private extractToken(client: any): string | null {
+    // 优先从 auth 获取
+    if (client.handshake.auth?.token) {
+      return client.handshake.auth.token;
+    }
+
+    // 从 query 获取
+    if (client.handshake.query?.token) {
+      return client.handshake.query.token;
+    }
+
+    // 从 headers 获取
+    const authHeader = client.handshake.headers?.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      return authHeader.substring(7);
+    }
+
+    return null;
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 连接级认证</h2>
+
+      <div class="card">
+        <h3 class="card-title">在 handleConnection 中认证</h3>
+        <div class="code-block">
+// chat/chat.gateway.ts
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  UseGuards
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
+import { WsJwtGuard } from '../auth/ws-jwt.guard';
+
+@WebSocketGateway({
+  namespace: 'chat',
+  cors: { origin: '*' }
+})
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
+
+  constructor(private readonly authService: AuthService) {}
+
+  // 连接时认证
+  async handleConnection(client: Socket) {
+    try {
+      // 提取 token
+      const token = this.extractToken(client);
+
+      if (!token) {
+        client.emit('error', { message: '认证失败：缺少 Token' });
+        client.disconnect(true);
+        return;
+      }
+
+      // 验证 token
+      const user = await this.authService.validateToken(token);
+
+      // 存储用户信息
+      client.data.user = user;
+      client.data.userId = user.userId;
+      client.data.username = user.username;
+
+      console.log(`用户已认证: ${user.username}`);
+
+      // 加入用户专属房间
+      client.join(`user:${user.userId}`);
+
+      // 发送认证成功消息
+      client.emit('authenticated', { userId: user.userId });
+
+    } catch (error) {
+      console.error('认证失败:', error.message);
+      client.emit('error', { message: '认证失败：Token 无效' });
+      client.disconnect(true);
+    }
+  }
+
+  handleDisconnect(client: Socket) {
+    const user = client.data.user;
+    if (user) {
+      console.log(`用户断开: ${user.username}`);
+    }
+  }
+
+  private extractToken(client: Socket): string | null {
+    // 同上
+    return client.handshake.auth?.token ||
+           client.handshake.query?.token ||
+           null;
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 使用守卫保护事件</h2>
+
+      <div class="code-block">
+// chat/chat.gateway.ts
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  UseGuards,
+  ConnectedSocket,
+  MessageBody
+} from '@nestjs/websockets';
+import { Socket } from 'socket.io';
+import { WsJwtGuard } from '../auth/ws-jwt.guard';
+
+@WebSocketGateway()
+@UseGuards(WsJwtGuard)  // 全局守卫
+export class ProtectedGateway {
+  // 所有事件都需要认证
+  @SubscribeMessage('message')
+  handleMessage(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    const user = client.data.user;
+    console.log(`用户 ${user.username} 发送消息: ${data}`);
+    return { success: true };
+  }
+
+  // 单独方法使用守卫
+  @SubscribeMessage('public-event')
+  handlePublicEvent(@ConnectedSocket() client: Socket) {
+    // 此方法不受守卫保护
+    return { message: 'public' };
+  }
+
+  @SubscribeMessage('private-event')
+  @UseGuards(WsJwtGuard)  // 方法级守卫
+  handlePrivateEvent(@ConnectedSocket() client: Socket) {
+    const user = client.data.user;
+    return { message: `private for ${user.username}` };
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👥</span> 角色与权限</h2>
+
+      <div class="code-block">
+// auth/ws-roles.guard.ts
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { WsException } from '@nestjs/websockets';
+
+export const ROLES_KEY = 'roles';
+
+@Injectable()
+export class WsRolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    // 获取所需角色
+    const requiredRoles = this.reflector.getAllAndOverride&lt;string[]&gt;(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (!requiredRoles) {
+      return true; // 没有角色要求
+    }
+
+    const client = context.switchToWs().getClient();
+    const user = client.data.user;
+
+    if (!user) {
+      throw new WsException('Unauthorized');
+    }
+
+    const hasRole = requiredRoles.some(role => user.roles?.includes(role));
+
+    if (!hasRole) {
+      throw new WsException('Forbidden: Insufficient permissions');
+    }
+
+    return true;
+  }
+}
+
+// 角色装饰器
+import { SetMetadata } from '@nestjs/common';
+
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+
+// 使用
+@WebSocketGateway()
+@UseGuards(WsJwtGuard, WsRolesGuard)
+export class AdminGateway {
+  @SubscribeMessage('admin-action')
+  @Roles('admin')
+  handleAdminAction(@ConnectedSocket() client: Socket) {
+    return { success: true };
+  }
+
+  @SubscribeMessage('moderator-action')
+  @Roles('admin', 'moderator')
+  handleModeratorAction(@ConnectedSocket() client: Socket) {
+    return { success: true };
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Token 刷新处理</h2>
+
+      <div class="code-block">
+// auth/token-refresh.gateway.ts
+import { WebSocketGateway, SubscribeMessage, ConnectedSocket } from '@nestjs/websockets';
+import { Socket } from 'socket.io';
+import { AuthService } from './auth.service';
+
+@WebSocketGateway()
+export class TokenRefreshGateway {
+  constructor(private readonly authService: AuthService) {}
+
+  @SubscribeMessage('token:refresh')
+  async handleTokenRefresh(@ConnectedSocket() client: Socket) {
+    const refreshToken = client.handshake.auth.refreshToken;
+
+    if (!refreshToken) {
+      client.emit('error', { code: 'NO_REFRESH_TOKEN' });
+      return;
+    }
+
+    try {
+      // 验证 refresh token
+      const user = await this.authService.validateRefreshToken(refreshToken);
+
+      // 生成新 token
+      const newToken = await this.authService.generateToken(user.userId, user.username);
+
+      // 更新 client data
+      client.data.user = user;
+
+      // 发送新 token
+      client.emit('token:refreshed', { token: newToken });
+
+    } catch (error) {
+      client.emit('error', { code: 'TOKEN_REFRESH_FAILED' });
+      client.disconnect(true);
+    }
+  }
+}
+
+// 客户端处理
+// socket.on('error', (error) => {
+//   if (error.code === 'TOKEN_REFRESH_FAILED') {
+//     // 跳转登录页
+//   }
+// });
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• WebSocket 认证在连接建立时进行</li>
+            <li>• 通过 auth、query 或 headers 传递 Token</li>
+            <li>• 使用 WsJwtGuard 实现认证守卫</li>
+            <li>• handleConnection 中进行连接级认证</li>
+            <li>• 认证信息存储在 client.data 中</li>
+            <li>• 实现 Token 刷新机制处理过期</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="67-3-消息处理.html">← 上一节</a>
+      <a href="67-5-与模块集成.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

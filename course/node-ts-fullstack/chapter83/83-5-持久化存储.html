@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>83.5 持久化存储 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>83.5 持久化存储</h1>
+      <p class="subtitle">状态持久化解决方案</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>默认情况下，Pinia 的状态存储在内存中，页面刷新后会丢失。本节将介绍如何使用插件实现状态持久化，将数据保存到 localStorage 或其他存储中。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解状态持久化的必要性</li>
+        <li>掌握使用 pinia-plugin-persistedstate 插件</li>
+        <li>学会自定义持久化配置</li>
+        <li>了解其他持久化方案</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装插件</h2>
+      <div class="code-block"><span class="comment"># 安装 pinia-plugin-persistedstate</span>
+npm install pinia-plugin-persistedstate
+
+<span class="comment"># 使用 yarn</span>
+yarn add pinia-plugin-persistedstate
+
+<span class="comment"># 使用 pnpm</span>
+pnpm add pinia-plugin-persistedstate</div>
+
+      <h3>注册插件</h3>
+      <div class="code-block"><span class="comment">// main.ts</span>
+<span class="keyword">import</span> { createApp } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">import</span> { createPinia } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+<span class="keyword">import</span> piniaPluginPersistedstate <span class="keyword">from</span> <span class="string">'pinia-plugin-persistedstate'</span>;
+<span class="keyword">import</span> App <span class="keyword">from</span> <span class="string">'./App.vue'</span>;
+
+<span class="keyword">const</span> app = createApp(App);
+
+<span class="keyword">const</span> pinia = createPinia();
+<span class="comment">// 添加持久化插件</span>
+pinia.use(piniaPluginPersistedstate);
+
+app.use(pinia);
+app.mount(<span class="string">'#app'</span>);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基本使用</h2>
+
+      <h3>启用持久化</h3>
+      <div class="code-block"><span class="keyword">import</span> { defineStore } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span> <span class="keyword">as</span> <span class="keyword">string</span> | <span class="keyword">null</span>,
+    user: <span class="keyword">null</span> <span class="keyword">as</span> User | <span class="keyword">null</span>
+  }),
+
+  <span class="comment">// 启用持久化</span>
+  persist: <span class="keyword">true</span>
+});
+
+<span class="comment">// Setup Store 风格</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">const</span> token = ref&lt;<span class="keyword">string</span> | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> user = ref&lt;User | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+  <span class="keyword">return</span> { token, user };
+}, {
+  persist: <span class="keyword">true</span>
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 自定义配置</h2>
+
+      <h3>指定持久化的字段</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>,
+    loading: <span class="keyword">false</span>,  <span class="comment">// 不需要持久化</span>
+    error: <span class="keyword">null</span>      <span class="comment">// 不需要持久化</span>
+  }),
+
+  persist: {
+    <span class="comment">// 只持久化 token 和 user</span>
+    paths: [<span class="string">'token'</span>, <span class="string">'user'</span>]
+  }
+});</div>
+
+      <h3>自定义存储 key</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>
+  }),
+
+  persist: {
+    key: <span class="string">'my-app-user'</span>, <span class="comment">// 自定义存储 key</span>
+    paths: [<span class="string">'token'</span>, <span class="string">'user'</span>]
+  }
+});</div>
+
+      <h3>自定义存储引擎</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>
+  }),
+
+  persist: {
+    storage: {
+      <span class="function">getItem</span>(key) {
+        <span class="keyword">return</span> localStorage.getItem(key);
+      },
+      <span class="function">setItem</span>(key, value) {
+        localStorage.setItem(key, value);
+      },
+      <span class="function">removeItem</span>(key) {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+});
+
+<span class="comment">// 使用 sessionStorage</span>
+persist: {
+  storage: sessionStorage
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 加密存储</h2>
+      <div class="code-block"><span class="keyword">import</span> { encrypt, decrypt } <span class="keyword">from</span> <span class="string">'@/utils/crypto'</span>;
+
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>
+  }),
+
+  persist: {
+    storage: {
+      <span class="function">getItem</span>(key) {
+        <span class="keyword">const</span> value = localStorage.getItem(key);
+        <span class="keyword">return</span> value ? decrypt(value) : <span class="keyword">null</span>;
+      },
+      <span class="function">setItem</span>(key, value) {
+        localStorage.setItem(key, encrypt(value));
+      },
+      <span class="function">removeItem</span>(key) {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 自定义序列化</h2>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>
+  }),
+
+  persist: {
+    <span class="comment">// 自定义序列化</span>
+    serializer: {
+      <span class="function">serialize</span>: JSON.stringify,
+      <span class="function">deserialize</span>: JSON.parse
+    },
+
+    <span class="comment">// 或者使用自定义格式</span>
+    serializer: {
+      <span class="function">serialize</span>(state) {
+        <span class="keyword">return</span> JSON.stringify({
+          ...state,
+          savedAt: <span class="keyword">new</span> Date().toISOString()
+        });
+      },
+      <span class="function">deserialize</span>(value) {
+        <span class="keyword">const</span> data = JSON.parse(value);
+        <span class="keyword">delete</span> data.savedAt;
+        <span class="keyword">return</span> data;
+      }
+    }
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 条件持久化</h2>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    token: <span class="keyword">null</span>,
+    user: <span class="keyword">null</span>,
+    rememberMe: <span class="keyword">false</span>
+  }),
+
+  persist: {
+    <span class="comment">// 根据条件决定是否持久化</span>
+    beforeRestore: (context) => {
+      console.log(<span class="string">'About to restore'</span>, context.store.$id);
+    },
+    afterRestore: (context) => {
+      <span class="keyword">if</span> (!context.store.rememberMe) {
+        <span class="comment">// 如果用户没有勾选记住我，清除持久化数据</span>
+        context.store.$reset();
+      }
+    }
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 手动实现持久化</h2>
+      <div class="code-block"><span class="comment">// 不使用插件，手动实现</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">const</span> token = ref&lt;<span class="keyword">string</span> | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> user = ref&lt;User | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+  <span class="comment">// 从 localStorage 恢复</span>
+  <span class="keyword">const</span> savedToken = localStorage.getItem(<span class="string">'token'</span>);
+  <span class="keyword">const</span> savedUser = localStorage.getItem(<span class="string">'user'</span>);
+
+  <span class="keyword">if</span> (savedToken) token.value = savedToken;
+  <span class="keyword">if</span> (savedUser) user.value = JSON.parse(savedUser);
+
+  <span class="comment">// 监听变化并保存</span>
+  watch([token, user], () => {
+    <span class="keyword">if</span> (token.value) {
+      localStorage.setItem(<span class="string">'token'</span>, token.value);
+    } <span class="keyword">else</span> {
+      localStorage.removeItem(<span class="string">'token'</span>);
+    }
+
+    <span class="keyword">if</span> (user.value) {
+      localStorage.setItem(<span class="string">'user'</span>, JSON.stringify(user.value));
+    } <span class="keyword">else</span> {
+      localStorage.removeItem(<span class="string">'user'</span>);
+    }
+  }, { deep: <span class="keyword">true</span> });
+
+  <span class="keyword">return</span> { token, user };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>使用 pinia-plugin-persistedstate 实现状态持久化</li>
+        <li>可以指定需要持久化的字段</li>
+        <li>支持自定义存储引擎和序列化方式</li>
+        <li>可以结合加密提高安全性</li>
+        <li>也可以手动实现持久化逻辑</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="83-4-Actions.html">← 上一节：Actions</a>
+      <a href="../chapter84/84-1-项目配置.html">下一章：Vue + TypeScript →</a>
+    </div>
+  </div>
+</body>
+</html>

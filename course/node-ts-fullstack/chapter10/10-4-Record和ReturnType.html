@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.4 Record 和 ReturnType - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.4 Record 和 ReturnType</h1>
+      <p class="subtitle">创建对象类型和获取返回类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Record 的实现原理</li>
+        <li>掌握 ReturnType 的使用场景</li>
+        <li>学会使用 Parameters 类型</li>
+        <li>了解实际项目中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Record 深入</h2>
+      <div class="code-block">
+// Record 创建键值对类型
+// 内置实现：
+type MyRecord<K extends keyof any, V> = {
+  [P in K]: V;
+};
+
+// 简单示例
+type UserRoles = Record<string, string>;
+// { [x: string]: string }
+
+// 使用字符串字面量联合
+type Role = 'admin' | 'user' | 'guest';
+type RolePermissions = Record<Role, string[]>;
+
+const permissions: RolePermissions = {
+  admin: ['read', 'write', 'delete'],
+  user: ['read', 'write'],
+  guest: ['read']
+};
+
+// 使用数字键
+type Status = 200 | 404 | 500;
+type StatusMessages = Record<Status, string>;
+
+const messages: StatusMessages = {
+  200: 'OK',
+  404: 'Not Found',
+  500: 'Internal Server Error'
+};
+
+// 嵌套对象
+interface User {
+  id: number;
+  name: string;
+}
+
+type UserDirectory = Record<string, User>;
+
+const users: UserDirectory = {
+  'alice': { id: 1, name: 'Alice' },
+  'bob': { id: 2, name: 'Bob' }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Record 特点</div>
+          <p>Record 简化了创建对象类型的语法，特别是当键是已知的字符串字面量联合时非常有用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> ReturnType 深入</h2>
+      <div class="code-block">
+// ReturnType 获取函数返回值类型
+// 内置实现：
+type MyReturnType<T extends (...args: any) => any> =
+  T extends (...args: any) => infer R ? R : any;
+
+// 从函数推断类型
+function fetchUser() {
+  return {
+    id: 1,
+    name: 'Alice',
+    email: 'alice@example.com'
+  };
+}
+
+type User = ReturnType<typeof fetchUser>;
+// { id: number; name: string; email: string; }
+
+// 用于 API 响应
+async function getProducts() {
+  const response = await fetch('/api/products');
+  return response.json() as Promise<{
+    products: Array<{ id: number; name: string; price: number }>;
+    total: number;
+  }>;
+}
+
+type ProductsResponse = Awaited<ReturnType<typeof getProducts>>;
+// { products: Array<{ id: number; name: string; price: number }>; total: number; }
+
+// 构造函数实例类型
+class Person {
+  constructor(public name: string, public age: number) {}
+  greet() { return `Hello, ${this.name}`; }
+}
+
+type PersonInstance = InstanceType<typeof Person>;
+// Person
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Parameters 类型</h2>
+      <div class="code-block">
+// Parameters 获取函数参数类型元组
+// 内置实现：
+type MyParameters<T extends (...args: any) => any> =
+  T extends (...args: infer P) => any ? P : never;
+
+// 获取参数类型
+function createUser(name: string, age: number, active: boolean = true) {
+  return { name, age, active };
+}
+
+type CreateUserParams = Parameters<typeof createUser>;
+// [name: string, age: number, active?: boolean]
+
+// 获取特定参数类型
+type NameParam = CreateUserParams[0];  // string
+type AgeParam = CreateUserParams[1];   // number
+
+// 包装函数保持类型
+function logCalls<T extends (...args: any[]) => any>(fn: T): T {
+  return ((...args: Parameters<T>): ReturnType<T> => {
+    console.log('Called with:', args);
+    const result = fn(...args);
+    console.log('Returned:', result);
+    return result;
+  }) as T;
+}
+
+const loggedCreateUser = logCalls(createUser);
+
+// 构造函数参数
+type ConstructorParams = ConstructorParameters<typeof Person>;
+// [name: string, age: number]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实际应用</h2>
+      <div class="code-block">
+// 状态管理
+type StateKey = 'user' | 'products' | 'cart';
+type AppState = Record<StateKey, any>;
+
+// 事件处理器映射
+type EventMap = Record<string, (...args: any[]) => void>;
+
+interface EventEmitter<Events extends EventMap> {
+  on<K extends keyof Events>(event: K, handler: Events[K]): void;
+  emit<K extends keyof Events>(event: K, ...args: Parameters<Events[K]>): void;
+}
+
+// 路由定义
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type RouteHandlers = Record<HttpMethod, (req: Request) => Response>;
+
+// 缓存管理
+type Cache<T> = Record<string, { data: T; timestamp: number }>;
+
+function createCache<T>(): Cache<T> {
+  return {};
+}
+
+const userCache = createCache<User>();
+
+// 工厂模式
+type Factory<T> = (...args: any[]) => T;
+type FactoryRegistry<T> = Record<string, Factory<T>>;
+
+const widgetFactories: FactoryRegistry<Widget> = {
+  button: (text: string) => new ButtonWidget(text),
+  input: (placeholder: string) => new InputWidget(placeholder),
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Record 创建键值对对象类型</li>
+            <li>• ReturnType 获取函数返回值类型</li>
+            <li>• Parameters 获取函数参数类型</li>
+            <li>• 常用于类型推断和包装函数</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-3-Pick和Omit.html">← 上一节：Pick 和 Omit</a>
+      <a href="10-5-Exclude和Extract.html">下一节：Exclude 和 Extract →</a>
+    </div>
+  </div>
+</body>
+</html>

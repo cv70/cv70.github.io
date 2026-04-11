@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>98.2 代码分割 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="98-1-资源优化.html">第九十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>98.2 代码分割</h1>
+      <p class="subtitle">JavaScript 代码分割策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解代码分割的作用</li>
+        <li>掌握动态导入语法</li>
+        <li>学会路由级代码分割</li>
+        <li>了解组件级代码分割</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 代码分割概述</h2>
+      <div class="code-block">
+# 为什么需要代码分割
+
+## 问题：大体积打包文件
+- 单个 JS 文件过大（几 MB）
+- 首次加载耗时长
+- 用户下载不需要的代码
+
+## 解决：代码分割
+- 将代码拆分成多个小块
+- 按需加载
+- 减小初始加载体积
+- 更好的缓存利用
+
+# 代码分割策略
+
+┌─────────────────┬──────────────────────────────────┐
+│     策略        │              说明                 │
+├─────────────────┼──────────────────────────────────┤
+│ 入口分割        │ 多入口，独立打包                 │
+│ 动态导入        │ import() 语法                   │
+│ 路由分割        │ 按路由懒加载组件                │
+│ 组件分割        │ 大组件延迟加载                  │
+│ 第三方库分割    │ vendor chunk 单独打包           │
+└─────────────────┴──────────────────────────────────┘
+
+# 打包结果示例
+
+Before:
+main.js (2MB) - 包含所有代码
+
+After:
+main.js (200KB)    - 核心代码
+vendor.js (500KB)  - 第三方库
+route-home.js (50KB)
+route-about.js (30KB)
+component-chart.js (100KB)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 动态导入</h2>
+      <div class="code-block">
+# import() 语法
+
+// 静态导入（打包时加载）
+import { add } from './math';
+add(1, 2);
+
+// 动态导入（运行时加载）
+async function calculate() {
+  const math = await import('./math');
+  return math.add(1, 2);
+}
+
+# 按需加载模块
+
+// 条件加载
+async function loadModule(condition) {
+  if (condition) {
+    const module = await import('./module-a');
+    module.doSomething();
+  } else {
+    const module = await import('./module-b');
+    module.doSomethingElse();
+  }
+}
+
+// 事件触发加载
+button.addEventListener('click', async () => {
+  const { showModal } = await import('./modal');
+  showModal();
+});
+
+# Webpack 魔法注释
+
+// 命名 chunk
+const module = await import(
+  /* webpackChunkName: "my-module" */
+  './module'
+);
+
+// 预取
+const module = await import(
+  /* webpackPrefetch: true */
+  './module'
+);
+
+// 预加载
+const module = await import(
+  /* webpackPreload: true */
+  './module'
+);
+
+# Vite 动态导入
+
+// Vite 自动处理代码分割
+const module = await import('./module');
+
+// 命名 chunk
+const module = await import(
+  /* @vite-ignore */
+  './module?chunkName=my-module'
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">预取 vs 预加载</div>
+          <p>prefetch: 空闲时加载，用于下一页面可能需要的代码。preload: 立即并行加载，用于当前页面需要的代码。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 路由级代码分割</h2>
+      <div class="code-block">
+# React Router 懒加载
+
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
+// 懒加载路由组件
+const Home = lazy(() => import('./pages/Home'));
+const About = lazy(() => import('./pages/About'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+
+function App() {
+  return (
+    &lt;BrowserRouter&gt;
+      &lt;Suspense fallback={&lt;Loading /&gt;}&gt;
+        &lt;Routes&gt;
+          &lt;Route path="/" element={&lt;Home /&gt;} /&gt;
+          &lt;Route path="/about" element={&lt;About /&gt;} /&gt;
+          &lt;Route path="/dashboard" element={&lt;Dashboard /&gt;} /&gt;
+        &lt;/Routes&gt;
+      &lt;/Suspense&gt;
+    &lt;/BrowserRouter&gt;
+  );
+}
+
+# Vue Router 懒加载
+
+import { createRouter, createWebHistory } from 'vue-router';
+
+const routes = [
+  {
+    path: '/',
+    component: () => import('./views/Home.vue'),
+  },
+  {
+    path: '/about',
+    component: () => import('./views/About.vue'),
+  },
+  {
+    path: '/dashboard',
+    component: () => import('./views/Dashboard.vue'),
+  },
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+});
+
+# Next.js 动态导入
+
+import dynamic from 'next/dynamic';
+
+const DynamicComponent = dynamic(() => import('./components/Chart'), {
+  loading: () => &lt;p&gt;Loading...&lt;/p&gt;,
+  ssr: false,  // 禁用服务端渲染
+});
+
+# 组件级懒加载 Hook
+
+function useLazyComponent(importFn) {
+  const [component, setComponent] = useState(null);
+
+  useEffect(() => {
+    importFn().then((module) => {
+      setComponent(() => module.default);
+    });
+  }, [importFn]);
+
+  return component;
+}
+
+// 使用
+const Chart = useLazyComponent(() => import('./Chart'));
+if (!Chart) return &lt;Loading /&gt;;
+return &lt;Chart data={data} /&gt;;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 第三方库分割</h2>
+      <div class="code-block">
+# Vite 自动分割
+
+// vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // 单独打包
+          'react-vendor': ['react', 'react-dom'],
+          'ui-vendor': ['antd', '@ant-design/icons'],
+          'chart': ['echarts', 'echarts-for-react'],
+        },
+      },
+    },
+  },
+});
+
+# 动态分割函数
+
+manualChunks(id) {
+  if (id.includes('node_modules')) {
+    // React 生态
+    if (id.includes('react') || id.includes('react-dom')) {
+      return 'react';
+    }
+    // UI 库
+    if (id.includes('antd') || id.includes('@ant-design')) {
+      return 'ui';
+    }
+    // 工具库
+    if (id.includes('lodash') || id.includes('dayjs')) {
+      return 'utils';
+    }
+    // 其他第三方
+    return 'vendor';
+  }
+}
+
+# Webpack SplitChunks
+
+// webpack.config.js
+optimization: {
+  splitChunks: {
+    chunks: 'all',
+    cacheGroups: {
+      vendor: {
+        test: /[\\/]node_modules[\\/]/,
+        name: 'vendor',
+        chunks: 'all',
+      },
+      react: {
+        test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+        name: 'react',
+        chunks: 'all',
+        priority: 10,
+      },
+    },
+  },
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 import() 实现动态导入</li>
+            <li>• 路由级懒加载是最常用的分割方式</li>
+            <li>• 第三方库单独打包利用缓存</li>
+            <li>• 使用 Suspense 处理加载状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="98-1-资源优化.html">← 上一节：资源优化</a>
+      <a href="98-3-懒加载.html">下一节：懒加载 →</a>
+    </div>
+  </div>
+</body>
+</html>

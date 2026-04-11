@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>44.2 Service 创建 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="44-1-Provider概念.html">第四十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>44.2 Service 创建</h1>
+      <p class="subtitle">创建和组织业务逻辑服务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Service 的创建方式</li>
+        <li>学会组织业务逻辑</li>
+        <li>理解 Service 与 Controller 的协作</li>
+        <li>了解 Service 的测试方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 使用 CLI 创建 Service</h2>
+      <div class="code-block">
+# 创建 Service
+nest g service users
+
+# 输出
+CREATE src/users/users.service.ts (90 bytes)
+CREATE src/users/users.service.spec.ts (453 bytes)
+UPDATE src/users/users.module.ts (172 bytes)
+
+# 同时创建模块、控制器、服务
+nest g resource users
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Service 实现示例</h2>
+      <div class="code-block">
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+
+@Injectable()
+export class UsersService {
+  private users: User[] = [];
+  private nextId = 1;
+
+  // 创建用户
+  create(createUserDto: CreateUserDto): User {
+    const user = {
+      id: this.nextId++,
+      ...createUserDto,
+      createdAt: new Date(),
+    };
+    this.users.push(user);
+    return user;
+  }
+
+  // 查询所有用户
+  findAll(): User[] {
+    return this.users;
+  }
+
+  // 查询单个用户
+  findOne(id: number): User {
+    const user = this.users.find(u => u.id === id);
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    return user;
+  }
+
+  // 更新用户
+  update(id: number, updateUserDto: UpdateUserDto): User {
+    const index = this.users.findIndex(u => u.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    this.users[index] = { ...this.users[index], ...updateUserDto };
+    return this.users[index];
+  }
+
+  // 删除用户
+  remove(id: number): void {
+    const index = this.users.findIndex(u => u.id === id);
+    if (index === -1) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    this.users.splice(index, 1);
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Service 职责</div>
+          <p>Service 负责业务逻辑实现，不应该处理 HTTP 相关内容。Controller 负责处理请求和响应，Service 负责数据处理和业务规则。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> Controller 与 Service 协作</h2>
+      <div class="code-block">
+// users.controller.ts
+import { Controller, Get, Post, Body, Param, Put, Delete, ParseIntPipe } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
+  }
+
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.update(id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.remove(id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> Service 单元测试</h2>
+      <div class="code-block">
+// users.service.spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { UsersService } from './users.service';
+import { NotFoundException } from '@nestjs/common';
+
+describe('UsersService', () => {
+  let service: UsersService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [UsersService],
+    }).compile();
+
+    service = module.get<UsersService>(UsersService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('should create a user', () => {
+      const dto = { name: 'John', email: 'john@example.com' };
+      const user = service.create(dto);
+      expect(user.id).toBe(1);
+      expect(user.name).toBe('John');
+    });
+  });
+
+  describe('findOne', () => {
+    it('should throw NotFoundException if user not found', () => {
+      expect(() => service.findOne(999)).toThrow(NotFoundException);
+    });
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• nest g service 创建 Service</li>
+            <li>• Service 封装业务逻辑</li>
+            <li>• Controller 调用 Service 方法</li>
+            <li>• 使用单元测试验证 Service 逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="44-1-Provider概念.html">← 上一节：Provider 概念</a>
+      <a href="44-3-依赖注入.html">下一节：依赖注入 →</a>
+    </div>
+  </div>
+</body>
+</html>

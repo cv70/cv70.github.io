@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.5 自定义 Hook - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="76-1-useState.html">第七十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>76.5 自定义 Hook</h1>
+      <p class="subtitle">复用组件逻辑</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解自定义 Hook 的概念</li>
+        <li>掌握自定义 Hook 的创建方式</li>
+        <li>学会提取复用逻辑</li>
+        <li>了解常用自定义 Hook 模式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 自定义 Hook 基础</h2>
+      <div class="code-block">
+// 自定义 Hook：以 use 开头的函数，内部调用其他 Hook
+// 用于提取和复用组件逻辑
+
+// 提取表单状态管理
+function useForm&lt;T extends Record&lt;string, unknown&gt;&gt;(initialValues: T) {
+  const [values, setValues] = useState&lt;T&gt;(initialValues);
+
+  const handleChange = (e: ChangeEvent&lt;HTMLInputElement&gt;) =&gt; {
+    const { name, value, type, checked } = e.target;
+    setValues(prev =&gt; ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const reset = () =&gt; setValues(initialValues);
+
+  return { values, handleChange, reset, setValues };
+}
+
+// 使用
+function LoginForm() {
+  const { values, handleChange, reset } = useForm({
+    username: '',
+    password: '',
+    remember: false,
+  });
+
+  const handleSubmit = (e: FormEvent) =&gt; {
+    e.preventDefault();
+    console.log(values);
+    reset();
+  };
+
+  return (
+    &lt;form onSubmit={handleSubmit}&gt;
+      &lt;input name="username" value={values.username} onChange={handleChange} /&gt;
+      &lt;input name="password" type="password" value={values.password} onChange={handleChange} /&gt;
+      &lt;input name="remember" type="checkbox" checked={values.remember} onChange={handleChange} /&gt;
+      &lt;button type="submit"&gt;Login&lt;/button&gt;
+    &lt;/form&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常用自定义 Hook</h2>
+      <div class="code-block">
+// useLocalStorage：持久化状态
+function useLocalStorage&lt;T&gt;(key: string, initialValue: T) {
+  const [storedValue, setStoredValue] = useState&lt;T&gt;(() =&gt; {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  const setValue = (value: T | ((prev: T) =&gt; T)) =&gt; {
+    const valueToStore = value instanceof Function ? value(storedValue) : value;
+    setStoredValue(valueToStore);
+    localStorage.setItem(key, JSON.stringify(valueToStore));
+  };
+
+  return [storedValue, setValue] as const;
+}
+
+// 使用
+function ThemeToggle() {
+  const [theme, setTheme] = useLocalStorage('theme', 'light');
+  return (
+    &lt;button onClick={() =&gt; setTheme(t =&gt; t === 'light' ? 'dark' : 'light')}&gt;
+      {theme}
+    &lt;/button&gt;
+  );
+}
+
+// useFetch：数据获取
+function useFetch&lt;T&gt;(url: string) {
+  const [data, setData] = useState&lt;T | null&gt;(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState&lt;Error | null&gt;(null);
+
+  useEffect(() =&gt; {
+    const controller = new AbortController();
+
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error('Network error');
+        const json = await response.json();
+        setData(json);
+        setError(null);
+      } catch (err) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          setError(err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+
+    return () =&gt; controller.abort();
+  }, [url]);
+
+  return { data, loading, error };
+}
+
+// 使用
+function UserList() {
+  const { data: users, loading, error } = useFetch&lt;User[]&gt;('/api/users');
+
+  if (loading) return &lt;div&gt;Loading...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error.message}&lt;/div&gt;;
+
+  return (
+    &lt;ul&gt;
+      {users?.map(user =&gt; &lt;li key={user.id}&gt;{user.name}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+
+// useDebounce：防抖
+function useDebounce&lt;T&gt;(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() =&gt; {
+    const timer = setTimeout(() =&gt; setDebouncedValue(value), delay);
+    return () =&gt; clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+// 使用
+function SearchInput() {
+  const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
+
+  useEffect(() =&gt; {
+    if (debouncedQuery) {
+      searchAPI(debouncedQuery);
+    }
+  }, [debouncedQuery]);
+
+  return &lt;input value={query} onChange={e =&gt; setQuery(e.target.value)} /&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 更多实用 Hook</h2>
+      <div class="code-block">
+// useToggle：切换布尔值
+function useToggle(initial = false): [boolean, () =&gt; void] {
+  const [value, setValue] = useState(initial);
+  const toggle = () =&gt; setValue(v =&gt; !v);
+  return [value, toggle];
+}
+
+// useWindowSize：窗口尺寸
+function useWindowSize() {
+  const [size, setSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() =&gt; {
+    const handleResize = () =&gt; {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+    window.addEventListener('resize', handleResize);
+    return () =&gt; window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return size;
+}
+
+// useClickOutside：点击外部检测
+function useClickOutside(ref: RefObject&lt;HTMLElement&gt;, callback: () =&gt; void) {
+  useEffect(() =&gt; {
+    function handleClick(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        callback();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () =&gt; document.removeEventListener('mousedown', handleClick);
+  }, [ref, callback]);
+}
+
+// 使用
+function Dropdown() {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef&lt;HTMLDivElement&gt;(null);
+
+  useClickOutside(ref, () =&gt; setIsOpen(false));
+
+  return (
+    &lt;div ref={ref}&gt;
+      &lt;button onClick={() =&gt; setIsOpen(!isOpen)}&gt;Toggle&lt;/button&gt;
+      {isOpen && &lt;div&gt;Dropdown content&lt;/div&gt;}
+    &lt;/div&gt;
+  );
+}
+
+// usePrevious：获取前一个值
+function usePrevious&lt;T&gt;(value: T): T | undefined {
+  const ref = useRef&lt;T&gt;();
+
+  useEffect(() =&gt; {
+    ref.current = value;
+  }, [value]);
+
+  return ref.current;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 自定义 Hook 以 use 开头</li>
+            <li>• 用于提取和复用组件逻辑</li>
+            <li>• 可以调用其他 Hook</li>
+            <li>• 返回值可以是任意类型</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-4-useReducer.html">← 上一节：useReducer</a>
+      <a href="76-6-Hooks最佳实践.html">下一节：Hooks 最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

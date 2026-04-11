@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.6 自定义工具类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.6 自定义工具类型</h1>
+      <p class="subtitle">创建项目专属的类型工具</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握常用自定义工具类型的实现</li>
+        <li>学会深层属性操作类型</li>
+        <li>理解路径获取类型</li>
+        <li>了解类型安全的实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 深层属性类型</h2>
+      <div class="code-block">
+// DeepPartial - 深层可选
+type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object
+    ? T[P] extends Function
+      ? T[P]
+      : DeepPartial<T[P]>
+    : T[P];
+};
+
+interface Config {
+  api: {
+    url: string;
+    headers: {
+      auth: string;
+    };
+  };
+  database: {
+    host: string;
+    port: number;
+  };
+}
+
+type PartialConfig = DeepPartial<Config>;
+// 所有层级属性都是可选的
+
+const config: PartialConfig = {
+  api: {
+    headers: {
+      auth: 'Bearer token'
+    }
+  }
+};
+
+// DeepRequired - 深层必需
+type DeepRequired<T> = {
+  [P in keyof T]-?: T[P] extends object
+    ? T[P] extends Function
+      ? T[P]
+      : DeepRequired<T[P]>
+    : T[P];
+};
+
+// DeepReadonly - 深层只读
+type DeepReadonly<T> = {
+  readonly [P in keyof T]: T[P] extends object
+    ? T[P] extends Function
+      ? T[P]
+      : DeepReadonly<T[P]>
+    : T[P];
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 属性筛选类型</h2>
+      <div class="code-block">
+// 按类型筛选属性
+type PickByType<T, U> = {
+  [K in keyof T as T[K] extends U ? K : never]: T[K];
+};
+
+type OmitByType<T, U> = {
+  [K in keyof T as T[K] extends U ? never : K]: T[K];
+};
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  active: boolean;
+  metadata: object;
+}
+
+type StringProps = PickByType<User, string>;
+// { name: string; email: string; }
+
+type NonBooleanProps = OmitByType<User, boolean>;
+// { id: number; name: string; email: string; metadata: object; }
+
+// 必需属性
+type RequiredKeys<T> = {
+  [K in keyof T]-?: {} extends Pick<T, K> ? never : K;
+}[keyof T];
+
+type OptionalKeys<T> = {
+  [K in keyof T]-?: {} extends Pick<T, K> ? K : never;
+}[keyof T];
+
+interface Example {
+  required: string;
+  optional?: number;
+  another: boolean;
+}
+
+type Req = RequiredKeys<Example>;  // 'required' | 'another'
+type Opt = OptionalKeys<Example>;  // 'optional'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 路径访问类型</h2>
+      <div class="code-block">
+// 获取嵌套对象的路径类型
+type Path<T, K extends string> =
+  K extends keyof T
+    ? T[K]
+    : K extends `${infer First}.${infer Rest}`
+      ? First extends keyof T
+        ? Path<T[First], Rest>
+        : never
+      : never;
+
+interface State {
+  user: {
+    profile: {
+      name: string;
+      age: number;
+    };
+    settings: {
+      theme: string;
+    };
+  };
+}
+
+type UserName = Path<State, 'user.profile.name'>;  // string
+type UserAge = Path<State, 'user.profile.age'>;    // number
+
+// 获取所有可能的路径
+type AllPaths<T, Prefix extends string = ''> = T extends object
+  ? {
+      [K in keyof T]:
+        | `${Prefix}${K & string}`
+        | AllPaths<T[K], `${Prefix}${K & string}.`>
+    }[keyof T]
+  : never;
+
+type StatePaths = AllPaths<State>;
+// 'user' | 'user.profile' | 'user.profile.name' | 'user.profile.age' | ...
+
+// 安全的路径访问
+function getByPath<T, P extends string>(
+  obj: T,
+  path: P
+): Path<T, P> {
+  return path.split('.').reduce((acc: any, key) => acc?.[key], obj);
+}
+
+const state: State = {
+  user: {
+    profile: { name: 'Alice', age: 30 },
+    settings: { theme: 'dark' }
+  }
+};
+
+const name = getByPath(state, 'user.profile.name');  // string
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实用工具类型集合</h2>
+      <div class="code-block">
+// 合并两个类型，后者覆盖前者
+type Merge<T, U> = Omit<T, keyof U> & U;
+
+interface Defaults {
+  timeout: number;
+  retries: number;
+  debug: boolean;
+}
+
+interface Overrides {
+  timeout: number;
+  logLevel: string;
+}
+
+type MergedConfig = Merge<Defaults, Overrides>;
+// { retries: number; debug: boolean; timeout: number; logLevel: string; }
+
+// 互斥属性
+type MutuallyExclusive<T, U> =
+  | (T & { [K in Exclude<keyof U, keyof T>]?: never })
+  | (U & { [K in Exclude<keyof T, keyof U>]?: never });
+
+interface Cat {
+  meow: () => void;
+  lives: number;
+}
+
+interface Dog {
+  bark: () => void;
+  loyalty: number;
+}
+
+type Pet = MutuallyExclusive<Cat, Dog>;
+// 只能是 Cat 或 Dog，不能混合
+
+// 标记属性
+type Brand<T, B> = T & { __brand: B };
+
+type UserId = Brand<number, 'UserId'>;
+type ProductId = Brand<number, 'ProductId'>;
+
+const userId = 1 as UserId;
+const productId = 1 as ProductId;
+// userId === productId  // 类型错误
+
+// 不可为空的对象
+type NonEmptyObject<T> = keyof T extends never ? never : T;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">自定义类型工具建议</div>
+          <p>创建项目专属的工具类型可以显著提高代码复用性和类型安全性。但要注意保持简洁，避免过度复杂化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• DeepPartial/DeepReadonly 处理嵌套对象</li>
+            <li>• PickByType/OmitByType 按类型筛选属性</li>
+            <li>• Path 类型实现安全的路径访问</li>
+            <li>• 自定义工具类型提高代码复用性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-5-Exclude和Extract.html">← 上一节：Exclude 和 Extract</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

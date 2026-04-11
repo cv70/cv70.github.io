@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.6 私聊实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.6 私聊实现</h1>
+      <p class="subtitle">点对点消息发送</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解私聊的实现原理</li>
+        <li>掌握用户与 Socket 的映射方法</li>
+        <li>学会实现完整的私聊功能</li>
+        <li>了解离线消息处理策略</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">私聊原理</h3>
+      <p class="card-text">
+        Socket.IO 中实现私聊的核心思路是：每个 Socket 连接时会自动加入一个以其 <code>socket.id</code> 为名称的房间。通过向这个特定房间发送消息，就能实现点对点通信。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 基本私聊实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">最简单的私聊</h3>
+        <div class="code-block">
+io.on('connection', (socket) => {
+  // 向特定 socket 发送消息
+  socket.on('private-message', (targetSocketId, message) => {
+    // 方式一：直接向目标 socket 的房间发送
+    io.to(targetSocketId).emit('private-message', {
+      from: socket.id,
+      message,
+      timestamp: Date.now()
+    });
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">基于用户 ID 的私聊</h3>
+        <div class="code-block">
+// 用户 ID 与 Socket ID 的映射
+const userSockets = new Map&lt;string, Set&lt;string&gt;&gt;();  // userId -> Set&lt;socketId&gt;
+const socketUsers = new Map&lt;string, string&gt;();  // socketId -> userId
+
+io.on('connection', (socket) => {
+  const userId = socket.handshake.query.userId as string;
+
+  // 建立映射
+  socketUsers.set(socket.id, userId);
+
+  if (!userSockets.has(userId)) {
+    userSockets.set(userId, new Set());
+  }
+  userSockets.get(userId)!.add(socket.id);
+
+  // 用户可能同时登录多个设备，加入用户专属房间
+  socket.join(`user:${userId}`);
+
+  // 断开时清理
+  socket.on('disconnect', () => {
+    socketUsers.delete(socket.id);
+
+    const sockets = userSockets.get(userId);
+    if (sockets) {
+      sockets.delete(socket.id);
+      if (sockets.size === 0) {
+        userSockets.delete(userId);
+      }
+    }
+  });
+});
+
+// 向特定用户发送消息
+function sendToUser(userId: string, event: string, data: any) {
+  io.to(`user:${userId}`).emit(event, data);
+}
+
+// 使用示例
+socket.on('private-message', (targetUserId: string, content: string) => {
+  const message = {
+    from: socketUsers.get(socket.id),
+    to: targetUserId,
+    content,
+    timestamp: Date.now()
+  };
+
+  sendToUser(targetUserId, 'private-message', message);
+
+  // 同时发给发送者（同步到其他设备）
+  sendToUser(socketUsers.get(socket.id)!, 'private-message', message);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整私聊系统实现</h2>
+
+      <div class="code-block">
+// ==================== 类型定义 ====================
+interface User {
+  id: string;
+  username: string;
+  avatar?: string;
+  status: 'online' | 'offline' | 'busy';
+}
+
+interface PrivateMessage {
+  id: string;
+  from: User;
+  to: User;
+  content: string;
+  type: 'text' | 'image' | 'file';
+  timestamp: number;
+  read: boolean;
+}
+
+interface Conversation {
+  id: string;
+  participants: string[];
+  lastMessage?: PrivateMessage;
+  unreadCount: number;
+}
+
+// ==================== 用户管理 ====================
+class UserManager {
+  private users = new Map&lt;string, User&gt;();
+  private userSockets = new Map&lt;string, Set&lt;string&gt;&gt;();
+  private socketUsers = new Map&lt;string, string&gt;();
+
+  connect(socketId: string, userId: string, userInfo: Partial&lt;User&gt;) {
+    // 更新或创建用户
+    if (!this.users.has(userId)) {
+      this.users.set(userId, {
+        id: userId,
+        username: userInfo.username || 'Anonymous',
+        avatar: userInfo.avatar,
+        status: 'online'
+      });
+    } else {
+      const user = this.users.get(userId)!;
+      user.status = 'online';
+    }
+
+    // 建立映射
+    this.socketUsers.set(socketId, userId);
+
+    if (!this.userSockets.has(userId)) {
+      this.userSockets.set(userId, new Set());
+    }
+    this.userSockets.get(userId)!.add(socketId);
+
+    return this.users.get(userId)!;
+  }
+
+  disconnect(socketId: string) {
+    const userId = this.socketUsers.get(socketId);
+    if (!userId) return;
+
+    this.socketUsers.delete(socketId);
+
+    const sockets = this.userSockets.get(userId);
+    if (sockets) {
+      sockets.delete(socketId);
+      if (sockets.size === 0) {
+        this.userSockets.delete(userId);
+        const user = this.users.get(userId);
+        if (user) {
+          user.status = 'offline';
+        }
+      }
+    }
+  }
+
+  getUser(userId: string): User | undefined {
+    return this.users.get(userId);
+  }
+
+  getOnlineUsers(): User[] {
+    return Array.from(this.users.values()).filter(u => u.status === 'online');
+  }
+
+  isOnline(userId: string): boolean {
+    const sockets = this.userSockets.get(userId);
+    return sockets !== undefined && sockets.size > 0;
+  }
+
+  getSockets(userId: string): string[] {
+    return Array.from(this.userSockets.get(userId) || []);
+  }
+}
+
+// ==================== 消息管理 ====================
+class MessageManager {
+  private messages: PrivateMessage[] = [];
+  private conversations = new Map&lt;string, Conversation&gt;();
+
+  // 生成会话 ID（两人之间的唯一标识）
+  getConversationId(userId1: string, userId2: string): string {
+    return [userId1, userId2].sort().join('-');
+  }
+
+  async saveMessage(message: PrivateMessage): Promise&lt;PrivateMessage&gt; {
+    this.messages.push(message);
+
+    // 更新会话
+    const conversationId = this.getConversationId(message.from.id, message.to.id);
+    const conversation = this.conversations.get(conversationId);
+
+    if (conversation) {
+      conversation.lastMessage = message;
+      conversation.unreadCount++;
+    } else {
+      this.conversations.set(conversationId, {
+        id: conversationId,
+        participants: [message.from.id, message.to.id],
+        lastMessage: message,
+        unreadCount: 1
+      });
+    }
+
+    // 存入数据库
+    await this.saveToDatabase(message);
+
+    return message;
+  }
+
+  async getConversation(userId: string, withUserId: string): Promise&lt;PrivateMessage[]&gt; {
+    return this.messages.filter(m =>
+      (m.from.id === userId && m.to.id === withUserId) ||
+      (m.from.id === withUserId && m.to.id === userId)
+    );
+  }
+
+  markAsRead(conversationId: string, userId: string) {
+    const conversation = this.conversations.get(conversationId);
+    if (conversation) {
+      conversation.unreadCount = 0;
+    }
+
+    this.messages.forEach(m => {
+      if (m.to.id === userId) {
+        m.read = true;
+      }
+    });
+  }
+}
+
+// ==================== 初始化 ====================
+const userManager = new UserManager();
+const messageManager = new MessageManager();
+
+io.on('connection', (socket) => {
+  const userId = socket.handshake.auth.userId;
+
+  if (!userId) {
+    return socket.disconnect();
+  }
+
+  // 用户连接
+  const user = userManager.connect(socket.id, userId, {
+    username: socket.handshake.auth.username,
+    avatar: socket.handshake.auth.avatar
+  });
+
+  // 加入用户专属房间
+  socket.join(`user:${userId}`);
+
+  // 广播用户上线
+  socket.broadcast.emit('user-online', user);
+
+  // ==================== 私聊消息 ====================
+  socket.on('send-private-message', async (data: { to: string; content: string; type?: 'text' | 'image' | 'file' }, callback) => {
+    const targetUser = userManager.getUser(data.to);
+
+    if (!targetUser) {
+      return callback({ success: false, error: '用户不存在' });
+    }
+
+    const message: PrivateMessage = {
+      id: generateId(),
+      from: user,
+      to: targetUser,
+      content: data.content,
+      type: data.type || 'text',
+      timestamp: Date.now(),
+      read: false
+    };
+
+    // 保存消息
+    await messageManager.saveMessage(message);
+
+    // 发送给目标用户
+    io.to(`user:${data.to}`).emit('private-message', message);
+
+    // 发送给发送者（多设备同步）
+    socket.emit('private-message', message);
+
+    callback({ success: true, message });
+  });
+
+  // ==================== 获取会话列表 ====================
+  socket.on('get-conversations', async (callback) => {
+    const conversations = await getConversationsForUser(userId);
+    callback(conversations);
+  });
+
+  // ==================== 获取聊天记录 ====================
+  socket.on('get-messages', async (withUserId: string, callback) => {
+    const messages = await messageManager.getConversation(userId, withUserId);
+    callback(messages);
+  });
+
+  // ==================== 标记已读 ====================
+  socket.on('mark-read', async (withUserId: string) => {
+    const conversationId = messageManager.getConversationId(userId, withUserId);
+    messageManager.markAsRead(conversationId, userId);
+    socket.emit('messages-read', { withUserId });
+  });
+
+  // ==================== 输入状态 ====================
+  socket.on('typing', (toUserId: string) => {
+    io.to(`user:${toUserId}`).emit('user-typing', {
+      userId,
+      username: user.username
+    });
+  });
+
+  socket.on('stop-typing', (toUserId: string) => {
+    io.to(`user:${toUserId}`).emit('user-stop-typing', {
+      userId
+    });
+  });
+
+  // ==================== 获取在线用户 ====================
+  socket.on('get-online-users', (callback) => {
+    callback(userManager.getOnlineUsers());
+  });
+
+  // ==================== 断开连接 ====================
+  socket.on('disconnect', () => {
+    userManager.disconnect(socket.id);
+
+    // 检查用户是否完全离线
+    if (!userManager.isOnline(userId)) {
+      socket.broadcast.emit('user-offline', { userId });
+    }
+  });
+});
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 离线消息处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">存储离线消息</h3>
+        <div class="code-block">
+// 用户上线时推送离线消息
+socket.on('connection', async (socket) => {
+  const userId = socket.handshake.auth.userId;
+
+  // 获取离线消息
+  const offlineMessages = await getOfflineMessages(userId);
+
+  if (offlineMessages.length > 0) {
+    // 分批发送，避免阻塞
+    for (const message of offlineMessages) {
+      socket.emit('offline-message', message);
+      await sleep(10);  // 短暂延迟
+    }
+
+    // 发送完成通知
+    socket.emit('offline-messages-done', {
+      count: offlineMessages.length
+    });
+
+    // 标记已送达
+    await markMessagesDelivered(offlineMessages.map(m => m.id));
+  }
+});
+
+// 发送消息时检查在线状态
+async function sendPrivateMessage(from: string, to: string, content: string) {
+  const message = {
+    id: generateId(),
+    from,
+    to,
+    content,
+    timestamp: Date.now(),
+    delivered: false,
+    read: false
+  };
+
+  // 保存消息
+  await saveMessage(message);
+
+  if (userManager.isOnline(to)) {
+    // 用户在线，直接发送
+    io.to(`user:${to}`).emit('private-message', message);
+    message.delivered = true;
+    await updateMessageDelivered(message.id);
+  }
+  // 用户离线，消息已存储，等待上线推送
+
+  return message;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 安全考虑</h2>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">私聊安全注意事项</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>验证发送者身份，防止伪造消息</li>
+            <li>验证接收者是否存在，防止信息泄露</li>
+            <li>敏感消息内容加密存储</li>
+            <li>实现消息撤回功能时注意时间限制</li>
+            <li>考虑举报和屏蔽功能</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="code-block">
+// 消息发送验证中间件
+io.use((socket, next) => {
+  const userId = socket.handshake.auth.userId;
+  const token = socket.handshake.auth.token;
+
+  // 验证 token 和用户身份
+  verifyUser(userId, token)
+    .then(user => {
+      socket.data.user = user;
+      next();
+    })
+    .catch(() => {
+      next(new Error('认证失败'));
+    });
+});
+
+// 发送消息时验证
+socket.on('private-message', async (to, content, callback) => {
+  // 验证接收者
+  if (!await userExists(to)) {
+    return callback({ error: '接收者不存在' });
+  }
+
+  // 验证是否被屏蔽
+  if (await isBlocked(to, socket.data.user.id)) {
+    return callback({ error: '您已被对方屏蔽' });
+  }
+
+  // 内容过滤
+  if (containsForbiddenContent(content)) {
+    return callback({ error: '消息内容不合规' });
+  }
+
+  // 发送消息...
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 每个 Socket 自动加入以其 ID 为名的房间</li>
+            <li>• 使用 <code>io.to(socketId)</code> 实现点对点发送</li>
+            <li>• 建立用户 ID 与 Socket ID 的映射关系</li>
+            <li>• 支持多设备同时在线（加入用户专属房间）</li>
+            <li>• 离线消息需要持久化存储</li>
+            <li>• 注意消息安全和验证</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="64-5-广播消息.html">← 上一节</a>
+      <a href="../chapter65/65-1-浏览器客户端.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

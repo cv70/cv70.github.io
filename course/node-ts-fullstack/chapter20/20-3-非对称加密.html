@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.3 非对称加密 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="20-1-哈希算法.html">第二十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>20.3 非对称加密</h1>
+      <p class="subtitle">公钥加密，私钥解密</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解非对称加密原理</li>
+        <li>掌握 RSA 密钥生成</li>
+        <li>学会公钥加密私钥解密</li>
+        <li>了解数字签名</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 生成密钥对</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成 RSA 密钥对
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: {
+    type: 'spki',
+    format: 'pem'
+  },
+  privateKeyEncoding: {
+    type: 'pkcs8',
+    format: 'pem'
+  }
+});
+
+console.log('公钥:');
+console.log(publicKey);
+console.log('私钥:');
+console.log(privateKey);
+
+// 异步生成
+crypto.generateKeyPair('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+}, (err, publicKey, privateKey) => {
+  if (err) throw err;
+  console.log('密钥对生成成功');
+});
+
+// 保存密钥到文件
+const fs = require('fs');
+fs.writeFileSync('public.pem', publicKey);
+fs.writeFileSync('private.pem', privateKey);
+
+// 从文件加载密钥
+const loadedPublicKey = fs.readFileSync('public.pem', 'utf8');
+const loadedPrivateKey = fs.readFileSync('private.pem', 'utf8');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 加密解密</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成密钥对
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048
+});
+
+// 公钥加密
+function encryptWithPublicKey(data, publicKey) {
+  const buffer = Buffer.from(data, 'utf8');
+  const encrypted = crypto.publicEncrypt(
+    {
+      key: publicKey,
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: 'sha256'
+    },
+    buffer
+  );
+  return encrypted.toString('base64');
+}
+
+// 私钥解密
+function decryptWithPrivateKey(encrypted, privateKey) {
+  const buffer = Buffer.from(encrypted, 'base64');
+  const decrypted = crypto.privateDecrypt(
+    {
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: 'sha256'
+    },
+    buffer
+  );
+  return decrypted.toString('utf8');
+}
+
+// 使用
+const plaintext = 'Hello RSA!';
+const encrypted = encryptWithPublicKey(plaintext, publicKey);
+console.log('加密:', encrypted);
+
+const decrypted = decryptWithPrivateKey(encrypted, privateKey);
+console.log('解密:', decrypted);
+
+// 私钥加密（用于签名场景）
+function encryptWithPrivateKey(data, privateKey) {
+  const buffer = Buffer.from(data, 'utf8');
+  const encrypted = crypto.privateEncrypt(privateKey, buffer);
+  return encrypted.toString('base64');
+}
+
+// 公钥解密
+function decryptWithPublicKey(encrypted, publicKey) {
+  const buffer = Buffer.from(encrypted, 'base64');
+  const decrypted = crypto.publicDecrypt(publicKey, buffer);
+  return decrypted.toString('utf8');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 数字签名</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成密钥对
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048
+});
+
+// 签名
+function sign(data, privateKey) {
+  const sign = crypto.createSign('SHA256');
+  sign.update(data);
+  sign.end();
+  return sign.sign(privateKey, 'hex');
+}
+
+// 验证签名
+function verify(data, signature, publicKey) {
+  const verifier = crypto.createVerify('SHA256');
+  verifier.update(data);
+  verifier.end();
+  return verifier.verify(publicKey, signature, 'hex');
+}
+
+// 使用
+const message = '这是一条重要消息';
+const signature = sign(message, privateKey);
+console.log('签名:', signature);
+
+const isValid = verify(message, signature, publicKey);
+console.log('验证结果:', isValid);  // true
+
+// 篡改后验证失败
+const tamperedMessage = '这是一条被修改的消息';
+const isStillValid = verify(tamperedMessage, signature, publicKey);
+console.log('篡改后验证:', isStillValid);  // false
+
+// 签名对象
+function signObject(obj, privateKey) {
+  const data = JSON.stringify(obj);
+  return {
+    ...obj,
+    signature: sign(data, privateKey)
+  };
+}
+
+function verifyObject(obj, publicKey) {
+  const { signature, ...data } = obj;
+  return verify(JSON.stringify(data), signature, publicKey);
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">数字签名的作用</div>
+          <p>数字签名验证数据来源和完整性，确保数据未被篡改。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 混合加密</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// RSA 加密数据量有限制，实际使用混合加密
+// 1. 生成随机对称密钥
+// 2. 用对称密钥加密数据
+// 3. 用公钥加密对称密钥
+
+function hybridEncrypt(plaintext, publicKey) {
+  // 生成随机对称密钥
+  const aesKey = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(16);
+
+  // 用 AES 加密数据
+  const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
+  let encryptedData = cipher.update(plaintext, 'utf8', 'hex');
+  encryptedData += cipher.final('hex');
+
+  // 用 RSA 加密 AES 密钥
+  const encryptedKey = crypto.publicEncrypt(
+    { key: publicKey, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING },
+    aesKey
+  );
+
+  return {
+    key: encryptedKey.toString('base64'),
+    iv: iv.toString('base64'),
+    data: encryptedData
+  };
+}
+
+function hybridDecrypt(encrypted, privateKey) {
+  // 用 RSA 解密 AES 密钥
+  const aesKey = crypto.privateDecrypt(
+    { key: privateKey, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING },
+    Buffer.from(encrypted.key, 'base64')
+  );
+
+  const iv = Buffer.from(encrypted.iv, 'base64');
+
+  // 用 AES 解密数据
+  const decipher = crypto.createDecipheriv('aes-256-cbc', aesKey, iv);
+  let decrypted = decipher.update(encrypted.data, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
+// 使用
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048
+});
+
+const largeData = '这是一段很长的数据...'.repeat(100);
+const encrypted = hybridEncrypt(largeData, publicKey);
+console.log('加密成功');
+
+const decrypted = hybridDecrypt(encrypted, privateKey);
+console.log('解密:', decrypted.slice(0, 50));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 非对称加密：公钥加密，私钥解密</li>
+            <li>• 数字签名：私钥签名，公钥验证</li>
+            <li>• RSA 有数据长度限制</li>
+            <li>• 大数据使用混合加密</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="20-2-对称加密.html">← 上一节：对称加密</a>
+      <a href="20-4-随机数生成.html">下一节：随机数生成 →</a>
+    </div>
+  </div>
+</body>
+</html>

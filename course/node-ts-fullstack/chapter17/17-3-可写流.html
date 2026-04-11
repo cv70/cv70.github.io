@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.3 可写流 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="17-1-流的概念.html">第十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>17.3 可写流</h1>
+      <p class="subtitle">写入数据流</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握可写流的基本用法</li>
+        <li>理解 write() 和 end() 方法</li>
+        <li>学会自定义可写流</li>
+        <li>掌握背压处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 使用可写流</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 创建文件可写流
+const writable = fs.createWriteStream('output.txt', {
+  encoding: 'utf8',
+  flags: 'w',        // 写入模式
+  mode: 0o644,       // 文件权限
+  autoClose: true,   // 自动关闭
+  start: 0           // 开始位置
+});
+
+// 写入数据
+writable.write('Hello ');
+writable.write('World\n');
+
+// 结束写入（同时写入最后的数据）
+writable.end('End of file\n');
+
+// 事件
+writable.on('finish', () => {
+  console.log('写入完成');
+});
+
+writable.on('close', () => {
+  console.log('文件关闭');
+});
+
+writable.on('error', (err) => {
+  console.error('写入错误:', err);
+});
+
+// drain 事件（背压处理）
+writable.on('drain', () => {
+  console.log('缓冲区已清空，可继续写入');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> write() 和背压</h2>
+      <div class="code-block">
+const fs = require('fs');
+const writable = fs.createWriteStream('large.txt');
+
+// write() 返回值
+// true: 缓冲区未满，可以继续写入
+// false: 缓冲区已满，应该等待 drain 事件
+
+let canContinue = writable.write('一些数据');
+console.log(canContinue);  // true 或 false
+
+// 正确处理背压
+function writeData(data, callback) {
+  const writable = fs.createWriteStream('output.txt');
+
+  for (const chunk of data) {
+    if (!writable.write(chunk)) {
+      // 缓冲区满，等待 drain
+      writable.once('drain', () => {
+        continueWriting();
+      });
+      return;
+    }
+  }
+
+  writable.end();
+  writable.on('finish', callback);
+}
+
+// 更好的方式：使用 for await
+async function writeAll(stream, data) {
+  for (const chunk of data) {
+    if (!stream.write(chunk)) {
+      await new Promise(resolve => stream.once('drain', resolve));
+    }
+  }
+  stream.end();
+}
+
+// 使用回调方式
+writable.write('data1', () => {
+  console.log('data1 已写入');
+});
+
+writable.write('data2', 'utf8', () => {
+  console.log('data2 已写入');
+});
+
+// cork 和 uncork（合并写入）
+writable.cork();
+writable.write('Hello ');
+writable.write('World');
+writable.uncork();  // 合并为一次写入
+
+// setDefaultEncoding
+writable.setDefaultEncoding('utf8');
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">背压（Backpressure）</div>
+          <p>当写入速度超过底层系统处理能力时，数据会积压在内存中。正确处理背压可避免内存溢出。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 自定义可写流</h2>
+      <div class="code-block">
+const { Writable } = require('stream');
+
+// 继承 Writable 实现自定义可写流
+class LogStream extends Writable {
+  constructor(options) {
+    super(options);
+    this.logFile = options.logFile || 'app.log';
+  }
+
+  _write(chunk, encoding, callback) {
+    // chunk: 要写入的数据
+    // encoding: 编码（如果 chunk 是字符串）
+    // callback: 完成回调
+
+    const fs = require('fs');
+    const timestamp = new Date().toISOString();
+    const message = `[${timestamp}] ${chunk.toString()}\n`;
+
+    fs.appendFile(this.logFile, message, callback);
+  }
+
+  _writev(chunks, callback) {
+    // 批量写入
+    const fs = require('fs');
+    const messages = chunks.map(({ chunk }) => {
+      const timestamp = new Date().toISOString();
+      return `[${timestamp}] ${chunk.toString()}`;
+    }).join('\n') + '\n';
+
+    fs.appendFile(this.logFile, messages, callback);
+  }
+
+  _final(callback) {
+    // 流结束前的清理工作
+    console.log('日志流关闭');
+    callback();
+  }
+}
+
+// 使用
+const logger = new LogStream({ logFile: 'app.log' });
+logger.write('用户登录');
+logger.write('请求处理');
+logger.end('应用关闭');
+
+// 简单创建方式
+const { Writable } = require('stream');
+
+const myWritable = new Writable({
+  write(chunk, encoding, callback) {
+    console.log('写入:', chunk.toString());
+    callback();
+  },
+
+  writev(chunks, callback) {
+    chunks.forEach(({ chunk }) => {
+      console.log('批量写入:', chunk.toString());
+    });
+    callback();
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实际应用示例</h2>
+      <div class="code-block">
+const fs = require('fs');
+const { Writable } = require('stream');
+
+// 1. 分片文件写入
+class ChunkedFileWriter extends Writable {
+  constructor(options) {
+    super(options);
+    this.chunkSize = options.chunkSize || 1024 * 1024;  // 1MB
+    this.chunkIndex = 0;
+    this.currentSize = 0;
+    this.basePath = options.basePath || 'chunk';
+    this.currentStream = null;
+    this._initNewChunk();
+  }
+
+  _initNewChunk() {
+    if (this.currentStream) {
+      this.currentStream.end();
+    }
+    const filename = `${this.basePath}.${this.chunkIndex++}`;
+    this.currentStream = fs.createWriteStream(filename);
+    this.currentSize = 0;
+  }
+
+  _write(chunk, encoding, callback) {
+    if (this.currentSize + chunk.length > this.chunkSize) {
+      this._initNewChunk();
+    }
+    this.currentStream.write(chunk);
+    this.currentSize += chunk.length;
+    callback();
+  }
+
+  _final(callback) {
+    this.currentStream.end(callback);
+  }
+}
+
+// 2. 带缓冲的写入器
+class BufferedWriteStream extends Writable {
+  constructor(options) {
+    super(options);
+    this.buffer = [];
+    this.bufferSize = options.bufferSize || 100;
+    this.destination = options.destination;
+  }
+
+  _write(chunk, encoding, callback) {
+    this.buffer.push(chunk);
+
+    if (this.buffer.length >= this.bufferSize) {
+      this._flush(callback);
+    } else {
+      callback();
+    }
+  }
+
+  _flush(callback) {
+    const data = Buffer.concat(this.buffer);
+    this.buffer = [];
+    this.destination.write(data, callback);
+  }
+
+  _final(callback) {
+    if (this.buffer.length > 0) {
+      this._flush(() => {
+        this.destination.end(callback);
+      });
+    } else {
+      this.destination.end(callback);
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• write() 写入数据，end() 结束写入</li>
+            <li>• 处理 write() 返回 false 时等待 drain</li>
+            <li>• 继承 Writable 实现 _write() 创建自定义流</li>
+            <li>• cork/uncork 合并多次写入</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="17-2-可读流.html">← 上一节：可读流</a>
+      <a href="17-4-双工流.html">下一节：双工流 →</a>
+    </div>
+  </div>
+</body>
+</html>

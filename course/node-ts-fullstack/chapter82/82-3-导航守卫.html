@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>82.3 导航守卫 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>82.3 导航守卫</h1>
+      <p class="subtitle">路由导航的控制与拦截</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>导航守卫是 Vue Router 提供的路由拦截机制，用于在路由跳转前后执行特定逻辑，如权限验证、登录检查、页面标题设置等。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解导航守卫的执行流程</li>
+        <li>掌握全局前置/后置守卫的使用</li>
+        <li>学会路由独享守卫和组件内守卫</li>
+        <li>掌握权限控制的实现方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 守卫类型</h2>
+      <table>
+        <tr>
+          <th>守卫类型</th>
+          <th>位置</th>
+          <th>用途</th>
+        </tr>
+        <tr>
+          <td>全局前置守卫</td>
+          <td>router.beforeEach</td>
+          <td>权限验证、登录检查</td>
+        </tr>
+        <tr>
+          <td>全局解析守卫</td>
+          <td>router.beforeResolve</td>
+          <td>确保所有守卫完成</td>
+        </tr>
+        <tr>
+          <td>全局后置钩子</td>
+          <td>router.afterEach</td>
+          <td>分析、更新标题</td>
+        </tr>
+        <tr>
+          <td>路由独享守卫</td>
+          <td>路由配置 beforeEnter</td>
+          <td>特定路由的守卫</td>
+        </tr>
+        <tr>
+          <td>组件内守卫</td>
+          <td>组件内 beforeRouteEnter 等</td>
+          <td>组件级别的路由控制</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 全局前置守卫</h2>
+      <div class="code-block"><span class="keyword">import</span> { createRouter } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+<span class="keyword">import type</span> { NavigationGuardNext, RouteLocationNormalized } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+
+<span class="keyword">const</span> router = createRouter({ /* ... */ });
+
+router.beforeEach((
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+  next: NavigationGuardNext
+) => {
+  <span class="comment">// to: 即将进入的目标路由</span>
+  <span class="comment">// from: 当前导航正要离开的路由</span>
+  <span class="comment">// next: 必须调用该方法来 resolve 这个钩子</span>
+
+  <span class="keyword">const</span> isAuthenticated = localStorage.getItem(<span class="string">'token'</span>);
+
+  <span class="comment">// 需要认证的页面</span>
+  <span class="keyword">if</span> (to.meta.requiresAuth &amp;&amp; !isAuthenticated) {
+    <span class="comment">// 重定向到登录页</span>
+    next({
+      path: <span class="string">'/login'</span>,
+      query: { redirect: to.fullPath }
+    });
+  } <span class="keyword">else</span> {
+    <span class="comment">// 放行</span>
+    next();
+  }
+});</div>
+
+      <h3>返回值方式</h3>
+      <div class="code-block">router.beforeEach(<span class="keyword">async</span> (to, from) => {
+  <span class="comment">// 返回 false 取消导航</span>
+  <span class="keyword">if</span> (to.path === <span class="string">'/blocked'</span>) {
+    <span class="keyword">return</span> <span class="keyword">false</span>;
+  }
+
+  <span class="comment">// 返回路由地址重定向</span>
+  <span class="keyword">if</span> (!isAuthenticated &amp;&amp; to.meta.requiresAuth) {
+    <span class="keyword">return</span> {
+      path: <span class="string">'/login'</span>,
+      query: { redirect: to.fullPath }
+    };
+  }
+
+  <span class="comment">// 返回 undefined 或 true 继续导航</span>
+  <span class="keyword">return</span> <span class="keyword">true</span>;
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 权限控制实现</h2>
+      <div class="code-block"><span class="keyword">import</span> { useUserStore } <span class="keyword">from</span> <span class="string">'@/stores/user'</span>;
+
+<span class="comment">// 白名单路由</span>
+<span class="keyword">const</span> whiteList = [<span class="string">'/login'</span>, <span class="string">'/register'</span>, <span class="string">'/forgot-password'</span>];
+
+router.beforeEach(<span class="keyword">async</span> (to, from) => {
+  <span class="comment">// 设置页面标题</span>
+  document.title = (to.meta.title <span class="keyword">as string</span>) || <span class="string">'My App'</span>;
+
+  <span class="keyword">const</span> userStore = useUserStore();
+  <span class="keyword">const</span> token = localStorage.getItem(<span class="string">'token'</span>);
+
+  <span class="comment">// 有 token</span>
+  <span class="keyword">if</span> (token) {
+    <span class="keyword">if</span> (to.path === <span class="string">'/login'</span>) {
+      <span class="comment">// 已登录，跳转到首页</span>
+      <span class="keyword">return</span> { path: <span class="string">'/'</span> };
+    }
+
+    <span class="comment">// 检查用户信息是否已加载</span>
+    <span class="keyword">if</span> (!userStore.userInfo) {
+      <span class="keyword">try</span> {
+        <span class="comment">// 获取用户信息</span>
+        <span class="keyword">await</span> userStore.fetchUserInfo();
+
+        <span class="comment">// 检查权限</span>
+        <span class="keyword">const</span> roles = userStore.roles;
+        <span class="keyword">const</span> requiredRoles = to.meta.roles <span class="keyword">as</span> <span class="keyword">string</span>[] | <span class="keyword">undefined</span>;
+
+        <span class="keyword">if</span> (requiredRoles &amp;&amp; !requiredRoles.some(role => roles.includes(role))) {
+          <span class="comment">// 无权限</span>
+          <span class="keyword">return</span> { path: <span class="string">'/403'</span> };
+        }
+      } <span class="keyword">catch</span> (error) {
+        <span class="comment">// Token 无效</span>
+        userStore.logout();
+        <span class="keyword">return</span> {
+          path: <span class="string">'/login'</span>,
+          query: { redirect: to.fullPath }
+        };
+      }
+    }
+
+    <span class="keyword">return</span> <span class="keyword">true</span>;
+  } <span class="keyword">else</span> {
+    <span class="comment">// 无 token</span>
+    <span class="keyword">if</span> (whiteList.includes(to.path)) {
+      <span class="keyword">return</span> <span class="keyword">true</span>;
+    }
+
+    <span class="keyword">return</span> {
+      path: <span class="string">'/login'</span>,
+      query: { redirect: to.fullPath }
+    };
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 全局后置钩子</h2>
+      <div class="code-block">router.afterEach((to, from) => {
+  <span class="comment">// to: 即将进入的路由</span>
+  <span class="comment">// from: 离开的路由</span>
+
+  <span class="comment">// 设置页面标题</span>
+  document.title = (to.meta.title <span class="keyword">as string</span>) || <span class="string">'My App'</span>;
+
+  <span class="comment">// 滚动到顶部</span>
+  window.scrollTo(<span class="number">0</span>, <span class="number">0</span>);
+
+  <span class="comment">// 发送页面访问统计</span>
+  analytics.trackPageView(to.fullPath);
+});
+
+<span class="comment">// 带错误处理的后置钩子</span>
+router.afterEach((to, from, failure) => {
+  <span class="keyword">if</span> (failure) {
+    console.log(<span class="string">'导航失败:'</span>, failure);
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 路由独享守卫</h2>
+      <div class="code-block"><span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/admin'</span>,
+    name: <span class="string">'Admin'</span>,
+    component: Admin,
+    beforeEnter: (to, from) => {
+      <span class="keyword">const</span> isAdmin = localStorage.getItem(<span class="string">'role'</span>) === <span class="string">'admin'</span>;
+
+      <span class="keyword">if</span> (!isAdmin) {
+        <span class="keyword">return</span> { path: <span class="string">'/403'</span> };
+      }
+    }
+  },
+  {
+    path: <span class="string">'/user/:id'</span>,
+    name: <span class="string">'UserDetail'</span>,
+    component: UserDetail,
+    beforeEnter: [
+      <span class="comment">// 可以使用数组</span>
+      <span class="function">checkAuth</span>,
+      <span class="function">checkUserExists</span>
+    ]
+  }
+];
+
+<span class="comment">// 复用守卫函数</span>
+<span class="keyword">function</span> <span class="function">checkAuth</span>(to, from) {
+  <span class="keyword">const</span> token = localStorage.getItem(<span class="string">'token'</span>);
+  <span class="keyword">if</span> (!token) {
+    <span class="keyword">return</span> { path: <span class="string">'/login'</span> };
+  }
+}
+
+<span class="keyword">async function</span> <span class="function">checkUserExists</span>(to) {
+  <span class="keyword">const</span> exists = <span class="keyword">await</span> checkUser(to.params.id);
+  <span class="keyword">if</span> (!exists) {
+    <span class="keyword">return</span> { path: <span class="string">'/404'</span> };
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧩</span> 组件内守卫</h2>
+      <div class="code-block"><span class="keyword">import</span> { defineComponent } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">export default</span> defineComponent({
+  <span class="comment">// 在渲染该组件的对应路由被验证前调用</span>
+  <span class="comment">// 不能获取组件实例 this，因为当守卫执行时，组件实例还没被创建</span>
+  beforeRouteEnter(to, from, next) {
+    <span class="comment">// 通过回调访问组件实例</span>
+    next(vm => {
+      vm.loadData();
+    });
+  },
+
+  <span class="comment">// 在当前路由改变，但是该组件被复用时调用</span>
+  <span class="comment">// 比如从 /users/1 导航到 /users/2</span>
+  beforeRouteUpdate(to, from, next) {
+    <span class="keyword">this</span>.loadData();
+    next();
+  },
+
+  <span class="comment">// 在导航离开该组件的对应路由时调用</span>
+  beforeRouteLeave(to, from, next) {
+    <span class="keyword">const</span> answer = window.confirm(<span class="string">'确定要离开吗？未保存的数据将丢失。'</span>);
+    <span class="keyword">if</span> (answer) {
+      next();
+    } <span class="keyword">else</span> {
+      next(<span class="keyword">false</span>);
+    }
+  }
+});</div>
+
+      <h3>Composition API 中使用</h3>
+      <div class="code-block">&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { onBeforeRouteLeave, onBeforeRouteUpdate } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+
+<span class="comment">// 离开守卫</span>
+onBeforeRouteLeave((to, from, next) => {
+  <span class="keyword">if</span> (hasUnsavedChanges.value) {
+    <span class="keyword">const</span> confirmed = confirm(<span class="string">'有未保存的更改，确定要离开吗？'</span>);
+    <span class="keyword">if</span> (!confirmed) <span class="keyword">return</span> <span class="keyword">false</span>;
+  }
+  next();
+});
+
+<span class="comment">// 更新守卫</span>
+onBeforeRouteUpdate((to, from, next) => {
+  <span class="keyword">if</span> (to.params.id !== from.params.id) {
+    loadUserData(to.params.id <span class="keyword">as string</span>);
+  }
+  next();
+});
+&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 守卫执行流程</h2>
+      <ol style="margin-left: 2rem; line-height: 2;">
+        <li>触发导航</li>
+        <li>调用失活组件的 beforeRouteLeave</li>
+        <li>调用全局 beforeEach</li>
+        <li>重用组件调用 beforeRouteUpdate</li>
+        <li>路由配置中的 beforeEnter</li>
+        <li>解析异步路由组件</li>
+        <li>激活组件的 beforeRouteEnter</li>
+        <li>调用全局 beforeResolve</li>
+        <li>导航确认</li>
+        <li>调用全局 afterEach</li>
+        <li>DOM 更新后调用 beforeRouteEnter 的 next 回调</li>
+      </ol>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>导航守卫用于控制路由跳转的流程</li>
+        <li>全局前置守卫常用于权限验证</li>
+        <li>全局后置钩子用于页面标题、分析等</li>
+        <li>路由独享守卫用于特定路由的控制</li>
+        <li>组件内守卫用于组件级别的路由控制</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="82-2-动态路由.html">← 上一节：动态路由</a>
+      <a href="82-4-路由懒加载.html">下一节：路由懒加载 →</a>
+    </div>
+  </div>
+</body>
+</html>

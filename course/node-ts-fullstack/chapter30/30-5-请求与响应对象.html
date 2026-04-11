@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.5 请求与响应对象 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter30.html">第30章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.5 请求与响应对象</h1>
+      <p class="subtitle">深入了解 Express 的 Request 和 Response 对象</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Request 对象的常用属性和方法</li>
+        <li>掌握 Response 对象的常用属性和方法</li>
+        <li>理解请求生命周期中对象的传递</li>
+        <li>学会正确处理请求和发送响应</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> Request 对象 (req)</h2>
+      <p>Request 对象（通常简写为 req）代表了 HTTP 请求，包含请求查询字符串、参数、体、HTTP 头等信息。</p>
+
+      <h3>常用属性</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>属性</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>req.params</code></td>
+            <td>路由参数（命名参数）</td>
+            <td><code>/users/:id</code> 中的 id</td>
+          </tr>
+          <tr>
+            <td><code>req.query</code></td>
+            <td>查询字符串参数</td>
+            <td><code>?page=1&amp;size=10</code></td>
+          </tr>
+          <tr>
+            <td><code>req.body</code></td>
+            <td>请求体数据（需中间件解析）</td>
+            <td>POST/PUT 数据</td>
+          </tr>
+          <tr>
+            <td><code>req.headers</code></td>
+            <td>请求头对象</td>
+            <td><code>req.headers['content-type']</code></td>
+          </tr>
+          <tr>
+            <td><code>req.method</code></td>
+            <td>HTTP 请求方法</td>
+            <td>GET, POST, PUT...</td>
+          </tr>
+          <tr>
+            <td><code>req.url</code></td>
+            <td>请求 URL 路径</td>
+            <td><code>/api/users?page=1</code></td>
+          </tr>
+          <tr>
+            <td><code>req.path</code></td>
+            <td>请求路径（不含查询字符串）</td>
+            <td><code>/api/users</code></td>
+          </tr>
+          <tr>
+            <td><code>req.hostname</code></td>
+            <td>主机名</td>
+            <td><code>localhost</code></td>
+          </tr>
+          <tr>
+            <td><code>req.ip</code></td>
+            <td>客户端 IP 地址</td>
+            <td><code>::1</code> 或 <code>127.0.0.1</code></td>
+          </tr>
+          <tr>
+            <td><code>req.protocol</code></td>
+            <td>请求协议</td>
+            <td><code>http</code> 或 <code>https</code></td>
+          </tr>
+          <tr>
+            <td><code>req.cookies</code></td>
+            <td>Cookies 对象（需 cookie-parser）</td>
+            <td><code>req.cookies.sessionId</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>获取请求参数示例</h3>
+      <div class="code-block">
+// 路由参数
+app.get('/users/:id', (req, res) => {
+  const { id } = req.params;
+  console.log('路由参数:', id);
+  res.json({ userId: id });
+});
+
+// 查询字符串
+app.get('/search', (req, res) => {
+  const { keyword, page, size } = req.query;
+  console.log('查询参数:', { keyword, page, size });
+  res.json({ keyword, page, size });
+});
+
+// 请求体
+app.post('/users', (req, res) => {
+  const { name, email, age } = req.body;
+  console.log('请求体:', req.body);
+  res.json({ name, email, age });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Request 常用方法</h2>
+
+      <h3>req.get(name) - 获取请求头</h3>
+      <div class="code-block">
+app.get('/info', (req, res) => {
+  const contentType = req.get('Content-Type');
+  const userAgent = req.get('User-Agent');
+  const auth = req.get('Authorization');
+
+  res.json({ contentType, userAgent, auth });
+});</div>
+
+      <h3>req.accepts(types) - 检查可接受的类型</h3>
+      <div class="code-block">
+app.get('/content', (req, res) => {
+  // 检查客户端接受的内容类型
+  const accepted = req.accepts(['json', 'html', 'xml']);
+
+  if (accepted === 'json') {
+    res.json({ message: 'JSON response' });
+  } else if (accepted === 'html') {
+    res.send('<h1>HTML Response</h1>');
+  } else {
+    res.status(406).send('Not Acceptable');
+  }
+});</div>
+
+      <h3>req.is(type) - 检查请求体类型</h3>
+      <div class="code-block">
+app.post('/upload', (req, res) => {
+  if (req.is('application/json')) {
+    // 处理 JSON
+    res.json({ received: req.body });
+  } else if (req.is('multipart/form-data')) {
+    // 处理文件上传
+    res.send('File upload');
+  } else {
+    res.status(415).send('Unsupported Media Type');
+  }
+});</div>
+
+      <h3>其他实用方法</h3>
+      <div class="code-block">
+// 检查是否为 AJAX 请求
+app.get('/check', (req, res) => {
+  if (req.xhr) {
+    res.json({ isAjax: true });
+  } else {
+    res.send('Not an AJAX request');
+  }
+});
+
+// 获取原始请求对象
+app.get('/raw', (req, res) => {
+  // req 是增强后的对象
+  // req.req 或 req.raw 是原始的 Node.js IncomingMessage
+  res.json({
+    httpVersion: req.httpVersion,
+    originalUrl: req.originalUrl
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> Response 对象 (res)</h2>
+      <p>Response 对象（通常简写为 res）代表了 HTTP 响应，在 Express 应用收到请求时生成。</p>
+
+      <h3>常用方法</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>说明</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>res.send()</code></td>
+            <td>发送响应</td>
+            <td>发送各种类型的响应</td>
+          </tr>
+          <tr>
+            <td><code>res.json()</code></td>
+            <td>发送 JSON 响应</td>
+            <td>API 响应</td>
+          </tr>
+          <tr>
+            <td><code>res.status()</code></td>
+            <td>设置状态码</td>
+            <td>配合其他方法使用</td>
+          </tr>
+          <tr>
+            <td><code>res.redirect()</code></td>
+            <td>重定向</td>
+            <td>页面跳转</td>
+          </tr>
+          <tr>
+            <td><code>res.render()</code></td>
+            <td>渲染模板</td>
+            <td>服务端渲染</td>
+          </tr>
+          <tr>
+            <td><code>res.sendFile()</code></td>
+            <td>发送文件</td>
+            <td>文件下载/展示</td>
+          </tr>
+          <tr>
+            <td><code>res.download()</code></td>
+            <td>下载文件</td>
+            <td>文件下载</td>
+          </tr>
+          <tr>
+            <td><code>res.set()</code></td>
+            <td>设置响应头</td>
+            <td>自定义响应头</td>
+          </tr>
+          <tr>
+            <td><code>res.cookie()</code></td>
+            <td>设置 Cookie</td>
+            <td>会话管理</td>
+          </tr>
+          <tr>
+            <td><code>res.clearCookie()</code></td>
+            <td>清除 Cookie</td>
+            <td>登出等操作</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> Response 方法详解</h2>
+
+      <h3>res.send() - 发送响应</h3>
+      <div class="code-block">
+// 发送字符串
+app.get('/text', (req, res) => {
+  res.send('Hello World');
+});
+
+// 发送 HTML
+app.get('/html', (req, res) => {
+  res.send('<h1>Hello World</h1>');
+});
+
+// 发送对象（自动转为 JSON）
+app.get('/object', (req, res) => {
+  res.send({ message: 'Hello' });
+});
+
+// 发送数组
+app.get('/array', (req, res) => {
+  res.send([1, 2, 3, 4, 5]);
+});
+
+// 发送 Buffer
+app.get('/buffer', (req, res) => {
+  res.send(Buffer.from('Hello'));
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">res.send() 自动设置 Content-Type</div>
+          <p><code>res.send()</code> 会根据发送内容的类型自动设置 Content-Type 头。发送对象/数组时自动设为 application/json。</p>
+        </div>
+      </div>
+
+      <h3>res.json() - 发送 JSON</h3>
+      <div class="code-block">
+// 明确发送 JSON 响应
+app.get('/api/data', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      users: [
+        { id: 1, name: 'Alice' },
+        { id: 2, name: 'Bob' }
+      ]
+    }
+  });
+});
+
+// 设置状态码
+app.get('/api/created', (req, res) => {
+  res.status(201).json({
+    success: true,
+    message: 'Resource created'
+  });
+});</div>
+
+      <h3>res.status() - 设置状态码</h3>
+      <div class="code-block">
+// 常见状态码使用
+app.get('/success', (req, res) => {
+  res.status(200).json({ message: 'Success' });
+});
+
+app.post('/created', (req, res) => {
+  res.status(201).json({ message: 'Created' });
+});
+
+app.get('/not-found', (req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+app.get('/error', (req, res) => {
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+// 链式调用
+app.get('/chain', (req, res) => {
+  res
+    .status(200)
+    .set('X-Custom-Header', 'value')
+    .json({ message: 'Chained response' });
+});</div>
+
+      <h3>res.redirect() - 重定向</h3>
+      <div class="code-block">
+// 默认 302 重定向
+app.get('/old', (req, res) => {
+  res.redirect('/new');
+});
+
+// 301 永久重定向
+app.get('/permanent', (req, res) => {
+  res.redirect(301, '/new-location');
+});
+
+// 重定向到外部网站
+app.get('/external', (req, res) => {
+  res.redirect('https://www.google.com');
+});
+
+// 返回上一页
+app.get('/back', (req, res) => {
+  res.redirect('back');
+});</div>
+
+      <h3>res.set() / res.setHeader() - 设置响应头</h3>
+      <div class="code-block">
+// 设置单个响应头
+app.get('/header', (req, res) => {
+  res.set('Content-Type', 'text/plain');
+  res.send('Plain text');
+});
+
+// 设置多个响应头
+app.get('/headers', (req, res) => {
+  res.set({
+    'Content-Type': 'application/json',
+    'X-Custom-Header': 'custom-value',
+    'Cache-Control': 'no-cache'
+  });
+  res.json({ message: 'Headers set' });
+});
+
+// CORS 相关设置
+app.get('/cors', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE'
+  });
+  res.json({ cors: 'enabled' });
+});</div>
+
+      <h3>res.cookie() / res.clearCookie() - Cookie 操作</h3>
+      <div class="code-block">
+// 设置 Cookie
+app.get('/set-cookie', (req, res) => {
+  res.cookie('sessionId', 'abc123', {
+    maxAge: 900000,       // 过期时间（毫秒）
+    httpOnly: true,       // 仅服务器可访问
+    secure: true,         // 仅 HTTPS 传输
+    sameSite: 'strict',   // CSRF 防护
+    domain: 'example.com',
+    path: '/'
+  });
+  res.send('Cookie set');
+});
+
+// 清除 Cookie
+app.get('/clear-cookie', (req, res) => {
+  res.clearCookie('sessionId');
+  res.send('Cookie cleared');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> HTTP 状态码参考</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>状态码</th>
+            <th>名称</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>200</code></td>
+            <td>OK</td>
+            <td>请求成功</td>
+          </tr>
+          <tr>
+            <td><code>201</code></td>
+            <td>Created</td>
+            <td>资源创建成功</td>
+          </tr>
+          <tr>
+            <td><code>204</code></td>
+            <td>No Content</td>
+            <td>成功但无返回内容（DELETE）</td>
+          </tr>
+          <tr>
+            <td><code>301</code></td>
+            <td>Moved Permanently</td>
+            <td>永久重定向</td>
+          </tr>
+          <tr>
+            <td><code>302</code></td>
+            <td>Found</td>
+            <td>临时重定向</td>
+          </tr>
+          <tr>
+            <td><code>304</code></td>
+            <td>Not Modified</td>
+            <td>资源未修改（缓存）</td>
+          </tr>
+          <tr>
+            <td><code>400</code></td>
+            <td>Bad Request</td>
+            <td>请求参数错误</td>
+          </tr>
+          <tr>
+            <td><code>401</code></td>
+            <td>Unauthorized</td>
+            <td>未认证</td>
+          </tr>
+          <tr>
+            <td><code>403</code></td>
+            <td>Forbidden</td>
+            <td>无权限</td>
+          </tr>
+          <tr>
+            <td><code>404</code></td>
+            <td>Not Found</td>
+            <td>资源不存在</td>
+          </tr>
+          <tr>
+            <td><code>409</code></td>
+            <td>Conflict</td>
+            <td>资源冲突</td>
+          </tr>
+          <tr>
+            <td><code>422</code></td>
+            <td>Unprocessable Entity</td>
+            <td>语义错误</td>
+          </tr>
+          <tr>
+            <td><code>429</code></td>
+            <td>Too Many Requests</td>
+            <td>请求过于频繁</td>
+          </tr>
+          <tr>
+            <td><code>500</code></td>
+            <td>Internal Server Error</td>
+            <td>服务器错误</td>
+          </tr>
+          <tr>
+            <td><code>502</code></td>
+            <td>Bad Gateway</td>
+            <td>网关错误</td>
+          </tr>
+          <tr>
+            <td><code>503</code></td>
+            <td>Service Unavailable</td>
+            <td>服务不可用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Request 对象包含请求的所有信息：params、query、body、headers 等</li>
+            <li>Response 对象用于发送响应：send、json、status、redirect 等</li>
+            <li>res.send() 自动设置 Content-Type，res.json() 明确返回 JSON</li>
+            <li>使用 res.status() 设置状态码，正确使用 HTTP 状态码很重要</li>
+            <li>可以链式调用 response 方法，提高代码可读性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>创建一个 API，获取路由参数、查询参数和请求体，并返回它们的组合</li>
+        <li>实现一个接口，根据请求的 Accept 头返回不同格式的内容</li>
+        <li>创建一个完整的 CRUD API，正确使用状态码</li>
+        <li>实现一个简单的 Cookie 机制，设置并读取 Cookie</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-4-路由基础.html">← 上一节：路由基础</a>
+      <a href="30-6-Express中间件概念.html">下一节：Express 中间件概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

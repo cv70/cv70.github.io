@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>116.3 聚合与实体 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="116-1-DDD概念.html">第116章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>116.3 聚合与实体</h1>
+      <p class="subtitle">管理领域对象的一致性边界</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解聚合的设计原则</li>
+        <li>掌握聚合根的作用</li>
+        <li>学会识别聚合边界</li>
+        <li>了解聚合间的关系</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 聚合概念</h2>
+      <div class="code-block">
+// 聚合（Aggregate）：一组相关对象的集合，作为数据修改的单元
+
+// 聚合设计原则
+const aggregatePrinciples = {
+  一致性边界: '聚合内部保证强一致性',
+  聚合根: '聚合中唯一的外部入口',
+  边界规则: '外部只能引用聚合根',
+  最小化: '聚合应该尽可能小'
+};
+
+// 聚合根职责
+const rootResponsibilities = {
+  控制访问: '外部只能通过聚合根访问内部对象',
+  维护不变性: '保证聚合内部业务规则',
+  发布事件: '对外通知状态变化'
+};
+
+// 聚合示例：订单聚合
+/*
+┌─────────────────────────────────────┐
+│           Order Aggregate           │
+│  ┌─────────────────────────────┐   │
+│  │    Order (Aggregate Root)   │   │
+│  │  - id: OrderId              │   │
+│  │  - status: OrderStatus      │   │
+│  │  - shippingAddress: Address │   │
+│  └─────────────────────────────┘   │
+│              │                      │
+│              ▼                      │
+│  ┌─────────────────────────────┐   │
+│  │       OrderItem[]           │   │
+│  │  - productId                │   │
+│  │  - quantity                 │   │
+│  │  - unitPrice                │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+*/
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">聚合设计要点</div>
+          <p>聚合要小，外部只引用聚合根ID，使用最终一致性跨聚合。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 聚合实现</h2>
+      <div class="code-block">
+// 订单聚合完整实现
+
+// 领域事件
+interface DomainEvent {
+  occurredAt: Date;
+  eventType: string;
+}
+
+class OrderCreatedEvent implements DomainEvent {
+  readonly occurredAt: Date;
+  readonly eventType = 'OrderCreated';
+
+  constructor(
+    readonly orderId: string,
+    readonly userId: string
+  ) {
+    this.occurredAt = new Date();
+  }
+}
+
+class OrderPaidEvent implements DomainEvent {
+  readonly occurredAt: Date;
+  readonly eventType = 'OrderPaid';
+
+  constructor(
+    readonly orderId: string,
+    readonly amount: number
+  ) {
+    this.occurredAt = new Date();
+  }
+}
+
+// 聚合基类
+abstract class AggregateRoot&lt;ID&gt; {
+  protected _id: ID;
+  private _domainEvents: DomainEvent[] = [];
+
+  get id(): ID {
+    return this._id;
+  }
+
+  get domainEvents(): ReadonlyArray&lt;DomainEvent&gt; {
+    return this._domainEvents;
+  }
+
+  protected addDomainEvent(event: DomainEvent): void {
+    this._domainEvents.push(event);
+  }
+
+  clearDomainEvents(): void {
+    this._domainEvents = [];
+  }
+}
+
+// 订单聚合根
+class Order extends AggregateRoot&lt;OrderId&gt; {
+  private _items: OrderItem[] = [];
+  private _status: OrderStatus;
+  private _shippingAddress: Address;
+  private _createdAt: Date;
+
+  private constructor() {
+    super();
+  }
+
+  // 工厂方法：创建新订单
+  static create(
+    id: OrderId,
+    userId: string,
+    shippingAddress: Address
+  ): Order {
+    const order = new Order();
+    order._id = id;
+    order._status = OrderStatus.PENDING;
+    order._shippingAddress = shippingAddress;
+    order._createdAt = new Date();
+
+    // 发布领域事件
+    order.addDomainEvent(new OrderCreatedEvent(id.value, userId));
+
+    return order;
+  }
+
+  // 从持久化重建
+  static reconstitute(
+    id: OrderId,
+    items: OrderItem[],
+    status: OrderStatus,
+    shippingAddress: Address,
+    createdAt: Date
+  ): Order {
+    const order = new Order();
+    order._id = id;
+    order._items = items;
+    order._status = status;
+    order._shippingAddress = shippingAddress;
+    order._createdAt = createdAt;
+    return order;
+  }
+
+  // 业务方法：添加商品
+  addItem(item: OrderItem): void {
+    this.ensureStatus(OrderStatus.PENDING, 'Cannot add items');
+
+    const existing = this._items.find(i => i.productId === item.productId);
+    if (existing) {
+      existing.increaseQuantity(item.Quantity);
+    } else {
+      this._items.push(item);
+    }
+  }
+
+  // 业务方法：支付
+  pay(): void {
+    this.ensureStatus(OrderStatus.PENDING, 'Order is not pending');
+    this.ensureNonEmpty('Cannot pay for empty order');
+
+    this._status = OrderStatus.PAID;
+
+    this.addDomainEvent(new OrderPaidEvent(
+      this._id.value,
+      this.getTotalAmount().amount
+    ));
+  }
+
+  // 业务方法：发货
+  ship(): void {
+    this.ensureStatus(OrderStatus.PAID, 'Order is not paid');
+    this._status = OrderStatus.SHIPPED;
+  }
+
+  // 业务方法：取消
+  cancel(reason: string): void {
+    if (this._status === OrderStatus.SHIPPED ||
+        this._status === OrderStatus.DELIVERED) {
+      throw new Error('Cannot cancel shipped or delivered order');
+    }
+    this._status = OrderStatus.CANCELLED;
+  }
+
+  // 查询方法
+  get items(): ReadonlyArray&lt;OrderItem&gt; {
+    return this._items;
+  }
+
+  get status(): OrderStatus {
+    return this._status;
+  }
+
+  getTotalAmount(): Money {
+    return this._items.reduce(
+      (total, item) => total.add(item.getTotalPrice()),
+      Money.create(0)
+    );
+  }
+
+  // 私有方法
+  private ensureStatus(expected: OrderStatus, message: string): void {
+    if (this._status !== expected) {
+      throw new Error(`${message}: expected ${expected}, got ${this._status}`);
+    }
+  }
+
+  private ensureNonEmpty(message: string): void {
+    if (this._items.length === 0) {
+      throw new Error(message);
+    }
+  }
+}
+
+// 使用示例
+const orderId = OrderId.generate();
+const address = new Address('北京', '北京', '朝阳区', 'xxx街道');
+
+const order = Order.create(orderId, 'user-123', address);
+
+order.addItem(new OrderItem(
+  'product-1',
+  '商品A',
+  Money.create(100),
+  2
+));
+
+order.pay();
+
+// 获取领域事件并发布
+console.log(order.domainEvents);
+// [OrderCreatedEvent, OrderPaidEvent]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 聚合是一致性边界</li>
+            <li>• 聚合根是唯一外部入口</li>
+            <li>• 聚合应该尽可能小</li>
+            <li>• 使用领域事件通知状态变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="116-2-领域建模.html">← 上一节：领域建模</a>
+      <a href="116-4-仓储模式.html">下一节：仓储模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

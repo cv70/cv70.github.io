@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.4 数据验证 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="46-1-管道概念.html">第四十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>46.4 数据验证</h1>
+      <p class="subtitle">使用 class-validator 进行 DTO 验证</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>安装和配置 class-validator</li>
+        <li>掌握常用验证装饰器</li>
+        <li>学会自定义验证规则</li>
+        <li>掌握 ValidationPipe 配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装 class-validator 和 class-transformer
+npm install class-validator class-transformer
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义验证 DTO</h2>
+      <div class="code-block">
+// create-user.dto.ts
+import {
+  IsString,
+  IsEmail,
+  IsInt,
+  Min,
+  Max,
+  IsOptional,
+  IsEnum,
+  MinLength,
+  MaxLength,
+  Matches,
+  IsDateString,
+  IsBoolean,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreateAddressDto {
+  @IsString()
+  @MaxLength(100)
+  city: string;
+
+  @IsString()
+  @MaxLength(200)
+  street: string;
+
+  @IsString()
+  @Matches(/^[0-9]{6}$/)
+  zipCode: string;
+}
+
+export class CreateUserDto {
+  @IsString()
+  @MinLength(2, { message: 'Name is too short' })
+  @MaxLength(50)
+  name: string;
+
+  @IsEmail({}, { message: 'Invalid email format' })
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+    message: 'Password too weak',
+  })
+  password: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(150)
+  age: number;
+
+  @IsEnum(['admin', 'user', 'guest'])
+  role: string;
+
+  @IsOptional()
+  @IsDateString()
+  birthday?: string;
+
+  @IsBoolean()
+  isActive: boolean;
+
+  @ValidateNested()
+  @Type(() => CreateAddressDto)
+  address: CreateAddressDto;
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">验证装饰器</div>
+          <p>class-validator 提供了丰富的验证装饰器，可以组合使用。message 选项可以自定义错误消息。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 常用验证装饰器</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>装饰器</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>@IsString()</td>
+            <td>验证字符串</td>
+          </tr>
+          <tr>
+            <td>@IsNumber()</td>
+            <td>验证数字</td>
+          </tr>
+          <tr>
+            <td>@IsInt()</td>
+            <td>验证整数</td>
+          </tr>
+          <tr>
+            <td>@IsEmail()</td>
+            <td>验证邮箱格式</td>
+          </tr>
+          <tr>
+            <td>@Min() / @Max()</td>
+            <td>最小/最大值</td>
+          </tr>
+          <tr>
+            <td>@MinLength() / @MaxLength()</td>
+            <td>最小/最大长度</td>
+          </tr>
+          <tr>
+            <td>@IsEnum()</td>
+            <td>验证枚举值</td>
+          </tr>
+          <tr>
+            <td>@Matches()</td>
+            <td>正则表达式验证</td>
+          </tr>
+          <tr>
+            <td>@IsOptional()</td>
+            <td>可选字段</td>
+          </tr>
+          <tr>
+            <td>@IsDateString()</td>
+            <td>验证日期字符串</td>
+          </tr>
+          <tr>
+            <td>@IsArray()</td>
+            <td>验证数组</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置 ValidationPipe</h2>
+      <div class="code-block">
+// main.ts
+import { ValidationPipe } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,              // 过滤非 DTO 定义的属性
+      forbidNonWhitelisted: true,   // 有非定义属性时报错
+      transform: true,              // 自动转换为 DTO 类型
+      transformOptions: {
+        enableImplicitConversion: true,  // 启用隐式类型转换
+      },
+      disableErrorMessages: false,  // 生产环境可设为 true
+      validationError: {
+        target: false,              // 不返回目标对象
+        value: false,               // 不返回错误值
+      },
+    }),
+  );
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 自定义验证器</h2>
+      <div class="code-block">
+import {
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments,
+} from 'class-validator';
+
+// 自定义装饰器：验证密码确认
+export function IsMatch(property: string, validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'isMatch',
+      target: object.constructor,
+      propertyName: propertyName,
+      constraints: [property],
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const [relatedPropertyName] = args.constraints;
+          const relatedValue = (args.object as any)[relatedPropertyName];
+          return value === relatedValue;
+        },
+        defaultMessage(args: ValidationArguments) {
+          const [relatedPropertyName] = args.constraints;
+          return `${propertyName} must match ${relatedPropertyName}`;
+        },
+      },
+    });
+  };
+}
+
+// 使用自定义验证器
+export class RegisterDto {
+  @IsString()
+  password: string;
+
+  @IsString()
+  @IsMatch('password', { message: 'Passwords do not match' })
+  confirmPassword: string;
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">验证组</div>
+          <p>可以使用 groups 选项为不同场景定义不同的验证规则，例如创建和更新时使用不同的验证。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• class-validator 提供丰富的验证装饰器</li>
+            <li>• DTO 定义验证规则，ValidationPipe 执行验证</li>
+            <li>• whitelist 过滤非定义属性</li>
+            <li>• 可创建自定义验证装饰器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="46-3-自定义管道.html">← 上一节：自定义管道</a>
+      <a href="46-5-数据转换.html">下一节：数据转换 →</a>
+    </div>
+  </div>
+</body>
+</html>

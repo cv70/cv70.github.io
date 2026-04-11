@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.3 一次性事件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="16-1-EventEmitter基础.html">第十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>16.3 一次性事件</h1>
+      <p class="subtitle">只执行一次的事件监听器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 once 方法的使用</li>
+        <li>理解一次性事件的实现原理</li>
+        <li>学会使用一次性事件的场景</li>
+        <li>了解 prependOnceListener 方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> once 方法</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// once 注册的监听器只执行一次
+emitter.once('init', () => {
+  console.log('初始化完成');
+});
+
+emitter.emit('init');  // 输出: 初始化完成
+emitter.emit('init');  // 不输出
+emitter.emit('init');  // 不输出
+
+// once 也可以接收参数
+emitter.once('data', (value) => {
+  console.log('收到数据:', value);
+});
+
+emitter.emit('data', '第一条');  // 输出: 收到数据: 第一条
+emitter.emit('data', '第二条');  // 不输出
+
+// once 与 on 可以同时使用
+emitter.on('event', () => console.log('on 监听器'));
+emitter.once('event', () => console.log('once 监听器'));
+
+emitter.emit('event');
+// 输出: on 监听器, once 监听器
+
+emitter.emit('event');
+// 输出: on 监听器 (once 已被移除)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实现原理</h2>
+      <div class="code-block">
+// once 的简单实现原理
+function onceWrapper(emitter, event, listener) {
+  const wrapper = (...args) => {
+    // 先移除自己
+    emitter.removeListener(event, wrapper);
+    // 执行原监听器
+    return listener.apply(this, args);
+  };
+  return wrapper;
+}
+
+// 自定义 once 实现
+class MyEmitter extends EventEmitter {
+  myOnce(event, listener) {
+    const wrapped = (...args) => {
+      this.off(event, wrapped);
+      listener.apply(this, args);
+    };
+    this.on(event, wrapped);
+    return this;
+  }
+}
+
+// 使用 wrapper 包装函数
+const wrapped = onceWrapper(emitter, 'test', () => {
+  console.log('只执行一次');
+});
+emitter.on('test', wrapped);
+
+// 查看 once 包装后的监听器
+const emitter2 = new EventEmitter();
+emitter2.once('event', () => console.log('once'));
+
+const listeners = emitter2.rawListeners('event');
+console.log(listeners[0]);  // { [Function: onceWrapper] listener: [Function] }
+console.log(listeners[0].listener);  // 原始监听器函数
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 使用场景</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 1. 一次性初始化
+class Database extends EventEmitter {
+  connect() {
+    setTimeout(() => {
+      this.emit('connected');
+    }, 1000);
+  }
+}
+
+const db = new Database();
+db.once('connected', () => {
+  console.log('数据库连接成功，开始操作');
+});
+
+db.connect();
+
+// 2. 首次事件响应
+const server = new EventEmitter();
+
+// 只响应第一次请求
+server.once('request', (req) => {
+  console.log('收到首个请求:', req.url);
+});
+
+// 3. 等待某个条件
+function waitForEvent(emitter, event) {
+  return new Promise((resolve) => {
+    emitter.once(event, resolve);
+  });
+}
+
+// 使用
+async function main() {
+  const result = await waitForEvent(emitter, 'done');
+  console.log('完成:', result);
+}
+
+// 4. 超时处理
+function waitForEventWithTimeout(emitter, event, timeout) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      emitter.off(event, handler);
+      reject(new Error('超时'));
+    }, timeout);
+
+    const handler = (data) => {
+      clearTimeout(timer);
+      resolve(data);
+    };
+
+    emitter.once(event, handler);
+  });
+}
+
+// 使用
+try {
+  const data = await waitForEventWithTimeout(emitter, 'response', 5000);
+} catch (err) {
+  console.error('等待超时');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> prependOnceListener</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// prependOnceListener 添加到开头且执行一次
+emitter.on('event', () => console.log('普通监听器 1'));
+emitter.on('event', () => console.log('普通监听器 2'));
+emitter.prependOnceListener('event', () => console.log('一次性监听器（开头）'));
+
+emitter.emit('event');
+// 输出顺序:
+// 一次性监听器（开头）
+// 普通监听器 1
+// 普通监听器 2
+
+emitter.emit('event');
+// 输出顺序:
+// 普通监听器 1
+// 普通监听器 2
+
+// 组合使用
+emitter.once('once', () => console.log('once'));
+emitter.prependOnceListener('once', () => console.log('prependOnce'));
+
+emitter.emit('once');
+// 输出:
+// prependOnce
+// once
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">使用建议</div>
+          <p>需要优先处理的一次性事件使用 prependOnceListener，普通一次性事件使用 once。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• once 注册的监听器只执行一次</li>
+            <li>• 执行后自动从监听器数组中移除</li>
+            <li>• prependOnceListener 添加到开头</li>
+            <li>• 适合初始化、首次响应等场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="16-2-事件监听与触发.html">← 上一节：事件监听与触发</a>
+      <a href="16-4-错误处理.html">下一节：错误处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

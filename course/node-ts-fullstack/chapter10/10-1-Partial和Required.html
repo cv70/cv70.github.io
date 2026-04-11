@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.1 Partial 和 Required - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.1 Partial 和 Required</h1>
+      <p class="subtitle">控制属性的可选性</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Partial 的实现原理</li>
+        <li>掌握 Required 的使用场景</li>
+        <li>学会组合使用这两种工具类型</li>
+        <li>了解实际项目中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Partial 深入</h2>
+      <div class="code-block">
+// Partial 将所有属性变为可选
+// 内置实现：
+type MyPartial<T> = {
+  [P in keyof T]?: T[P];
+};
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  age: number;
+}
+
+// 使用 Partial
+type PartialUser = Partial<User>;
+// { id?: number; name?: string; email?: string; age?: number; }
+
+// 部分属性更新
+const updates: Partial<User> = {
+  name: 'Alice'
+};
+
+function updateUser(user: User, updates: Partial<User>): User {
+  return { ...user, ...updates };
+}
+
+const user: User = { id: 1, name: 'Bob', email: 'bob@example.com', age: 25 };
+const updated = updateUser(user, { name: 'Alice', age: 26 });
+// { id: 1, name: 'Alice', email: 'bob@example.com', age: 26 }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✏️</span> Required 深入</h2>
+      <div class="code-block">
+// Required 将所有属性变为必需
+// 内置实现：
+type MyRequired<T> = {
+  [P in keyof T]-?: T[P];
+};
+
+interface FormUser {
+  id?: number;
+  name?: string;
+  email?: string;
+  role?: 'admin' | 'user';
+}
+
+// 使用 Required
+type CompleteUser = Required<FormUser>;
+// { id: number; name: string; email: string; role: 'admin' | 'user'; }
+
+// 验证后使用
+function validateForm(data: FormUser): Required<FormUser> | null {
+  if (!data.name || !data.email) {
+    return null;
+  }
+  return {
+    id: data.id ?? Date.now(),
+    name: data.name,
+    email: data.email,
+    role: data.role ?? 'user'
+  };
+}
+
+// API 请求体验证
+interface ApiInput {
+  username?: string;
+  password?: string;
+  rememberMe?: boolean;
+}
+
+type ApiInputRequired = Required<Pick<ApiInput, 'username' | 'password'>> &
+  Partial<Pick<ApiInput, 'rememberMe'>>;
+// { username: string; password: string; rememberMe?: boolean; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 组合应用</h2>
+      <div class="code-block">
+// 部分必需、部分可选
+interface Config {
+  apiUrl: string;
+  timeout: number;
+  retries: number;
+  debug: boolean;
+  logLevel: 'info' | 'warn' | 'error';
+}
+
+// 创建配置：必需核心属性，可选其他
+type CreateConfig = Required<Pick<Config, 'apiUrl'>> &
+  Partial<Omit<Config, 'apiUrl'>>;
+// { apiUrl: string; timeout?: number; retries?: number; ... }
+
+const config: CreateConfig = {
+  apiUrl: 'https://api.example.com',
+  timeout: 5000
+};
+
+// 合并默认配置
+const defaultConfig: Required<Config> = {
+  apiUrl: '',
+  timeout: 3000,
+  retries: 3,
+  debug: false,
+  logLevel: 'info'
+};
+
+function createConfig(input: Partial<Config>): Required<Config> {
+  return { ...defaultConfig, ...input };
+}
+
+// 表单状态管理
+interface FormState {
+  values: Record<string, unknown>;
+  errors: Record<string, string>;
+  touched: Record<string, boolean>;
+  isSubmitting: boolean;
+}
+
+type FormUpdate = Partial<FormState>;
+
+function updateForm(state: FormState, update: FormUpdate): FormState {
+  return { ...state, ...update };
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">最佳实践</div>
+          <p>Partial 常用于更新操作，Required 常用于验证后的完整对象。结合 Pick 和 Omit 可以精确控制哪些属性需要修改。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Partial 使所有属性变为可选</li>
+            <li>• Required 使所有属性变为必需</li>
+            <li>• -? 移除可选修饰符</li>
+            <li>• 常用于表单处理和配置合并</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter09/9-5-模板字面量类型.html">← 上一章：模板字面量类型</a>
+      <a href="10-2-Readonly和Mutable.html">下一节：Readonly 和 Mutable →</a>
+    </div>
+  </div>
+</body>
+</html>

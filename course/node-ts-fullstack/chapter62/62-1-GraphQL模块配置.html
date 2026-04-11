@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>62.1 GraphQL 模块配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="62-1-GraphQL模块配置.html">第62章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>62.1 GraphQL 模块配置</h1>
+      <p class="subtitle">NestJS GraphQL 模块配置详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> NestJS GraphQL 简介</h2>
+      <p>NestJS 提供了 @nestjs/graphql 包，支持两种开发模式：代码优先（Code First）和 Schema 优先（Schema First）。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">代码优先</h3>
+          <p class="card-text">使用 TypeScript 装饰器定义类型，自动生成 Schema</p>
+          <ul class="feature-list">
+            <li>TypeScript 类型同步</li>
+            <li>开发效率高</li>
+            <li>减少重复代码</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Schema 优先</h3>
+          <p class="card-text">先定义 GraphQL Schema，再实现 Resolver</p>
+          <ul class="feature-list">
+            <li>Schema 即文档</li>
+            <li>前后端并行开发</li>
+            <li>更好的 API 设计</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 安装与配置</h2>
+
+      <h3>安装依赖</h3>
+      <div class="code-block">
+<span class="comment"># 安装 GraphQL 相关依赖</span>
+npm install @nestjs/graphql @nestjs/apollo graphql apollo-server-express
+      </div>
+
+      <h3>基本配置</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { Module } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> { GraphQLModule } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { ApolloDriver, ApolloDriverConfig } <span class="keyword">from</span> <span class="string">'@nestjs/apollo'</span>;
+<span class="keyword">import</span> { join } <span class="keyword">from</span> <span class="string">'path'</span>;
+
+@Module({
+  imports: [
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      <span class="comment">// Schema 文件路径</span>
+      typePaths: [<span class="string">'./**/*.graphql'</span>],
+
+      <span class="comment">// 或使用代码优先</span>
+      autoSchemaFile: join(process.cwd(), <span class="string">'src/schema.gql'</span>),
+
+      <span class="comment">// 开发环境启用 Playground</span>
+      playground: <span class="keyword">true</span>,
+
+      <span class="comment">// 调试模式</span>
+      debug: <span class="keyword">true</span>,
+
+      <span class="comment">// 路径配置</span>
+      path: <span class="string">'/graphql'</span>,
+
+      <span class="comment">// CORS 配置</span>
+      cors: {
+        origin: <span class="keyword">true</span>,
+        credentials: <span class="keyword">true</span>,
+      },
+    }),
+  ],
+})
+<span class="keyword">export class</span> AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整配置选项</h2>
+
+      <div class="code-block">
+GraphQLModule.forRoot<ApolloDriverConfig>({
+  driver: ApolloDriver,
+
+  <span class="comment">// === Schema 配置 ===</span>
+
+  <span class="comment">// Schema 优先模式</span>
+  typePaths: [<span class="string">'./**/*.graphql'</span>],
+
+  <span class="comment">// 代码优先模式</span>
+  autoSchemaFile: <span class="keyword">true</span>,  <span class="comment">// 自动生成到内存</span>
+  autoSchemaFile: join(process.cwd(), <span class="string">'src/schema.gql'</span>),  <span class="comment">// 生成到文件</span>
+
+  <span class="comment">// Schema 配置</span>
+  sortSchema: <span class="keyword">true</span>,  <span class="comment">// 排序 Schema</span>
+
+  <span class="comment">// === 调试配置 ===</span>
+  debug: process.env.NODE_ENV !== <span class="string">'production'</span>,
+  playground: process.env.NODE_ENV !== <span class="string">'production'</span>,
+  introspection: <span class="keyword">true</span>,  <span class="comment">// 允许 Schema 内省</span>
+
+  <span class="comment">// === 路径配置 ===</span>
+  path: <span class="string">'/graphql'</span>,
+
+  <span class="comment">// === Context 配置 ===</span>
+  context: ({ req, res }) => ({
+    req,
+    res,
+    user: req.user,
+  }),
+
+  <span class="comment">// === 格式化错误 ===</span>
+  formatError: (error) => {
+    <span class="keyword">const</span> graphQLFormattedError = {
+      message: error.message,
+      code: error.extensions?.code,
+      statusCode: error.extensions?.statusCode,
+    };
+    <span class="keyword">return</span> graphQLFormattedError;
+  },
+
+  <span class="comment">// === 响应格式化 ===</span>
+  formatResponse: (response) => {
+    <span class="keyword">return</span> response;
+  },
+
+  <span class="comment">// === 插件 ===</span>
+  plugins: [],
+
+  <span class="comment">// === 订阅配置 ===</span>
+  subscriptions: {
+    <span class="string">'graphql-ws'</span>: <span class="keyword">true</span>,
+  },
+
+  <span class="comment">// === 缓存配置 ===</span>
+  cache: <span class="string">'bounded'</span>,
+
+  <span class="comment">// === 安全校验 ===</span>
+  csrfPrevention: <span class="keyword">true</span>,
+  persistedQueries: <span class="keyword">false</span>,  <span class="comment">// 禁用持久化查询</span>
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Context 配置</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Module } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> { GraphQLModule } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { ApolloDriver, ApolloDriverConfig } <span class="keyword">from</span> <span class="string">'@nestjs/apollo'</span>;
+
+<span class="keyword">@Module</span>({
+  imports: [
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: <span class="keyword">true</span>,
+      context: ({ req, res }) => {
+        <span class="keyword">const</span> token = req.headers.authorization?.split(<span class="string">' '</span>)[<span class="number">1</span>];
+        <span class="keyword">return</span> {
+          req,
+          res,
+          token,
+        };
+      },
+    }),
+  ],
+})
+<span class="keyword">export class</span> AppModule {}
+
+<span class="comment">// 异步配置</span>
+GraphQLModule.forRootAsync<ApolloDriverConfig>({
+  driver: ApolloDriver,
+  imports: [ConfigModule],
+  inject: [ConfigService],
+  useFactory: <span class="keyword">async</span> (configService: ConfigService) => ({
+    autoSchemaFile: <span class="keyword">true</span>,
+    playground: configService.get(<span class="string">'NODE_ENV'</span>) !== <span class="string">'production'</span>,
+    debug: configService.get(<span class="string">'NODE_ENV'</span>) !== <span class="string">'production'</span>,
+  }),
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>NestJS 支持代码优先和 Schema 优先两种模式</li>
+        <li>autoSchemaFile 配置代码优先模式</li>
+        <li>typePaths 配置 Schema 优先模式</li>
+        <li>Context 用于传递请求上下文</li>
+        <li>formatError 统一错误格式</li>
+        <li>生产环境应关闭 playground 和 debug</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter61/61-5-认证与授权.html">← 上一节：认证与授权</a>
+      <a href="62-2-代码优先模式.html">下一节：代码优先模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

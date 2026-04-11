@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>111.3 消息存储 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="111-1-需求分析.html">第111章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>111.3 消息存储</h1>
+      <p class="subtitle">消息的持久化与查询设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握消息表设计</li>
+        <li>学会会话管理</li>
+        <li>理解消息索引优化</li>
+        <li>了解消息删除策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 数据模型设计</h2>
+      <div class="code-block">
+// message.entity.ts
+@Entity('messages')
+@Index(['conversationId', 'createdAt'])
+@Index(['senderId', 'createdAt'])
+export class Message {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  conversationId: string;
+
+  @Column()
+  senderId: string;
+
+  @Column()
+  receiverId: string;  // 群聊时为群ID
+
+  @Column()
+  type: MessageType;
+
+  @Column({ type: 'text' })
+  content: string;
+
+  @Column({ type: 'json', nullable: true })
+  extra: {
+    fileName?: string;
+    fileSize?: number;
+    fileUrl?: string;
+    thumbnailUrl?: string;
+    width?: number;
+    height?: number;
+    duration?: number;
+  };
+
+  @Column({ default: false })
+  isGroup: boolean;
+
+  @Column({ default: false })
+  recalled: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  recalledAt: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// conversation.entity.ts
+@Entity('conversations')
+export class Conversation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  type: 'private' | 'group';
+
+  @Column({ nullable: true })
+  groupId: string;
+
+  @ManyToMany(() => User)
+  @JoinTable()
+  participants: User[];
+
+  @Column({ nullable: true })
+  lastMessageId: string;
+
+  @ManyToOne(() => Message, { nullable: true })
+  lastMessage: Message;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastMessageAt: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+// 会话读状态（用户维度）
+@Entity('conversation_reads')
+export class ConversationRead {
+  @PrimaryColumn()
+  conversationId: string;
+
+  @PrimaryColumn()
+  userId: string;
+
+  @Column({ type: 'timestamp' })
+  lastReadAt: Date;
+
+  @Column({ default: 0 })
+  unreadCount: number;
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">存储设计要点</div>
+          <p>分表存储历史消息、会话缓存最新消息、未读计数实时更新。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 消息服务实现</h2>
+      <div class="code-block">
+// message.service.ts
+@Injectable()
+export class MessageService {
+  constructor(
+    @InjectRepository(Message) private messageRepo: Repository<Message>,
+    @InjectRepository(Conversation) private convRepo: Repository<Conversation>,
+    @InjectRepository(ConversationRead) private readRepo: Repository<ConversationRead>,
+  ) {}
+
+  // 创建消息
+  async create(dto: CreateMessageDto): Promise<Message> {
+    // 获取或创建会话
+    let conversation = await this.getOrCreateConversation(
+      dto.from,
+      dto.to,
+      dto.isGroup
+    );
+
+    // 创建消息
+    const message = this.messageRepo.create({
+      conversationId: conversation.id,
+      senderId: dto.from,
+      receiverId: dto.to,
+      type: dto.type,
+      content: dto.content,
+      extra: dto.extra,
+      isGroup: dto.isGroup,
+    });
+
+    await this.messageRepo.save(message);
+
+    // 更新会话最后消息
+    await this.convRepo.update(conversation.id, {
+      lastMessageId: message.id,
+      lastMessageAt: message.createdAt,
+    });
+
+    // 更新未读计数
+    if (!dto.isGroup) {
+      await this.incrementUnreadCount(conversation.id, dto.to);
+    } else {
+      // 群聊需要给所有群成员增加未读
+      await this.incrementGroupUnreadCount(conversation.id, dto.from);
+    }
+
+    return message;
+  }
+
+  // 获取会话消息列表
+  async getMessages(
+    conversationId: string,
+    userId: string,
+    options: { before?: string; limit: number }
+  ): Promise<Message[]> {
+    const query = this.messageRepo.createQueryBuilder('message')
+      .where('message.conversationId = :conversationId', { conversationId })
+      .orderBy('message.createdAt', 'DESC')
+      .limit(options.limit);
+
+    if (options.before) {
+      const beforeMessage = await this.messageRepo.findOne({
+        where: { id: options.before }
+      });
+      if (beforeMessage) {
+        query.andWhere('message.createdAt < :createdAt', {
+          createdAt: beforeMessage.createdAt
+        });
+      }
+    }
+
+    const messages = await query.getMany();
+
+    // 标记已读
+    await this.markAsRead(conversationId, userId);
+
+    return messages.reverse();
+  }
+
+  // 获取会话列表
+  async getConversations(userId: string): Promise<Conversation[]> {
+    return this.convRepo.createQueryBuilder('conversation')
+      .leftJoinAndSelect('conversation.participants', 'participant')
+      .leftJoinAndSelect('conversation.lastMessage', 'lastMessage')
+      .innerJoin('conversation.participants', 'user', 'user.id = :userId', { userId })
+      .orderBy('conversation.lastMessageAt', 'DESC')
+      .getMany();
+  }
+
+  // 标记已读
+  async markAsRead(conversationId: string, userId: string) {
+    await this.readRepo.upsert(
+      {
+        conversationId,
+        userId,
+        lastReadAt: new Date(),
+        unreadCount: 0,
+      },
+      ['conversationId', 'userId']
+    );
+  }
+
+  // 增加未读计数
+  private async incrementUnreadCount(conversationId: string, userId: string) {
+    await this.readRepo.createQueryBuilder()
+      .insert()
+      .values({
+        conversationId,
+        userId,
+        lastReadAt: new Date(0),
+        unreadCount: 1,
+      })
+      .onConflict(`
+        ("conversationId", "userId") DO UPDATE
+        SET "unreadCount" = "unreadCount" + 1
+      `)
+      .execute();
+  }
+
+  // 撤回消息
+  async recallMessage(messageId: string, userId: string): Promise<void> {
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      throw new NotFoundException('消息不存在');
+    }
+
+    if (message.senderId !== userId) {
+      throw new ForbiddenException('只能撤回自己的消息');
+    }
+
+    // 检查是否在撤回时间内（如2分钟）
+    const timeDiff = Date.now() - message.createdAt.getTime();
+    if (timeDiff > 2 * 60 * 1000) {
+      throw new BadRequestException('已超过撤回时间');
+    }
+
+    await this.messageRepo.update(messageId, {
+      recalled: true,
+      recalledAt: new Date(),
+    });
+  }
+
+  // 获取或创建会话
+  private async getOrCreateConversation(
+    userId1: string,
+    userId2: string,
+    isGroup: boolean
+  ): Promise<Conversation> {
+    if (isGroup) {
+      // 群聊会话
+      let conversation = await this.convRepo.findOne({
+        where: { groupId: userId2, type: 'group' }
+      });
+
+      if (!conversation) {
+        conversation = this.convRepo.create({
+          type: 'group',
+          groupId: userId2,
+        });
+        await this.convRepo.save(conversation);
+      }
+
+      return conversation;
+    } else {
+      // 私聊会话
+      const conversations = await this.convRepo
+        .createQueryBuilder('conversation')
+        .innerJoin('conversation.participants', 'user')
+        .where('conversation.type = :type', { type: 'private' })
+        .andWhere('user.id IN (:...userIds)', { userIds: [userId1, userId2] })
+        .groupBy('conversation.id')
+        .having('COUNT(user.id) = 2')
+        .getMany();
+
+      if (conversations.length > 0) {
+        return conversations[0];
+      }
+
+      const conversation = this.convRepo.create({
+        type: 'private',
+        participants: [{ id: userId1 } as User, { id: userId2 } as User],
+      });
+
+      return this.convRepo.save(conversation);
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 消息表存储所有聊天记录</li>
+            <li>• 会话表维护会话列表</li>
+            <li>• 未读计数独立存储便于查询</li>
+            <li>• 索引优化提升查询性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="111-2-WebSocket服务.html">← 上一节：WebSocket 服务</a>
+      <a href="111-4-在线状态管理.html">下一节：在线状态管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

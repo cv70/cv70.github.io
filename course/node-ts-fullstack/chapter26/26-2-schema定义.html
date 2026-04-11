@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.2 Schema 定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="26-1-prisma简介.html">第二十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>26.2 Schema 定义</h1>
+      <p class="subtitle">使用 PSDL 定义数据模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Prisma Schema 语法</li>
+        <li>学会定义模型和字段</li>
+        <li>理解关系定义方式</li>
+        <li>了解属性和修饰符</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本结构</h2>
+      <div class="code-block">
+// schema.prisma 文件结构
+
+// 1. Generator 配置
+generator client {
+  provider = "prisma-client-js"  // 生成 Prisma Client
+  previewFeatures = []           // 预览功能
+  output   = "../node_modules/.prisma/client"  // 输出路径
+}
+
+// 2. Datasource 配置
+datasource db {
+  provider = "mysql"             // 数据库类型
+  url      = env("DATABASE_URL") // 连接字符串
+  relationMode = "foreignKeys"   // 关系模式
+}
+
+// 3. Model 定义
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  name  String?
+}
+
+// 支持的数据库 provider
+// mysql, postgresql, sqlite, sqlserver, mongodb, cockroachdb
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 字段类型</h2>
+      <div class="code-block">
+model Example {
+  // 基础类型
+  id        Int      @id @default(autoincrement())
+  string    String
+  int       Int
+  float     Float
+  boolean   Boolean
+  dateTime  DateTime
+  json      Json
+  bytes     Bytes
+  decimal   Decimal
+
+  // 可选字段（可为 null）
+  nickname  String?
+
+  // 列表类型（仅 MongoDB 或 PostgreSQL）
+  tags      String[]
+
+  // 枚举类型
+  role      Role     @default(USER)
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+// 数据库类型映射
+String     → VARCHAR(191) / TEXT
+Int        → INT
+Float      → DOUBLE
+Boolean    → TINYINT(1)
+DateTime   → DATETIME(3)
+Json       → JSON
+Decimal    → DECIMAL(65,30)
+Bytes      → BLOB
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">类型后缀说明</div>
+          <p>String? 表示可选字段，允许 NULL；String[] 表示数组类型。Prisma 会根据数据库类型自动映射到对应的 SQL 类型。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 字段属性</h2>
+      <div class="code-block">
+model User {
+  // 主键
+  id        Int      @id @default(autoincrement())
+  uuid      String   @id @default(uuid())
+  customId  String   @id
+
+  // 默认值
+  createdAt DateTime @default(now())
+  status    Status   @default(ACTIVE)
+  count     Int      @default(0)
+  random    Float    @default(random())
+
+  // 更新时间
+  updatedAt DateTime @updatedAt
+
+  // 唯一约束
+  email     String   @unique
+  username  String   @unique
+
+  // 数据库映射
+  fullName  String   @map("full_name")  // 字段映射到数据库列名
+  isActive  Boolean  @map("is_active") @default(true)
+
+  // 忽略字段（不映射到数据库）
+  tempData  String   @ignore
+
+  // 表映射
+  @@map("users")  // 模型映射到表名
+
+  // 组合唯一
+  @@unique([firstName, lastName])
+
+  // 索引
+  @@index([email])
+  @@index([createdAt, status])
+
+  // 组合主键
+  @@id([userId, roleId])
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])  // 组合主键
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 关系定义</h2>
+      <div class="code-block">
+// 一对多关系
+model User {
+  id    Int    @id @default(autoincrement())
+  posts Post[]  // 一个用户有多篇文章
+}
+
+model Post {
+  id       Int   @id @default(autoincrement())
+  title    String
+  author   User  @relation(fields: [authorId], references: [id])
+  authorId Int   // 外键字段
+}
+
+// 一对一关系
+model User {
+  id      Int      @id @default(autoincrement())
+  profile Profile? // 一个用户有一个详情（可选）
+}
+
+model Profile {
+  id     Int    @id @default(autoincrement())
+  bio    String
+  user   User   @relation(fields: [userId], references: [id])
+  userId Int    @unique  // 外键唯一约束
+}
+
+// 多对多关系
+model Post {
+  id         Int         @id @default(autoincrement())
+  title      String
+  categories Category[]  // 隐式多对多
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String
+  posts Post[]
+}
+
+// 显式多对多（需要额外字段时）
+model Post {
+  id         Int              @id @default(autoincrement())
+  title      String
+  categories PostToCategory[]
+}
+
+model Category {
+  id    Int              @id @default(autoincrement())
+  name  String
+  posts PostToCategory[]
+}
+
+model PostToCategory {
+  postId     Int
+  categoryId Int
+  assignedAt DateTime @default(now())  // 额外字段
+
+  post     Post     @relation(fields: [postId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([postId, categoryId])
+}
+
+// 自引用关系
+model User {
+  id        Int    @id @default(autoincrement())
+  name      String
+  parentId  Int?
+  parent    User?  @relation("UserTree", fields: [parentId], references: [id])
+  children  User[] @relation("UserTree")
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Schema 使用 PSDL 语法定义数据模型</li>
+            <li>• 支持丰富的字段类型和属性</li>
+            <li>• 使用 @relation 定义模型间关系</li>
+            <li>• @@map 和 @map 可自定义表名和列名</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="26-1-prisma简介.html">← 上一节：Prisma 简介</a>
+      <a href="26-3-prisma-client.html">下一节：Prisma Client →</a>
+    </div>
+  </div>
+</body>
+</html>

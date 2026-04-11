@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.2 条件类型分发 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="8-1-条件类型基础.html">第八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>8.2 条件类型分发</h1>
+      <p class="subtitle">联合类型的分布式条件类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解条件类型的分发机制</li>
+        <li>掌握联合类型的分发规则</li>
+        <li>学会控制分发的开启和关闭</li>
+        <li>了解分发的实际应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是分发？</h2>
+      <div class="code-block">
+// 当条件类型作用于联合类型时，会自动分发
+// 即对联合类型的每个成员分别应用条件类型
+
+type ToArray<T> = T extends any ? T[] : never;
+
+// 分发过程：
+// string | number 分发为：
+//   (string extends any ? string[] : never) |
+//   (number extends any ? number[] : never)
+// 结果：string[] | number[]
+
+type Result = ToArray<string | number>;  // string[] | number[]
+
+// 另一个示例
+type NonNullable<T> = T extends null | undefined ? never : T;
+
+type R1 = NonNullable<string | null | undefined>;  // string
+type R2 = NonNullable<number | null>;               // number
+type R3 = NonNullable<null | undefined>;            // never
+
+// 分发过程：
+// string | null | undefined 分发为：
+//   (string extends null | undefined ? never : string) |  -> string
+//   (null extends null | undefined ? never : null) |      -> never
+//   (undefined extends null | undefined ? never : undefined) -> never
+// 结果：string | never | never = string
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">分发规则</div>
+          <p>当 T 是联合类型时，条件类型会自动将 T 拆分为每个成员，分别判断后再组合。这是 TypeScript 的内置行为。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 禁止分发</h2>
+      <div class="code-block">
+// 有时我们不希望分发，可以使用元组包装
+type ToArrayNoDistribute<T> = [T] extends [any] ? T[] : never;
+
+type WithDistribute = ToArray<string | number>;         // string[] | number[]
+type NoDistribute = ToArrayNoDistribute<string | number>; // (string | number)[]
+
+// 对比：
+// 分发： (string | number)[] => 可以是 string[] 或 number[]
+// 不分发：(string | number)[] => 必须同时包含 string 和 number
+
+// 实际应用：检查是否为联合类型
+type IsUnion<T, U = T> =
+  T extends any
+    ? [U] extends [T]
+      ? false
+      : true
+    : never;
+
+type A = IsUnion<string>;           // false
+type B = IsUnion<string | number>;  // true
+type C = IsUnion<never>;            // false
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实用示例</h2>
+      <div class="code-block">
+// 获取函数返回值类型的联合
+type GetReturnTypes<T> = T extends (...args: any[]) => infer R ? R : never;
+
+type Funcs = (() => string) | ((n: number) => number) | ((b: boolean) => void);
+type Returns = GetReturnTypes<Funcs>;  // string | number | void
+
+// 提取联合类型中的特定类型
+type ExtractString<T> = T extends string ? T : never;
+
+type Mixed = string | number | boolean | 'hello';
+type OnlyString = ExtractString<Mixed>;  // string | 'hello'
+
+// 过滤联合类型
+type Filter<T, U> = T extends U ? T : never;
+
+type Values = 'a' | 'b' | 1 | 2 | true;
+type Letters = Filter<Values, string>;    // 'a' | 'b'
+type Numbers = Filter<Values, number>;    // 1 | 2
+
+// 排除类型（Exclude 的实现）
+type MyExclude<T, U> = T extends U ? never : T;
+
+type E = MyExclude<'a' | 'b' | 'c', 'a'>;  // 'b' | 'c'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 联合类型自动触发分发</li>
+            <li>• 分发对每个成员单独判断</li>
+            <li>• [T] 包装可禁止分发</li>
+            <li>• 分发是 Filter/Exclude 等工具类型的基础</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="8-1-条件类型基础.html">← 上一节：条件类型基础</a>
+      <a href="8-3-infer关键字.html">下一节：infer 关键字 →</a>
+    </div>
+  </div>
+</body>
+</html>

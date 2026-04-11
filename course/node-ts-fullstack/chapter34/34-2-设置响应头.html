@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.2 设置响应头 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter34.html">第34章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>34.2 设置响应头</h1>
+      <p class="subtitle">掌握 Express 响应头的设置方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 res.set() 和 res.setHeader() 的用法</li>
+        <li>了解常用响应头的作用</li>
+        <li>学会设置 CORS 相关响应头</li>
+        <li>理解缓存相关响应头</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 设置响应头方法</h2>
+
+      <div class="code-block">
+// res.set() 或 res.setHeader()
+
+// 设置单个响应头
+app.get('/single', (req, res) => {
+  res.set('Content-Type', 'application/json');
+  res.set('X-Custom-Header', 'Custom Value');
+  res.json({ message: 'OK' });
+});
+
+// 设置多个响应头
+app.get('/multiple', (req, res) => {
+  res.set({
+    'Content-Type': 'application/json',
+    'X-API-Version': '1.0',
+    'X-Request-ID': 'abc123'
+  });
+  res.json({ message: 'OK' });
+});
+
+// res.append() - 追加响应头
+app.get('/append', (req, res) => {
+  res.append('Set-Cookie', 'name=value');
+  res.append('Set-Cookie', 'token=abc123');
+  res.send('Cookies set');
+});
+
+// res.removeHeader() - 移除响应头
+app.get('/remove', (req, res) => {
+  res.removeHeader('X-Powered-By');
+  res.send('Header removed');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 常用响应头</h2>
+
+      <div class="code-block">
+app.get('/headers', (req, res) => {
+  res.set({
+    // 内容类型
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Encoding': 'gzip',
+
+    // 缓存控制
+    'Cache-Control': 'public, max-age=3600',
+    'ETag': 'abc123',
+    'Last-Modified': new Date().toUTCString(),
+    'Expires': new Date(Date.now() + 3600000).toUTCString(),
+
+    // 安全相关
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+
+    // 自定义头
+    'X-API-Version': '1.0',
+    'X-Request-ID': 'abc123'
+  });
+
+  res.json({ message: 'Headers set' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> CORS 响应头</h2>
+
+      <div class="code-block">
+// 手动设置 CORS
+app.get('/api', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400'
+  });
+
+  res.json({ message: 'CORS enabled' });
+});
+
+// 预检请求处理
+app.options('/api', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  });
+  res.sendStatus(204);
+});
+
+// 或使用 cors 中间件
+const cors = require('cors');
+app.use(cors());</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 缓存响应头</h2>
+
+      <div class="code-block">
+// 禁用缓存
+app.get('/no-cache', (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+  res.json({ data: 'fresh' });
+});
+
+// 启用缓存
+app.get('/cached', (req, res) => {
+  res.set({
+    'Cache-Control': 'public, max-age=3600',
+    'ETag': 'v1',
+    'Last-Modified': new Date().toUTCString()
+  });
+  res.json({ data: 'cached' });
+});
+
+// 条件请求
+app.get('/conditional', (req, res) => {
+  const etag = 'v1';
+  const lastModified = new Date('2024-01-01');
+
+  // 检查客户端缓存
+  if (req.headers['if-none-match'] === etag) {
+    return res.sendStatus(304);  // Not Modified
+  }
+
+  if (req.headers['if-modified-since']) {
+    const clientDate = new Date(req.headers['if-modified-since']);
+    if (clientDate >= lastModified) {
+      return res.sendStatus(304);
+    }
+  }
+
+  res.set('ETag', etag);
+  res.set('Last-Modified', lastModified.toUTCString());
+  res.json({ data: 'fresh' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>res.set() 设置响应头，支持单个和批量设置</li>
+            <li>res.append() 追加响应头，不覆盖已有值</li>
+            <li>CORS 响应头用于跨域访问控制</li>
+            <li>缓存响应头用于控制客户端缓存行为</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="34-1-发送响应.html">← 上一节：发送响应</a>
+      <a href="34-3-状态码设置.html">下一节：状态码设置 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>97.3 分页优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="97-1-接口缓存.html">第九十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>97.3 分页优化</h1>
+      <p class="subtitle">大数据量分页查询优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解分页查询的性能问题</li>
+        <li>掌握游标分页实现</li>
+        <li>学会优化 OFFSET 分页</li>
+        <li>了解无限滚动实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 分页方式对比</h2>
+      <div class="code-block">
+# 常见分页方式
+
+## 1. OFFSET 分页（传统）
+SELECT * FROM orders LIMIT 10 OFFSET 10000;
+
+问题：
+- 大偏移量时性能差
+- 需要扫描跳过的所有行
+- 数据变化可能导致重复或遗漏
+
+## 2. 游标分页（Cursor）
+SELECT * FROM orders WHERE id > 10000 LIMIT 10;
+
+优势：
+- 性能稳定，不随偏移量增长
+- 索引友好
+- 适合无限滚动
+
+## 3. 键集分页（Keyset）
+SELECT * FROM orders
+WHERE (created_at, id) > ('2024-01-01', 10000)
+ORDER BY created_at DESC, id DESC
+LIMIT 10;
+
+# 性能对比
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│     方式        │   偏移量小时     │   偏移量大时     │
+├─────────────────┼──────────────────┼──────────────────┤
+│ OFFSET 分页     │ 快               │ 慢               │
+│ 游标分页        │ 快               │ 快               │
+└─────────────────┴──────────────────┴──────────────────┘
+
+# 适用场景
+OFFSET 分页：需要跳转到任意页面
+游标分页：无限滚动、下一页/上一页
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> OFFSET 分页优化</h2>
+      <div class="code-block">
+# 基础 OFFSET 分页
+
+// Prisma
+const orders = await prisma.order.findMany({
+  skip: (page - 1) * pageSize,
+  take: pageSize,
+  orderBy: { createdAt: 'desc' },
+});
+
+// TypeORM
+const orders = await orderRepository
+  .createQueryBuilder('order')
+  .skip((page - 1) * pageSize)
+  .take(pageSize)
+  .orderBy('order.createdAt', 'DESC')
+  .getMany();
+
+# 大偏移量优化
+
+// 使用子查询优化
+const orders = await prisma.$queryRaw`
+  SELECT o.* FROM orders o
+  INNER JOIN (
+    SELECT id FROM orders
+    ORDER BY created_at DESC
+    LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
+  ) tmp ON o.id = tmp.id
+`;
+
+// TypeORM 版本
+const orders = await orderRepository.query(`
+  SELECT o.* FROM orders o
+  INNER JOIN (
+    SELECT id FROM orders
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  ) tmp ON o.id = tmp.id
+`, [pageSize, (page - 1) * pageSize]);
+
+# 获取总数优化
+
+// 传统方式（慢）
+const total = await prisma.order.count();
+
+// 优化：估算总数
+const total = await prisma.$queryRaw`
+  SELECT reltuples::bigint AS estimate
+  FROM pg_class
+  WHERE relname = 'orders'
+`;
+
+// 或使用缓存
+const total = await cache.getOrSet(
+  'orders:count',
+  () => prisma.order.count(),
+  300  // 5 分钟缓存
+);
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">OFFSET 性能问题</div>
+          <p>当 OFFSET 值很大时（如 100000），数据库需要扫描并跳过前 100000 条记录，性能会急剧下降。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 游标分页实现</h2>
+      <div class="code-block">
+# Prisma 游标分页
+
+interface PaginatedResult&lt;T&gt; {
+  data: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+async function getOrders(cursor?: string, limit = 10): Promise&lt;PaginatedResult&lt;Order&gt;&gt; {
+  const orders = await prisma.order.findMany({
+    take: limit + 1,  // 多取一条判断是否有更多
+    ...(cursor && {
+      skip: 1,  // 跳过游标本身
+      cursor: { id: cursor },
+    }),
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const hasMore = orders.length > limit;
+  const data = hasMore ? orders.slice(0, -1) : orders;
+
+  return {
+    data,
+    nextCursor: hasMore ? data[data.length - 1].id : null,
+    hasMore,
+  };
+}
+
+# API 设计
+
+// GET /api/orders?cursor=xxx&limit=10
+app.get('/api/orders', async (req, res) => {
+  const { cursor, limit = 10 } = req.query;
+
+  const result = await getOrders(
+    cursor as string,
+    parseInt(limit as string)
+  );
+
+  res.json({
+    data: result.data,
+    pagination: {
+      nextCursor: result.nextCursor,
+      hasMore: result.hasMore,
+    },
+  });
+});
+
+# 复合游标分页
+
+// 按创建时间和 ID 排序
+async function getOrdersByTime(
+  cursor?: { createdAt: Date; id: string },
+  limit = 10
+) {
+  const orders = await prisma.order.findMany({
+    take: limit + 1,
+    ...(cursor && {
+      cursor: {
+        createdAt_id: {
+          createdAt: cursor.createdAt,
+          id: cursor.id,
+        },
+      },
+      skip: 1,
+    }),
+    orderBy: [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+  });
+
+  // ... 处理结果
+}
+
+// 编码游标
+function encodeCursor(data: object): string {
+  return Buffer.from(JSON.stringify(data)).toString('base64');
+}
+
+function decodeCursor(cursor: string): object {
+  return JSON.parse(Buffer.from(cursor, 'base64').toString());
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 无限滚动实现</h2>
+      <div class="code-block">
+# 前端实现
+
+interface UseInfiniteScrollOptions&lt;T&gt; {
+  fetchFn: (cursor?: string) => Promise&lt;PaginatedResult&lt;T&gt;&gt;;
+  threshold?: number;
+}
+
+function useInfiniteScroll&lt;T&gt;(options: UseInfiniteScrollOptions&lt;T&gt;) {
+  const { fetchFn, threshold = 200 } = options;
+
+  const [data, setData] = useState&lt;T[]&gt;([]);
+  const [cursor, setCursor] = useState&lt;string | null&gt;(null);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadMore = async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
+    const result = await fetchFn(cursor || undefined);
+
+    setData(prev => [...prev, ...result.data]);
+    setCursor(result.nextCursor);
+    setHasMore(result.hasMore);
+    setLoading(false);
+  };
+
+  // 滚动监听
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+
+      if (scrollHeight - scrollTop - clientHeight < threshold) {
+        loadMore();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [cursor, loading, hasMore]);
+
+  // 初始加载
+  useEffect(() => {
+    loadMore();
+  }, []);
+
+  return { data, loading, hasMore, loadMore };
+}
+
+# React 组件使用
+
+function OrderList() {
+  const { data, loading, hasMore } = useInfiniteScroll({
+    fetchFn: (cursor) =>
+      fetch(`/api/orders?cursor=${cursor || ''}`).then(r => r.json()),
+  });
+
+  return (
+    &lt;div&gt;
+      {data.map(order => (
+        &lt;OrderCard key={order.id} order={order} /&gt;
+      ))}
+      {loading && &lt;Spinner /&gt;}
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• OFFSET 大偏移量时性能差</li>
+            <li>• 游标分页性能稳定，适合无限滚动</li>
+            <li>• 可以用子查询优化 OFFSET 分页</li>
+            <li>• 数据总数可以估算或缓存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="97-2-数据压缩.html">← 上一节：数据压缩</a>
+      <a href="97-4-批量操作.html">下一节：批量操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

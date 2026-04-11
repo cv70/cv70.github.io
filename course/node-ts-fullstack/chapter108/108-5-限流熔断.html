@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>108.5 限流熔断 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="108-1-网关概念.html">第108章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>108.5 限流熔断</h1>
+      <p class="subtitle">保护服务稳定性的核心机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解限流的作用和算法</li>
+        <li>掌握熔断器模式</li>
+        <li>学会降级策略设计</li>
+        <li>了解常见限流工具</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 限流概述</h2>
+      <div class="code-block">
+// 限流（Rate Limiting）控制请求速率，保护后端服务
+
+const reasons = {
+  protectBackend: '保护后端服务不被压垮',
+  preventAbuse: '防止恶意请求和爬虫',
+  fairUsage: '保证资源公平分配',
+  costControl: '控制API调用成本'
+};
+
+// 常见限流算法
+
+// 1. 固定窗口算法
+class FixedWindowLimiter {
+  private windows: Map<string, { count: number; startTime: number }> = new Map();
+  private limit: number;
+  private windowSize: number;  // 毫秒
+
+  constructor(limit: number, windowSize: number) {
+    this.limit = limit;
+    this.windowSize = windowSize;
+  }
+
+  isAllowed(key: string): boolean {
+    const now = Date.now();
+    let window = this.windows.get(key);
+
+    if (!window || now - window.startTime >= this.windowSize) {
+      window = { count: 0, startTime: now };
+      this.windows.set(key, window);
+    }
+
+    window.count++;
+
+    return window.count <= this.limit;
+  }
+}
+
+// 2. 滑动窗口算法
+class SlidingWindowLimiter {
+  private requests: Map<string, number[]> = new Map();
+  private limit: number;
+  private windowSize: number;
+
+  isAllowed(key: string): boolean {
+    const now = Date.now();
+    const requests = this.requests.get(key) || [];
+
+    // 移除窗口外的请求
+    const validRequests = requests.filter(t => now - t < this.windowSize);
+
+    if (validRequests.length >= this.limit) {
+      return false;
+    }
+
+    validRequests.push(now);
+    this.requests.set(key, validRequests);
+
+    return true;
+  }
+}
+
+// 3. 令牌桶算法
+class TokenBucket {
+  private tokens: number;
+  private lastRefill: number;
+
+  constructor(
+    private capacity: number,
+    private refillRate: number  // 每秒补充数量
+  ) {
+    this.tokens = capacity;
+    this.lastRefill = Date.now();
+  }
+
+  isAllowed(cost: number = 1): boolean {
+    this.refill();
+
+    if (this.tokens >= cost) {
+      this.tokens -= cost;
+      return true;
+    }
+
+    return false;
+  }
+
+  private refill() {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    const tokensToAdd = elapsed * this.refillRate;
+
+    this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
+    this.lastRefill = now;
+  }
+}
+
+// 4. 漏桶算法
+class LeakyBucket {
+  private queue: any[] = [];
+  private processing = false;
+
+  constructor(
+    private capacity: number,
+    private leakRate: number  // 每秒处理数量
+  ) {}
+
+  async add(item: any): Promise<boolean> {
+    if (this.queue.length >= this.capacity) {
+      return false;
+    }
+
+    this.queue.push(item);
+    this.process();
+
+    return true;
+  }
+
+  private async process() {
+    if (this.processing) return;
+
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      await this.handleItem(item);
+      await new Promise(r => setTimeout(r, 1000 / this.leakRate));
+    }
+
+    this.processing = false;
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">算法选择</div>
+          <p>固定窗口简单但有边界问题；滑动窗口精确但内存消耗大；令牌桶允许突发流量；漏桶恒定速率输出。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 熔断器模式</h2>
+      <div class="code-block">
+// 熔断器防止故障蔓延
+
+enum CircuitState {
+  CLOSED,      // 正常状态
+  OPEN,        // 熔断状态
+  HALF_OPEN    // 半开状态
+}
+
+class CircuitBreaker {
+  private state = CircuitState.CLOSED;
+  private failureCount = 0;
+  private successCount = 0;
+  private lastFailureTime = 0;
+
+  constructor(
+    private threshold: number = 5,        // 失败阈值
+    private timeout: number = 60000,      // 熔断超时时间
+    private halfOpenSuccesses: number = 3 // 半开状态成功阈值
+  ) {}
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === CircuitState.OPEN) {
+      if (Date.now() - this.lastFailureTime >= this.timeout) {
+        this.state = CircuitState.HALF_OPEN;
+        this.successCount = 0;
+      } else {
+        throw new Error('Circuit breaker is OPEN');
+      }
+    }
+
+    try {
+      const result = await fn();
+
+      if (this.state === CircuitState.HALF_OPEN) {
+        this.successCount++;
+        if (this.successCount >= this.halfOpenSuccesses) {
+          this.reset();
+        }
+      } else {
+        this.failureCount = 0;
+      }
+
+      return result;
+    } catch (error) {
+      this.recordFailure();
+      throw error;
+    }
+  }
+
+  private recordFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.state === CircuitState.HALF_OPEN) {
+      this.state = CircuitState.OPEN;
+    } else if (this.failureCount >= this.threshold) {
+      this.state = CircuitState.OPEN;
+    }
+  }
+
+  private reset() {
+    this.state = CircuitState.CLOSED;
+    this.failureCount = 0;
+    this.successCount = 0;
+  }
+
+  getState(): CircuitState {
+    return this.state;
+  }
+}
+
+// 使用熔断器
+const userCircuit = new CircuitBreaker(5, 60000);
+
+async function callUserService(userId: string) {
+  return userCircuit.execute(async () => {
+    const response = await fetch(`http://user-service/users/${userId}`);
+    if (!response.ok) throw new Error('Service error');
+    return response.json();
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 降级策略</h2>
+      <div class="code-block">
+// 服务降级：在系统压力大或故障时，返回备选响应
+
+class DegradableService {
+  private circuit: CircuitBreaker;
+  private fallbackData: any;
+
+  constructor() {
+    this.circuit = new CircuitBreaker();
+  }
+
+  // 带降级的服务调用
+  async callWithFallback<T>(
+    fn: () => Promise<T>,
+    fallback: () => T | Promise<T>
+  ): Promise<T> {
+    try {
+      return await this.circuit.execute(fn);
+    } catch (error) {
+      console.warn('Service degraded, using fallback');
+      return fallback();
+    }
+  }
+}
+
+// 使用示例
+const service = new DegradableService();
+
+// 商品推荐服务
+async function getRecommendations(userId: string) {
+  return service.callWithFallback(
+    // 正常调用
+    async () => {
+      const response = await fetch(`/api/recommendations/${userId}`);
+      return response.json();
+    },
+    // 降级策略：返回默认推荐
+    () => [
+      { id: 1, name: '热门商品1' },
+      { id: 2, name: '热门商品2' },
+      { id: 3, name: '热门商品3' }
+    ]
+  );
+}
+
+// 评论服务降级
+async function getComments(productId: string) {
+  return service.callWithFallback(
+    async () => {
+      const response = await fetch(`/api/comments/${productId}`);
+      return response.json();
+    },
+    // 降级：显示占位信息
+    () => ({
+      items: [],
+      message: '评论服务暂时不可用，请稍后再试'
+    })
+  );
+}
+
+// Express中间件实现限流
+import rateLimit from 'express-rate-limit';
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15分钟
+  max: 100,  // 最多100个请求
+  message: {
+    error: 'Too many requests, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use('/api/', apiLimiter);
+
+// 更细粒度的限流
+const strictLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1分钟
+  max: 5,  // 最多5个请求
+  skipSuccessfulRequests: false,
+  keyGenerator: (req) => {
+    return req.user?.id || req.ip;  // 按用户或IP限流
+  }
+});
+
+app.post('/api/password/reset', strictLimiter, handlePasswordReset);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 限流保护服务不被压垮</li>
+            <li>• 熔断器防止故障蔓延</li>
+            <li>• 降级保证基本可用</li>
+            <li>• 三者配合保障系统稳定性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="108-4-网关安全.html">← 上一节：网关安全</a>
+      <a href="../chapter109/109-1-需求分析.html">下一章：博客系统实战 →</a>
+    </div>
+  </div>
+</body>
+</html>

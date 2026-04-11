@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.2 Model 操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-schema定义.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.2 Model 操作</h1>
+      <p class="subtitle">使用 Model 进行数据库操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 CRUD 操作方法</li>
+        <li>学会查询和过滤</li>
+        <li>理解 Model 和 Document 的区别</li>
+        <li>了解批量操作技巧</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 创建文档</h2>
+      <div class="code-block">
+import User from './models/User';
+
+// 方式一：new + save
+const user = new User({
+  name: 'Alice',
+  email: 'alice@mail.com',
+  age: 25,
+});
+
+await user.save();
+
+// 方式二：create（推荐）
+const user = await User.create({
+  name: 'Bob',
+  email: 'bob@mail.com',
+  age: 30,
+});
+
+// 批量创建
+const users = await User.insertMany([
+  { name: 'User 1', email: 'user1@mail.com' },
+  { name: 'User 2', email: 'user2@mail.com' },
+  { name: 'User 3', email: 'user3@mail.com' },
+]);
+
+// save vs create
+// save: 触发验证和中间件，返回 Document
+// create: 触发验证和中间件，返回 Document
+// insertMany: 批量插入，默认验证但不触发 save 中间件
+
+// 创建时验证失败会抛出 ValidationError
+try {
+  await User.create({ name: 'Test' });  // email 必填
+} catch (error) {
+  console.error(error.message);
+  // "User validation failed: email: Path `email` is required."
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 查询文档</h2>
+      <div class="code-block">
+// 查询所有
+const users = await User.find();
+
+// 条件查询
+const users = await User.find({ status: 'active' });
+const user = await User.findOne({ email: 'alice@mail.com' });
+
+// 按 ID 查询
+const user = await User.findById('64a1b2c3d4e5f6...');
+
+// 查询或抛出错误
+const user = await User.findOne({ email: 'alice@mail.com' }).orFail(
+  new Error('用户不存在')
+);
+
+// 选择字段
+const users = await User.find().select('name email -_id');
+const user = await User.findById(id).select('name email');
+
+// 排序
+const users = await User.find().sort({ createdAt: -1 });
+const users = await User.find().sort('-createdAt name');
+
+// 分页
+const users = await User.find()
+  .skip((page - 1) * limit)
+  .limit(limit);
+
+// 分页并获取总数
+const [users, total] = await Promise.all([
+  User.find().skip(0).limit(10),
+  User.countDocuments(),
+]);
+
+// 计数
+const count = await User.countDocuments({ status: 'active' });
+
+// 判断是否存在
+const exists = await User.exists({ email: 'alice@mail.com' });
+
+// 去重
+const emails = await User.distinct('email');
+
+// 查询链
+const users = await User.find()
+  .where('status').equals('active')
+  .where('age').gte(18)
+  .sort('-createdAt')
+  .limit(10)
+  .select('name email');
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">查询返回类型</div>
+          <p>find() 返回 Document 数组，findOne() 返回单个 Document 或 null。Document 可以修改后调用 save() 保存。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 更新文档</h2>
+      <div class="code-block">
+// 方式一：修改 Document + save
+const user = await User.findById(id);
+user.name = 'New Name';
+user.age = 26;
+await user.save();
+
+// 方式二：findByIdAndUpdate
+const user = await User.findByIdAndUpdate(
+  id,
+  { name: 'New Name' },
+  { new: true }  // 返回更新后的文档
+);
+
+// 方式三：updateOne / updateMany
+await User.updateOne(
+  { _id: id },
+  { $set: { name: 'New Name' } }
+);
+
+await User.updateMany(
+  { status: 'pending' },
+  { $set: { status: 'active' } }
+);
+
+// 方式四：findOneAndUpdate
+const user = await User.findOneAndUpdate(
+  { email: 'alice@mail.com' },
+  { $set: { status: 'inactive' } },
+  { new: true, upsert: true }  // 不存在则创建
+);
+
+// 更新选项
+{
+  new: true,           // 返回更新后的文档
+  upsert: true,        // 不存在则创建
+  runValidators: true, // 运行验证器
+  setDefaultsOnInsert: true,  // 插入时设置默认值
+  context: 'query',    // 验证器上下文
+}
+
+// 增量更新
+await User.findByIdAndUpdate(id, { $inc: { loginCount: 1 } });
+
+// 数组操作
+await User.findByIdAndUpdate(id, {
+  $push: { tags: 'new-tag' },
+});
+await User.findByIdAndUpdate(id, {
+  $pull: { tags: 'old-tag' },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> 删除文档</h2>
+      <div class="code-block">
+// 方式一：Document remove
+const user = await User.findById(id);
+await user.deleteOne();  // 或 user.remove()
+
+// 方式二：findByIdAndDelete
+const user = await User.findByIdAndDelete(id);
+
+// 方式三：deleteOne / deleteMany
+await User.deleteOne({ _id: id });
+await User.deleteMany({ status: 'inactive' });
+
+// 删除并返回
+const user = await User.findOneAndDelete({ email: 'old@mail.com' });
+
+// 返回删除数量
+const result = await User.deleteMany({ status: 'inactive' });
+console.log(result.deletedCount);  // 删除的文档数
+
+// 软删除（需要 Schema 支持）
+const userSchema = new mongoose.Schema({
+  name: String,
+  deletedAt: { type: Date, default: null },
+});
+
+// 软删除方法
+userSchema.methods.softDelete = function() {
+  this.deletedAt = new Date();
+  return this.save();
+};
+
+// 查询时过滤已删除
+userSchema.query.notDeleted = function() {
+  return this.where({ deletedAt: null });
+};
+
+const User = mongoose.model('User', userSchema);
+
+// 使用
+const user = await User.findById(id);
+await user.softDelete();
+
+const activeUsers = await User.find().notDeleted();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• create/insertMany 创建文档</li>
+            <li>• find/findOne/findById 查询文档</li>
+            <li>• findByIdAndUpdate 更新文档</li>
+            <li>• deleteOne/deleteMany 删除文档</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-1-schema定义.html">← 上一节：Schema 定义</a>
+      <a href="28-3-中间件.html">下一节：中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

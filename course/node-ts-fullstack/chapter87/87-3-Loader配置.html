@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>87.3 Loader 配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="87-1-Webpack基础.html">第八十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>87.3 Loader 配置</h1>
+      <p class="subtitle">Webpack Loader 详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Loader 的作用和工作原理</li>
+        <li>掌握常用 Loader 配置</li>
+        <li>学会处理各种资源类型</li>
+        <li>了解 Loader 执行顺序</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Loader 概述</h2>
+      <p>Loader 用于处理非 JavaScript 文件，将各种资源转换为 Webpack 能处理的模块。</p>
+      <div class="code-block">
+# Loader 工作原理
+源文件 → Loader 转换 → JavaScript 模块
+
+# 配置语法
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.css$/,        // 匹配文件
+        use: ['style-loader', 'css-loader'], // 使用的 loader
+        exclude: /node_modules/, // 排除目录
+        include: /src/,        // 包含目录
+      },
+    ],
+  },
+};
+
+# Loader 执行顺序
+从右到左，从下到上
+
+['style-loader', 'css-loader', 'sass-loader']
+执行顺序: sass-loader → css-loader → style-loader
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">链式调用</div>
+          <p>多个 Loader 可以链式调用，前一个 Loader 的输出是后一个 Loader 的输入，最终输出 JavaScript 模块。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> CSS 处理</h2>
+      <div class="code-block">
+# 安装依赖
+npm install --save-dev \
+  style-loader \
+  css-loader \
+  sass \
+  sass-loader \
+  postcss \
+  postcss-loader \
+  autoprefixer
+
+// webpack.config.js
+module.exports = {
+  module: {
+    rules: [
+      // CSS 文件
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
+
+      // Sass/SCSS 文件
+      {
+        test: /\.scss$/,
+        use: [
+          'style-loader',
+          'css-loader',
+          {
+            loader: 'sass-loader',
+            options: {
+              sourceMap: true,
+            },
+          },
+        ],
+      },
+
+      // PostCSS 处理
+      {
+        test: /\.css$/,
+        use: [
+          'style-loader',
+          {
+            loader: 'css-loader',
+            options: {
+              modules: true, // CSS Modules
+            },
+          },
+          {
+            loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: [
+                  require('autoprefixer'),
+                  require('cssnano')({ preset: 'default' }),
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+// postcss.config.js
+module.exports = {
+  plugins: [
+    require('autoprefixer')({
+      overrideBrowserslist: ['> 1%', 'last 2 versions'],
+    }),
+  ],
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> TypeScript 和 JavaScript</h2>
+      <div class="code-block">
+# 安装依赖
+npm install --save-dev \
+  typescript \
+  ts-loader \
+  @babel/core \
+  @babel/preset-env \
+  @babel/preset-typescript \
+  babel-loader
+
+// webpack.config.js
+module.exports = {
+  module: {
+    rules: [
+      // TypeScript (ts-loader)
+      {
+        test: /\.tsx?$/,
+        use: 'ts-loader',
+        exclude: /node_modules/,
+      },
+
+      // TypeScript (babel-loader)
+      {
+        test: /\.tsx?$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: [
+              ['@babel/preset-env', { targets: 'defaults' }],
+              '@babel/preset-typescript',
+            ],
+          },
+        },
+      },
+
+      // JavaScript (Babel)
+      {
+        test: /\.m?js$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-env'],
+            plugins: ['@babel/plugin-transform-runtime'],
+          },
+        },
+      },
+    ],
+  },
+
+  resolve: {
+    extensions: ['.tsx', '.ts', '.js'],
+  },
+};
+
+// babel.config.js
+module.exports = {
+  presets: [
+    ['@babel/preset-env', { modules: false }],
+    '@babel/preset-typescript',
+  ],
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 资源文件处理</h2>
+      <div class="code-block">
+// Webpack 5 资源模块 (Asset Modules)
+module.exports = {
+  module: {
+    rules: [
+      // 图片资源
+      {
+        test: /\.(png|jpg|jpeg|gif|svg|webp)$/i,
+        type: 'asset/resource',
+        generator: {
+          filename: 'images/[hash][ext][query]',
+        },
+        // 小于 8KB 转为 base64
+        parser: {
+          dataUrlCondition: {
+            maxSize: 8 * 1024, // 8KB
+          },
+        },
+      },
+
+      // 字体文件
+      {
+        test: /\.(woff|woff2|eot|ttf|otf)$/i,
+        type: 'asset/resource',
+        generator: {
+          filename: 'fonts/[hash][ext][query]',
+        },
+      },
+
+      // 音视频文件
+      {
+        test: /\.(mp3|mp4|wav|ogg)$/i,
+        type: 'asset/resource',
+        generator: {
+          filename: 'media/[hash][ext][query]',
+        },
+      },
+
+      // 数据文件 (JSON, CSV, XML)
+      {
+        test: /\.json$/i,
+        type: 'json',
+      },
+      {
+        test: /\.(csv|tsv)$/i,
+        use: ['csv-loader'],
+      },
+      {
+        test: /\.xml$/i,
+        use: ['xml-loader'],
+      },
+    ],
+  },
+};
+
+// 在代码中使用
+import logo from './assets/logo.png';
+import './styles/main.scss';
+
+const img = document.createElement('img');
+img.src = logo; // 输出路径
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Loader 用于转换非 JavaScript 模块</li>
+            <li>• 执行顺序从右到左、从下到上</li>
+            <li>• CSS 需要 style-loader 和 css-loader 配合</li>
+            <li>• Webpack 5 内置资源模块处理文件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="87-2-入口与出口.html">← 上一节：入口与出口</a>
+      <a href="87-4-Plugin配置.html">下一节：Plugin 配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

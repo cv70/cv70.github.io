@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>111.4 在线状态管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="111-1-需求分析.html">第111章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>111.4 在线状态管理</h1>
+      <p class="subtitle">用户在线状态的实时追踪</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解在线状态管理难点</li>
+        <li>掌握Redis存储在线状态</li>
+        <li>学会多端状态同步</li>
+        <li>了解心跳检测机制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 在线状态设计</h2>
+      <div class="code-block">
+// 在线状态类型
+enum UserStatus {
+  ONLINE = 'online',       // 在线
+  OFFLINE = 'offline',     // 离线
+  BUSY = 'busy',           // 忙碌
+  AWAY = 'away',           // 离开
+  INVISIBLE = 'invisible'  // 隐身
+}
+
+// 在线状态数据结构
+interface UserPresence {
+  userId: string;
+  status: UserStatus;
+  deviceId: string;        // 设备ID
+  platform: 'web' | 'mobile' | 'desktop';
+  lastSeen: Date;          // 最后活跃时间
+  socketId: string;        // WebSocket连接ID
+}
+
+// 状态管理挑战
+const challenges = {
+  多端登录: '同一用户可能在多个设备登录',
+  状态同步: '状态变更需要实时通知关注者',
+  心跳检测: '检测连接是否存活',
+  状态持久化: '用户离线后保存最后在线时间',
+  性能: '大量用户状态查询效率'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">状态存储选择</div>
+          <p>Redis适合存储在线状态，支持TTL自动过期、高性能读写。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Redis实现在线状态</h2>
+      <div class="code-block">
+// presence.service.ts
+import { Redis } from 'ioredis';
+
+@Injectable()
+export class PresenceService {
+  private redis: Redis;
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL);
+  }
+
+  private readonly PREFIX = 'presence:';
+
+  // 设置用户在线
+  async setOnline(userId: string, socketId: string, device: DeviceInfo) {
+    const key = `${this.PREFIX}${userId}`;
+
+    // 添加设备到集合
+    await this.redis.hset(key, socketId, JSON.stringify({
+      ...device,
+      status: UserStatus.ONLINE,
+      lastSeen: Date.now(),
+    }));
+
+    // 设置过期时间（30分钟无心跳自动离线）
+    await this.redis.expire(key, 1800);
+
+    // 加入在线用户集合
+    await this.redis.sadd('online_users', userId);
+  }
+
+  // 设置用户离线
+  async setOffline(userId: string, socketId: string) {
+    const key = `${this.PREFIX}${userId}`;
+
+    // 移除设备
+    await this.redis.hdel(key, socketId);
+
+    // 检查是否还有其他设备在线
+    const devices = await this.redis.hlen(key);
+
+    if (devices === 0) {
+      // 没有设备在线，从在线集合移除
+      await this.redis.srem('online_users', userId);
+
+      // 保存最后在线时间
+      await this.redis.set(`last_seen:${userId}`, Date.now());
+    }
+  }
+
+  // 获取用户状态
+  async getUserStatus(userId: string): Promise<UserPresence | null> {
+    const key = `${this.PREFIX}${userId}`;
+    const devices = await this.redis.hgetall(key);
+
+    if (!devices || Object.keys(devices).length === 0) {
+      // 获取最后在线时间
+      const lastSeen = await this.redis.get(`last_seen:${userId}`);
+      return {
+        userId,
+        status: UserStatus.OFFLINE,
+        lastSeen: lastSeen ? new Date(parseInt(lastSeen)) : null,
+      } as any;
+    }
+
+    // 返回最新的设备状态
+    const latestDevice = Object.values(devices)
+      .map(d => JSON.parse(d))
+      .sort((a, b) => b.lastSeen - a.lastSeen)[0];
+
+    return {
+      userId,
+      status: latestDevice.status,
+      lastSeen: new Date(latestDevice.lastSeen),
+    };
+  }
+
+  // 批量获取用户状态
+  async getBatchUserStatus(userIds: string[]): Promise<Map<string, UserStatus>> {
+    const pipeline = this.redis.pipeline();
+
+    userIds.forEach(id => {
+      pipeline.exists(`${this.PREFIX}${id}`);
+    });
+
+    const results = await pipeline.exec();
+    const statusMap = new Map();
+
+    results.forEach((result, index) => {
+      const exists = result[1] === 1;
+      statusMap.set(userIds[index], exists ? UserStatus.ONLINE : UserStatus.OFFLINE);
+    });
+
+    return statusMap;
+  }
+
+  // 心跳更新
+  async heartbeat(userId: string, socketId: string) {
+    const key = `${this.PREFIX}${userId}`;
+    const deviceData = await this.redis.hget(key, socketId);
+
+    if (deviceData) {
+      const device = JSON.parse(deviceData);
+      device.lastSeen = Date.now();
+
+      await this.redis.hset(key, socketId, JSON.stringify(device));
+      await this.redis.expire(key, 1800);
+    }
+  }
+
+  // 更新自定义状态
+  async updateStatus(userId: string, socketId: string, status: UserStatus) {
+    const key = `${this.PREFIX}${userId}`;
+    const deviceData = await this.redis.hget(key, socketId);
+
+    if (deviceData) {
+      const device = JSON.parse(deviceData);
+      device.status = status;
+      device.lastSeen = Date.now();
+
+      await this.redis.hset(key, socketId, JSON.stringify(device));
+    }
+  }
+
+  // 获取在线好友
+  async getOnlineFriends(userId: string): Promise<string[]> {
+    // 获取好友列表
+    const friendIds = await this.getFriendIds(userId);
+
+    // 批量检查在线状态
+    const statusMap = await this.getBatchUserStatus(friendIds);
+
+    return friendIds.filter(id => statusMap.get(id) === UserStatus.ONLINE);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 心跳检测</h2>
+      <div class="code-block">
+// 在Gateway中实现心跳
+
+@WebSocketGateway()
+export class ChatGateway {
+  private heartbeatInterval = 30000;  // 30秒
+
+  async handleConnection(client: Socket) {
+    // ...认证逻辑...
+
+    // 启动心跳检测
+    this.startHeartbeat(client);
+  }
+
+  private startHeartbeat(client: Socket) {
+    const heartbeatTimer = setInterval(() => {
+      if (client.disconnected) {
+        clearInterval(heartbeatTimer);
+        return;
+      }
+
+      // 发送心跳请求
+      client.emit('ping', { timestamp: Date.now() });
+    }, this.heartbeatInterval);
+
+    // 监听心跳响应
+    client.on('pong', async () => {
+      await this.presenceService.heartbeat(
+        client.data.user.id,
+        client.id
+      );
+    });
+
+    // 客户端断开时清理
+    client.on('disconnect', () => {
+      clearInterval(heartbeatTimer);
+    });
+  }
+}
+
+// 客户端心跳响应
+class ChatClient {
+  constructor() {
+    this.socket.on('ping', () => {
+      this.socket.emit('pong', { timestamp: Date.now() });
+    });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Redis存储在线状态，支持TTL</li>
+            <li>• 支持多设备同时在线</li>
+            <li>• 心跳检测保持连接活跃</li>
+            <li>• 状态变更实时通知关注者</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="111-3-消息存储.html">← 上一节：消息存储</a>
+      <a href="111-5-消息推送.html">下一节：消息推送 →</a>
+    </div>
+  </div>
+</body>
+</html>

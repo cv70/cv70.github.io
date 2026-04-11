@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.3 中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-schema定义.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.3 中间件</h1>
+      <p class="subtitle">拦截和扩展数据库操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中间件的概念和类型</li>
+        <li>掌握 pre 和 post 中间件</li>
+        <li>学会常见中间件应用场景</li>
+        <li>了解错误处理中间件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 中间件类型</h2>
+      <div class="code-block">
+Mongoose 中间件类型：
+
+1. Document 中间件
+   ├── init    - 文档初始化后
+   ├── validate - 验证前后
+   ├── save    - 保存前后
+   └── remove  - 删除前后
+
+2. Query 中间件
+   ├── count     - 计数前后
+   ├── deleteOne - 删除前后
+   ├── deleteMany - 批量删除前后
+   ├── find      - 查询前后
+   ├── findOne   - 单条查询前后
+   ├── findOneAndDelete - 查询删除前后
+   ├── findOneAndRemove - 查询移除前后
+   ├── findOneAndUpdate - 查询更新前后
+   ├── update    - 更新前后
+   ├── updateOne - 单条更新前后
+   └── updateMany - 批量更新前后
+
+3. Aggregate 中间件
+   └── aggregate - 聚合前后
+
+4. Model 中间件
+   ├── insertMany - 批量插入前后
+   └── bulkWrite  - 批量写入前后
+
+中间件执行顺序：
+pre 中间件 → 操作 → post 中间件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Pre 中间件</h2>
+      <div class="code-block">
+// pre 中间件在操作执行前运行
+
+// 密码加密
+userSchema.pre('save', async function(next) {
+  // 只在密码被修改时加密
+  if (!this.isModified('password')) return next();
+
+  const bcrypt = require('bcrypt');
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// 更新时间戳
+userSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// 验证前处理
+userSchema.pre('validate', function(next) {
+  // 自动生成用户名
+  if (!this.username && this.email) {
+    this.username = this.email.split('@')[0];
+  }
+  next();
+});
+
+// Query 中间件 - 自动过滤已删除
+userSchema.pre(/^find/, function(next) {
+  // this 指向 Query 对象
+  this.where({ deletedAt: null });
+  next();
+});
+
+// 特定查询的中间件
+userSchema.pre('findOneAndUpdate', function(next) {
+  this.options.runValidators = true;
+  this.options.new = true;
+  next();
+});
+
+// 异步 pre 中间件
+userSchema.pre('save', async function() {
+  // 可以直接使用 async/await
+  const existingUser = await User.findOne({ email: this.email });
+  if (existingUser && !this._id.equals(existingUser._id)) {
+    throw new Error('邮箱已被使用');
+  }
+});
+
+// 条件执行
+userSchema.pre('save', function(next) {
+  if (this.isNew) {
+    // 新文档
+    console.log('Creating new user');
+  } else {
+    // 更新文档
+    console.log('Updating user');
+  }
+  next();
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">this 的指向</div>
+          <p>在 Document 中间件中，this 指向 Document；在 Query 中间件中，this 指向 Query 对象。不要使用箭头函数，否则会丢失 this 绑定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Post 中间件</h2>
+      <div class="code-block">
+// post 中间件在操作完成后运行
+
+// 记录日志
+userSchema.post('save', function(doc, next) {
+  console.log(`User saved: ${doc._id}`);
+  next();
+});
+
+// 错误处理
+userSchema.post('save', function(error, doc, next) {
+  if (error.name === 'MongoServerError' && error.code === 11000) {
+    next(new Error('邮箱已被注册'));
+  } else {
+    next(error);
+  }
+});
+
+// 更新后操作
+userSchema.post('findOneAndUpdate', function(doc, next) {
+  // doc 是更新后的文档
+  console.log(`User updated: ${doc._id}`);
+  next();
+});
+
+// 删除后清理关联数据
+userSchema.post('findOneAndDelete', async function(doc, next) {
+  if (doc) {
+    // 删除用户的所有文章
+    await Post.deleteMany({ author: doc._id });
+  }
+  next();
+});
+
+// 聚合后处理
+userSchema.post('aggregate', function(result, next) {
+  // 可以修改聚合结果
+  result.forEach(item => {
+    item.computedField = item.value * 2;
+  });
+  next();
+});
+
+// 批量操作后处理
+userSchema.post('insertMany', function(docs, next) {
+  console.log(`Inserted ${docs.length} documents`);
+  next();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 常见应用场景</h2>
+      <div class="code-block">
+// 1. 密码加密（已在上面展示）
+
+// 2. 软删除
+userSchema.pre('deleteOne', { document: true, query: false }, async function() {
+  // 软删除：标记删除时间而非真正删除
+  this.deletedAt = new Date();
+  await this.save();
+  return false;  // 阻止实际删除
+});
+
+// 3. 数据审计
+const auditSchema = new mongoose.Schema({
+  action: String,
+  collection: String,
+  documentId: mongoose.Schema.Types.ObjectId,
+  changes: Object,
+  userId: mongoose.Schema.Types.ObjectId,
+  timestamp: { type: Date, default: Date.now },
+});
+
+userSchema.pre('save', async function() {
+  if (!this.isNew) {
+    const original = await User.findById(this._id);
+    const changes = {};
+
+    for (const key of Object.keys(this.toObject())) {
+      if (!this._id.equals(original[key]) && original[key] !== this[key]) {
+        changes[key] = { from: original[key], to: this[key] };
+      }
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await Audit.create({
+        action: 'update',
+        collection: 'User',
+        documentId: this._id,
+        changes,
+      });
+    }
+  }
+});
+
+// 4. 自动填充关联
+userSchema.pre('findOne', function() {
+  this.populate('posts');
+});
+
+// 5. 缓存清理
+userSchema.post('save', async function() {
+  await cache.del(`user:${this._id}`);
+  await cache.del('users:all');
+});
+
+// 6. 通知发送
+orderSchema.post('save', function(doc, next) {
+  if (doc.status === 'completed') {
+    notificationService.send(doc.userId, '订单已完成');
+  }
+  next();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• pre 中间件在操作前执行</li>
+            <li>• post 中间件在操作后执行</li>
+            <li>• 中间件常用于加密、日志、审计</li>
+            <li>• 不要使用箭头函数，保持 this 绑定</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-2-model操作.html">← 上一节：Model 操作</a>
+      <a href="28-4-虚拟字段.html">下一节：虚拟字段 →</a>
+    </div>
+  </div>
+</body>
+</html>

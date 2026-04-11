@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.5 异常日志 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="49-1-异常过滤器.html">第四十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>49.5 异常日志</h1>
+      <p class="subtitle">完善异常日志记录与监控</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握异常日志记录策略</li>
+        <li>集成日志服务</li>
+        <li>了解异常告警机制</li>
+        <li>掌握生产环境日志配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 异常日志的重要性</h2>
+      <p>完善的异常日志可以帮助快速定位问题、分析错误趋势、监控系统健康状态。生产环境中异常日志尤为重要。</p>
+
+      <div class="code-block">
+日志记录内容建议：
+
+1. 基本信息
+   - 时间戳
+   - Trace ID / Request ID
+   - 请求路径和方法
+   - 用户信息（脱敏）
+
+2. 错误信息
+   - 错误类型
+   - 错误消息
+   - 堆栈跟踪（开发环境）
+   - 错误码
+
+3. 请求上下文
+   - 请求参数（脱敏）
+   - 请求头（脱敏敏感信息）
+   - 客户端信息
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 集成日志服务的异常过滤器</h2>
+      <div class="code-block">
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Inject,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
+
+@Catch()
+export class LoggingExceptionFilter implements ExceptionFilter {
+  constructor(
+    @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+  ) {}
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    const traceId = request.headers['x-trace-id'] || this.generateTraceId();
+
+    // 构建日志上下文
+    const logContext = {
+      traceId,
+      method: request.method,
+      url: request.url,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      userId: request['user']?.id,
+      timestamp: new Date().toISOString(),
+    };
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let errorResponse: any = {
+      code: status,
+      message: 'Internal server error',
+      traceId,
+    };
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+
+      errorResponse = {
+        code: status,
+        message: this.extractMessage(exceptionResponse),
+        details: typeof exceptionResponse === 'object' ? exceptionResponse : undefined,
+        traceId,
+      };
+
+      // 客户端错误 (4xx)
+      if (status < 500) {
+        this.logger.warn('Client error', {
+          ...logContext,
+          status,
+          error: exceptionResponse,
+        });
+      }
+    }
+
+    // 服务器错误 (5xx)
+    if (status >= 500) {
+      this.logger.error('Server error', {
+        ...logContext,
+        status,
+        error: exception instanceof Error ? exception.message : 'Unknown error',
+        stack: exception instanceof Error ? exception.stack : undefined,
+      });
+
+      // 生产环境隐藏详细错误信息
+      if (process.env.NODE_ENV === 'production') {
+        errorResponse.message = 'Internal server error';
+        delete errorResponse.details;
+      }
+    }
+
+    response.status(status).json(errorResponse);
+  }
+
+  private extractMessage(response: any): string {
+    if (typeof response === 'string') return response;
+    if (typeof response === 'object' && response.message) {
+      return Array.isArray(response.message)
+        ? response.message.join(', ')
+        : response.message;
+    }
+    return 'An error occurred';
+  }
+
+  private generateTraceId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚨</span> 异常告警机制</h2>
+      <div class="code-block">
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+
+interface ErrorStats {
+  count: number;
+  lastOccurrence: Date;
+  errors: Array<{ message: string; timestamp: Date }>;
+}
+
+@Injectable()
+export class ErrorMonitorService implements OnModuleInit {
+  private errorStats = new Map<string, ErrorStats>();
+  private alertThreshold = 10; // 同类错误阈值
+  private alertWindowMs = 60000; // 1分钟窗口
+
+  recordError(errorType: string, message: string) {
+    const stats = this.errorStats.get(errorType) || {
+      count: 0,
+      lastOccurrence: new Date(),
+      errors: [],
+    };
+
+    stats.count++;
+    stats.lastOccurrence = new Date();
+    stats.errors.push({ message, timestamp: new Date() });
+
+    // 只保留窗口内的错误
+    const cutoff = Date.now() - this.alertWindowMs;
+    stats.errors = stats.errors.filter(e => e.timestamp.getTime() > cutoff);
+
+    this.errorStats.set(errorType, stats);
+
+    // 检查是否需要告警
+    if (stats.errors.length >= this.alertThreshold) {
+      this.sendAlert(errorType, stats);
+    }
+  }
+
+  private async sendAlert(errorType: string, stats: ErrorStats) {
+    // 发送告警（邮件、Slack、钉钉等）
+    console.error(`ALERT: ${errorType} occurred ${stats.errors.length} times in the last minute`);
+
+    // 重置计数
+    this.errorStats.delete(errorType);
+  }
+
+  // 定期清理过期的错误记录
+  @Cron(CronExpression.EVERY_MINUTE)
+  cleanupExpiredRecords() {
+    const cutoff = Date.now() - this.alertWindowMs;
+    for (const [key, stats] of this.errorStats) {
+      stats.errors = stats.errors.filter(e => e.timestamp.getTime() > cutoff);
+      if (stats.errors.length === 0) {
+        this.errorStats.delete(key);
+      }
+    }
+  }
+}
+
+// 在异常过滤器中使用
+@Catch()
+export class MonitoredExceptionFilter implements ExceptionFilter {
+  constructor(private errorMonitor: ErrorMonitorService) {}
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    // ... 处理异常
+
+    // 记录错误
+    if (exception instanceof Error) {
+      this.errorMonitor.recordError(
+        exception.constructor.name,
+        exception.message,
+      );
+    }
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">生产环境配置</div>
+          <p>生产环境中，敏感信息应该脱敏或隐藏。建议使用日志聚合服务（如 ELK、Datadog）统一管理日志。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 异常日志帮助快速定位问题</li>
+            <li>• 使用结构化日志便于分析</li>
+            <li>• Trace ID 追踪请求链路</li>
+            <li>• 错误告警机制及时发现问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="49-4-全局异常处理.html">← 上一节：全局异常处理</a>
+      <a href="../chapter50/50-1-TypeORM集成.html">下一章：TypeORM 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

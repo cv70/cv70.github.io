@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>54.2 本地策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="54-1-Passport简介.html">第五十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>54.2 本地策略</h1>
+      <p class="subtitle">实现用户名密码认证</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 passport-local 的配置</li>
+        <li>学会用户名密码验证流程</li>
+        <li>理解自定义选项配置</li>
+        <li>学会错误处理和消息提示</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装 passport-local
+npm install passport-local
+
+# 安装类型定义
+npm install -D @types/passport-local
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 配置本地策略</h2>
+      <div class="code-block">
+// src/config/passport.ts
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import { User, IUser } from '../models/User';
+import bcrypt from 'bcryptjs';
+
+// 本地策略配置
+passport.use(new LocalStrategy(
+  {
+    usernameField: 'email',      // 使用邮箱作为用户名
+    passwordField: 'password',
+    passReqToCallback: false,
+  },
+  async (email: string, password: string, done: Function) => {
+    try {
+      // 1. 查找用户
+      const user = await User.findOne({ email: email.toLowerCase() });
+
+      if (!user) {
+        return done(null, false, { message: '邮箱或密码错误' });
+      }
+
+      // 2. 验证密码
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch) {
+        return done(null, false, { message: '邮箱或密码错误' });
+      }
+
+      // 3. 检查用户状态
+      if (!user.isActive) {
+        return done(null, false, { message: '账户已被禁用' });
+      }
+
+      // 4. 更新登录时间
+      user.lastLogin = new Date();
+      await user.save();
+
+      // 5. 认证成功
+      return done(null, user);
+    } catch (error) {
+      return done(error);
+    }
+  }
+));
+
+export default passport;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">安全提示</div>
+          <p>认证失败时不要提示"用户不存在"或"密码错误"，统一使用"邮箱或密码错误"，防止攻击者枚举用户。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 登录路由实现</h2>
+      <div class="code-block">
+// src/routes/auth.routes.ts
+import express, { Request, Response, NextFunction } from 'express';
+import passport from '../config/passport';
+
+const router = express.Router();
+
+// 登录接口（返回 JSON）
+router.post('/login', (req: Request, res: Response, next: NextFunction) => {
+  passport.authenticate('local', (err: any, user: IUser | false, info: any) => {
+    if (err) {
+      return next(err);
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: info?.message || '认证失败',
+      });
+    }
+
+    req.login(user, (err) => {
+      if (err) {
+        return next(err);
+      }
+
+      return res.json({
+        success: true,
+        message: '登录成功',
+        user: {
+          id: user._id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+        },
+      });
+    });
+  })(req, res, next);
+});
+
+// 登录接口（Session 版本）
+router.post('/login-session',
+  passport.authenticate('local', {
+    successRedirect: '/dashboard',
+    failureRedirect: '/login',
+    failureFlash: true,
+  })
+);
+
+// 登出
+router.post('/logout', (req: Request, res: Response, next: NextFunction) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    res.json({ success: true, message: '登出成功' });
+  });
+});
+
+// 检查认证状态
+router.get('/me', (req: Request, res: Response) => {
+  if (req.isAuthenticated()) {
+    res.json({
+      authenticated: true,
+      user: req.user,
+    });
+  } else {
+    res.status(401).json({
+      authenticated: false,
+      message: '未登录',
+    });
+  }
+});
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 认证中间件</h2>
+      <div class="code-block">
+// src/middleware/auth.middleware.ts
+import { Request, Response, NextFunction } from 'express';
+
+// 必须登录
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+
+  if (req.xhr || req.headers.accept?.indexOf('json') > -1) {
+    return res.status(401).json({
+      error: '请先登录',
+      code: 'UNAUTHORIZED',
+    });
+  }
+
+  res.redirect('/login');
+}
+
+// 必须是特定角色
+export function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: '请先登录' });
+    }
+
+    const user = req.user as any;
+
+    if (!roles.includes(user.role)) {
+      return res.status(403).json({
+        error: '权限不足',
+        required: roles,
+        current: user.role,
+      });
+    }
+
+    next();
+  };
+}
+
+// 使用示例
+import express from 'express';
+import { requireAuth, requireRole } from './middleware/auth.middleware';
+
+const app = express();
+
+// 需要登录
+app.get('/profile', requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// 需要管理员权限
+app.get('/admin/users',
+  requireAuth,
+  requireRole('admin'),
+  (req, res) => {
+    res.json({ message: '管理员面板' });
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 注册与密码重置</h2>
+      <div class="code-block">
+// src/controllers/auth.controller.ts
+import { Request, Response } from 'express';
+import { User } from '../models/User';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+
+export class AuthController {
+  // 用户注册
+  async register(req: Request, res: Response) {
+    try {
+      const { email, username, password } = req.body;
+
+      // 检查用户是否已存在
+      const existingUser = await User.findOne({
+        $or: [{ email }, { username }]
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: '邮箱或用户名已被注册',
+        });
+      }
+
+      // 创建用户
+      const user = new User({
+        email,
+        username,
+        password: await bcrypt.hash(password, 12),
+        role: 'user',
+        isActive: true,
+      });
+
+      await user.save();
+
+      // 自动登录
+      req.login(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: '注册成功但自动登录失败' });
+        }
+
+        res.status(201).json({
+          success: true,
+          message: '注册成功',
+          user: {
+            id: user._id,
+            email: user.email,
+            username: user.username,
+          },
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ message: '服务器错误' });
+    }
+  }
+
+  // 请求密码重置
+  async forgotPassword(req: Request, res: Response) {
+    try {
+      const { email } = req.body;
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        return res.json({
+          success: true,
+          message: '如果邮箱存在，重置链接已发送',
+        });
+      }
+
+      // 生成重置令牌
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenHash = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+      user.resetPasswordToken = resetTokenHash;
+      user.resetPasswordExpires = new Date(Date.now() + 3600000);
+
+      await user.save();
+
+      // 发送邮件
+      // await sendEmail({ to: user.email, ... });
+
+      res.json({
+        success: true,
+        message: '如果邮箱存在，重置链接已发送',
+      });
+    } catch (error) {
+      res.status(500).json({ message: '服务器错误' });
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• LocalStrategy 用于用户名密码认证</li>
+            <li>• 使用自定义回调处理认证结果</li>
+            <li>• 认证失败消息应模糊，防止枚举</li>
+            <li>• requireAuth 中间件保护需要登录的路由</li>
+            <li>• 密码重置使用随机令牌</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="54-1-Passport简介.html">← 上一节：Passport 简介</a>
+      <a href="54-3-JWT策略.html">下一节：JWT 策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

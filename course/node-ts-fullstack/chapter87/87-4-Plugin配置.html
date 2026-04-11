@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>87.4 Plugin 配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="87-1-Webpack基础.html">第八十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>87.4 Plugin 配置</h1>
+      <p class="subtitle">Webpack 插件详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Plugin 的作用和原理</li>
+        <li>掌握常用 Plugin 配置</li>
+        <li>学会开发环境配置</li>
+        <li>了解生产环境优化插件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Plugin 概述</h2>
+      <p>Plugin 用于扩展 Webpack 功能，执行范围更广的任务，从打包优化到资源管理。</p>
+      <div class="code-block">
+# Plugin 与 Loader 的区别
+Loader: 转换特定类型的文件
+Plugin: 执行更广泛的任务，监听构建生命周期
+
+# 使用方式
+const Plugin = require('some-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new Plugin({ options }),
+  ],
+};
+
+# 常用插件分类
+1. HTML 生成
+2. CSS 提取和优化
+3. 代码压缩
+4. 环境变量注入
+5. 构建分析
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> HTML 相关插件</h2>
+      <div class="code-block">
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new HtmlWebpackPlugin({
+      // 模板文件
+      template: './src/index.html',
+
+      // 输出文件名
+      filename: 'index.html',
+
+      // 注入位置
+      inject: 'body', // 'head' | 'body' | false
+
+      // 压缩 HTML
+      minify: {
+        collapseWhitespace: true,
+        removeComments: true,
+        removeRedundantAttributes: true,
+      },
+
+      // 指定引入的 chunk
+      chunks: ['main'],
+
+      // 标题
+      title: 'My App',
+
+      // 自定义变量
+      templateParameters: {
+        ENV: 'production',
+      },
+
+      // favicon
+      favicon: './src/favicon.ico',
+    }),
+
+    // 多页面应用
+    new HtmlWebpackPlugin({
+      template: './src/pages/home.html',
+      filename: 'home.html',
+      chunks: ['home'],
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/pages/about.html',
+      filename: 'about.html',
+      chunks: ['about'],
+    }),
+  ],
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> CSS 处理插件</h2>
+      <div class="code-block">
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
+
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.css$/,
+        use: [
+          // 开发环境用 style-loader，生产环境用 MiniCssExtractPlugin
+          process.env.NODE_ENV === 'production'
+            ? MiniCssExtractPlugin.loader
+            : 'style-loader',
+          'css-loader',
+        ],
+      },
+    ],
+  },
+
+  plugins: [
+    new MiniCssExtractPlugin({
+      filename: 'css/[name].[contenthash:8].css',
+      chunkFilename: 'css/[name].[contenthash:8].chunk.css',
+    }),
+  ],
+
+  optimization: {
+    minimizer: [
+      new CssMinimizerPlugin(),
+    ],
+  },
+};
+
+// CopyWebpackPlugin - 复制静态资源
+const CopyPlugin = require('copy-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new CopyPlugin({
+      patterns: [
+        { from: 'public', to: 'public' },
+        { from: 'src/assets', to: 'assets' },
+      ],
+    }),
+  ],
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">CSS 提取</div>
+          <p>MiniCssExtractPlugin 将 CSS 提取到独立文件，有利于缓存和并行加载，但开发环境建议使用 style-loader 支持 HMR。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 环境和优化插件</h2>
+      <div class="code-block">
+const webpack = require('webpack');
+const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+
+module.exports = {
+  plugins: [
+    // 定义环境变量
+    new webpack.DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+      'process.env.API_URL': JSON.stringify('https://api.example.com'),
+      VERSION: JSON.stringify(require('./package.json').version),
+    }),
+
+    // 提供全局变量
+    new webpack.ProvidePlugin({
+      $: 'jquery',
+      _: 'lodash',
+      React: 'react',
+    }),
+
+    // 进度显示
+    new webpack.ProgressPlugin(),
+
+    // 模块热替换
+    new webpack.HotModuleReplacementPlugin(),
+
+    // 构建分析
+    new BundleAnalyzerPlugin({
+      analyzerMode: 'static',
+      reportFilename: 'report.html',
+      openAnalyzer: false,
+    }),
+
+    // IgnorePlugin - 忽略特定模块
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^\.\/locale$/,
+      contextRegExp: /moment$/,
+    }),
+  ],
+};
+
+// 生产环境配置
+const TerserPlugin = require('terser-webpack-plugin');
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        parallel: true,
+        terserOptions: {
+          compress: {
+            drop_console: true,
+          },
+        },
+      }),
+    ],
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 缓存优化插件</h2>
+      <div class="code-block">
+// WorkboxWebpackPlugin - PWA 支持
+const WorkboxPlugin = require('workbox-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new WorkboxPlugin.GenerateSW({
+      clientsClaim: true,
+      skipWaiting: true,
+      include: [/\.html$/, /\.js$/, /\.css$/],
+    }),
+  ],
+};
+
+// CompressionPlugin - Gzip 压缩
+const CompressionPlugin = require('compression-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new CompressionPlugin({
+      algorithm: 'gzip',
+      test: /\.(js|css|html|svg)$/,
+      threshold: 10240, // 10KB 以上才压缩
+      minRatio: 0.8,
+    }),
+  ],
+};
+
+// HashedModuleIdsPlugin - 稳定的模块 ID
+module.exports = {
+  plugins: [
+    new webpack.HashedModuleIdsPlugin(),
+  ],
+  optimization: {
+    runtimeChunk: 'single',
+    splitChunks: {
+      chunks: 'all',
+      cacheGroups: {
+        vendor: {
+          test: /[\\/]node_modules[\\/]/,
+          name: 'vendors',
+          chunks: 'all',
+        },
+      },
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Plugin 用于扩展 Webpack 功能</li>
+            <li>• HtmlWebpackPlugin 自动生成 HTML 文件</li>
+            <li>• MiniCssExtractPlugin 提取 CSS 到独立文件</li>
+            <li>• DefinePlugin 注入环境变量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="87-3-Loader配置.html">← 上一节：Loader 配置</a>
+      <a href="87-5-优化配置.html">下一节：优化配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

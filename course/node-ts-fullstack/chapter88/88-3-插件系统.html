@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>88.3 插件系统 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="88-1-Vite简介.html">第八十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>88.3 插件系统</h1>
+      <p class="subtitle">Vite 插件开发与使用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Vite 插件机制</li>
+        <li>掌握常用官方插件</li>
+        <li>学会使用社区插件</li>
+        <li>了解自定义插件开发</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 插件机制</h2>
+      <p>Vite 插件基于 Rollup 插件接口扩展，同时增加了 Vite 特有的钩子。</p>
+      <div class="code-block">
+// Vite 插件结构
+interface VitePlugin {
+  // 插件名称
+  name: string
+
+  // 应用条件
+  apply?: 'build' | 'serve' | ((config, env) => boolean)
+
+  // Rollup 钩子
+  options?: (options) => void
+  buildStart?: (options) => void
+  resolveId?: (source, importer) => string | null
+  load?: (id) => string | null
+  transform?: (code, id) => { code, map } | null
+
+  // Vite 特有钩子
+  config?: (config, env) => void
+  configResolved?: (config) => void
+  configureServer?: (server) => void
+  transformIndexHtml?: (html) => string
+  handleHotUpdate?: (ctx) => void
+}
+
+// 插件执行顺序
+1. Alias 路径解析
+2. 用户插件（带 enforce: 'pre'）
+3. Vite 核心插件
+4. 用户插件（无 enforce）
+5. Vite 构建插件
+6. 用户插件（带 enforce: 'post'）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常用官方插件</h2>
+      <div class="code-block">
+// vite.config.ts
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import vueJsx from '@vitejs/plugin-vue-jsx'
+import react from '@vitejs/plugin-react'
+import legacy from '@vitejs/plugin-legacy'
+
+export default defineConfig({
+  plugins: [
+    // Vue 3 单文件组件支持
+    vue({
+      include: [/\.vue$/, /\.md$/],
+    }),
+
+    // Vue JSX 支持
+    vueJsx(),
+
+    // React 支持
+    react({
+      babel: {
+        presets: ['@babel/preset-react'],
+      },
+    }),
+
+    // 旧版浏览器支持
+    legacy({
+      targets: ['defaults', 'not IE 11'],
+      additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
+    }),
+  ],
+})
+
+// 安装插件
+npm install -D @vitejs/plugin-vue
+npm install -D @vitejs/plugin-vue-jsx
+npm install -D @vitejs/plugin-react
+npm install -D @vitejs/plugin-legacy
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 社区常用插件</h2>
+      <div class="code-block">
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import Components from 'unplugin-vue-components/vite'
+import AutoImport from 'unplugin-auto-import/vite'
+import { VitePWA } from 'vite-plugin-pwa'
+import viteCompression from 'vite-plugin-compression'
+import { visualizer } from 'rollup-plugin-visualizer'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+
+    // 自动导入组件
+    Components({
+      dirs: ['src/components'],
+      extensions: ['vue'],
+      dts: 'src/components.d.ts',
+    }),
+
+    // 自动导入 API
+    AutoImport({
+      imports: ['vue', 'vue-router', 'pinia'],
+      dts: 'src/auto-imports.d.ts',
+    }),
+
+    // PWA 支持
+    VitePWA({
+      registerType: 'autoUpdate',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+      },
+    }),
+
+    // Gzip 压缩
+    viteCompression({
+      algorithm: 'gzip',
+      ext: '.gz',
+    }),
+
+    // 构建分析
+    visualizer({
+      open: true,
+      gzipSize: true,
+    }),
+  ],
+})
+
+// 其他常用插件
+// vite-plugin-svg-icons - SVG 图标
+// vite-plugin-imagemin - 图片压缩
+// vite-plugin-mock - Mock 数据
+// vite-plugin-pages - 文件路由
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">插件推荐</div>
+          <p>unplugin-vue-components 和 unplugin-auto-import 可以自动导入组件和 API，减少手写 import 语句。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 自定义插件开发</h2>
+      <div class="code-block">
+// 自定义插件示例
+function myVitePlugin(): Plugin {
+  return {
+    name: 'my-vite-plugin',
+
+    // 仅在构建时应用
+    apply: 'build',
+
+    // 执行顺序
+    enforce: 'pre',
+
+    // 修改配置
+    config(config, env) {
+      return {
+        define: {
+          __DEV__: env.mode === 'development',
+        },
+      }
+    },
+
+    // 配置解析完成
+    configResolved(resolvedConfig) {
+      console.log('Config resolved:', resolvedConfig.mode)
+    },
+
+    // 开发服务器配置
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/api/hello') {
+          res.end(JSON.stringify({ message: 'Hello from plugin!' }))
+          return
+        }
+        next()
+      })
+    },
+
+    // 转换 HTML
+    transformIndexHtml(html) {
+      return html.replace(
+        /&lt;title&gt;/,
+        `&lt;title&gt;My App - `
+      )
+    },
+
+    // 转换代码
+    transform(code, id) {
+      if (id.endsWith('.custom')) {
+        return {
+          code: compileCustom(code),
+          map: null,
+        }
+      }
+    },
+
+    // 热更新处理
+    handleHotUpdate({ file, server }) {
+      if (file.endsWith('.custom')) {
+        server.ws.send({
+          type: 'custom',
+          event: 'custom-update',
+          data: { file },
+        })
+      }
+    },
+  }
+}
+
+// 使用
+export default defineConfig({
+  plugins: [myVitePlugin()],
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Vite 插件基于 Rollup 接口扩展</li>
+            <li>• 使用官方插件支持各种框架</li>
+            <li>• 社区插件提供丰富的功能扩展</li>
+            <li>• 可以开发自定义插件满足特殊需求</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="88-2-Vite配置.html">← 上一节：Vite 配置</a>
+      <a href="88-4-构建优化.html">下一节：构建优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

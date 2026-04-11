@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>72.1 测试模块配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="../chapter71/71-5-测试数据库操作.html">上一节</a></li>
+      <li><a href="72-2-服务测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>72.1 测试模块配置</h1>
+      <p class="subtitle">第十部分：测试篇 - NestJS 测试基础</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> NestJS 测试概述</h2>
+      <p>NestJS 内置了强大的测试支持，使用 Jest 作为默认测试框架，提供了 <code>@nestjs/testing</code> 包来简化测试配置。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">NestJS 测试优势</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>内置测试工具包</li>
+            <li>依赖注入便于 Mock</li>
+            <li>模块化架构便于隔离测试</li>
+            <li>CLI 自动生成测试模板</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 安装和配置</h2>
+
+      <div class="code-block"># NestJS 项目默认已安装测试依赖
+# 如果需要手动安装
+npm install --save-dev @nestjs/testing jest ts-jest @types/jest</div>
+
+      <h3>jest 配置</h3>
+      <div class="code-block">// jest.config.js
+module.exports = {
+  moduleFileExtensions: ['js', 'json', 'ts'],
+  rootDir: 'src',
+  testRegex: '.*\\.spec\\.ts$',
+  transform: {
+    '^.+\\.(t|j)s$': 'ts-jest'
+  },
+  collectCoverageFrom: [
+    '**/*.(t|j)s'
+  ],
+  coverageDirectory: '../coverage',
+  testEnvironment: 'node'
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Test.createTestingModule</h2>
+
+      <div class="code-block">import { Test, TestingModule } from '@nestjs/testing';
+import { UserService } from './user.service';
+import { UserRepository } from './user.repository';
+
+describe('UserService', () => {
+  let service: UserService;
+  let module: TestingModule;
+
+  beforeEach(async () => {
+    // 创建测试模块
+    module = await Test.createTestingModule({
+      providers: [
+        UserService,
+        {
+          provide: UserRepository,
+          useValue: {
+            findById: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+          }
+        }
+      ]
+    }).compile();
+
+    // 获取服务实例
+    service = module.get&lt;UserService&gt;(UserService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> Mock Provider</h2>
+
+      <div class="code-block">// 方式一：使用 useValue
+{
+  provide: UserRepository,
+  useValue: {
+    findById: jest.fn().mockResolvedValue({ id: '1', name: 'John' }),
+    create: jest.fn(),
+  }
+}
+
+// 方式二：使用 useClass
+{
+  provide: UserRepository,
+  useClass: MockUserRepository
+}
+
+// 方式三：使用 useFactory
+{
+  provide: 'DATABASE_CONNECTION',
+  useFactory: () => ({
+    query: jest.fn(),
+    execute: jest.fn(),
+  })
+}
+
+// 方式四：使用 existing
+{
+  provide: 'ALIAS_NAME',
+  useExisting: UserRepository
+}</div>
+
+      <h3>创建 Mock 类</h3>
+      <div class="code-block">class MockUserRepository {
+  private data = [];
+
+  async findById(id: string) {
+    return this.data.find(u => u.id === id);
+  }
+
+  async create(userData: any) {
+    const user = { id: Date.now().toString(), ...userData };
+    this.data.push(user);
+    return user;
+  }
+
+  async clear() {
+    this.data = [];
+  }
+}
+
+// 在测试中使用
+beforeEach(async () => {
+  const mockRepository = new MockUserRepository();
+
+  module = await Test.createTestingModule({
+    providers: [
+      UserService,
+      {
+        provide: UserRepository,
+        useValue: mockRepository
+      }
+    ]
+  }).compile();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 覆盖模块中的 Provider</h2>
+
+      <div class="code-block">import { Test, TestingModule } from '@nestjs/testing';
+import { AppModule } from './app.module';
+import { ConfigService } from '@nestjs/config';
+
+describe('App Module', () => {
+  let module: TestingModule;
+
+  beforeEach(async () => {
+    module = await Test.createTestingModule({
+      imports: [AppModule]
+    })
+    .overrideProvider(ConfigService)
+    .useValue({
+      get: jest.fn((key: string) => {
+        switch (key) {
+          case 'DATABASE_URL':
+            return 'sqlite::memory:';
+          default:
+            return null;
+        }
+      })
+    })
+    .overrideProvider('DATABASE_CONNECTION')
+    .useFactory({
+      factory: () => createMockDatabase()
+    })
+    .compile();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试异步 Provider</h2>
+
+      <div class="code-block">// 异步 Provider
+{
+  provide: 'ASYNC_SERVICE',
+  useFactory: async (configService: ConfigService) => {
+    const url = configService.get('API_URL');
+    const client = await connectToService(url);
+    return client;
+  },
+  inject: [ConfigService]
+}
+
+// 测试异步 Provider
+beforeEach(async () => {
+  module = await Test.createTestingModule({
+    providers: [
+      {
+        provide: ConfigService,
+        useValue: {
+          get: jest.fn().mockReturnValue('http://test-api.com')
+        }
+      },
+      {
+        provide: 'ASYNC_SERVICE',
+        useFactory: async (config: ConfigService) => {
+          return {
+            getData: jest.fn().mockResolvedValue({ data: 'mocked' })
+          };
+        },
+        inject: [ConfigService]
+      }
+    ]
+  }).compile();
+
+  const service = await module.get('ASYNC_SERVICE');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 测试守卫和拦截器</h2>
+
+      <div class="code-block">import { Test, TestingModule } from '@nestjs/testing';
+import { ExecutionContext, CallHandler } from '@nestjs/common';
+import { AuthGuard } from './auth.guard';
+import { JwtService } from '@nestjs/jwt';
+
+describe('AuthGuard', () => {
+  let guard: AuthGuard;
+  let jwtService: JwtService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        AuthGuard,
+        {
+          provide: JwtService,
+          useValue: {
+            verify: jest.fn()
+          }
+        }
+      ]
+    }).compile();
+
+    guard = module.get&lt;AuthGuard&gt;(AuthGuard);
+    jwtService = module.get&lt;JwtService&gt;(JwtService);
+  });
+
+  it('should allow access with valid token', async () => {
+    const mockContext = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: { authorization: 'Bearer valid-token' }
+        })
+      })
+    } as ExecutionContext;
+
+    jwtService.verify.mockReturnValue({ userId: '123' });
+
+    const result = await guard.canActivate(mockContext);
+    expect(result).toBe(true);
+  });
+
+  it('should deny access without token', async () => {
+    const mockContext = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: {}
+        })
+      })
+    } as ExecutionContext;
+
+    await expect(guard.canActivate(mockContext)).rejects.toThrow();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 Test.createTestingModule 创建测试模块</li>
+            <li>使用 useValue/useClass/useFactory Mock Provider</li>
+            <li>使用 overrideProvider 覆盖模块中的依赖</li>
+            <li>通过 module.get() 获取服务实例</li>
+            <li>测试守卫和拦截器需要模拟 ExecutionContext</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter71/71-5-测试数据库操作.html">← 上一节：测试数据库操作</a>
+      <a href="72-2-服务测试.html">下一节：服务测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

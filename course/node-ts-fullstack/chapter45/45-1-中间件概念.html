@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.1 中间件概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="45-1-中间件概念.html">第四十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>45.1 中间件概念</h1>
+      <p class="subtitle">理解 NestJS 中间件的执行机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中间件的作用和执行时机</li>
+        <li>掌握中间件的特点</li>
+        <li>了解中间件与其他组件的区别</li>
+        <li>理解中间件的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是中间件？</h2>
+      <p>中间件是在路由处理程序之前调用的函数，可以访问请求对象和响应对象，以及下一个中间件函数。</p>
+
+      <div class="code-block">
+// 中间件执行流程
+客户端请求
+    ↓
+┌─────────────────┐
+│   中间件 1       │  ← 可以修改请求/响应
+└─────────────────┘
+    ↓ next()
+┌─────────────────┐
+│   中间件 2       │  ← 可以终止请求
+└─────────────────┘
+    ↓ next()
+┌─────────────────┐
+│   路由处理器     │  ← 控制器方法
+└─────────────────┘
+    ↓
+响应客户端
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">中间件特点</div>
+          <p>中间件可以执行任何代码、修改请求响应对象、结束请求-响应周期、调用下一个中间件。如果不调用 next()，请求将被终止。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 中间件接口</h2>
+      <div class="code-block">
+import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+
+@Injectable()
+export class LoggerMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+
+    // 继续下一个中间件或路由处理器
+    next();
+
+    // next() 之后的代码在响应发送后执行
+    console.log(`Response sent: ${res.statusCode}`);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 中间件 vs 其他组件</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>组件</th>
+            <th>执行时机</th>
+            <th>主要用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>中间件</td>
+            <td>路由处理前</td>
+            <td>日志、认证、请求预处理</td>
+          </tr>
+          <tr>
+            <td>守卫</td>
+            <td>中间件后</td>
+            <td>权限验证</td>
+          </tr>
+          <tr>
+            <td>拦截器</td>
+            <td>守卫后/响应前</td>
+            <td>响应转换、日志</td>
+          </tr>
+          <tr>
+            <td>管道</td>
+            <td>路由参数处理</td>
+            <td>数据验证、转换</td>
+          </tr>
+          <tr>
+            <td>过滤器</td>
+            <td>异常时</td>
+            <td>异常处理</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 应用场景</h2>
+      <ul class="feature-list">
+        <li>请求日志记录</li>
+        <li>请求体解析</li>
+        <li>CORS 处理</li>
+        <li>请求限流</li>
+        <li>请求计时</li>
+        <li>请求 ID 生成</li>
+        <li>认证前置处理</li>
+      </ul>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">中间件限制</div>
+          <p>中间件不能使用依赖注入来访问模块中的 Provider（除了在模块构造函数中注入）。如需访问数据库或其他服务，考虑使用守卫或拦截器。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 中间件在路由处理器前执行</li>
+            <li>• 可以访问和修改请求/响应对象</li>
+            <li>• next() 调用下一个中间件</li>
+            <li>• 常用于日志、认证预处理等</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter44/44-5-可选注入.html">← 上一章：可选注入</a>
+      <a href="45-2-创建中间件.html">下一节：创建中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

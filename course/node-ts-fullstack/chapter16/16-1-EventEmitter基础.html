@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.1 EventEmitter 基础 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="16-1-EventEmitter基础.html">第十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>16.1 EventEmitter 基础</h1>
+      <p class="subtitle">Node.js 事件驱动的核心</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解事件驱动编程模型</li>
+        <li>掌握 EventEmitter 类的使用</li>
+        <li>学会创建自定义事件发射器</li>
+        <li>了解事件监听器管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> EventEmitter 简介</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// EventEmitter 是 Node.js 事件模块的核心类
+// 用于实现发布-订阅模式
+
+// 创建事件发射器实例
+const emitter = new EventEmitter();
+
+// 注册事件监听器
+emitter.on('message', (data) => {
+  console.log('收到消息:', data);
+});
+
+// 触发事件
+emitter.emit('message', 'Hello World!');
+// 输出: 收到消息: Hello World!
+
+// 事件名称可以是字符串或 Symbol
+const customEvent = Symbol('custom');
+emitter.on(customEvent, () => console.log('Symbol 事件'));
+emitter.emit(customEvent);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">发布-订阅模式</div>
+          <p>EventEmitter 实现了发布-订阅模式：发布者触发事件，订阅者监听事件并做出响应。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 创建自定义发射器</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 方式一：实例化后使用
+const myEmitter = new EventEmitter();
+
+myEmitter.on('event', (a, b) => {
+  console.log(a, b, this);  // this 指向 EventEmitter 实例
+});
+
+myEmitter.emit('event', 'a', 'b');
+
+// 方式二：继承 EventEmitter
+class MyEmitter extends EventEmitter {
+  constructor() {
+    super();
+    this.data = null;
+  }
+
+  setData(data) {
+    this.data = data;
+    this.emit('dataChanged', data);
+  }
+}
+
+const emitter = new MyEmitter();
+
+emitter.on('dataChanged', (newData) => {
+  console.log('数据已更新:', newData);
+});
+
+emitter.setData('Hello');  // 触发 dataChanged 事件
+
+// 方式三：封装发射器
+class Timer extends EventEmitter {
+  start(seconds) {
+    this.emit('start', seconds);
+
+    const interval = setInterval(() => {
+      seconds--;
+      this.emit('tick', seconds);
+
+      if (seconds <= 0) {
+        clearInterval(interval);
+        this.emit('end');
+      }
+    }, 1000);
+  }
+}
+
+const timer = new Timer();
+timer.on('start', (s) => console.log(`开始倒计时: ${s}秒`));
+timer.on('tick', (s) => console.log(`剩余: ${s}秒`));
+timer.on('end', () => console.log('时间到!'));
+
+timer.start(5);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 事件监听器管理</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// 添加监听器
+emitter.on('event', () => console.log('监听器1'));
+emitter.on('event', () => console.log('监听器2'));
+
+// 查看监听器数量
+console.log(emitter.listenerCount('event'));  // 2
+
+// 获取所有监听器
+console.log(emitter.listeners('event'));
+// [ [Function], [Function] ]
+
+// 获取所有事件名
+console.log(emitter.eventNames());  // ['event']
+
+// 移除监听器
+const listener = () => console.log('可移除的监听器');
+emitter.on('test', listener);
+emitter.removeListener('test', listener);
+// 或
+emitter.off('test', listener);  // Node.js 10+ 别名
+
+// 移除所有监听器
+emitter.removeAllListeners('test');
+emitter.removeAllListeners();  // 移除所有事件的监听器
+
+// 设置最大监听器数量（默认 10）
+emitter.setMaxListeners(20);
+console.log(emitter.getMaxListeners());  // 20
+
+// 警告：监听器超过限制会打印警告
+// 可以设置为 0 表示无限制
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 监听器顺序控制</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// prependListener - 添加到监听器数组开头
+emitter.on('event', () => console.log('监听器1'));
+emitter.on('event', () => console.log('监听器2'));
+emitter.prependListener('event', () => console.log('监听器0（开头）'));
+
+emitter.emit('event');
+// 输出顺序：
+// 监听器0（开头）
+// 监听器1
+// 监听器2
+
+// prependOnceListener - 添加到开头且只执行一次
+emitter.prependOnceListener('once', () => console.log('只执行一次'));
+
+// rawListeners - 获取原始监听器数组
+const listeners = emitter.rawListeners('event');
+console.log(listeners);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• EventEmitter 是事件驱动编程的核心</li>
+            <li>• on() 注册监听器，emit() 触发事件</li>
+            <li>• 可以继承 EventEmitter 创建自定义发射器</li>
+            <li>• removeListener/off() 移除监听器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter15/15-5-文件流操作.html">← 上一章：文件流操作</a>
+      <a href="16-2-事件监听与触发.html">下一节：事件监听与触发 →</a>
+    </div>
+  </div>
+</body>
+</html>

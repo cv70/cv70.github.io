@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>101.3 Nginx 反向代理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="101-1-云服务器部署.html">第101章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>101.3 Nginx 反向代理</h1>
+      <p class="subtitle">使用 Nginx 作为反向代理和负载均衡器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解反向代理的原理与优势</li>
+        <li>掌握 Nginx 基础配置</li>
+        <li>学会配置负载均衡</li>
+        <li>掌握静态文件服务和缓存配置</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Nginx Reverse Proxy" class="card-image">
+      <h3 class="card-title">什么是反向代理</h3>
+      <p class="card-text">
+        <strong>反向代理</strong>是代理服务器的一种，它接收客户端请求后转发给内部服务器，
+        并将响应返回给客户端。客户端只知道代理服务器地址，不直接访问后端服务。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 反向代理架构</h2>
+      <div class="code-block">
+┌──────────┐     ┌──────────────┐     ┌──────────────┐
+│  Client  │────▶│    Nginx     │────▶│  Node.js App │
+│  浏览器   │     │  反向代理     │     │   :3000      │
+└──────────┘     │  :80/443     │     └──────────────┘
+                 └──────────────┘            │
+                       │                     │
+                       │            ┌──────────────┐
+                       └───────────▶│  Node.js App │
+                                    │   :3001      │
+                                    └──────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Nginx 安装</h2>
+      <div class="code-block">
+<span class="comment"># Ubuntu/Debian</span>
+sudo apt update
+sudo apt install nginx -y
+
+<span class="comment"># 启动 Nginx</span>
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+<span class="comment"># 验证安装</span>
+nginx -v
+curl http://localhost
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 基础反向代理配置</h2>
+      <div class="code-block">
+<span class="comment"># /etc/nginx/sites-available/myapp</span>
+server {
+    listen 80;
+    server_name example.com www.example.com;
+
+    <span class="comment"># 访问日志</span>
+    access_log /var/log/nginx/myapp.access.log;
+    error_log /var/log/nginx/myapp.error.log;
+
+    <span class="comment"># 反向代理配置</span>
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+
+        <span class="comment"># 传递客户端真实信息</span>
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        <span class="comment"># WebSocket 支持</span>
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        <span class="comment"># 超时配置</span>
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    <span class="comment"># API 路由</span>
+    location /api/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    <span class="comment"># 静态文件（如果有）</span>
+    location /static/ {
+        alias /var/www/myapp/public/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 负载均衡配置</h2>
+      <div class="code-block">
+<span class="comment"># /etc/nginx/conf.d/upstream.conf</span>
+upstream nodejs_backend {
+    <span class="comment"># 负载均衡策略</span>
+    <span class="comment"># least_conn;  # 最少连接</span>
+    <span class="comment"># ip_hash;     # IP 哈希</span>
+
+    server 127.0.0.1:3000 weight=3;
+    server 127.0.0.1:3001 weight=2;
+    server 127.0.0.1:3002 weight=1;
+
+    <span class="comment"># 健康检查</span>
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name example.com;
+
+    location / {
+        proxy_pass http://nodejs_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        <span class="comment"># 请求头</span>
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 负载均衡策略</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>说明</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>轮询 (默认)</strong></td>
+            <td>按顺序依次分配</td>
+            <td>服务器性能相近</td>
+          </tr>
+          <tr>
+            <td><strong>weight</strong></td>
+            <td>按权重分配</td>
+            <td>服务器性能不同</td>
+          </tr>
+          <tr>
+            <td><strong>least_conn</strong></td>
+            <td>分配给连接最少的服务器</td>
+            <td>请求处理时间差异大</td>
+          </tr>
+          <tr>
+            <td><strong>ip_hash</strong></td>
+            <td>根据 IP 哈希分配</td>
+            <td>需要会话保持</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 缓存配置</h2>
+      <div class="code-block">
+<span class="comment"># 缓存路径配置</span>
+proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=api_cache:10m
+                 max_size=1g inactive=60m use_temp_path=off;
+
+server {
+    listen 80;
+    server_name example.com;
+
+    <span class="comment"># 缓存 API 响应</span>
+    location /api/public/ {
+        proxy_pass http://localhost:3000;
+        proxy_cache api_cache;
+        proxy_cache_valid 200 10m;
+        proxy_cache_valid 404 1m;
+        proxy_cache_use_stale error timeout updating http_500;
+        proxy_cache_lock on;
+        add_header X-Cache-Status $upstream_cache_status;
+    }
+
+    <span class="comment"># 静态资源缓存</span>
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff2)$ {
+        proxy_pass http://localhost:3000;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化</h2>
+      <div class="code-block">
+<span class="comment"># /etc/nginx/nginx.conf</span>
+http {
+    <span class="comment"># 启用 gzip 压缩</span>
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript
+               application/xml application/xml+rss text/javascript;
+
+    <span class="comment"># 连接优化</span>
+    keepalive_timeout 65;
+    keepalive_requests 100;
+
+    <span class="comment"># 文件缓存</span>
+    open_file_cache max=1000 inactive=20s;
+    open_file_cache_valid 30s;
+    open_file_cache_min_uses 2;
+    open_file_cache_errors on;
+
+    <span class="comment"># 缓冲区配置</span>
+    client_body_buffer_size 16K;
+    client_header_buffer_size 1k;
+    client_max_body_size 8m;
+    large_client_header_buffers 4 8k;
+}
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Nginx 配置验证</div>
+        <pre style="margin-top: 0.5rem;"># 测试配置语法
+sudo nginx -t
+
+# 重载配置
+sudo nginx -s reload
+
+# 启用站点配置
+sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/
+sudo nginx -s reload</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Nginx 作为反向代理提供安全、负载均衡、缓存等功能</li>
+            <li>• proxy_pass 配置后端服务地址</li>
+            <li>• upstream 定义后端服务器组实现负载均衡</li>
+            <li>• 合理配置缓存和压缩提升性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="101-2-PM2进程管理.html">← 上一节</a>
+      <a href="101-4-HTTPS配置.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

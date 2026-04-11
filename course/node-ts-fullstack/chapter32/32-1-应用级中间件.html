@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.1 应用级中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.1 应用级中间件</h1>
+      <p class="subtitle">深入理解 Express 应用级中间件的使用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解应用级中间件的概念和特点</li>
+        <li>掌握 app.use() 的各种用法</li>
+        <li>学会全局中间件的设计模式</li>
+        <li>理解中间件的执行顺序</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 什么是应用级中间件</h2>
+      <p>应用级中间件是绑定到 Express 应用实例（app）上的中间件。它们可以处理所有进入应用的请求，或只处理特定路径的请求。</p>
+
+      <h3>基本语法</h3>
+      <div class="code-block">
+// 应用级中间件语法
+app.use([path], callback [, callback ...])
+
+// path: 可选，路径或路径模式
+// callback: 中间件函数，可以是函数或函数数组</div>
+
+      <h3>应用级中间件的特点</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">全局性</h3>
+          <p class="card-text">不指定路径时，会处理所有请求</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">顺序执行</h3>
+          <p class="card-text">按照定义顺序依次执行</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">可控制流程</h3>
+          <p class="card-text">可结束响应或调用 next() 继续</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">可堆叠</h3>
+          <p class="card-text">同一路径可挂载多个中间件</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> app.use() 基本用法</h2>
+
+      <h3>1. 全局中间件</h3>
+      <div class="code-block">
+// 不指定路径，处理所有请求
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
+// 请求计时中间件
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`Request took ${Date.now() - start}ms`);
+  });
+  next();
+});</div>
+
+      <h3>2. 路径限定中间件</h3>
+      <div class="code-block">
+// 只处理 /api 路径下的请求
+app.use('/api', (req, res, next) => {
+  console.log('API request received');
+  next();
+});
+
+// 处理特定路径前缀
+app.use('/admin', (req, res, next) => {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).send('Admin access required');
+  }
+  next();
+});</div>
+
+      <h3>3. 多个中间件</h3>
+      <div class="code-block">
+// 多个中间件作为参数
+app.use(
+  (req, res, next) => {
+    console.log('Middleware 1');
+    next();
+  },
+  (req, res, next) => {
+    console.log('Middleware 2');
+    next();
+  }
+);
+
+// 或使用数组形式
+const middleware1 = (req, res, next) => {
+  console.log('Middleware 1');
+  next();
+};
+
+const middleware2 = (req, res, next) => {
+  console.log('Middleware 2');
+  next();
+};
+
+app.use([middleware1, middleware2]);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 常见应用级中间件</h2>
+
+      <h3>日志中间件</h3>
+      <div class="code-block">
+// 简单日志中间件
+const logger = (req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const url = req.originalUrl;
+  const ip = req.ip;
+
+  console.log(`[${timestamp}] ${method} ${url} - ${ip}`);
+  next();
+};
+
+app.use(logger);
+
+// 更详细的日志中间件
+const detailedLogger = (req, res, next) => {
+  const start = Date.now();
+
+  // 请求信息
+  console.log({
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.originalUrl,
+    headers: req.headers,
+    query: req.query,
+    body: req.body,
+    ip: req.ip
+  });
+
+  // 响应完成时记录
+  res.on('finish', () => {
+    console.log({
+      statusCode: res.statusCode,
+      duration: `${Date.now() - start}ms`
+    });
+  });
+
+  next();
+};</div>
+
+      <h3>请求体解析中间件</h3>
+      <div class="code-block">
+// Express 内置中间件
+app.use(express.json());                           // 解析 JSON
+app.use(express.urlencoded({ extended: true }));   // 解析 URL 编码
+app.use(express.raw());                            // 解析 Buffer
+app.use(express.text());                           // 解析文本
+
+// 自定义请求体大小限制
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ limit: '10kb', extended: true }));</div>
+
+      <h3>静态文件中间件</h3>
+      <div class="code-block">
+// 提供静态文件
+app.use(express.static('public'));
+
+// 指定虚拟路径前缀
+app.use('/static', express.static('public'));
+
+// 多个静态目录
+app.use(express.static('public'));
+app.use(express.static('uploads'));
+app.use(express.static('files'));
+
+// 配置选项
+app.use('/assets', express.static('assets', {
+  dotfiles: 'ignore',       // 忽略点文件
+  etag: true,               // 启用 ETag
+  extensions: ['htm', 'html'], // 默认扩展名
+  index: 'index.html',      // 默认文件
+  lastModified: true,       // Last-Modified 头
+  maxAge: '1d',             // 缓存时间
+  redirect: true,           // 目录重定向
+  setHeaders: (res, path) => {
+    // 自定义响应头
+    if (path.endsWith('.js')) {
+      res.set('Content-Type', 'application/javascript');
+    }
+  }
+}));</div>
+
+      <h3>CORS 中间件</h3>
+      <div class="code-block">
+// 手动实现 CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+// 或使用 cors 中间件
+const cors = require('cors');
+app.use(cors());</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 中间件执行顺序</h2>
+      <p>理解中间件的执行顺序非常重要，它会直接影响应用的行为：</p>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 1. 全局中间件 - 最先执行
+app.use((req, res, next) => {
+  console.log('1. Global middleware');
+  req.startTime = Date.now();
+  next();
+});
+
+// 2. 路径限定的中间件
+app.use('/api', (req, res, next) => {
+  console.log('2. API middleware');
+  next();
+});
+
+// 3. 路由处理
+app.get('/api/users', (req, res) => {
+  console.log('3. Route handler');
+  res.json({ users: [] });
+});
+
+// 4. 其他路由
+app.get('/', (req, res) => {
+  console.log('3. Home handler');
+  res.send('Home');
+});
+
+// 执行顺序：
+// GET /api/users -> 1 -> 2 -> 3
+// GET /          -> 1 -> 3</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">顺序很重要</div>
+          <p>中间件必须在使用它们的路由之前定义，否则不会被执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 实际应用示例</h2>
+
+      <h3>完整的请求处理链</h3>
+      <div class="code-block">
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const morgan = require('morgan');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+
+// ============ 安全相关中间件 ============
+app.use(helmet());                    // 安全 HTTP 头
+
+// ============ CORS ============
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// ============ 速率限制 ============
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 分钟
+  max: 100,                   // 限制 100 次
+  message: { error: 'Too many requests' }
+});
+app.use('/api', limiter);
+
+// ============ 压缩 ============
+app.use(compression());
+
+// ============ 请求解析 ============
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// ============ 日志 ============
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
+}
+
+// ============ 自定义中间件 ============
+// 请求 ID
+app.use((req, res, next) => {
+  req.id = require('uuid').v4();
+  res.set('X-Request-ID', req.id);
+  next();
+});
+
+// 请求计时
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+  });
+  next();
+});
+
+// ============ 静态文件 ============
+app.use('/static', express.static('public'));
+
+// ============ 路由 ============
+app.use('/api', require('./routes/api'));
+app.use('/', require('./routes/web'));
+
+// ============ 错误处理 ============
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+module.exports = app;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>应用级中间件通过 app.use() 绑定，处理所有或特定路径的请求</li>
+            <li>中间件按定义顺序执行，必须放在使用它的路由之前</li>
+            <li>常用应用级中间件：日志、请求解析、静态文件、CORS、安全等</li>
+            <li>一个路径可以挂载多个中间件，按顺序执行</li>
+            <li>中间件可以结束响应或调用 next() 继续处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>实现一个记录请求详细信息（方法、路径、状态码、响应时间）的日志中间件</li>
+        <li>配置一个完整的 Express 应用，包含安全、CORS、压缩、日志等中间件</li>
+        <li>实现一个请求 ID 中间件，为每个请求生成唯一 ID</li>
+        <li>使用 express.static 配置多个静态文件目录</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter31/31-6-路由最佳实践.html">← 上一节：路由最佳实践</a>
+      <a href="32-2-路由级中间件.html">下一节：路由级中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

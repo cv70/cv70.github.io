@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.1 中间件原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="38-1-中间件原理.html">第三十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>38.1 中间件原理</h1>
+      <p class="subtitle">理解 Koa 中间件的核心机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中间件的概念和作用</li>
+        <li>掌握中间件的执行流程</li>
+        <li>学会编写基本中间件</li>
+        <li>理解 next() 函数的作用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是中间件</h2>
+      <p><strong>中间件</strong>是处理请求和响应的函数，介于请求和响应之间。每个中间件可以访问请求对象（ctx）、响应对象（ctx）和下一个中间件（next）。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">核心概念</div>
+          <p>中间件是一个 async 函数，接收 ctx 和 next 两个参数，通过 await next() 将控制权传递给下一个中间件。</p>
+        </div>
+      </div>
+
+      <div class="code-block">
+// 基本中间件结构
+async function middleware(ctx, next) {
+  // 前置处理 - 请求进入时执行
+  console.log('Request:', ctx.path);
+
+  // 调用下一个中间件
+  await next();
+
+  // 后置处理 - 响应返回时执行
+  console.log('Response:', ctx.status);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 中间件执行流程</h2>
+      <div class="code-block">
+app.use(async (ctx, next) => {
+  console.log('1. 第一个中间件 - 开始');
+  await next();
+  console.log('4. 第一个中间件 - 结束');
+});
+
+app.use(async (ctx, next) => {
+  console.log('2. 第二个中间件 - 开始');
+  await next();
+  console.log('3. 第二个中间件 - 结束');
+});
+
+app.use(async ctx => {
+  console.log('核心处理');
+  ctx.body = 'Hello';
+});
+
+// 执行顺序: 1 -> 2 -> 核心 -> 3 -> 4
+      </div>
+
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <div class="title">执行顺序</div>
+          <p>中间件按照 app.use() 注册顺序执行，形成"先进后出"的栈结构。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> next() 函数</h2>
+      <p>next() 函数是连接各个中间件的桥梁，它返回一个 Promise。</p>
+      <div class="code-block">
+app.use(async (ctx, next) => {
+  const start = Date.now();
+
+  // 等待下游中间件执行完成
+  await next();
+
+  const ms = Date.now() - start;
+  console.log(`${ctx.method} ${ctx.url} - ${ms}ms`);
+});
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">调用 next()</h3>
+          <ul class="feature-list">
+            <li>继续执行下一个中间件</li>
+            <li>等待下游处理完成</li>
+            <li>然后执行后续代码</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">不调用 next()</h3>
+          <ul class="feature-list">
+            <li>终止中间件链</li>
+            <li>直接返回响应</li>
+            <li>用于认证拦截等场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 手写中间件核心实现</h2>
+      <div class="code-block">
+// 简化版 Koa 中间件实现
+class SimpleKoa {
+  constructor() {
+    this.middlewares = [];
+  }
+
+  use(middleware) {
+    this.middlewares.push(middleware);
+  }
+
+  // 组合所有中间件
+  compose(middlewares) {
+    return function (ctx) {
+      let index = -1;
+
+      function dispatch(i) {
+        if (i <= index) {
+          return Promise.reject(new Error('next() called multiple times'));
+        }
+        index = i;
+
+        const middleware = middlewares[i];
+        if (!middleware) return Promise.resolve();
+
+        try {
+          return Promise.resolve(middleware(ctx, () => dispatch(i + 1)));
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      }
+
+      return dispatch(0);
+    };
+  }
+
+  listen(port, callback) {
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      const ctx = { req, res, body: null };
+      const fn = this.compose(this.middlewares);
+      fn(ctx).then(() => {
+        res.end(ctx.body || 'Not Found');
+      });
+    });
+    server.listen(port, callback);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常见中间件类型</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+          <h3 class="card-title">认证中间件</h3>
+          <p class="card-text">验证用户身份和权限</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+          <h3 class="card-title">日志中间件</h3>
+          <p class="card-text">记录请求和响应信息</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🛡️</div>
+          <h3 class="card-title">错误处理</h3>
+          <p class="card-text">捕获和处理异常</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 实战示例</h2>
+      <div class="code-block">
+// 日志中间件
+app.use(async (ctx, next) => {
+  const start = Date.now();
+  console.log(`--> ${ctx.method} ${ctx.url}`);
+
+  await next();
+
+  const ms = Date.now() - start;
+  console.log(`<-- ${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms`);
+});
+
+// 认证中间件
+app.use(async (ctx, next) => {
+  const token = ctx.headers.authorization;
+
+  if (!token) {
+    ctx.status = 401;
+    ctx.body = { error: 'No token provided' };
+    return; // 不调用 next()，终止请求
+  }
+
+  ctx.state.user = verifyToken(token);
+  await next();
+});
+
+// 业务处理
+app.use(async ctx => {
+  ctx.body = { message: 'Success', user: ctx.state.user };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 中间件是处理请求的 async 函数</li>
+            <li>• 使用 app.use() 注册中间件</li>
+            <li>• await next() 将控制权传递给下一个中间件</li>
+            <li>• 中间件按注册顺序执行，形成栈结构</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter37/37-5-路由基础.html">← 上一节：路由基础</a>
+      <a href="38-2-洋葱模型.html">下一节：洋葱模型 →</a>
+    </div>
+  </div>
+</body>
+</html>

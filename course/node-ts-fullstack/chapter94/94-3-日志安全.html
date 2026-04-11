@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>94.3 日志安全 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="94-1-文件上传安全.html">第九十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>94.3 日志安全</h1>
+      <p class="subtitle">安全日志记录与审计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解日志安全的重要性</li>
+        <li>掌握敏感信息脱敏方法</li>
+        <li>学会安全日志配置</li>
+        <li>了解日志审计策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 日志安全风险</h2>
+      <div class="code-block">
+# 日志中的安全问题
+
+## 1. 敏感信息泄露
+- 密码、密钥、Token
+- 个人身份信息
+- 信用卡号、银行卡号
+- 医疗健康信息
+
+## 2. 注入攻击
+- 日志注入（Log Injection）
+- 日志伪造（Log Forging）
+- CRLF 注入
+
+## 3. 日志篡改
+- 攻击者删除或修改日志
+- 掩盖攻击痕迹
+
+## 4. 合规问题
+- GDPR、HIPAA 等法规要求
+- 日志保留期限
+- 访问控制
+
+# 不安全的日志示例
+
+// 错误：记录敏感信息
+logger.info(`User login: ${username}, password: ${password}`);
+
+// 错误：记录完整请求体
+logger.info(`Request body: ${JSON.stringify(req.body)}`);
+
+// 错误：记录 API 密钥
+logger.debug(`API call with key: ${apiKey}`);
+
+// 错误：未处理的用户输入
+logger.info(`User comment: ${userInput}`);  // 可能包含恶意内容
+
+# 日志注入攻击
+
+// 用户输入
+const userInput = 'Normal log entry\nERROR: Fake error message';
+
+// 日志输出
+INFO: User comment: Normal log entry
+ERROR: Fake error message  // 伪造的日志行
+
+// 攻击者可以伪造日志，干扰日志分析
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">合规风险</div>
+          <p>日志中包含敏感信息可能违反 GDPR、HIPAA 等数据保护法规，导致法律风险和巨额罚款。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 敏感信息脱敏</h2>
+      <div class="code-block">
+# 数据脱敏函数
+
+// 手机号脱敏: 138****8888
+function maskPhone(phone: string): string {
+  if (!phone || phone.length &lt; 7) return phone;
+  return phone.slice(0, 3) + '****' + phone.slice(-4);
+}
+
+// 邮箱脱敏: t***@example.com
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [name, domain] = email.split('@');
+  const maskedName = name[0] + '***';
+  return `${maskedName}@${domain}`;
+}
+
+// 身份证脱敏: 110***********1234
+function maskIdCard(idCard: string): string {
+  if (!idCard || idCard.length &lt; 8) return idCard;
+  return idCard.slice(0, 3) + '***********' + idCard.slice(-4);
+}
+
+// 银行卡脱敏: 6222****1234
+function maskBankCard(card: string): string {
+  if (!card || card.length &lt; 8) return card;
+  return card.slice(0, 4) + '****' + card.slice(-4);
+}
+
+// 密码完全隐藏
+function maskPassword(): string {
+  return '[REDACTED]';
+}
+
+# 通用脱敏器
+
+interface MaskRule {
+  pattern: RegExp;
+  replace: string;
+}
+
+const MASK_RULES: MaskRule[] = [
+  { pattern: /"password"\s*:\s*"[^"]*"/g, replace: '"password":"[REDACTED]"' },
+  { pattern: /"token"\s*:\s*"[^"]*"/g, replace: '"token":"[REDACTED]"' },
+  { pattern: /"apiKey"\s*:\s*"[^"]*"/g, replace: '"apiKey":"[REDACTED]"' },
+  { pattern: /\b\d{16,19}\b/g, replace: '[CARD_NUMBER]' },  // 银行卡
+  { pattern: /\b\d{17,18}[Xx\d]\b/g, replace: '[ID_CARD]' },  // 身份证
+];
+
+function sanitizeLog(message: string): string {
+  let sanitized = message;
+
+  for (const rule of MASK_RULES) {
+    sanitized = sanitized.replace(rule.pattern, rule.replace);
+  }
+
+  return sanitized;
+}
+
+// 使用
+const logMessage = sanitizeLog(JSON.stringify({
+  username: 'john',
+  password: 'secret123',
+  cardNumber: '6222021234567890',
+}));
+// 输出: {"username":"john","password":"[REDACTED]","cardNumber":"[CARD_NUMBER]"}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 安全日志配置</h2>
+      <div class="code-block">
+# Winston 安全日志配置
+
+import winston from 'winston';
+
+// 自定义格式：脱敏敏感信息
+const sanitizeFormat = winston.format((info) => {
+  if (typeof info.message === 'string') {
+    info.message = sanitizeLog(info.message);
+  }
+  return info;
+});
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    sanitizeFormat(),
+    winston.format.json()
+  ),
+  defaultMeta: {
+    service: 'api-server',
+    environment: process.env.NODE_ENV,
+  },
+  transports: [
+    // 文件日志
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: 'logs/combined.log',
+      maxsize: 5242880,
+      maxFiles: 10,
+    }),
+  ],
+});
+
+// 开发环境添加控制台输出
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.simple(),
+  }));
+}
+
+# Express 请求日志中间件
+
+import morgan from 'morgan';
+
+// 自定义 morgan 格式
+morgan.token('body', (req: any) => {
+  const body = { ...req.body };
+
+  // 脱敏敏感字段
+  const sensitiveFields = ['password', 'token', 'apiKey', 'secret'];
+  sensitiveFields.forEach(field => {
+    if (body[field]) body[field] = '[REDACTED]';
+  });
+
+  return JSON.stringify(body);
+});
+
+app.use(morgan(':method :url :status :body', {
+  stream: {
+    write: (message) => logger.info(message.trim()),
+  },
+  skip: (req) => {
+    // 跳过健康检查等
+    return req.url === '/health';
+  },
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 审计日志</h2>
+      <div class="code-block">
+# 审计日志记录
+
+interface AuditLog {
+  timestamp: Date;
+  action: string;
+  userId?: string;
+  ip: string;
+  userAgent: string;
+  resource: string;
+  resourceId?: string;
+  oldValues?: object;
+  newValues?: object;
+  status: 'success' | 'failure';
+}
+
+class AuditLogger {
+  private logger: winston.Logger;
+
+  constructor() {
+    this.logger = winston.createLogger({
+      level: 'info',
+      format: winston.format.json(),
+      transports: [
+        new winston.transports.File({
+          filename: 'logs/audit.log',
+        }),
+      ],
+    });
+  }
+
+  log(data: AuditLog) {
+    this.logger.info('AUDIT', data);
+  }
+}
+
+const audit = new AuditLogger();
+
+// 记录敏感操作
+app.put('/users/:id', auth, async (req, res) => {
+  const oldUser = await User.findById(req.params.id);
+
+  // 执行更新...
+
+  // 记录审计日志
+  audit.log({
+    timestamp: new Date(),
+    action: 'UPDATE_USER',
+    userId: req.user.id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || '',
+    resource: 'User',
+    resourceId: req.params.id,
+    oldValues: { role: oldUser.role },
+    newValues: { role: req.body.role },
+    status: 'success',
+  });
+
+  res.json(updatedUser);
+});
+
+# 需要审计的操作
+
+- 用户登录/登出
+- 权限变更
+- 敏感数据访问
+- 数据修改/删除
+- 系统配置变更
+- 管理员操作
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 日志中不应包含敏感信息</li>
+            <li>• 使用脱敏函数处理敏感数据</li>
+            <li>• 防止日志注入攻击</li>
+            <li>• 关键操作需要审计日志</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="94-2-敏感数据加密.html">← 上一节：敏感数据加密</a>
+      <a href="94-4-API安全.html">下一节：API 安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

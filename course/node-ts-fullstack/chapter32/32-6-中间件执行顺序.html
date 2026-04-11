@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.6 中间件执行顺序 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.6 中间件执行顺序</h1>
+      <p class="subtitle">深入理解 Express 中间件的执行机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中间件的顺序执行机制</li>
+        <li>掌握 next() 的作用和用法</li>
+        <li>理解"洋葱模型"的工作原理</li>
+        <li>学会调试中间件执行顺序</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 执行顺序基本原则</h2>
+      <p>Express 中间件按照定义顺序依次执行，这是一个核心概念：</p>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 中间件 1
+app.use((req, res, next) => {
+  console.log('1. First middleware');
+  next();
+});
+
+// 中间件 2
+app.use((req, res, next) => {
+  console.log('2. Second middleware');
+  next();
+});
+
+// 路由处理
+app.get('/', (req, res) => {
+  console.log('3. Route handler');
+  res.send('Hello');
+});
+
+// 请求 GET / 输出：
+// 1. First middleware
+// 2. Second middleware
+// 3. Route handler</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">关键点</div>
+          <p>中间件的定义顺序决定了执行顺序。先定义的先执行，这是 Express 的核心原则。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧅</span> 洋葱模型</h2>
+      <p>Express 中间件的执行可以形象地理解为"洋葱模型"：</p>
+
+      <div class="image-container" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 1rem;">
+        <div style="text-align: center; color: white; font-family: monospace;">
+          <pre>
+┌──────────────────────────────────────┐
+│            请求进入                   │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 1: next() 前的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 2: next() 前的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 3: next() 前的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│        Route Handler 处理             │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 3: next() 后的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 2: next() 后的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│  Middleware 1: next() 后的代码        │
+└──────────────────┬───────────────────┘
+                   ▼
+┌──────────────────────────────────────┐
+│            响应返回                   │
+└──────────────────────────────────────┘
+          </pre>
+        </div>
+      </div>
+
+      <div class="code-block">
+app.use((req, res, next) => {
+  console.log('1 - start');
+  next();
+  console.log('1 - end');
+});
+
+app.use((req, res, next) => {
+  console.log('2 - start');
+  next();
+  console.log('2 - end');
+});
+
+app.get('/', (req, res) => {
+  console.log('handler');
+  res.send('Hello');
+});
+
+// 输出顺序：
+// 1 - start
+// 2 - start
+// handler
+// 2 - end
+// 1 - end</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> next() 的作用</h2>
+
+      <h3>1. 传递控制权</h3>
+      <div class="code-block">
+// 调用 next() 将控制权传递给下一个中间件
+app.use((req, res, next) => {
+  console.log('Before next');
+  next();  // 传递控制权
+  console.log('After next');
+});
+
+// next() 后的代码会在后续中间件执行完后执行</div>
+
+      <h3>2. 不调用 next() 的后果</h3>
+      <div class="code-block">
+// ❌ 不调用 next() - 请求会挂起
+app.use((req, res, next) => {
+  console.log('Middleware without next');
+  // 没有 next()，请求永远无法到达路由处理
+});
+
+app.get('/', (req, res) => {
+  // 永远不会执行
+  res.send('Hello');
+});</div>
+
+      <h3>3. 提前结束响应</h3>
+      <div class="code-block">
+// 中间件可以提前结束响应
+app.use((req, res, next) => {
+  if (req.headers['x-block'] === 'true') {
+    return res.status(403).send('Blocked');  // 结束响应
+  }
+  next();  // 继续处理
+});</div>
+
+      <h3>4. next('route')</h3>
+      <div class="code-block">
+// next('route') 跳过当前路由的其他中间件
+app.get('/user/:id',
+  (req, res, next) => {
+    if (req.params.id === '0') {
+      next('route');  // 跳到下一个匹配的路由
+    } else {
+      next();  // 继续下一个中间件
+    }
+  },
+  (req, res) => {
+    res.send('Regular user');
+  }
+);
+
+app.get('/user/:id', (req, res) => {
+  res.send('Special user (id is 0)');
+});</div>
+
+      <h3>5. next(error)</h3>
+      <div class="code-block">
+// 传递错误给错误处理中间件
+app.use((req, res, next) => {
+  const error = new Error('Something went wrong');
+  next(error);  // 跳过所有普通中间件，直接到错误处理
+});
+
+// 错误处理中间件
+app.use((err, req, res, next) => {
+  res.status(500).json({ error: err.message });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 不同类型中间件的执行顺序</h2>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 1. 应用级中间件（无路径）
+app.use((req, res, next) => {
+  console.log('1. Global app middleware');
+  next();
+});
+
+// 2. 应用级中间件（带路径）
+app.use('/api', (req, res, next) => {
+  console.log('2. Path-specific app middleware');
+  next();
+});
+
+// 3. 路由级中间件
+const router = express.Router();
+router.use((req, res, next) => {
+  console.log('3. Router-level middleware');
+  next();
+});
+
+// 4. 路由处理
+router.get('/users', (req, res) => {
+  console.log('4. Route handler');
+  res.json({ users: [] });
+});
+
+app.use('/api', router);
+
+// 请求 GET /api/users 输出：
+// 1. Global app middleware
+// 2. Path-specific app middleware
+// 3. Router-level middleware
+// 4. Route handler</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 调试中间件执行</h2>
+
+      <h3>调试函数</h3>
+      <div class="code-block">
+// 创建调试中间件
+function debugMiddleware(name) {
+  return (req, res, next) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [${name}] ${req.method} ${req.originalUrl}`);
+    next();
+  };
+}
+
+// 使用
+app.use(debugMiddleware('global-1'));
+app.use('/api', debugMiddleware('api-prefix'));
+app.use(debugMiddleware('global-2'));
+
+// 输出示例：
+// [2024-01-01T00:00:00.000Z] [global-1] GET /api/users
+// [2024-01-01T00:00:00.000Z] [api-prefix] GET /api/users
+// [2024-01-01T00:00:00.000Z] [global-2] GET /api/users</div>
+
+      <h3>请求追踪</h3>
+      <div class="code-block">
+// 请求追踪中间件
+app.use((req, res, next) => {
+  req.requestId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  req.startTime = Date.now();
+
+  console.log(`[${req.requestId}] Request started: ${req.method} ${req.originalUrl}`);
+
+  res.on('finish', () => {
+    const duration = Date.now() - req.startTime;
+    console.log(`[${req.requestId}] Request finished: ${res.statusCode} (${duration}ms)`);
+  });
+
+  next();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题</h2>
+
+      <h3>1. 中间件顺序错误</h3>
+      <div class="code-block">
+// ❌ 错误：中间件在路由之后
+app.get('/users', (req, res) => {
+  res.json(req.body);  // undefined!
+});
+app.use(express.json());  // 太晚了
+
+// ✅ 正确：中间件在路由之前
+app.use(express.json());
+app.get('/users', (req, res) => {
+  res.json(req.body);  // 正常
+});</div>
+
+      <h3>2. 忘记调用 next()</h3>
+      <div class="code-block">
+// ❌ 错误：忘记调用 next()
+app.use((req, res, next) => {
+  console.log('Logging...');
+  // 忘记 next()，请求挂起
+});
+
+// ✅ 正确
+app.use((req, res, next) => {
+  console.log('Logging...');
+  next();
+});</div>
+
+      <h3>3. 多次调用 next()</h3>
+      <div class="code-block">
+// ❌ 错误：多次调用 next()
+app.use((req, res, next) => {
+  next();
+  next();  // 错误！已经传递过控制权了
+});
+
+// ✅ 正确：只调用一次
+app.use((req, res, next) => {
+  if (condition) {
+    next();
+  } else {
+    res.send('Blocked');
+  }
+});</div>
+
+      <h3>4. 异步中间件问题</h3>
+      <div class="code-block">
+// ❌ 错误：异步中间件不等待
+app.use(async (req, res, next) => {
+  await someAsyncOperation();
+  // next() 可能在异步完成前被调用
+  next();
+});
+
+// ✅ 正确：确保异步完成后再调用 next()
+app.use(async (req, res, next) => {
+  try {
+    await someAsyncOperation();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>中间件按定义顺序执行：先定义先执行</li>
+            <li>next() 传递控制权，必须调用（除非结束响应）</li>
+            <li>洋葱模型：next() 前后代码分别在不同阶段执行</li>
+            <li>next('route') 跳过当前路由的其他中间件</li>
+            <li>next(error) 跳转到错误处理中间件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-5-第三方中间件.html">← 上一节：第三方中间件</a>
+      <a href="32-7-实战编写自定义中间件.html">下一节：实战编写自定义中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

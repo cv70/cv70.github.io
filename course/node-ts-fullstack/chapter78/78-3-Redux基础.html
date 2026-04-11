@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>78.3 Redux 基础 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="78-1-状态管理概述.html">第七十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>78.3 Redux 基础</h1>
+      <p class="subtitle">可预测的状态容器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Redux 核心概念</li>
+        <li>掌握 Store、Action、Reducer</li>
+        <li>学会 Redux 工作流程</li>
+        <li>了解 Redux 中间件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Redux 核心概念</h2>
+      <div class="code-block">
+// Redux 三大原则
+// 1. 单一数据源：整个应用的 state 存储在一个 store 中
+// 2. State 是只读的：只能通过 dispatch action 来修改
+// 3. 使用纯函数修改：Reducer 是纯函数
+
+// 核心概念
+
+// Action：描述发生了什么
+interface Action {
+  type: string;
+  payload?: any;
+}
+
+const incrementAction = { type: 'INCREMENT' };
+const addTodoAction = { type: 'ADD_TODO', payload: { text: 'Learn Redux' } };
+
+// Reducer：根据 action 返回新 state
+function counterReducer(state = 0, action: Action) {
+  switch (action.type) {
+    case 'INCREMENT':
+      return state + 1;
+    case 'DECREMENT':
+      return state - 1;
+    case 'INCREMENT_BY':
+      return state + action.payload;
+    default:
+      return state;
+  }
+}
+
+// Store：保存 state，提供 API
+import { createStore } from 'redux';
+
+const store = createStore(counterReducer);
+
+// 获取 state
+console.log(store.getState());  // 0
+
+// 订阅变化
+store.subscribe(() =&gt; {
+  console.log('State changed:', store.getState());
+});
+
+// 派发 action
+store.dispatch({ type: 'INCREMENT' });  // State changed: 1
+store.dispatch({ type: 'INCREMENT_BY', payload: 5 });  // State changed: 6
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Redux 工作流程</h2>
+      <div class="code-block">
+// Redux 工作流程
+// View ──dispatch(action)──&gt; Store ──action──&gt; Reducer ──newState──&gt; Store ──notify──&gt; View
+
+// 完整示例：Todo 应用
+
+// 定义类型
+interface Todo {
+  id: number;
+  text: string;
+  completed: boolean;
+}
+
+interface TodoState {
+  todos: Todo[];
+  filter: 'all' | 'active' | 'completed';
+}
+
+type TodoAction =
+  | { type: 'ADD_TODO'; payload: string }
+  | { type: 'TOGGLE_TODO'; payload: number }
+  | { type: 'DELETE_TODO'; payload: number }
+  | { type: 'SET_FILTER'; payload: 'all' | 'active' | 'completed' };
+
+// 初始状态
+const initialState: TodoState = {
+  todos: [],
+  filter: 'all',
+};
+
+// Reducer
+function todoReducer(state = initialState, action: TodoAction): TodoState {
+  switch (action.type) {
+    case 'ADD_TODO':
+      return {
+        ...state,
+        todos: [
+          ...state.todos,
+          {
+            id: Date.now(),
+            text: action.payload,
+            completed: false,
+          },
+        ],
+      };
+    case 'TOGGLE_TODO':
+      return {
+        ...state,
+        todos: state.todos.map(todo =&gt;
+          todo.id === action.payload
+            ? { ...todo, completed: !todo.completed }
+            : todo
+        ),
+      };
+    case 'DELETE_TODO':
+      return {
+        ...state,
+        todos: state.todos.filter(todo =&gt; todo.id !== action.payload),
+      };
+    case 'SET_FILTER':
+      return {
+        ...state,
+        filter: action.payload,
+      };
+    default:
+      return state;
+  }
+}
+
+// 创建 store
+const store = createStore(todoReducer);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Redux 中间件</h2>
+      <div class="code-block">
+// 中间件：在 action 到达 reducer 之前处理 action
+// 常用于处理异步操作
+
+import { createStore, applyMiddleware } from 'redux';
+import thunk from 'redux-thunk';
+
+// Thunk 中间件：允许 dispatch 函数
+const fetchUser = (userId: string) =&gt; async (dispatch) =&gt; {
+  dispatch({ type: 'FETCH_USER_START' });
+
+  try {
+    const response = await fetch(`/api/users/${userId}`);
+    const user = await response.json();
+    dispatch({ type: 'FETCH_USER_SUCCESS', payload: user });
+  } catch (error) {
+    dispatch({ type: 'FETCH_USER_ERROR', payload: error.message });
+  }
+};
+
+// 使用中间件
+const store = createStore(userReducer, applyMiddleware(thunk));
+
+// 派发异步 action
+store.dispatch(fetchUser('123'));
+
+// 自定义中间件
+const logger = store =&gt; next =&gt; action =&gt; {
+  console.log('Dispatching:', action);
+  const result = next(action);
+  console.log('New state:', store.getState());
+  return result;
+};
+
+// 应用多个中间件
+const store = createStore(
+  reducer,
+  applyMiddleware(thunk, logger)
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Redux 遵循单一数据源、状态只读、纯函数修改原则</li>
+            <li>• Action 描述发生了什么</li>
+            <li>• Reducer 根据 Action 返回新 State</li>
+            <li>• 中间件处理副作用和异步操作</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="78-2-ContextAPI.html">← 上一节：Context API</a>
+      <a href="78-4-ReduxToolkit.html">下一节：Redux Toolkit →</a>
+    </div>
+  </div>
+</body>
+</html>

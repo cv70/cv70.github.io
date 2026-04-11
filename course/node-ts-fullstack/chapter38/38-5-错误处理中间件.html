@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.5 错误处理中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="38-1-中间件原理.html">第三十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>38.5 错误处理中间件</h1>
+      <p class="subtitle">构建健壮的错误处理机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Koa 的错误处理机制</li>
+        <li>掌握全局错误处理中间件的编写</li>
+        <li>学会自定义错误类型</li>
+        <li>了解错误日志记录和监控</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Koa 错误处理机制</h2>
+      <p>Koa 提供了多种错误处理方式：try/catch、全局事件监听、错误中间件。</p>
+
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">try/catch</h3>
+          <p class="card-text">在中间件内捕获</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">错误中间件</h3>
+          <p class="card-text">统一捕获所有错误</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📡</div>
+          <h3 class="card-title">事件监听</h3>
+          <p class="card-text">监听 error 事件</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 全局错误处理中间件</h2>
+      <div class="code-block">
+// 最外层错误处理中间件
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    // 设置状态码
+    ctx.status = err.status || err.statusCode || 500;
+
+    // 设置响应体
+    ctx.body = {
+      success: false,
+      error: err.message,
+      code: err.code || 'INTERNAL_ERROR'
+    };
+
+    // 开发环境返回堆栈信息
+    if (process.env.NODE_ENV === 'development') {
+      ctx.body.stack = err.stack;
+    }
+
+    // 触发应用级错误事件
+    ctx.app.emit('error', err, ctx);
+  }
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">中间件顺序</div>
+          <p>错误处理中间件必须放在最外层（最先注册），才能捕获所有后续中间件的错误。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 自定义错误类</h2>
+      <div class="code-block">
+// errors/AppError.js
+class AppError extends Error {
+  constructor(message, statusCode = 500, code = 'APP_ERROR') {
+    super(message);
+    this.statusCode = statusCode;
+    this.code = code;
+    this.status = statusCode;
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// 错误类型定义
+class ValidationError extends AppError {
+  constructor(message) {
+    super(message, 400, 'VALIDATION_ERROR');
+  }
+}
+
+class UnauthorizedError extends AppError {
+  constructor(message = 'Unauthorized') {
+    super(message, 401, 'UNAUTHORIZED');
+  }
+}
+
+class ForbiddenError extends AppError {
+  constructor(message = 'Forbidden') {
+    super(message, 403, 'FORBIDDEN');
+  }
+}
+
+class NotFoundError extends AppError {
+  constructor(message = 'Resource not found') {
+    super(message, 404, 'NOT_FOUND');
+  }
+}
+
+class ConflictError extends AppError {
+  constructor(message) {
+    super(message, 409, 'CONFLICT');
+  }
+}
+
+module.exports = {
+  AppError,
+  ValidationError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 使用自定义错误</h2>
+      <div class="code-block">
+const { ValidationError, NotFoundError, UnauthorizedError } = require('./errors');
+
+// 验证错误
+router.post('/users', async ctx => {
+  const { name, email } = ctx.request.body;
+
+  if (!name || !email) {
+    throw new ValidationError('Name and email are required');
+  }
+
+  ctx.body = { message: 'User created' };
+});
+
+// 资源未找到
+router.get('/users/:id', async ctx => {
+  const user = await User.findById(ctx.params.id);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  ctx.body = user;
+});
+
+// 未授权
+router.get('/profile', async ctx => {
+  if (!ctx.state.user) {
+    throw new UnauthorizedError('Please login first');
+  }
+
+  ctx.body = ctx.state.user;
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 全局错误事件监听</h2>
+      <div class="code-block">
+// 监听应用级错误事件
+app.on('error', (err, ctx) => {
+  // 记录错误日志
+  console.error('Global error handler:');
+  console.error('Status:', err.status || 500);
+  console.error('Message:', err.message);
+  console.error('URL:', ctx.url);
+  console.error('Method:', ctx.method);
+  console.error('Stack:', err.stack);
+
+  // 发送到错误监控服务
+  // sendToSentry(err, ctx);
+  // sendToLogService(err, ctx);
+});
+
+// 处理未捕获的 Promise rejection
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
+// 处理未捕获的异常
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 错误日志记录</h2>
+      <div class="code-block">
+// middlewares/errorLogger.js
+const fs = require('fs');
+const path = require('path');
+
+const logStream = fs.createWriteStream(
+  path.join(__dirname, '../logs/error.log'),
+  { flags: 'a' }
+);
+
+function errorLogger() {
+  return async (ctx, next) => {
+    try {
+      await next();
+    } catch (err) {
+      // 记录错误日志
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        method: ctx.method,
+        url: ctx.url,
+        status: err.status || 500,
+        message: err.message,
+        stack: err.stack,
+        body: ctx.request.body,
+        query: ctx.query,
+        ip: ctx.ip
+      };
+
+      logStream.write(JSON.stringify(logEntry) + '\n');
+
+      throw err; // 继续抛出给上层处理
+    }
+  };
+}
+
+module.exports = errorLogger;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 生产环境错误处理</h2>
+      <div class="code-block">
+// 完整的生产环境错误处理
+const { AppError } = require('./errors');
+
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    // 记录错误
+    console.error(err);
+
+    // 判断错误类型
+    const isAppError = err instanceof AppError;
+    const isDev = process.env.NODE_ENV === 'development';
+
+    // 设置状态码
+    ctx.status = err.status || 500;
+
+    // 构建响应
+    const response = {
+      success: false,
+      error: isAppError ? err.message : 'Internal Server Error',
+      code: err.code || 'INTERNAL_ERROR'
+    };
+
+    // 开发环境额外信息
+    if (isDev) {
+      response.stack = err.stack;
+      response.detail = err.detail;
+    }
+
+    // 生产环境隐藏内部错误详情
+    if (!isAppError && !isDev) {
+      response.error = 'An unexpected error occurred';
+    }
+
+    ctx.body = response;
+
+    // 触发错误事件
+    ctx.app.emit('error', err, ctx);
+  }
+});
+
+// 404 处理
+app.use(async ctx => {
+  ctx.status = 404;
+  ctx.body = {
+    success: false,
+    error: 'Not Found',
+    code: 'NOT_FOUND'
+  };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整错误处理方案</h2>
+      <div class="code-block">
+// app.js - 完整示例
+const Koa = require('koa');
+const app = new Koa();
+
+// 1. 全局错误事件监听
+app.on('error', (err, ctx) => {
+  // 发送到 Sentry / LogRocket 等
+  console.error('App error:', err);
+});
+
+// 2. 错误处理中间件（最外层）
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    ctx.status = err.status || 500;
+    ctx.body = {
+      success: false,
+      error: err.message,
+      code: err.code || 'ERROR'
+    };
+    ctx.app.emit('error', err, ctx);
+  }
+});
+
+// 3. 404 处理中间件（最内层）
+app.use(async (ctx, next) => {
+  await next();
+
+  if (ctx.status === 404 && !ctx.body) {
+    ctx.status = 404;
+    ctx.body = { success: false, error: 'Not Found', code: 'NOT_FOUND' };
+  }
+});
+
+// 4. 业务路由
+app.use(router.routes());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 错误处理中间件放在最外层</li>
+            <li>• 使用自定义错误类统一错误类型</li>
+            <li>• 监听 app.on('error') 处理全局错误</li>
+            <li>• 生产环境隐藏敏感错误信息</li>
+            <li>• 记录错误日志便于排查问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="38-4-自定义中间件.html">← 上一节：自定义中间件</a>
+      <a href="../chapter39/39-1-文件上传.html">下一章：Koa 进阶 →</a>
+    </div>
+  </div>
+</body>
+</html>

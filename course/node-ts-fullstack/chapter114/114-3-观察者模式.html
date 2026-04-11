@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>114.3 观察者模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="114-1-单例模式.html">第114章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>114.3 观察者模式</h1>
+      <p class="subtitle">对象间的发布-订阅关系</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解观察者模式的定义</li>
+        <li>掌握TypeScript实现</li>
+        <li>学会事件系统的设计</li>
+        <li>了解观察者模式的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 模式定义</h2>
+      <div class="code-block">
+// 观察者模式：定义对象间的一对多依赖，当一个对象状态改变时，所有依赖者都会收到通知
+
+// 应用场景
+const useCases = [
+  '事件处理系统',
+  '消息订阅',
+  '数据绑定',
+  '状态管理',
+  '日志系统'
+];
+
+// 基本实现
+interface Observer<T> {
+  update(data: T): void;
+}
+
+interface Subject<T> {
+  attach(observer: Observer<T>): void;
+  detach(observer: Observer<T>): void;
+  notify(data: T): void;
+}
+
+class ConcreteSubject<T> implements Subject<T> {
+  private observers: Set<Observer<T>> = new Set();
+
+  attach(observer: Observer<T>): void {
+    this.observers.add(observer);
+  }
+
+  detach(observer: Observer<T>): void {
+    this.observers.delete(observer);
+  }
+
+  notify(data: T): void {
+    this.observers.forEach(observer => observer.update(data));
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">观察者优点</div>
+          <p>解耦发布者和订阅者、支持广播通信、动态添加删除观察者。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeScript实现</h2>
+      <div class="code-block">
+// 事件发射器实现
+type EventHandler<T = any> = (data: T) => void;
+
+class EventEmitter<EventMap extends Record<string, any>> {
+  private handlers: Map<keyof EventMap, Set<EventHandler>> = new Map();
+
+  on<K extends keyof EventMap>(event: K, handler: EventHandler<EventMap[K]>) {
+    if (!this.handlers.has(event)) {
+      this.handlers.set(event, new Set());
+    }
+    this.handlers.get(event)!.add(handler);
+    return () => this.off(event, handler);
+  }
+
+  off<K extends keyof EventMap>(event: K, handler: EventHandler<EventMap[K]>) {
+    this.handlers.get(event)?.delete(handler);
+  }
+
+  emit<K extends keyof EventMap>(event: K, data: EventMap[K]) {
+    this.handlers.get(event)?.forEach(handler => handler(data));
+  }
+
+  once<K extends keyof EventMap>(event: K, handler: EventHandler<EventMap[K]>) {
+    const wrapper: EventHandler<EventMap[K]> = (data) => {
+      this.off(event, wrapper);
+      handler(data);
+    };
+    this.on(event, wrapper);
+  }
+}
+
+// 使用示例
+interface AppEvents {
+  'user:login': { userId: string; timestamp: Date };
+  'user:logout': { userId: string };
+  'order:created': { orderId: string; amount: number };
+}
+
+const eventBus = new EventEmitter<AppEvents>();
+
+// 订阅事件
+const unsubscribe = eventBus.on('user:login', (data) => {
+  console.log(`User ${data.userId} logged in at ${data.timestamp}`);
+});
+
+// 发射事件
+eventBus.emit('user:login', {
+  userId: 'user-123',
+  timestamp: new Date()
+});
+
+// 取消订阅
+unsubscribe();
+
+// 实际应用：订单状态通知
+class OrderService {
+  constructor(private eventBus: EventEmitter<AppEvents>) {}
+
+  async createOrder(orderData: any) {
+    const order = await this.saveOrder(orderData);
+
+    // 发布事件
+    this.eventBus.emit('order:created', {
+      orderId: order.id,
+      amount: order.amount
+    });
+
+    return order;
+  }
+}
+
+// 通知服务订阅订单事件
+class NotificationService {
+  constructor(eventBus: EventEmitter<AppEvents>) {
+    eventBus.on('order:created', async (data) => {
+      await this.sendOrderNotification(data.orderId);
+    });
+  }
+
+  private async sendOrderNotification(orderId: string) {
+    console.log(`Sending notification for order ${orderId}`);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 观察者模式实现一对多依赖</li>
+            <li>• 发布者和订阅者解耦</li>
+            <li>• EventEmitter是常用实现</li>
+            <li>• 支持动态添加删除观察者</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="114-2-工厂模式.html">← 上一节：工厂模式</a>
+      <a href="114-4-策略模式.html">下一节：策略模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

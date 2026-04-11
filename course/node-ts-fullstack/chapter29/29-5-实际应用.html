@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.5 实际应用 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-Redis简介.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.5 实际应用</h1>
+      <p class="subtitle">Redis 在实际项目中的应用场景</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Session 缓存实现</li>
+        <li>学会实现限流功能</li>
+        <li>了解排行榜的实现方式</li>
+        <li>掌握消息队列的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Session 存储</h2>
+      <div class="code-block">
+import express from 'express';
+import session from 'express-session';
+import connectRedis from 'connect-redis';
+
+const app = express();
+
+// 创建 Redis Store
+const RedisStore = connectRedis(session);
+
+const redisClient = createClient();
+await redisClient.connect();
+
+app.use(session({
+  store: new RedisStore({
+    client: redisClient,
+    prefix: 'sess:',     // key 前缀
+    ttl: 86400,          // 过期时间（秒）
+  }),
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 86400000  // 24 小时
+  }
+}));
+
+// 使用 Session
+app.get('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await User.authenticate(username, password);
+  if (user) {
+    req.session.userId = user.id;
+    req.session.username = user.name;
+    res.json({ success: true });
+  }
+});
+
+app.get('/profile', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: '未登录' });
+  }
+  const user = await User.findById(req.session.userId);
+  res.json(user);
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: '登出失败' });
+    }
+    res.json({ success: true });
+  });
+});
+
+// 手动操作 Session
+app.post('/extend-session', async (req, res) => {
+  if (req.session.userId) {
+    req.session.cookie.maxAge = 86400000;  // 延长24小时
+    res.json({ message: 'Session 已延长' });
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚦</span> API 限流</h2>
+      <div class="code-block">
+import express from 'express';
+
+const app = express();
+
+// 固定窗口限流
+class RateLimiter {
+  constructor(
+    private client: RedisClientType,
+    private limit: number,      // 限制次数
+    private window: number      // 时间窗口（秒）
+  ) {}
+
+  async isAllowed(key: string): Promise<{ allowed: boolean; remaining: number }> {
+    const current = await this.client.incr(key);
+
+    if (current === 1) {
+      await this.client.expire(key, this.window);
+    }
+
+    const ttl = await this.client.ttl(key);
+
+    return {
+      allowed: current <= this.limit,
+      remaining: Math.max(0, this.limit - current),
+    };
+  }
+}
+
+// 滑动窗口限流（更精确）
+class SlidingWindowRateLimiter {
+  constructor(
+    private client: RedisClientType,
+    private limit: number,
+    private window: number
+  ) {}
+
+  async isAllowed(key: string): Promise<{ allowed: boolean; remaining: number }> {
+    const now = Date.now();
+    const windowStart = now - this.window * 1000;
+
+    const script = `
+      local key = KEYS[1]
+      local now = tonumber(ARGV[1])
+      local windowStart = tonumber(ARGV[2])
+      local limit = tonumber(ARGV[3])
+      local window = tonumber(ARGV[4])
+
+      -- 删除过期的请求记录
+      redis.call('ZREMRANGEBYSCORE', key, 0, windowStart)
+
+      -- 获取当前窗口内的请求数
+      local count = redis.call('ZCARD', key)
+
+      if count < limit then
+        redis.call('ZADD', key, now, now .. '-' .. math.random())
+        redis.call('EXPIRE', key, window)
+        return {1, limit - count - 1}
+      else
+        return {0, 0}
+      end
+    `;
+
+    const result = await this.client.eval(script, {
+      keys: [key],
+      arguments: [String(now), String(windowStart), String(this.limit), String(this.window)]
+    });
+
+    return {
+      allowed: result[0] === 1,
+      remaining: result[1],
+    };
+  }
+}
+
+// 限流中间件
+const rateLimiter = new SlidingWindowRateLimiter(client, 100, 60);  // 60秒内最多100次
+
+app.use(async (req, res, next) => {
+  const ip = req.ip;
+  const { allowed, remaining } = await rateLimiter.isAllowed(`rate:${ip}`);
+
+  res.setHeader('X-RateLimit-Remaining', remaining);
+
+  if (!allowed) {
+    return res.status(429).json({
+      error: '请求过于频繁，请稍后再试',
+      retryAfter: 60
+    });
+  }
+
+  next();
+});
+
+// 特定接口的限流
+const loginLimiter = new SlidingWindowRateLimiter(client, 5, 300);  // 5分钟内最多5次
+
+app.post('/login', async (req, res) => {
+  const ip = req.ip;
+  const { allowed } = await loginLimiter.isAllowed(`login:${ip}`);
+
+  if (!allowed) {
+    return res.status(429).json({ error: '登录尝试次数过多，请稍后再试' });
+  }
+
+  // 登录逻辑
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏆</span> 排行榜</h2>
+      <div class="code-block">
+class LeaderboardService {
+  private readonly key = 'leaderboard';
+
+  constructor(private client: RedisClientType) {}
+
+  // 更新分数
+  async updateScore(userId: string, score: number): Promise<void> {
+    await this.client.zAdd(this.key, { score, value: userId });
+  }
+
+  // 增加分数
+  async addScore(userId: string, increment: number): Promise<number> {
+    return await this.client.zIncrBy(this.key, increment, userId);
+  }
+
+  // 获取用户排名（从高到低）
+  async getRank(userId: string): Promise<number | null> {
+    const rank = await this.client.zRevRank(this.key, userId);
+    return rank !== null ? rank + 1 : null;  // 排名从1开始
+  }
+
+  // 获取用户分数
+  async getScore(userId: string): Promise<number | null> {
+    return await this.client.zScore(this.key, userId);
+  }
+
+  // 获取排行榜前N名
+  async getTopN(n: number): Promise<Array<{ userId: string; score: number; rank: number }>> {
+    const results = await this.client.zRange(this.key, 0, n - 1, {
+      rev: true,
+      withScores: true
+    });
+
+    return results.map((item, index) => ({
+      userId: item.value,
+      score: item.score,
+      rank: index + 1
+    }));
+  }
+
+  // 获取用户周围排名
+  async getAroundUser(userId: string, range: number = 5): Promise<Array<{
+    userId: string; score: number; rank: number;
+  }>> {
+    const rank = await this.client.zRevRank(this.key, userId);
+    if (rank === null) return [];
+
+    const start = Math.max(0, rank - range);
+    const end = rank + range;
+
+    const results = await this.client.zRange(this.key, start, end, {
+      rev: true,
+      withScores: true
+    });
+
+    return results.map((item, index) => ({
+      userId: item.value,
+      score: item.score,
+      rank: start + index + 1
+    }));
+  }
+
+  // 获取分数范围内的用户
+  async getByScoreRange(min: number, max: number): Promise<Array<{
+    userId: string; score: number;
+  }>> {
+    const results = await this.client.zRangeByScore(this.key, min, max, {
+      withScores: true
+    });
+
+    return results.map(item => ({
+      userId: item.value,
+      score: item.score
+    }));
+  }
+}
+
+// 使用示例
+const leaderboard = new LeaderboardService(client);
+
+// 用户获得积分
+await leaderboard.updateScore('user:1', 100);
+await leaderboard.addScore('user:1', 50);  // 加50分
+
+// 获取排行榜
+const top10 = await leaderboard.getTopN(10);
+
+// 获取用户排名
+const rank = await leaderboard.getRank('user:1');
+const score = await leaderboard.getScore('user:1');
+
+// 获取用户周围排名
+const around = await leaderboard.getAroundUser('user:1', 5);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📨</span> 消息队列</h2>
+      <div class="code-block">
+// 使用 List 实现简单的消息队列
+class MessageQueue {
+  constructor(private client: RedisClientType, private queueName: string) {}
+
+  // 生产者：添加消息
+  async produce(message: any): Promise<void> {
+    await this.client.rPush(this.queueName, JSON.stringify(message));
+  }
+
+  // 消费者：阻塞获取消息
+  async consume(timeout: number = 0): Promise<any> {
+    const result = await this.client.blPop(this.queueName, timeout);
+    if (result) {
+      return JSON.parse(result.element);
+    }
+    return null;
+  }
+
+  // 获取队列长度
+  async length(): Promise<number> {
+    return await this.client.lLen(this.queueName);
+  }
+}
+
+// 使用 Stream 实现更可靠的消息队列
+class StreamQueue {
+  constructor(private client: RedisClientType, private streamName: string) {}
+
+  // 添加消息
+  async produce(data: Record<string, any>): Promise<string> {
+    return await this.client.xAdd(this.streamName, '*', data);
+  }
+
+  // 消费者组
+  async createGroup(groupName: string): Promise<void> {
+    try {
+      await this.client.xGroupCreate(this.streamName, groupName, '0', {
+        MKSTREAM: true
+      });
+    } catch (error) {
+      // 组已存在
+    }
+  }
+
+  // 读取消息
+  async consume(groupName: string, consumerName: string, count: number = 1): Promise<any[]> {
+    const messages = await this.client.xReadGroup(
+      groupName,
+      consumerName,
+      [{ key: this.streamName, id: '>' }],
+      { COUNT: count, BLOCK: 5000 }
+    );
+
+    if (!messages) return [];
+
+    return messages[0].messages.map(msg => ({
+      id: msg.id,
+      data: msg.message
+    }));
+  }
+
+  // 确认消息
+  async ack(groupName: string, messageId: string): Promise<void> {
+    await this.client.xAck(this.streamName, groupName, messageId);
+  }
+}
+
+// 使用示例
+const queue = new MessageQueue(client, 'tasks');
+await queue.produce({ type: 'email', to: 'user@example.com' });
+
+const message = await queue.consume(5);  // 5秒超时
+if (message) {
+  // 处理消息
+  console.log(message);
+}
+
+// 发布订阅
+class PubSubService {
+  constructor(private client: RedisClientType) {}
+
+  async publish(channel: string, message: any): Promise<void> {
+    await this.client.publish(channel, JSON.stringify(message));
+  }
+
+  async subscribe(channel: string, callback: (message: any) => void): Promise<void> {
+    const subscriber = this.client.duplicate();
+    await subscriber.connect();
+
+    await subscriber.subscribe(channel, (message) => {
+      callback(JSON.parse(message));
+    });
+  }
+}
+
+// 实时通知
+const pubsub = new PubSubService(client);
+
+// 服务端发布通知
+await pubsub.publish('notifications:user:123', {
+  type: 'message',
+  content: '您有新消息'
+});
+
+// 客户端订阅
+await pubsub.subscribe('notifications:user:123', (message) => {
+  console.log('收到通知:', message);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Redis 存储 Session 实现分布式会话</li>
+            <li>• 使用计数器或滑动窗口实现限流</li>
+            <li>• Sorted Set 实现排行榜功能</li>
+            <li>• List 和 Stream 可用于消息队列</li>
+            <li>• Pub/Sub 实现实时消息推送</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-4-分布式锁.html">← 上一节：分布式锁</a>
+      <a href="../chapter30/30-1-Express简介.html">下一章：Express 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

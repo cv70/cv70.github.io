@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.3 应用中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="45-1-中间件概念.html">第四十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>45.3 应用中间件</h1>
+      <p class="subtitle">配置中间件的作用范围</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握中间件的路由配置</li>
+        <li>学会排除特定路由</li>
+        <li>了解路由对象配置</li>
+        <li>掌握模块级中间件配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本配置</h2>
+      <div class="code-block">
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
+
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(LoggerMiddleware)
+      .forRoutes('users');  // 应用到 /users 路由
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 路由配置方式</h2>
+      <div class="code-block">
+import { RequestMethod } from '@nestjs/common';
+
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // 1. 字符串路径
+    consumer.apply(LoggerMiddleware)
+      .forRoutes('users');
+
+    // 2. 多个路径
+    consumer.apply(LoggerMiddleware)
+      .forRoutes('users', 'products', 'orders');
+
+    // 3. 所有路由
+    consumer.apply(LoggerMiddleware)
+      .forRoutes('*');
+
+    // 4. 指定 HTTP 方法
+    consumer.apply(LoggerMiddleware)
+      .forRoutes({
+        path: 'users',
+        method: RequestMethod.GET,
+      });
+
+    // 5. 多个路由配置
+    consumer.apply(LoggerMiddleware)
+      .forRoutes(
+        { path: 'users', method: RequestMethod.GET },
+        { path: 'users/:id', method: RequestMethod.GET },
+        { path: 'products', method: RequestMethod.ALL },
+      );
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">路由配置说明</div>
+          <p>forRoutes 支持字符串路径、路由对象、通配符 '*'。RequestMethod 包括 GET, POST, PUT, DELETE, PATCH, ALL 等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚫</span> 排除路由</h2>
+      <div class="code-block">
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(AuthMiddleware)
+      .exclude(
+        'auth/login',
+        'auth/register',
+        'auth/refresh',
+        { path: 'health', method: RequestMethod.GET },
+      )
+      .forRoutes('*');
+  }
+}
+
+// 排除的路由不会经过中间件
+// /auth/login - 不应用中间件
+// /users - 应用中间件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 模块级中间件</h2>
+      <div class="code-block">
+// users.module.ts
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService],
+})
+export class UsersModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // 只在 UsersModule 的路由上应用
+    consumer
+      .apply(UsersLoggerMiddleware)
+      .forRoutes(UsersController);  // 使用控制器类
+
+    // 或者指定路由
+    consumer
+      .apply(UsersAuthMiddleware)
+      .forRoutes('users');
+  }
+}
+
+// 使用控制器类作为参数，会自动应用到该控制器的所有路由
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 链式配置</h2>
+      <div class="code-block">
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // 为不同路由配置不同中间件
+    consumer
+      .apply(LoggerMiddleware)
+      .forRoutes('*')
+      .apply(AuthMiddleware)
+      .exclude('auth/*')
+      .forRoutes('*')
+      .apply(AdminMiddleware)
+      .forRoutes('admin/*');
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">配置注意</div>
+          <p>中间件配置是顺序执行的，后面的配置会在前面配置的基础上叠加。确保配置逻辑清晰，避免重复应用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• forRoutes() 指定中间件作用的路由</li>
+            <li>• exclude() 排除特定路由</li>
+            <li>• 可以使用控制器类作为路由参数</li>
+            <li>• 支持链式配置多个中间件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="45-2-创建中间件.html">← 上一节：创建中间件</a>
+      <a href="45-4-全局中间件.html">下一节：全局中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

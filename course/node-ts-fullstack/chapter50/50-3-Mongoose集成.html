@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.3 Mongoose 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="50-1-TypeORM集成.html">第五十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>50.3 Mongoose 集成</h1>
+      <p class="subtitle">在 NestJS 中使用 MongoDB</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>安装和配置 Mongoose</li>
+        <li>定义 Schema 和模型</li>
+        <li>使用 Mongoose 进行 CRUD</li>
+        <li>理解 MongoDB 特性</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 安装和配置</h2>
+      <div class="code-block">
+# 安装依赖
+npm install @nestjs/mongoose mongoose
+
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+
+@Module({
+  imports: [
+    MongooseModule.forRoot('mongodb://localhost:27017/mydb'),
+  ],
+})
+export class AppModule {}
+
+// 使用配置服务
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        uri: config.get('MONGODB_URI'),
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义 Schema</h2>
+      <div class="code-block">
+// users/schemas/user.schema.ts
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+
+@Schema({ timestamps: true })
+export class User extends Document {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true, unique: true })
+  email: string;
+
+  @Prop({ required: true, select: false })
+  password: string;
+
+  @Prop({ enum: ['user', 'admin'], default: 'user' })
+  role: string;
+
+  @Prop({ default: true })
+  isActive: boolean;
+
+  @Prop()
+  createdAt: Date;
+
+  @Prop()
+  updatedAt: Date;
+}
+
+export const UserSchema = SchemaFactory.createForClass(User);
+
+// 添加索引
+UserSchema.index({ email: 1 });
+
+// 添加虚拟属性
+UserSchema.virtual('profile').get(function() {
+  return { name: this.name, email: this.email };
+});
+
+// orders/schemas/order.schema.ts
+@Schema({ timestamps: true })
+export class Order extends Document {
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
+
+  @Prop({ type: Number, required: true })
+  total: number;
+
+  @Prop({ enum: ['pending', 'paid', 'shipped'], default: 'pending' })
+  status: string;
+
+  @Prop([{ productId: Types.ObjectId, quantity: Number, price: Number }])
+  items: OrderItem[];
+}
+
+export const OrderSchema = SchemaFactory.createForClass(Order);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Schema 装饰器</div>
+          <p>@Schema() 定义集合，@Prop() 定义字段。NestJS 提供的装饰器简化了 Mongoose Schema 的定义。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 使用 Model</h2>
+      <div class="code-block">
+// users.module.ts
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { User, UserSchema } from './schemas/user.schema';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+    ]),
+  ],
+  controllers: [UsersController],
+  providers: [UsersService],
+})
+export class UsersModule {}
+
+// users.service.ts
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from './schemas/user.schema';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    @InjectModel(User.name) private userModel: Model<User>,
+  ) {}
+
+  async findAll(): Promise<User[]> {
+    return this.userModel.find().exec();
+  }
+
+  async findOne(id: string): Promise<User | null> {
+    return this.userModel.findById(id).exec();
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userModel.findOne({ email }).exec();
+  }
+
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const createdUser = new this.userModel(createUserDto);
+    return createdUser.save();
+  }
+
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User | null> {
+    return this.userModel
+      .findByIdAndUpdate(id, updateUserDto, { new: true })
+      .exec();
+  }
+
+  async remove(id: string): Promise<User | null> {
+    return this.userModel.findByIdAndDelete(id).exec();
+  }
+
+  // 复杂查询
+  async findActiveUsers() {
+    return this.userModel
+      .find({ isActive: true })
+      .select('-password')  // 排除密码字段
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .exec();
+  }
+
+  // 聚合查询
+  async getUserOrderStats(userId: string) {
+    return this.userModel.aggregate([
+      { $match: { _id: Types.ObjectId(userId) } },
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'orders',
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          email: 1,
+          orderCount: { $size: '$orders' },
+          totalSpent: { $sum: '$orders.total' },
+        },
+      },
+    ]);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• MongooseModule 提供 MongoDB 集成</li>
+            <li>• @Schema() 和 @Prop() 定义数据模型</li>
+            <li>• @InjectModel 注入 Model 实例</li>
+            <li>• 支持 MongoDB 的所有特性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-2-Prisma集成.html">← 上一节：Prisma 集成</a>
+      <a href="50-4-数据库事务.html">下一节：数据库事务 →</a>
+    </div>
+  </div>
+</body>
+</html>

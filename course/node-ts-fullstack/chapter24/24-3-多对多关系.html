@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.3 多对多关系 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="24-1-一对一关系.html">第二十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>24.3 多对多关系</h1>
+      <p class="subtitle">定义实体间的多对多关联</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解多对多关系的概念</li>
+        <li>掌握 @ManyToMany 装饰器使用</li>
+        <li>学会 @JoinTable 配置</li>
+        <li>了解中间表的使用方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 多对多关系概述</h2>
+      <p>多对多关系是指 A 可以有多个 B，B 也可以属于多个 A。例如：学生和课程、文章和标签、用户和角色。</p>
+
+      <div class="code-block">
+数据库表结构：
+
+users 表                     roles 表
+┌─────┬──────────┐           ┌─────┬─────────┐
+│ id  │ username │           │ id  │ name    │
+├─────┼──────────┤           ├─────┼─────────┤
+│  1  │ alice    │           │  1  │ admin   │
+│  2  │ bob      │           │  2  │ editor  │
+└─────┴──────────┘           │  3  │ user    │
+                             └─────┴─────────┘
+
+user_roles 表（中间表）
+┌─────────┬─────────┐
+│ user_id │ role_id │
+├─────────┼─────────┤
+│    1    │    1    │  alice 是 admin
+│    1    │    2    │  alice 也是 editor
+│    2    │    3    │  bob 是 user
+└─────────┴─────────┘
+
+User (M) ◄────────► (N) Role
+       多对多关系
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义多对多关系</h2>
+      <div class="code-block">
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable } from 'typeorm';
+
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+
+  // 多对多关系
+  @ManyToMany(() => Role, (role) => role.users)
+  @JoinTable()  // 拥有中间表的一方
+  roles: Role[];
+}
+
+@Entity()
+export class Role {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  // 反向引用
+  @ManyToMany(() => User, (user) => user.roles)
+  users: User[];
+}
+
+// 查询用户及其角色
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['roles'],
+});
+console.log(user.roles);  // Role[]
+
+// 查询角色及其用户
+const role = await roleRepository.findOne({
+  where: { id: 1 },
+  relations: ['users'],
+});
+console.log(role.users);  // User[]
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">@JoinTable 位置</div>
+          <p>@JoinTable 只需要在关系的一方添加，指定由该方管理中间表。通常选择业务上更合理的一方，如 User 与 Role，由 User 管理 roles 更自然。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 自定义中间表</h2>
+      <div class="code-block">
+// 方式一：使用 @JoinTable 配置
+@Entity()
+export class User {
+  @ManyToMany(() => Role, (role) => role.users)
+  @JoinTable({
+    name: 'user_roles',           // 中间表名
+    joinColumn: {
+      name: 'user_id',            // 当前实体在中间表的列名
+      referencedColumnName: 'id', // 当前实体的引用列
+    },
+    inverseJoinColumn: {
+      name: 'role_id',            // 目标实体在中间表的列名
+      referencedColumnName: 'id', // 目标实体的引用列
+    },
+  })
+  roles: Role[];
+}
+
+// 方式二：自定义中间表实体（需要额外字段时）
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+
+  @OneToMany(() => UserRole, (userRole) => userRole.user)
+  userRoles: UserRole[];
+}
+
+@Entity()
+export class Role {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @OneToMany(() => UserRole, (userRole) => userRole.role)
+  roleUsers: UserRole[];
+}
+
+@Entity()
+export class UserRole {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  userId: number;
+
+  @Column()
+  roleId: number;
+
+  @Column()
+  assignedAt: Date;  // 额外字段：分配时间
+
+  @Column({ nullable: true })
+  assignedBy: number;  // 额外字段：谁分配的
+
+  @ManyToOne(() => User, (user) => user.userRoles)
+  user: User;
+
+  @ManyToOne(() => Role, (role) => role.roleUsers)
+  role: Role;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 关联数据操作</h2>
+      <div class="code-block">
+// 添加关联
+const user = await userRepository.findOneBy({ id: 1 });
+const role = await roleRepository.findOneBy({ id: 1 });
+
+user.roles = [role];
+await userRepository.save(user);
+
+// 添加多个角色
+const roles = await roleRepository.findBy({ id: In([1, 2, 3]) });
+user.roles = roles;
+await userRepository.save(user);
+
+// 追加角色（不覆盖已有角色）
+if (!user.roles) user.roles = [];
+user.roles.push(newRole);
+await userRepository.save(user);
+
+// 移除单个角色
+user.roles = user.roles.filter(r => r.id !== roleId);
+await userRepository.save(user);
+
+// 清空所有角色
+user.roles = [];
+await userRepository.save(user);
+
+// 使用 QueryBuilder 添加关联
+await userRepository
+  .createQueryBuilder()
+  .relation(User, 'roles')
+  .of(user)
+  .add(role);
+
+// 移除关联
+await userRepository
+  .createQueryBuilder()
+  .relation(User, 'roles')
+  .of(user)
+  .remove(role);
+
+// 检查是否有关联
+const hasRole = await userRepository
+  .createQueryBuilder('user')
+  .innerJoin('user.roles', 'role', 'role.id = :roleId', { roleId: 1 })
+  .where('user.id = :userId', { userId: 1 })
+  .getOne();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 多对多关系需要中间表来关联</li>
+            <li>• @JoinTable 配置中间表信息</li>
+            <li>• 需要额外字段时可自定义中间表实体</li>
+            <li>• 使用 QueryBuilder 可精细操作关联</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="24-2-一对多关系.html">← 上一节：一对多关系</a>
+      <a href="24-4-级联操作.html">下一节：级联操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

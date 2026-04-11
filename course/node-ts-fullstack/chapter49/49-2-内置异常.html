@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.2 内置异常 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="49-1-异常过滤器.html">第四十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>49.2 内置异常</h1>
+      <p class="subtitle">使用 NestJS 提供的内置 HTTP 异常</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握常用 HTTP 异常类</li>
+        <li>学会抛出带自定义消息的异常</li>
+        <li>了解异常的响应格式</li>
+        <li>掌握异常的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 常用 HTTP 异常</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>异常类</th>
+            <th>状态码</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BadRequestException</td>
+            <td>400</td>
+            <td>请求参数错误</td>
+          </tr>
+          <tr>
+            <td>UnauthorizedException</td>
+            <td>401</td>
+            <td>未认证</td>
+          </tr>
+          <tr>
+            <td>ForbiddenException</td>
+            <td>403</td>
+            <td>无权限</td>
+          </tr>
+          <tr>
+            <td>NotFoundException</td>
+            <td>404</td>
+            <td>资源不存在</td>
+          </tr>
+          <tr>
+            <td>ConflictException</td>
+            <td>409</td>
+            <td>资源冲突</td>
+          </tr>
+          <tr>
+            <td>UnprocessableEntityException</td>
+            <td>422</td>
+            <td>验证失败</td>
+          </tr>
+          <tr>
+            <td>InternalServerErrorException</td>
+            <td>500</td>
+            <td>服务器错误</td>
+          </tr>
+          <tr>
+            <td>BadGatewayException</td>
+            <td>502</td>
+            <td>网关错误</td>
+          </tr>
+          <tr>
+            <td>ServiceUnavailableException</td>
+            <td>503</td>
+            <td>服务不可用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用内置异常</h2>
+      <div class="code-block">
+import {
+  BadRequestException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+
+@Controller('users')
+export class UsersController {
+  constructor(private usersService: UsersService) {}
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    const user = await this.usersService.findOne(+id);
+
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+
+    return user;
+  }
+
+  @Post()
+  async create(@Body() createUserDto: CreateUserDto) {
+    const exists = await this.usersService.findByEmail(createUserDto.email);
+
+    if (exists) {
+      throw new ConflictException('Email already exists');
+    }
+
+    return this.usersService.create(createUserDto);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string, @Req() req: Request) {
+    const user = await this.usersService.findOne(+id);
+
+    if (user.id !== req.user.id && !req.user.roles.includes('admin')) {
+      throw new ForbiddenException('You can only delete your own account');
+    }
+
+    return this.usersService.remove(+id);
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">异常消息</div>
+          <p>所有 HTTP 异常都接受一个可选的消息参数。如果不提供，将使用默认的错误消息。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 自定义异常响应</h2>
+      <div class="code-block">
+// 传递对象作为消息
+throw new BadRequestException({
+  code: 'VALIDATION_ERROR',
+  message: 'Validation failed',
+  errors: [
+    { field: 'email', message: 'Invalid email format' },
+    { field: 'password', message: 'Password too short' },
+  ],
+});
+
+// 响应格式
+// {
+//   statusCode: 400,
+//   message: {
+//     code: 'VALIDATION_ERROR',
+//     message: 'Validation failed',
+//     errors: [...]
+//   },
+//   error: 'Bad Request'
+// }
+
+// 使用 HttpException 自定义
+throw new HttpException(
+  {
+    code: 'CUSTOM_ERROR',
+    message: 'Something went wrong',
+    details: 'More info here',
+  },
+  HttpStatus.BAD_REQUEST,
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 异常基类</h2>
+      <div class="code-block">
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+// 所有 HTTP 异常都继承自 HttpException
+class CustomException extends HttpException {
+  constructor(message: string, public readonly code: string) {
+    super(
+      {
+        code,
+        message,
+        timestamp: new Date().toISOString(),
+      },
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+}
+
+// 使用
+throw new CustomException('User not active', 'USER_INACTIVE');
+
+// 响应
+// {
+//   statusCode: 400,
+//   message: {
+//     code: 'USER_INACTIVE',
+//     message: 'User not active',
+//     timestamp: '...'
+//   }
+// }
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">异常最佳实践</div>
+          <p>使用语义明确的异常类。NotFoundException 表示资源不存在，ForbiddenException 表示权限不足。不要滥用 InternalServerErrorException，它应该只用于真正的服务器错误。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• NestJS 提供丰富的内置 HTTP 异常</li>
+            <li>• 异常可以接受字符串或对象作为消息</li>
+            <li>• 可以继承 HttpException 创建自定义异常</li>
+            <li>• 使用语义明确的异常类</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="49-1-异常过滤器.html">← 上一节：异常过滤器</a>
+      <a href="49-3-自定义异常.html">下一节：自定义异常 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>61.1 Resolver 编写 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="61-1-Resolver编写.html">第61章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>61.1 Resolver 编写</h1>
+      <p class="subtitle">GraphQL Resolver 详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Resolver 概述</h2>
+      <p>Resolver 是 GraphQL 中处理每个字段请求的函数，负责从数据源获取数据并返回给客户端。每个字段都可以有一个对应的 Resolver。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Resolver 的作用</div>
+          <ul>
+            <li>处理字段请求</li>
+            <li>从数据库或 API 获取数据</li>
+            <li>处理业务逻辑</li>
+            <li>实现数据关联</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> Resolver 函数签名</h2>
+
+      <div class="code-block">
+<span class="comment">// Resolver 函数签名</span>
+fieldName(parent, args, context, info) => result
+
+<span class="comment">// 参数说明</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    user: (
+      parent: <span class="keyword">any</span>,           <span class="comment">// 父级字段的返回值</span>
+      args: {                <span class="comment">// 查询参数</span>
+        id: <span class="keyword">string</span>;
+      },
+      context: {             <span class="comment">// 共享上下文</span>
+        dataSources: <span class="keyword">any</span>;
+        user: User;
+      },
+      info: GraphQLResolveInfo  <span class="comment">// 查询信息</span>
+    ) => {
+      <span class="keyword">return</span> { id: <span class="string">'1'</span>, name: <span class="string">'张三'</span> };
+    },
+  },
+};
+      </div>
+
+      <h3>参数详解</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>参数</th>
+            <th>类型</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>parent</code></td>
+            <td>any</td>
+            <td>父级字段的返回值，Query 类型为 undefined</td>
+          </tr>
+          <tr>
+            <td><code>args</code></td>
+            <td>object</td>
+            <td>查询中传递的参数对象</td>
+          </tr>
+          <tr>
+            <td><code>context</code></td>
+            <td>object</td>
+            <td>所有 Resolver 共享的上下文对象</td>
+          </tr>
+          <tr>
+            <td><code>info</code></td>
+            <td>GraphQLResolveInfo</td>
+            <td>包含查询 AST、字段信息等</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基础 Resolver</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">type</span> Query {
+  user(id: ID!): User
+  users: [User!]!
+}
+
+<span class="keyword">type</span> Mutation {
+  createUser(name: String!, email: String!): User!
+}
+
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    <span class="comment">// 获取单个用户</span>
+    user: <span class="keyword">async</span> (_parent, { id }, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parseInt(id) },
+      });
+    },
+
+    <span class="comment">// 获取所有用户</span>
+    users: <span class="keyword">async</span> (_parent, _args, context) => {
+      <span class="keyword">return</span> context.prisma.user.findMany();
+    },
+  },
+
+  Mutation: {
+    <span class="comment">// 创建用户</span>
+    createUser: <span class="keyword">async</span> (_parent, { name, email }, context) => {
+      <span class="keyword">return</span> context.prisma.user.create({
+        data: { name, email },
+      });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 字段 Resolver</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  posts: [Post!]!      <span class="comment">// 关联字段</span>
+  postCount: Int!      <span class="comment">// 计算字段</span>
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  author: User!        <span class="comment">// 关联字段</span>
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    <span class="comment">// 关联查询：用户的文章</span>
+    posts: <span class="keyword">async</span> (parent, _args, context) => {
+      <span class="comment">// parent 是 User 对象</span>
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { authorId: parent.id },
+      });
+    },
+
+    <span class="comment">// 计算字段：文章数量</span>
+    postCount: <span class="keyword">async</span> (parent, _args, context) => {
+      <span class="keyword">return</span> context.prisma.post.count({
+        where: { authorId: parent.id },
+      });
+    },
+  },
+
+  Post: {
+    <span class="comment">// 关联查询：文章作者</span>
+    author: <span class="keyword">async</span> (parent, _args, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parent.authorId },
+      });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Context 配置</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { PrismaClient } <span class="keyword">from</span> <span class="string">'@prisma/client'</span>;
+
+<span class="keyword">const</span> prisma = <span class="keyword">new</span> PrismaClient();
+
+<span class="comment">// 定义 Context 类型</span>
+<span class="keyword">interface</span> Context {
+  prisma: PrismaClient;
+  user?: { id: <span class="keyword">number</span>; role: <span class="keyword">string</span> };
+  dataSources: {
+    userApi: UserAPI;
+    postApi: PostAPI;
+  };
+}
+
+<span class="comment">// 配置 Context</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer<Context>({
+  typeDefs,
+  resolvers,
+});
+
+<span class="keyword">const</span> { url } = <span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> ({ req, res }) => ({
+    prisma,
+    user: <span class="keyword">await</span> getUserFromToken(req.headers.authorization),
+    dataSources: {
+      userApi: <span class="keyword">new</span> UserAPI(),
+      postApi: <span class="keyword">new</span> PostAPI(),
+    },
+  }),
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 默认 Resolver</h2>
+
+      <div class="code-block">
+<span class="comment">// 如果没有定义 Resolver，GraphQL 使用默认行为</span>
+<span class="comment">// 默认返回 parent[fieldName]</span>
+
+<span class="keyword">type</span> User {
+  id: ID!        <span class="comment">// 自动返回 parent.id</span>
+  name: String!  <span class="comment">// 自动返回 parent.name</span>
+  email: String! <span class="comment">// 自动返回 parent.email</span>
+}
+
+<span class="comment">// 只有复杂字段需要显式定义 Resolver</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    <span class="comment">// 只定义需要特殊处理的字段</span>
+    posts: <span class="keyword">async</span> (parent, _args, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { authorId: parent.id },
+      });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Resolver 链</h2>
+
+      <p>GraphQL 按照查询结构依次执行 Resolver，形成 Resolver 链。</p>
+
+      <div class="code-block">
+<span class="comment">// 查询</span>
+query {
+  user(id: <span class="string">"1"</span>) {      <span class="comment">// 1. 执行 Query.user</span>
+    name
+    posts {           <span class="comment">// 2. 执行 User.posts</span>
+      title
+      comments {      <span class="comment">// 3. 执行 Post.comments</span>
+        content
+        author {      <span class="comment">// 4. 执行 Comment.author</span>
+          name
+        }
+      }
+    }
+  }
+}
+
+<span class="comment">// 执行顺序</span>
+<span class="comment">// 1. Query.user(parent=undefined, args={id:"1"}, ...)</span>
+<span class="comment">//    返回: { id: "1", name: "张三", ... }</span>
+
+<span class="comment">// 2. User.posts(parent={id:"1", name:"张三",...}, ...)</span>
+<span class="comment">//    返回: [{ id: "p1", title: "文章1", ... }]</span>
+
+<span class="comment">// 3. Post.comments(parent={id:"p1",...}, ...)</span>
+<span class="comment">//    返回: [{ id: "c1", content: "评论1", ... }]</span>
+
+<span class="comment">// 4. Comment.author(parent={id:"c1",...}, ...)</span>
+<span class="comment">//    返回: { id: "2", name: "李四" }</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整示例</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { ApolloServer } <span class="keyword">from</span> <span class="string">'@apollo/server'</span>;
+<span class="keyword">import</span> { startStandaloneServer } <span class="keyword">from</span> <span class="string">'@apollo/server/standalone'</span>;
+<span class="keyword">import</span> { PrismaClient } <span class="keyword">from</span> <span class="string">'@prisma/client'</span>;
+
+<span class="keyword">const</span> prisma = <span class="keyword">new</span> PrismaClient();
+
+<span class="keyword">const</span> typeDefs = <span class="string">`#graphql
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+    posts: [Post!]!
+    postCount: Int!
+  }
+
+  type Post {
+    id: ID!
+    title: String!
+    content: String
+    author: User!
+    comments: [Comment!]!
+  }
+
+  type Comment {
+    id: ID!
+    content: String!
+    author: User!
+  }
+
+  type Query {
+    user(id: ID!): User
+    users: [User!]!
+    post(id: ID!): Post
+    posts(limit: Int = 10): [Post!]!
+  }
+
+  type Mutation {
+    createUser(name: String!, email: String!): User!
+    createPost(title: String!, content: String, authorId: ID!): Post!
+  }
+`</span>;
+
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    user: <span class="keyword">async</span> (_, { id }, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parseInt(id) },
+      });
+    },
+    users: <span class="keyword">async</span> (_, __, context) => {
+      <span class="keyword">return</span> context.prisma.user.findMany();
+    },
+    post: <span class="keyword">async</span> (_, { id }, context) => {
+      <span class="keyword">return</span> context.prisma.post.findUnique({
+        where: { id: parseInt(id) },
+      });
+    },
+    posts: <span class="keyword">async</span> (_, { limit }, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({ take: limit });
+    },
+  },
+  Mutation: {
+    createUser: <span class="keyword">async</span> (_, { name, email }, context) => {
+      <span class="keyword">return</span> context.prisma.user.create({
+        data: { name, email },
+      });
+    },
+    createPost: <span class="keyword">async</span> (_, { title, content, authorId }, context) => {
+      <span class="keyword">return</span> context.prisma.post.create({
+        data: { title, content, authorId: parseInt(authorId) },
+      });
+    },
+  },
+  User: {
+    posts: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { authorId: parent.id },
+      });
+    },
+    postCount: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.post.count({
+        where: { authorId: parent.id },
+      });
+    },
+  },
+  Post: {
+    author: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parent.authorId },
+      });
+    },
+    comments: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.comment.findMany({
+        where: { postId: parent.id },
+      });
+    },
+  },
+};
+
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({ typeDefs, resolvers });
+
+<span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> () => ({ prisma }),
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Resolver 是处理字段请求的函数</li>
+        <li>四个参数：parent、args、context、info</li>
+        <li>Context 用于共享数据</li>
+        <li>字段 Resolver 处理关联和计算字段</li>
+        <li>默认 Resolver 返回 parent[fieldName]</li>
+        <li>Resolver 链按查询结构顺序执行</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter60/60-6-指令.html">← 上一节：指令</a>
+      <a href="61-2-数据关联查询.html">下一节：数据关联查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

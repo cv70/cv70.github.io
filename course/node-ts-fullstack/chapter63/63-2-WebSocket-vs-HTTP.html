@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>63.2 WebSocket vs HTTP - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="63-1-WebSocket协议.html">第六十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>63.2 WebSocket vs HTTP</h1>
+      <p class="subtitle">深入对比两种通信协议</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 HTTP 与 WebSocket 的本质区别</li>
+        <li>掌握各自的适用场景</li>
+        <li>了解轮询、长轮询等实时通信方案</li>
+        <li>能够根据场景选择合适的通信方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 核心对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>HTTP</th>
+            <th>WebSocket</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>通信模式</td>
+            <td>半双工（请求-响应）</td>
+            <td>全双工（双向通信）</td>
+          </tr>
+          <tr>
+            <td>连接方式</td>
+            <td>短连接（HTTP/1.1 默认 Keep-Alive）</td>
+            <td>持久连接</td>
+          </tr>
+          <tr>
+            <td>服务端推送</td>
+            <td>不支持（需轮询）</td>
+            <td>原生支持</td>
+          </tr>
+          <tr>
+            <td>协议开销</td>
+            <td>每次请求都有完整 HTTP 头</td>
+            <td>仅握手时有 HTTP 头，之后帧头很小</td>
+          </tr>
+          <tr>
+            <td>连接状态</td>
+            <td>无状态</td>
+            <td>有状态</td>
+          </tr>
+          <tr>
+            <td>数据格式</td>
+            <td>文本为主</td>
+            <td>文本和二进制</td>
+          </tr>
+          <tr>
+            <td>兼容性</td>
+            <td>所有环境</td>
+            <td>现代浏览器</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> HTTP 实现实时通信的方案</h2>
+
+      <div class="card">
+        <h3 class="card-title">1. 短轮询（Short Polling）</h3>
+        <p class="card-text">客户端定时向服务端发送请求，询问是否有新数据。</p>
+        <div class="code-block">
+// 客户端定时轮询
+setInterval(async () => {
+  const response = await fetch('/api/messages');
+  const data = await response.json();
+  if (data.length > 0) {
+    // 处理新消息
+  }
+}, 3000);
+        </div>
+        <div class="tip-box warning" style="margin-top: 1rem;">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">缺点</div>
+            <p>频繁请求浪费资源，延迟取决于轮询间隔，无法真正实现实时。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">2. 长轮询（Long Polling）</h3>
+        <p class="card-text">客户端发送请求后，服务端保持连接直到有数据或超时。</p>
+        <div class="code-block">
+// 服务端示例（Express）
+app.get('/api/long-poll', async (req, res) => {
+  const checkForData = () => {
+    return new Promise((resolve) => {
+      const interval = setInterval(() => {
+        const data = checkNewData();
+        if (data) {
+          clearInterval(interval);
+          resolve(data);
+        }
+      }, 1000);
+
+      // 超时处理
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve(null);
+      }, 30000);
+    });
+  };
+
+  const data = await checkForData();
+  res.json(data || []);
+});
+        </div>
+        <div class="tip-box warning" style="margin-top: 1rem;">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">缺点</div>
+            <p>服务端需要维护大量挂起的请求，资源消耗大；重连时有延迟。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">3. Server-Sent Events (SSE)</h3>
+        <p class="card-text">服务端向客户端的单向推送，基于 HTTP 实现。</p>
+        <div class="code-block">
+// 客户端
+const eventSource = new EventSource('/api/events');
+eventSource.onmessage = (event) => {
+  console.log('收到消息:', event.data);
+};
+
+// 服务端（Express）
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = () => {
+    res.write(`data: ${JSON.stringify({ time: Date.now() })}\n\n`);
+  };
+
+  const interval = setInterval(sendEvent, 1000);
+  req.on('close', () => clearInterval(interval));
+});
+        </div>
+        <div class="tip-box info" style="margin-top: 1rem;">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">适用场景</div>
+            <p>SSE 适合服务端单向推送（如股票行情、通知），实现简单，自动重连。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 性能对比</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">延迟</h3>
+          <p class="card-text">WebSocket &lt; SSE &lt; 长轮询 &lt; 短轮询</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">💾</div>
+          <h3 class="card-title">资源消耗</h3>
+          <p class="card-text">WebSocket &lt; SSE &lt; 长轮询 &lt; 短轮询</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔧</div>
+          <h3 class="card-title">实现复杂度</h3>
+          <p class="card-text">短轮询 &lt; SSE &lt; 长轮询 &lt; WebSocket</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 如何选择</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>推荐方案</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>普通 API 请求</td>
+            <td>HTTP REST</td>
+            <td>简单、无状态、易于缓存</td>
+          </tr>
+          <tr>
+            <td>服务端单向推送通知</td>
+            <td>SSE</td>
+            <td>实现简单，自动重连</td>
+          </tr>
+          <tr>
+            <td>即时聊天/协作</td>
+            <td>WebSocket</td>
+            <td>双向实时通信</td>
+          </tr>
+          <tr>
+            <td>在线游戏</td>
+            <td>WebSocket</td>
+            <td>低延迟双向通信</td>
+          </tr>
+          <tr>
+            <td>股票行情/数据监控</td>
+            <td>SSE/WebSocket</td>
+            <td>实时数据推送</td>
+          </tr>
+          <tr>
+            <td>文件上传/下载</td>
+            <td>HTTP</td>
+            <td>支持断点续传，有标准</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✅</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>在实际项目中，通常会将 HTTP 和 WebSocket 结合使用：HTTP 用于普通 API 请求，WebSocket 用于需要实时通信的功能。这种混合架构可以兼顾开发效率和实时性需求。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• HTTP 是请求-响应模式，WebSocket 是全双工通信</li>
+            <li>• HTTP 实现实时通信有轮询、长轮询、SSE 等方案</li>
+            <li>• WebSocket 适合双向实时通信场景，性能最优</li>
+            <li>• SSE 适合服务端单向推送，实现简单</li>
+            <li>• 实际项目常采用 HTTP + WebSocket 混合架构</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="63-1-WebSocket协议.html">← 上一节</a>
+      <a href="63-3-原生-WebSocket-API.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

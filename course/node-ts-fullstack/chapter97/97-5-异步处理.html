@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>97.5 异步处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="97-1-接口缓存.html">第九十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>97.5 异步处理</h1>
+      <p class="subtitle">后台任务与消息队列</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解异步处理的应用场景</li>
+        <li>掌握消息队列使用</li>
+        <li>学会后台任务设计</li>
+        <li>了解任务调度实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 异步处理场景</h2>
+      <div class="code-block">
+# 为什么需要异步处理
+
+## 同步处理问题
+用户请求 → 执行慢任务 → 返回响应
+                   ↑
+              用户等待时间长
+
+## 异步处理优势
+用户请求 → 创建任务 → 立即返回
+              ↓
+         后台处理任务
+
+# 适用场景
+
+## 耗时操作
+- 发送邮件
+- 生成报表
+- 图片处理
+- 视频转码
+
+## 批量操作
+- 数据导入导出
+- 批量通知
+- 数据同步
+
+## 定时任务
+- 数据清理
+- 报表生成
+- 缓存刷新
+
+## 解耦
+- 服务间通信
+- 事件驱动架构
+
+# 架构模式
+
+┌────────────┐      ┌────────────┐      ┌────────────┐
+│  Producer  │ ──→  │   Queue    │ ──→  │  Consumer  │
+│  (生产者)   │      │  (消息队列) │      │  (消费者)   │
+└────────────┘      └────────────┘      └────────────┘
+
+应用服务 ──→ 消息队列 ──→ 后台工作进程
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Bull 队列</h2>
+      <div class="code-block">
+# 安装 Bull
+
+npm install bull
+npm install @types/bull -D
+
+# 创建队列
+
+import Queue from 'bull';
+
+// 创建邮件队列
+const emailQueue = new Queue('email', {
+  redis: {
+    host: 'localhost',
+    port: 6379,
+  },
+});
+
+// 添加任务
+await emailQueue.add({
+  to: 'user@example.com',
+  subject: 'Welcome',
+  body: 'Welcome to our service!',
+});
+
+// 添加延迟任务
+await emailQueue.add(
+  { to: 'user@example.com', subject: 'Reminder' },
+  { delay: 24 * 60 * 60 * 1000 }  // 24 小时后执行
+);
+
+// 添加优先级任务
+await emailQueue.add(
+  { to: 'admin@example.com', subject: 'Urgent' },
+  { priority: 1 }  // 数字越小优先级越高
+);
+
+# 处理任务
+
+// 单个处理器
+emailQueue.process(async (job) => {
+  const { to, subject, body } = job.data;
+
+  await sendEmail(to, subject, body);
+
+  return { success: true };
+});
+
+// 并发处理
+emailQueue.process(5, async (job) => {
+  // 最多同时处理 5 个任务
+});
+
+// 多个处理器
+emailQueue.process('send', async (job) => {
+  // 发送邮件
+});
+
+emailQueue.process('retry', async (job) => {
+  // 重试发送
+});
+
+# 任务事件
+
+emailQueue.on('completed', (job, result) => {
+  console.log(`Job ${job.id} completed:`, result);
+});
+
+emailQueue.on('failed', (job, err) => {
+  console.error(`Job ${job.id} failed:`, err);
+});
+
+emailQueue.on('progress', (job, progress) => {
+  console.log(`Job ${job.id} progress: ${progress}%`);
+});
+
+# 重试配置
+
+await emailQueue.add(data, {
+  attempts: 3,           // 最多重试 3 次
+  backoff: {
+    type: 'exponential', // 指数退避
+    delay: 1000,         // 初始延迟 1 秒
+  },
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">任务重试</div>
+          <p>配置合理的重试策略，避免任务失败后立即重试导致系统压力。指数退避是常用的重试策略。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Bull Board 监控</h2>
+      <div class="code-block">
+# 安装监控面板
+
+npm install @bull-board/express @bull-board/api
+
+# 集成到 Express
+
+import express from 'express';
+import { createBullBoard } from '@bull-board/api';
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+
+const app = express();
+
+// 创建 Bull Board
+const serverAdapter = new ExpressAdapter();
+createBullBoard({
+  queues: [
+    new BullAdapter(emailQueue),
+    new BullAdapter(reportQueue),
+  ],
+  serverAdapter,
+});
+
+serverAdapter.setBasePath('/admin/queues');
+app.use('/admin/queues', serverAdapter.getRouter());
+
+# 访问监控面板
+http://localhost:3000/admin/queues
+
+# 功能
+- 查看队列状态
+- 查看任务详情
+- 暂停/恢复队列
+- 重试/删除任务
+- 查看任务历史
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 任务调度</h2>
+      <div class="code-block">
+# Bull 定时任务
+
+import Queue from 'bull';
+
+const reportQueue = new Queue('report');
+
+// 重复任务（Cron 表达式）
+await reportQueue.add(
+  { type: 'daily' },
+  {
+    repeat: {
+      cron: '0 0 * * *',  // 每天凌晨执行
+    },
+  }
+);
+
+// 每小时执行
+await reportQueue.add(
+  { type: 'hourly' },
+  { repeat: { every: 60 * 60 * 1000 } }
+);
+
+// 工作日早上 9 点执行
+await reportQueue.add(
+  { type: 'weekday' },
+  {
+    repeat: {
+      cron: '0 9 * * 1-5',
+    },
+  }
+);
+
+# 使用 node-cron
+
+import cron from 'node-cron';
+
+// 每分钟执行
+cron.schedule('* * * * *', async () => {
+  console.log('Running every minute');
+  await processPendingTasks();
+});
+
+// 每天凌晨 2 点执行
+cron.schedule('0 2 * * *', async () => {
+  await cleanupOldData();
+});
+
+// 工作日早上 9 点
+cron.schedule('0 9 * * 1-5', async () => {
+  await sendDailyReport();
+});
+
+# Agenda 调度器
+
+import Agenda from 'agenda';
+
+const agenda = new Agenda({
+  db: { address: process.env.MONGODB_URI },
+});
+
+// 定义任务
+agenda.define('send report', async (job) => {
+  const { userId } = job.attrs.data;
+  await sendReport(userId);
+});
+
+// 启动调度器
+await agenda.start();
+
+// 调度一次性任务
+await agenda.schedule('in 1 hour', 'send report', { userId: '123' });
+
+// 调度重复任务
+await agenda.every('1 day', 'send report', { userId: '123' });
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 异步处理提高 API 响应速度</li>
+            <li>• Bull 是 Node.js 常用的队列库</li>
+            <li>• 配置合理的重试策略</li>
+            <li>• 使用 Bull Board 监控队列状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="97-4-批量操作.html">← 上一节：批量操作</a>
+      <a href="../chapter98/98-1-资源优化.html">下一章：资源优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

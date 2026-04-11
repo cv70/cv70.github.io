@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>102.4 AWS Lambda - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="102-1-Serverless概念.html">第102章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>102.4 AWS Lambda</h1>
+      <p class="subtitle">使用 AWS Lambda 构建企业级 Serverless 应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 AWS Lambda 的工作原理</li>
+        <li>掌握 Lambda 函数开发与部署</li>
+        <li>学会使用 Serverless Framework</li>
+        <li>了解 Lambda 与 AWS 服务的集成</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="AWS Lambda" class="card-image">
+      <h3 class="card-title">AWS Lambda 简介</h3>
+      <p class="card-text">
+        <strong>AWS Lambda</strong> 是 Amazon 提供的函数即服务 (FaaS) 平台，是市场上最成熟、功能最全的 Serverless 服务。
+        支持 Node.js、Python、Java、Go、.NET 等多种运行时，与 AWS 生态系统深度集成。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Lambda 限制与配置</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>配置项</th>
+            <th>限制</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>内存</td>
+            <td>128MB - 10GB</td>
+            <td>内存越大，CPU 越强</td>
+          </tr>
+          <tr>
+            <td>超时时间</td>
+            <td>1秒 - 15分钟</td>
+            <td>默认 3 秒</td>
+          </tr>
+          <tr>
+            <td>部署包大小</td>
+            <td>50MB (直传) / 250MB (S3)</td>
+            <td>解压后最大 250MB</td>
+          </tr>
+          <tr>
+            <td>环境变量</td>
+            <td>4KB</td>
+            <td>所有变量总和</td>
+          </tr>
+          <tr>
+            <td>并发执行</td>
+            <td>1000 (默认)</td>
+            <td>可申请提高配额</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> Lambda 函数示例</h2>
+      <div class="code-block">
+<span class="comment">// src/handlers/api.ts</span>
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { DynamoDB } from 'aws-sdk';
+
+const dynamoDb = new DynamoDB.DocumentClient();
+const TABLE_NAME = process.env.TABLE_NAME!;
+
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  const httpMethod = event.httpMethod;
+  const pathParameters = event.pathParameters;
+
+  try {
+    switch (httpMethod) {
+      case 'GET':
+        if (pathParameters?.id) {
+          return await getItem(pathParameters.id);
+        }
+        return await listItems();
+
+      case 'POST':
+        return await createItem(JSON.parse(event.body || '{}'));
+
+      case 'PUT':
+        return await updateItem(
+          pathParameters!.id,
+          JSON.parse(event.body || '{}')
+        );
+
+      case 'DELETE':
+        return await deleteItem(pathParameters!.id);
+
+      default:
+        return {
+          statusCode: 405,
+          body: JSON.stringify({ message: 'Method not allowed' })
+        };
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ message: 'Internal server error' })
+    };
+  }
+};
+
+async function getItem(id: string): Promise<APIGatewayProxyResult> {
+  const result = await dynamoDb
+    .get({ TableName: TABLE_NAME, Key: { id } })
+    .promise();
+
+  if (!result.Item) {
+    return { statusCode: 404, body: JSON.stringify({ message: 'Not found' }) };
+  }
+
+  return { statusCode: 200, body: JSON.stringify(result.Item) };
+}
+
+async function listItems(): Promise<APIGatewayProxyResult> {
+  const result = await dynamoDb.scan({ TableName: TABLE_NAME }).promise();
+  return { statusCode: 200, body: JSON.stringify(result.Items) };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Serverless Framework 配置</h2>
+      <div class="code-block">
+<span class="comment"># serverless.yml</span>
+service: my-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-northeast-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    TABLE_NAME: ${self:service}-${self:provider.stage}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TABLE_NAME}"
+
+functions:
+  api:
+    handler: src/handlers/api.handler
+    events:
+      - httpApi:
+          path: /items
+          method: GET
+      - httpApi:
+          path: /items/{id}
+          method: GET
+      - httpApi:
+          path: /items
+          method: POST
+      - httpApi:
+          path: /items/{id}
+          method: PUT
+      - httpApi:
+          path: /items/{id}
+          method: DELETE
+    memorySize: 256
+    timeout: 10
+
+resources:
+  Resources:
+    ItemsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_NAME}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+custom:
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    exclude: ['aws-sdk']
+    target: node20
+    define:
+      'process.env.NODE_ENV': '"production"'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 部署与管理</h2>
+      <div class="code-block">
+<span class="comment"># 安装 Serverless Framework</span>
+npm install -g serverless
+
+<span class="comment"># 本地开发</span>
+serverless offline
+
+<span class="comment"># 部署到 AWS</span>
+serverless deploy
+serverless deploy --stage prod
+
+<span class="comment"># 部署单个函数</span>
+serverless deploy function -f api
+
+<span class="comment"># 查看部署信息</span>
+serverless info
+
+<span class="comment"># 查看日志</span>
+serverless logs -f api -t
+
+<span class="comment"># 移除服务</span>
+serverless remove
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> AWS 服务集成</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">触发器集成</h3>
+          <ul class="feature-list">
+            <li>API Gateway - HTTP API / REST API</li>
+            <li>S3 - 文件上传触发</li>
+            <li>SNS/SQS - 消息触发</li>
+            <li>DynamoDB Streams - 数据变更触发</li>
+            <li>EventBridge - 定时任务</li>
+            <li>CloudFront - Edge Functions</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">常用服务</h3>
+          <ul class="feature-list">
+            <li>DynamoDB - NoSQL 数据库</li>
+            <li>S3 - 对象存储</li>
+            <li>RDS - 关系数据库</li>
+            <li>ElastiCache - Redis 缓存</li>
+            <li>Secrets Manager - 密钥管理</li>
+            <li>CloudWatch - 监控日志</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Layer 共享依赖</h2>
+      <div class="code-block">
+<span class="comment"># serverless.yml</span>
+layers:
+  common:
+    path: layers/common
+    description: Common dependencies and utilities
+
+functions:
+  api:
+    handler: src/handlers/api.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+<span class="comment">
+# layers/common/nodejs/package.json</span>
+{
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "axios": "^1.6.0"
+  }
+}
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Lambda 最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>在函数外部初始化客户端复用连接</li>
+          <li>使用环境变量配置敏感信息</li>
+          <li>合理设置内存和超时避免浪费</li>
+          <li>使用 Layers 共享大型依赖</li>
+          <li>启用 Provisioned Concurrency 减少冷启动</li>
+          <li>使用 X-Ray 进行分布式追踪</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• AWS Lambda 是最成熟的 FaaS 平台</li>
+            <li>• 使用 Serverless Framework 简化部署配置</li>
+            <li>• Lambda 可与 AWS 生态服务深度集成</li>
+            <li>• 注意冷启动优化和资源限制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="102-3-Vercel部署.html">← 上一节</a>
+      <a href="102-5-阿里云函数计算.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

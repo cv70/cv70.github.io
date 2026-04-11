@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.6 Mock 函数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="69-5-测试生命周期.html">上一节</a></li>
+      <li><a href="../chapter70/70-1-模拟模块.html">下一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>69.6 Mock 函数</h1>
+      <p class="subtitle">第十部分：测试篇 - 掌握 Mock 函数的使用</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> Mock 函数简介</h2>
+      <p>Mock 函数（也称为"间谍"）是测试中常用的技术，用于：</p>
+      <ul class="feature-list">
+        <li>捕获函数调用（包括参数和调用次数）</li>
+        <li>控制函数的返回值</li>
+        <li>替换真实实现</li>
+        <li>验证函数是否被正确调用</li>
+      </ul>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">为什么需要 Mock？</div>
+          <p>隔离测试单元，避免依赖外部系统（数据库、API、文件系统等），使测试更快、更稳定、更独立。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 创建 Mock 函数</h2>
+
+      <div class="code-block">// 使用 jest.fn() 创建 Mock 函数
+const mockFn = jest.fn();
+
+// 基本使用
+test('mock function', () => {
+  mockFn('hello', 'world');
+
+  // 检查是否被调用
+  expect(mockFn).toHaveBeenCalled();
+  expect(mockFn).toHaveBeenCalledTimes(1);
+  expect(mockFn).toHaveBeenCalledWith('hello', 'world');
+});</div>
+
+      <h3>设置返回值</h3>
+      <div class="code-block">describe('Mock Return Values', () => {
+  test('mockReturnValue', () => {
+    const mock = jest.fn();
+    mock.mockReturnValue(42);
+
+    expect(mock()).toBe(42);
+    expect(mock()).toBe(42); // 每次都返回相同值
+  });
+
+  test('mockReturnValueOnce', () => {
+    const mock = jest.fn();
+    mock
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2)
+      .mockReturnValue(3); // 默认返回值
+
+    expect(mock()).toBe(1);
+    expect(mock()).toBe(2);
+    expect(mock()).toBe(3);
+    expect(mock()).toBe(3);
+  });
+
+  test('mockImplementation', () => {
+    const mock = jest.fn();
+    mock.mockImplementation((a: number, b: number) => a + b);
+
+    expect(mock(1, 2)).toBe(3);
+    expect(mock(5, 3)).toBe(8);
+  });
+
+  test('mockImplementationOnce', () => {
+    const mock = jest.fn();
+    mock
+      .mockImplementationOnce(() => 'first')
+      .mockImplementationOnce(() => 'second')
+      .mockImplementation(() => 'default');
+
+    expect(mock()).toBe('first');
+    expect(mock()).toBe('second');
+    expect(mock()).toBe('default');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Mock 属性和方法</h2>
+
+      <div class="code-block">describe('Mock Properties', () => {
+  test('mock.calls - 调用参数', () => {
+    const mock = jest.fn();
+    mock('first', 'call');
+    mock('second', 'call');
+
+    // mock.calls 存储所有调用的参数
+    expect(mock.mock.calls).toHaveLength(2);
+    expect(mock.mock.calls[0]).toEqual(['first', 'call']);
+    expect(mock.mock.calls[1]).toEqual(['second', 'call']);
+  });
+
+  test('mock.results - 返回值', () => {
+    const mock = jest.fn();
+    mock.mockReturnValue('result');
+    mock();
+    mock();
+
+    // mock.results 存储所有返回值
+    expect(mock.mock.results).toHaveLength(2);
+    expect(mock.mock.results[0].value).toBe('result');
+  });
+
+  test('mock.instances - this 值', () => {
+    const mock = jest.fn();
+    const obj = { method: mock };
+    obj.method();
+
+    // mock.instances 存储 this 值
+    expect(mock.mock.instances[0]).toBe(obj);
+  });
+
+  test('mock.lastCall - 最后一次调用', () => {
+    const mock = jest.fn();
+    mock('first');
+    mock('last');
+
+    expect(mock.mock.lastCall).toEqual(['last']);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> Mock 断言方法</h2>
+
+      <div class="code-block">describe('Mock Assertions', () => {
+  test('toHaveBeenCalled', () => {
+    const mock = jest.fn();
+    expect(mock).not.toHaveBeenCalled();
+
+    mock();
+    expect(mock).toHaveBeenCalled();
+  });
+
+  test('toHaveBeenCalledTimes', () => {
+    const mock = jest.fn();
+    mock();
+    mock();
+    mock();
+
+    expect(mock).toHaveBeenCalledTimes(3);
+  });
+
+  test('toHaveBeenCalledWith', () => {
+    const mock = jest.fn();
+    mock('hello', 'world');
+
+    expect(mock).toHaveBeenCalledWith('hello', 'world');
+    expect(mock).not.toHaveBeenCalledWith('other');
+  });
+
+  test('toHaveBeenLastCalledWith', () => {
+    const mock = jest.fn();
+    mock('first');
+    mock('last');
+
+    expect(mock).toHaveBeenLastCalledWith('last');
+  });
+
+  test('toHaveBeenNthCalledWith', () => {
+    const mock = jest.fn();
+    mock('first');
+    mock('second');
+    mock('third');
+
+    expect(mock).toHaveBeenNthCalledWith(1, 'first');
+    expect(mock).toHaveBeenNthCalledWith(2, 'second');
+    expect(mock).toHaveBeenNthCalledWith(3, 'third');
+  });
+
+  test('toHaveReturned', () => {
+    const mock = jest.fn(() => 'result');
+    mock();
+
+    expect(mock).toHaveReturned();
+    expect(mock).toHaveReturnedTimes(1);
+    expect(mock).toHaveReturnedWith('result');
+  });
+
+  test('toHaveLastReturnedWith', () => {
+    const mock = jest.fn();
+    mock.mockReturnValueOnce('first');
+    mock.mockReturnValueOnce('last');
+
+    mock();
+    mock();
+
+    expect(mock).toHaveLastReturnedWith('last');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> Mock 实现</h2>
+
+      <div class="code-block">describe('Mock Implementations', () => {
+  test('mockImplementation', () => {
+    const mock = jest.fn((x: number) => x * 2);
+
+    expect(mock(5)).toBe(10);
+    expect(mock(3)).toBe(6);
+  });
+
+  test('mockReturnThis', () => {
+    const mock = jest.fn().mockReturnThis();
+    const context = { method: mock };
+
+    expect(context.method()).toBe(context);
+  });
+
+  test('mockName', () => {
+    const mock = jest.fn().mockName('myMock');
+
+    // 在错误消息中会显示名称
+    // expect(mock).toHaveBeenCalled();
+    // Error: expect(myMock).toHaveBeenCalled()
+  });
+
+  test('mockClear, mockReset, mockRestore', () => {
+    const mock = jest.fn().mockReturnValue('value');
+
+    mock('arg');
+    expect(mock).toHaveBeenCalled();
+
+    // mockClear: 清除调用记录
+    mock.mockClear();
+    expect(mock).not.toHaveBeenCalled();
+    expect(mock()).toBe('value'); // 返回值还在
+
+    // mockReset: 清除所有设置
+    mock.mockReset();
+    expect(mock()).toBeUndefined(); // 返回默认 undefined
+
+    // mockRestore: 恢复原始实现（用于 spyOn）
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> jest.spyOn</h2>
+
+      <div class="code-block">// spyOn 用于监视对象的方法
+const video = {
+  play: () => 'playing',
+  pause: () => 'paused'
+};
+
+describe('spyOn', () => {
+  test('spyOn method', () => {
+    const spy = jest.spyOn(video, 'play');
+
+    // 调用原方法
+    const result = video.play();
+
+    expect(result).toBe('playing');
+    expect(spy).toHaveBeenCalled();
+  });
+
+  test('spyOn with mock implementation', () => {
+    const spy = jest.spyOn(video, 'play');
+    spy.mockReturnValue('mocked');
+
+    expect(video.play()).toBe('mocked');
+
+    // 恢复原始实现
+    spy.mockRestore();
+    expect(video.play()).toBe('playing');
+  });
+
+  test('spyOn with mockImplementation', () => {
+    const spy = jest.spyOn(video, 'pause');
+    spy.mockImplementation(() => 'mocked pause');
+
+    expect(video.pause()).toBe('mocked pause');
+
+    spy.mockRestore();
+  });
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">spyOn vs jest.fn</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>jest.fn(): 创建全新的 Mock 函数</li>
+            <li>jest.spyOn(): 监视现有对象的方法，可以调用原始实现</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> TypeScript 中的 Mock</h2>
+
+      <div class="code-block">// 定义 Mock 类型
+interface UserRepository {
+  findById(id: string): Promise&lt;User | null&gt;;
+  create(data: CreateUserData): Promise&lt;User&gt;;
+  update(id: string, data: UpdateData): Promise&lt;User&gt;;
+}
+
+// 创建类型安全的 Mock
+function createMockRepository(): jest.Mocked&lt;UserRepository&gt; {
+  return {
+    findById: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn()
+  };
+}
+
+describe('UserService', () => {
+  let service: UserService;
+  let mockRepository: jest.Mocked&lt;UserRepository&gt;;
+
+  beforeEach(() => {
+    mockRepository = createMockRepository();
+    service = new UserService(mockRepository);
+  });
+
+  test('should find user', async () => {
+    const mockUser = { id: '1', name: 'John' };
+    mockRepository.findById.mockResolvedValue(mockUser);
+
+    const result = await service.findUser('1');
+
+    expect(result).toEqual(mockUser);
+    expect(mockRepository.findById).toHaveBeenCalledWith('1');
+  });
+
+  test('should create user', async () => {
+    mockRepository.create.mockResolvedValue({
+      id: '1',
+      name: 'John',
+      email: 'john@example.com'
+    });
+
+    const result = await service.createUser({
+      name: 'John',
+      email: 'john@example.com'
+    });
+
+    expect(result.id).toBe('1');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> Mock 时间</h2>
+
+      <div class="code-block">describe('Date Mocking', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2024-01-15T10:00:00Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('current date is mocked', () => {
+    expect(new Date()).toEqual(new Date('2024-01-15T10:00:00Z'));
+  });
+
+  test('Date.now returns mocked time', () => {
+    expect(Date.now()).toBe(1705312800000);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> Mock 方法速查</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>jest.fn()</td>
+            <td>创建 Mock 函数</td>
+          </tr>
+          <tr>
+            <td>jest.fn(impl)</td>
+            <td>创建带实现的 Mock</td>
+          </tr>
+          <tr>
+            <td>jest.spyOn(obj, method)</td>
+            <td>监视对象方法</td>
+          </tr>
+          <tr>
+            <td>mockReturnValue(val)</td>
+            <td>设置返回值</td>
+          </tr>
+          <tr>
+            <td>mockReturnValueOnce(val)</td>
+            <td>设置一次性返回值</td>
+          </tr>
+          <tr>
+            <td>mockImplementation(fn)</td>
+            <td>设置实现函数</td>
+          </tr>
+          <tr>
+            <td>mockResolvedValue(val)</td>
+            <td>设置 Promise resolve 值</td>
+          </tr>
+          <tr>
+            <td>mockRejectedValue(val)</td>
+            <td>设置 Promise reject 值</td>
+          </tr>
+          <tr>
+            <td>mockClear()</td>
+            <td>清除调用记录</td>
+          </tr>
+          <tr>
+            <td>mockReset()</td>
+            <td>重置所有设置</td>
+          </tr>
+          <tr>
+            <td>mockRestore()</td>
+            <td>恢复原始实现</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>jest.fn() 创建全新的 Mock 函数</li>
+            <li>jest.spyOn() 监视现有方法</li>
+            <li>mockReturnValue/mockImplementation 设置行为</li>
+            <li>使用 toHaveBeenCalled* 断言调用情况</li>
+            <li>TypeScript 中使用 jest.Mocked&lt;T&gt; 获得类型安全</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-5-测试生命周期.html">← 上一节：测试生命周期</a>
+      <a href="../chapter70/70-1-模拟模块.html">下一章：Jest 进阶 →</a>
+    </div>
+  </div>
+</body>
+</html>

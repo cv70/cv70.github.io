@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.2 获取请求体 body - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter33.html">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.2 获取请求体 body</h1>
+      <p class="subtitle">深入理解 Express 请求体解析机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握不同格式请求体的解析方法</li>
+        <li>理解 body-parser 的工作原理</li>
+        <li>学会处理大型请求体和特殊格式</li>
+        <li>掌握请求体验证的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 请求体格式概述</h2>
+      <p>HTTP 请求体可以有多种格式，常见的有：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Content-Type</th>
+            <th>格式</th>
+            <th>解析中间件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>application/json</code></td>
+            <td>JSON 数据</td>
+            <td><code>express.json()</code></td>
+          </tr>
+          <tr>
+            <td><code>application/x-www-form-urlencoded</code></td>
+            <td>表单数据</td>
+            <td><code>express.urlencoded()</code></td>
+          </tr>
+          <tr>
+            <td><code>multipart/form-data</code></td>
+            <td>文件上传</td>
+            <td><code>multer</code></td>
+          </tr>
+          <tr>
+            <td><code>text/plain</code></td>
+            <td>纯文本</td>
+            <td><code>express.text()</code></td>
+          </tr>
+          <tr>
+            <td><code>application/octet-stream</code></td>
+            <td>二进制数据</td>
+            <td><code>express.raw()</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> JSON 请求体</h2>
+
+      <div class="code-block">
+// 基本配置
+app.use(express.json());
+
+// 完整配置
+app.use(express.json({
+  limit: '1mb',              // 大小限制
+  inflate: true,             // 解压 gzip/deflate
+  strict: true,              // 只接受对象和数组
+  type: 'application/json',  // MIME 类型
+  reviver: null              // JSON.parse 的 reviver 函数
+}));
+
+// 示例
+app.post('/api/users', (req, res) => {
+  console.log(req.body);  // 已解析的 JSON 对象
+  res.json(req.body);
+});
+
+// 请求示例
+/*
+POST /api/users
+Content-Type: application/json
+
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "age": 25
+}
+*/</div>
+
+      <h3>strict 选项详解</h3>
+      <div class="code-block">
+// strict: true（默认）- 只接受对象和数组
+// ✅ 有效: {"name": "Alice"}
+// ✅ 有效: [1, 2, 3]
+// ❌ 无效: "hello"
+// ❌ 无效: 123
+// ❌ 无效: true
+
+// strict: false - 接受任何 JSON 值
+app.use(express.json({ strict: false }));
+// ✅ 所有 JSON 值都有效</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> URL 编码请求体</h2>
+
+      <div class="code-block">
+// 基本配置
+app.use(express.urlencoded({ extended: true }));
+
+// 完整配置
+app.use(express.urlencoded({
+  extended: true,            // 使用 qs 库解析
+  limit: '1mb',
+  parameterLimit: 1000,      // 参数数量限制
+  inflate: true
+}));
+
+// 示例
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  res.send(`Login: ${username}`);
+});
+
+// 表单示例
+/*
+POST /login
+Content-Type: application/x-www-form-urlencoded
+
+username=alice&password=123456&remember=on
+*/</div>
+
+      <h3>extended 选项对比</h3>
+      <div class="code-block">
+// extended: true (使用 qs 库)
+// 支持嵌套对象
+// user[name]=Alice&user[age]=25
+// 解析为: { user: { name: 'Alice', age: '25' } }
+
+// extended: false (使用 querystring 库)
+// 不支持嵌套对象
+// user[name]=Alice&user[age]=25
+// 解析为: { 'user[name]': 'Alice', 'user[age]': '25' }</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 文本和二进制请求体</h2>
+
+      <h3>文本请求体</h3>
+      <div class="code-block">
+app.use(express.text({
+  limit: '1mb',
+  type: 'text/plain',
+  defaultCharset: 'utf-8'
+}));
+
+app.post('/submit', (req, res) => {
+  console.log(typeof req.body);  // 'string'
+  res.send(`Received: ${req.body}`);
+});
+
+// 请求示例
+/*
+POST /submit
+Content-Type: text/plain
+
+Hello, this is plain text content.
+*/</div>
+
+      <h3>二进制请求体</h3>
+      <div class="code-block">
+app.use(express.raw({
+  limit: '10mb',
+  type: 'application/octet-stream',
+  inflate: true
+}));
+
+app.post('/upload/binary', (req, res) => {
+  console.log(Buffer.isBuffer(req.body));  // true
+  console.log(req.body.length);
+
+  // 保存文件
+  fs.writeFileSync('uploaded.bin', req.body);
+  res.send('File saved');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 按路由配置解析器</h2>
+
+      <div class="code-block">
+// 全局配置可能不够灵活，可以按路由配置
+
+// API 路由 - JSON
+app.use('/api', express.json({ limit: '1mb' }));
+
+// 表单提交 - URL 编码
+app.use('/forms', express.urlencoded({ extended: true }));
+
+// 特定路由使用特定解析器
+app.post('/api/users',
+  express.json({ limit: '100kb' }),
+  userController.create
+);
+
+app.post('/api/upload/binary',
+  express.raw({ limit: '50mb' }),
+  uploadController.binary
+);
+
+app.post('/submit-text',
+  express.text({ limit: '10kb' }),
+  textController.submit
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 大小限制和安全</h2>
+
+      <div class="code-block">
+// 为什么需要大小限制？
+// 1. 防止内存溢出攻击
+// 2. 防止大文件上传攻击
+// 3. 节省服务器资源
+
+// 合理的大小限制
+app.use(express.json({ limit: '100kb' }));  // API 通常不需要很大
+app.use(express.urlencoded({ limit: '100kb' }));
+
+// 特殊路由可以单独设置更大限制
+app.post('/api/import',
+  express.json({ limit: '10mb' }),
+  importController.handle
+);
+
+// 获取请求体大小
+app.use((req, res, next) => {
+  const contentLength = parseInt(req.headers['content-length'] || '0');
+
+  if (contentLength > 10 * 1024 * 1024) {  // 10MB
+    return res.status(413).json({
+      error: 'Request entity too large'
+    });
+  }
+
+  next();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 请求体验证</h2>
+
+      <div class="code-block">
+const Joi = require('joi');
+
+// 验证中间件
+const validateBody = (schema) => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true
+    });
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        errors: error.details.map(d => ({
+          field: d.path.join('.'),
+          message: d.message
+        }))
+      });
+    }
+
+    req.body = value;
+    next();
+  };
+};
+
+// 用户创建验证
+const userSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(50).required(),
+  email: Joi.string().email().lowercase().required(),
+  password: Joi.string().min(8).max(100)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .message('Password must contain uppercase, lowercase, and number'),
+  age: Joi.number().integer().min(0).max(150).optional(),
+  role: Joi.string().valid('user', 'admin').default('user'),
+  settings: Joi.object({
+    notifications: Joi.boolean().default(true),
+    theme: Joi.string().valid('light', 'dark').default('light')
+  }).default({})
+});
+
+app.post('/api/users',
+  validateBody(userSchema),
+  async (req, res) => {
+    // req.body 已经验证和转换
+    const user = await User.create(req.body);
+    res.status(201).json(user);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 处理不同内容类型</h2>
+
+      <div class="code-block">
+// 根据内容类型处理
+app.post('/api/data', (req, res, next) => {
+  const contentType = req.headers['content-type'];
+
+  switch (contentType) {
+    case 'application/json':
+      // JSON 已由 express.json() 解析
+      res.json(req.body);
+      break;
+
+    case 'application/x-www-form-urlencoded':
+      // 表单数据已由 express.urlencoded() 解析
+      res.json(req.body);
+      break;
+
+    case 'text/plain':
+      // 文本数据
+      res.send(`Text: ${req.body}`);
+      break;
+
+    default:
+      res.status(415).json({
+        error: 'Unsupported media type'
+      });
+  }
+});
+
+// 获取原始请求体（某些场景需要）
+app.use(express.json({
+  verify: (req, res, buf, encoding) => {
+    req.rawBody = buf.toString(encoding || 'utf8');
+  }
+}));
+
+app.post('/webhook', (req, res) => {
+  // req.body - 解析后的数据
+  // req.rawBody - 原始字符串（用于签名验证）
+  const signature = req.headers['x-signature'];
+  // 验证签名...
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>express.json() 解析 JSON，express.urlencoded() 解析表单</li>
+            <li>设置合理的大小限制，防止攻击</li>
+            <li>可以按路由配置不同的解析器</li>
+            <li>使用 verify 选项获取原始请求体</li>
+            <li>始终验证请求体数据，使用 Joi 等验证库</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-1-获取请求参数.html">← 上一节：获取请求参数</a>
+      <a href="33-3-文件上传multer.html">下一节：文件上传 multer →</a>
+    </div>
+  </div>
+</body>
+</html>

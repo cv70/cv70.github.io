@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>61.3 分页实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="61-1-Resolver编写.html">第61章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>61.3 分页实现</h1>
+      <p class="subtitle">GraphQL 分页策略详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 分页方式概述</h2>
+      <p>GraphQL 支持多种分页方式，每种方式有不同的适用场景和优缺点。</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>分页方式</th>
+            <th>优点</th>
+            <th>缺点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Offset 分页</td>
+            <td>简单直观，支持跳页</td>
+            <td>大数据量性能差，数据变化时可能重复/遗漏</td>
+            <td>后台管理、小型数据</td>
+          </tr>
+          <tr>
+            <td>Cursor 分页</td>
+            <td>性能稳定，数据一致</td>
+            <td>不支持跳页，实现复杂</td>
+            <td>无限滚动、实时数据</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> Offset 分页</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">input</span> PaginationInput {
+  page: Int = <span class="number">1</span>
+  pageSize: Int = <span class="number">10</span>
+}
+
+<span class="keyword">type</span> UserConnection {
+  data: [User!]!
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  totalPages: Int!
+}
+
+<span class="keyword">type</span> Query {
+  users(pagination: PaginationInput): UserConnection!
+}
+
+<span class="comment">// Resolver</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    users: <span class="keyword">async</span> (_, { pagination }, context) => {
+      <span class="keyword">const</span> { page = <span class="number">1</span>, pageSize = <span class="number">10</span> } = pagination || {};
+      <span class="keyword">const</span> skip = (page - <span class="number">1</span>) * pageSize;
+
+      <span class="keyword">const</span> [data, total] = <span class="keyword">await Promise</span>.all([
+        context.prisma.user.findMany({
+          skip,
+          take: pageSize,
+          orderBy: { createdAt: <span class="string">'desc'</span> },
+        }),
+        context.prisma.user.count(),
+      ]);
+
+      <span class="keyword">return</span> {
+        data,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    },
+  },
+};
+
+<span class="comment">// 查询示例</span>
+query GetUsers {
+  users(pagination: { page: <span class="number">2</span>, pageSize: <span class="number">10</span> }) {
+    data {
+      id
+      name
+      email
+    }
+    total
+    page
+    pageSize
+    totalPages
+  }
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"users"</span>: {
+      <span class="string">"data"</span>: [...],
+      <span class="string">"total"</span>: <span class="number">100</span>,
+      <span class="string">"page"</span>: <span class="number">2</span>,
+      <span class="string">"pageSize"</span>: <span class="number">10</span>,
+      <span class="string">"totalPages"</span>: <span class="number">10</span>
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> Cursor 分页（Relay 规范）</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema - Relay 风格</span>
+<span class="keyword">type</span> PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+<span class="keyword">type</span> UserEdge {
+  node: User!
+  cursor: String!
+}
+
+<span class="keyword">type</span> UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+<span class="keyword">type</span> Query {
+  users(
+    first: Int          <span class="comment">// 从开始获取 N 条</span>
+    after: String       <span class="comment">// 在此 cursor 之后</span>
+    last: Int           <span class="comment">// 从末尾获取 N 条</span>
+    before: String      <span class="comment">// 在此 cursor 之前</span>
+  ): UserConnection!
+}
+
+<span class="comment">// Resolver</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    users: <span class="keyword">async</span> (_, { first, after, last, before }, context) => {
+      <span class="keyword">const</span> limit = first || last || <span class="number">10</span>;
+
+      <span class="comment">// 解析 cursor（通常是 base64 编码的 ID）</span>
+      <span class="keyword">let</span> cursor = <span class="keyword">null</span>;
+      <span class="keyword">if</span> (after) {
+        cursor = Buffer.from(after, <span class="string">'base64'</span>).toString(<span class="string">'utf-8'</span>);
+      }
+
+      <span class="comment">// 查询数据</span>
+      <span class="keyword">const</span> users = <span class="keyword">await</span> context.prisma.user.findMany({
+        take: limit + <span class="number">1</span>,  <span class="comment">// 多取一条判断是否有下一页</span>
+        skip: cursor ? <span class="number">1</span> : <span class="number">0</span>,
+        cursor: cursor ? { id: parseInt(cursor) } : undefined,
+        orderBy: { id: <span class="string">'asc'</span> },
+      });
+
+      <span class="keyword">const</span> hasNextPage = users.length > limit;
+      <span class="keyword">if</span> (hasNextPage) users.pop();
+
+      <span class="keyword">const</span> edges = users.map(user => ({
+        node: user,
+        cursor: Buffer.from(String(user.id)).toString(<span class="string">'base64'</span>),
+      }));
+
+      <span class="keyword">const</span> totalCount = <span class="keyword">await</span> context.prisma.user.count();
+
+      <span class="keyword">return</span> {
+        edges,
+        pageInfo: {
+          hasNextPage,
+          hasPreviousPage: !!cursor,
+          startCursor: edges[<span class="number">0</span>]?.cursor,
+          endCursor: edges[edges.length - <span class="number">1</span>]?.cursor,
+        },
+        totalCount,
+      };
+    },
+  },
+};
+
+<span class="comment">// 查询示例</span>
+query GetUsers {
+  users(first: <span class="number">10</span>) {
+    edges {
+      cursor
+      node {
+        id
+        name
+        email
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    totalCount
+  }
+}
+
+<span class="comment">// 下一页</span>
+query GetNextPage {
+  users(first: <span class="number">10</span>, after: <span class="string">"MTA="</span>) {
+    edges {
+      cursor
+      node { id name }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Prisma 分页实现</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Prisma } <span class="keyword">from</span> <span class="string">'@prisma/client'</span>;
+
+<span class="keyword">interface</span> PaginationParams {
+  page?: <span class="keyword">number</span>;
+  pageSize?: <span class="keyword">number</span>;
+  cursor?: <span class="keyword">string</span>;
+  orderBy?: <span class="keyword">string</span>;
+  orderDir?: <span class="string">'asc'</span> | <span class="string">'desc'</span>;
+}
+
+<span class="keyword">async function</span> <span class="function">paginate</span><T>(
+  model: <span class="keyword">any</span>,
+  params: PaginationParams,
+  where?: <span class="keyword">any</span>
+) {
+  <span class="keyword">const</span> {
+    page = <span class="number">1</span>,
+    pageSize = <span class="number">10</span>,
+    cursor,
+    orderBy = <span class="string">'createdAt'</span>,
+    orderDir = <span class="string">'desc'</span>,
+  } = params;
+
+  <span class="keyword">const</span> order: Prisma.OrderByArg = { [orderBy]: orderDir };
+
+  <span class="comment">// Cursor 分页</span>
+  <span class="keyword">if</span> (cursor) {
+    <span class="keyword">const</span> items = <span class="keyword">await</span> model.findMany({
+      where,
+      take: pageSize + <span class="number">1</span>,
+      skip: <span class="number">1</span>,
+      cursor: { id: cursor },
+      orderBy: order,
+    });
+
+    <span class="keyword">const</span> hasNext = items.length > pageSize;
+    <span class="keyword">if</span> (hasNext) items.pop();
+
+    <span class="keyword">return</span> {
+      data: items,
+      pagination: {
+        hasNext,
+        endCursor: items[items.length - <span class="number">1</span>]?.id,
+      },
+    };
+  }
+
+  <span class="comment">// Offset 分页</span>
+  <span class="keyword">const</span> [data, total] = <span class="keyword">await Promise</span>.all([
+    model.findMany({
+      where,
+      skip: (page - <span class="number">1</span>) * pageSize,
+      take: pageSize,
+      orderBy: order,
+    }),
+    model.count({ where }),
+  ]);
+
+  <span class="keyword">return</span> {
+    data,
+    pagination: {
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    },
+  };
+}
+
+<span class="comment">// 使用</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    posts: <span class="keyword">async</span> (_, { page, pageSize, cursor }, context) => {
+      <span class="keyword">return</span> paginate(context.prisma.post, { page, pageSize, cursor });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Offset 分页简单直观，适合管理后台</li>
+        <li>Cursor 分页性能稳定，适合无限滚动</li>
+        <li>Relay 规范提供了标准的分页接口</li>
+        <li>使用 totalCount 获取总数</li>
+        <li>Prisma 提供了灵活的分页 API</li>
+        <li>根据场景选择合适的分页方式</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="61-2-数据关联查询.html">← 上一节：数据关联查询</a>
+      <a href="61-4-N+1问题与DataLoader.html">下一节：N+1 问题与 DataLoader →</a>
+    </div>
+  </div>
+</body>
+</html>

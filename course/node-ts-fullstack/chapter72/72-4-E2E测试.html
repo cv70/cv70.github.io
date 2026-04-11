@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>72.4 E2E 测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="72-3-控制器测试.html">上一节</a></li>
+      <li><a href="72-5-Mock依赖.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>72.4 E2E 测试</h1>
+      <p class="subtitle">第十部分：测试篇 - NestJS 端到端测试</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> E2E 测试概述</h2>
+      <p>端到端（E2E）测试验证整个应用的工作流程，从 HTTP 请求到数据库操作再到响应。</p>
+
+      <div class="code-block"># E2E 测试文件位置
+test/
+├── app.e2e-spec.ts
+├── auth.e2e-spec.ts
+├── users.e2e-spec.ts
+└── jest-e2e.json</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> E2E 测试配置</h2>
+
+      <div class="code-block">// test/jest-e2e.json
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 基本 E2E 测试</h2>
+
+      <div class="code-block">// test/app.e2e-spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from './../src/app.module';
+
+describe('AppController (e2e)', () => {
+  let app: INestApplication;
+
+  beforeEach(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule]
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('/ (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect('Hello World!');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 用户 API E2E 测试</h2>
+
+      <div class="code-block">// test/users.e2e-spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from '../src/app.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from '../src/users/user.entity';
+
+describe('Users (e2e)', () => {
+  let app: INestApplication;
+  let userId: string;
+
+  beforeAll(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'sqlite',
+          database: ':memory:',
+          entities: [User],
+          synchronize: true
+        }),
+        AppModule
+      ]
+    })
+    .overrideProvider('DATABASE_CONNECTION')
+    .useFactory({
+      factory: () => createInMemoryDatabase()
+    })
+    .compile();
+
+    app = module.createNestApplication();
+
+    // 应用全局管道
+    app.useGlobalPipes(new ValidationPipe());
+
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('/users (POST)', () => {
+    it('should create a user', () => {
+      return request(app.getHttpServer())
+        .post('/users')
+        .send({
+          name: 'John Doe',
+          email: 'john@example.com'
+        })
+        .expect(201)
+        .expect((res) => {
+          expect(res.body).toMatchObject({
+            name: 'John Doe',
+            email: 'john@example.com'
+          });
+          expect(res.body.id).toBeDefined();
+          userId = res.body.id;
+        });
+    });
+
+    it('should validate required fields', () => {
+      return request(app.getHttpServer())
+        .post('/users')
+        .send({})
+        .expect(400);
+    });
+
+    it('should reject duplicate email', async () => {
+      await request(app.getHttpServer())
+        .post('/users')
+        .send({
+          name: 'User 1',
+          email: 'same@example.com'
+        })
+        .expect(201);
+
+      return request(app.getHttpServer())
+        .post('/users')
+        .send({
+          name: 'User 2',
+          email: 'same@example.com'
+        })
+        .expect(409);
+    });
+  });
+
+  describe('/users (GET)', () => {
+    it('should return all users', () => {
+      return request(app.getHttpServer())
+        .get('/users')
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toBeInstanceOf(Array);
+        });
+    });
+  });
+
+  describe('/users/:id (GET)', () => {
+    it('should return a user by id', () => {
+      return request(app.getHttpServer())
+        .get(`/users/${userId}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.id).toBe(userId);
+        });
+    });
+
+    it('should return 404 for non-existent user', () => {
+      return request(app.getHttpServer())
+        .get('/users/non-existent-id')
+        .expect(404);
+    });
+  });
+
+  describe('/users/:id (PUT)', () => {
+    it('should update a user', () => {
+      return request(app.getHttpServer())
+        .put(`/users/${userId}`)
+        .send({ name: 'Updated Name' })
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.name).toBe('Updated Name');
+        });
+    });
+  });
+
+  describe('/users/:id (DELETE)', () => {
+    it('should delete a user', () => {
+      return request(app.getHttpServer())
+        .delete(`/users/${userId}`)
+        .expect(200);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 认证流程 E2E 测试</h2>
+
+      <div class="code-block">// test/auth.e2e-spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from '../src/app.module';
+
+describe('Authentication (e2e)', () => {
+  let app: INestApplication;
+  let authToken: string;
+
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({
+      imports: [AppModule]
+    }).compile();
+
+    app = module.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('Registration', () => {
+    it('should register a new user', () => {
+      return request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'test@example.com',
+          password: 'Password123!',
+          name: 'Test User'
+        })
+        .expect(201)
+        .expect((res) => {
+          expect(res.body.access_token).toBeDefined();
+        });
+    });
+
+    it('should reject invalid email', () => {
+      return request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'invalid-email',
+          password: 'Password123!'
+        })
+        .expect(400);
+    });
+
+    it('should reject weak password', () => {
+      return request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'test2@example.com',
+          password: 'weak'
+        })
+        .expect(400);
+    });
+  });
+
+  describe('Login', () => {
+    it('should login with valid credentials', async () => {
+      // 先注册
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'login@example.com',
+          password: 'Password123!'
+        });
+
+      // 再登录
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'login@example.com',
+          password: 'Password123!'
+        })
+        .expect(201);
+
+      expect(response.body.access_token).toBeDefined();
+      authToken = response.body.access_token;
+    });
+
+    it('should reject wrong password', () => {
+      return request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'login@example.com',
+          password: 'wrongpassword'
+        })
+        .expect(401);
+    });
+  });
+
+  describe('Protected Routes', () => {
+    it('should access protected route with token', () => {
+      return request(app.getHttpServer())
+        .get('/users/profile')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+    });
+
+    it('should reject access without token', () => {
+      return request(app.getHttpServer())
+        .get('/users/profile')
+        .expect(401);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试辅助函数</h2>
+
+      <div class="code-block">// test/helpers/index.ts
+import { INestApplication } from '@nestjs/common';
+import * as request from 'supertest';
+
+export async function createTestApp(): Promise&lt;INestApplication&gt; {
+  const module = await Test.createTestingModule({
+    imports: [AppModule]
+  }).compile();
+
+  const app = module.createNestApplication();
+  await app.init();
+  return app;
+}
+
+export async function registerUser(
+  app: INestApplication,
+  userData: any
+): Promise&lt;string&gt; {
+  const response = await request(app.getHttpServer())
+    .post('/auth/register')
+    .send(userData);
+
+  return response.body.access_token;
+}
+
+export function authRequest(
+  app: INestApplication,
+  token: string
+) {
+  return {
+    get: (url: string) =>
+      request(app.getHttpServer())
+        .get(url)
+        .set('Authorization', `Bearer ${token}`),
+
+    post: (url: string, data: any) =>
+      request(app.getHttpServer())
+        .post(url)
+        .send(data)
+        .set('Authorization', `Bearer ${token}`),
+
+    put: (url: string, data: any) =>
+      request(app.getHttpServer())
+        .put(url)
+        .send(data)
+        .set('Authorization', `Bearer ${token}`),
+
+    delete: (url: string) =>
+      request(app.getHttpServer())
+        .delete(url)
+        .set('Authorization', `Bearer ${token}`)
+  };
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>E2E 测试验证完整的请求响应流程</li>
+            <li>使用内存数据库隔离测试环境</li>
+            <li>测试认证流程需要管理 token</li>
+            <li>创建辅助函数减少重复代码</li>
+            <li>测试成功和失败两种情况</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="72-3-控制器测试.html">← 上一节：控制器测试</a>
+      <a href="72-5-Mock依赖.html">下一节：Mock 依赖 →</a>
+    </div>
+  </div>
+</body>
+</html>

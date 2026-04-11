@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>108.4 网关安全 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="108-1-网关概念.html">第108章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>108.4 网关安全</h1>
+      <p class="subtitle">API网关的安全防护实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解网关面临的安全威胁</li>
+        <li>掌握认证授权实现</li>
+        <li>学会常见攻击防护</li>
+        <li>了解安全最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 网关安全威胁</h2>
+      <div class="code-block">
+// API网关面临的安全威胁
+
+const threats = {
+  unauthorized: {
+    name: '未授权访问',
+    description: '未认证用户访问受保护资源',
+    solution: '认证授权机制'
+  },
+  injection: {
+    name: '注入攻击',
+    description: 'SQL注入、XSS、命令注入',
+    solution: '输入验证、参数化查询'
+  },
+  ddos: {
+    name: 'DDoS攻击',
+    description: '分布式拒绝服务攻击',
+    solution: '限流、IP黑名单'
+  },
+  dataExposure: {
+    name: '敏感数据泄露',
+    description: '返回过多数据或敏感信息',
+    solution: '数据脱敏、响应过滤'
+  },
+  csrf: {
+    name: 'CSRF攻击',
+    description: '跨站请求伪造',
+    solution: 'CSRF Token、SameSite'
+  },
+  replay: {
+    name: '重放攻击',
+    description: '截获请求并重复发送',
+    solution: '时间戳、Nonce、签名'
+  }
+};
+
+// 安全防护层次
+const securityLayers = `
+1. 网络层 - 防火墙、WAF
+2. 网关层 - 认证、限流、IP过滤
+3. 应用层 - 输入验证、权限控制
+4. 数据层 - 加密、脱敏
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">安全原则</div>
+          <p>最小权限原则、纵深防御、安全默认、输入验证。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 认证授权实现</h2>
+      <div class="code-block">
+import express from 'express';
+import jwt from 'jsonwebtoken';
+
+const app = express();
+
+// ==================== JWT认证中间件 ====================
+
+interface JwtPayload {
+  userId: string;
+  roles: string[];
+  permissions: string[];
+}
+
+function authMiddleware(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    req.user = payload;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// ==================== 权限检查中间件 ====================
+
+function requirePermission(permission: string) {
+  return (req: any, res: any, next: any) => {
+    if (!req.user.permissions.includes(permission)) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+    next();
+  };
+}
+
+function requireRole(role: string) {
+  return (req: any, res: any, next: any) => {
+    if (!req.user.roles.includes(role)) {
+      return res.status(403).json({ error: 'Role required' });
+    }
+    next();
+  };
+}
+
+// 使用中间件
+app.get('/api/admin/users',
+  authMiddleware,
+  requireRole('admin'),
+  (req, res) => {
+    // 只有admin角色可以访问
+  }
+);
+
+app.delete('/api/orders/:id',
+  authMiddleware,
+  requirePermission('order:delete'),
+  (req, res) => {
+    // 只有有order:delete权限的用户可以访问
+  }
+);
+
+// ==================== API Key认证 ====================
+
+const apiKeys = new Map<string, { clientId: string; permissions: string[] }>();
+
+function apiKeyAuth(req: any, res: any, next: any) {
+  const apiKey = req.headers['x-api-key'];
+
+  if (!apiKey) {
+    return res.status(401).json({ error: 'API key required' });
+  }
+
+  const keyInfo = apiKeys.get(apiKey);
+
+  if (!keyInfo) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  req.client = keyInfo;
+  next();
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 常见攻击防护</h2>
+      <div class="code-block">
+// ==================== SQL注入防护 ====================
+
+// 错误方式
+const badQuery = `SELECT * FROM users WHERE id = ${userId}`;  // 危险！
+
+// 正确方式：参数化查询
+const safeQuery = await db.query(
+  'SELECT * FROM users WHERE id = ?',
+  [userId]
+);
+
+// 使用ORM自动防护
+const user = await User.findOne({ where: { id: userId } });
+
+// ==================== XSS防护 ====================
+
+import sanitizeHtml from 'sanitize-html';
+
+// 输入净化
+function sanitizeInput(input: string): string {
+  return sanitizeHtml(input, {
+    allowedTags: [],
+    allowedAttributes: {}
+  });
+}
+
+// 输出编码
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// 设置安全响应头
+app.use((req, res, next) => {
+  // 防止XSS
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+
+  // 防止点击劫持
+  res.setHeader('X-Frame-Options', 'DENY');
+
+  // 内容类型嗅探防护
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  // CSP策略
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self'");
+
+  // HSTS
+  res.setHeader('Strict-Transport-Security',
+    'max-age=31536000; includeSubDomains');
+
+  next();
+});
+
+// ==================== 请求签名验证 ====================
+
+import crypto from 'crypto';
+
+function verifySignature(req: any, res: any, next: any) {
+  const timestamp = req.headers['x-timestamp'];
+  const nonce = req.headers['x-nonce'];
+  const signature = req.headers['x-signature'];
+
+  // 检查时间戳（防止重放攻击）
+  const now = Date.now();
+  if (Math.abs(now - parseInt(timestamp)) > 300000) {  // 5分钟
+    return res.status(401).json({ error: 'Request expired' });
+  }
+
+  // 构造签名字符串
+  const stringToSign = [
+    req.method,
+    req.path,
+    timestamp,
+    nonce,
+    JSON.stringify(req.body)
+  ].join('\n');
+
+  // 计算签名
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.API_SECRET!)
+    .update(stringToSign)
+    .digest('hex');
+
+  if (signature !== expectedSignature) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  next();
+}
+
+// ==================== 敏感数据脱敏 ====================
+
+function maskSensitiveData(data: any): any {
+  const sensitiveFields = ['password', 'token', 'creditCard', 'ssn'];
+
+  if (typeof data !== 'object' || data === null) {
+    return data;
+  }
+
+  const masked = { ...data };
+
+  for (const field of sensitiveFields) {
+    if (masked[field]) {
+      masked[field] = '***MASKED***';
+    }
+  }
+
+  return masked;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 网关是安全防护的第一道防线</li>
+            <li>• 认证授权是核心安全机制</li>
+            <li>• 防范常见攻击：注入、XSS、CSRF</li>
+            <li>• 设置安全响应头、数据脱敏</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="108-3-Nginx网关.html">← 上一节：Nginx 网关</a>
+      <a href="108-5-限流熔断.html">下一节：限流熔断 →</a>
+    </div>
+  </div>
+</body>
+</html>

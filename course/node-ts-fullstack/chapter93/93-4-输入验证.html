@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>93.4 输入验证 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="93-1-SQL注入原理.html">第九十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>93.4 输入验证</h1>
+      <p class="subtitle">输入验证最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解输入验证的重要性</li>
+        <li>掌握验证策略和方法</li>
+        <li>学会使用验证库</li>
+        <li>了解前后端验证配合</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 输入验证原则</h2>
+      <div class="code-block">
+# 核心原则
+
+## 1. 永远不要信任用户输入
+所有输入都可能是恶意的
+
+## 2. 白名单验证优于黑名单
+只接受已知安全的输入
+
+## 3. 验证在服务端必须执行
+前端验证可以被绕过
+
+## 4. 尽早验证，尽早拒绝
+在数据处理前验证
+
+# 验证层次
+
+┌─────────────────────────────────────────────────────┐
+│                    验证层次                          │
+├─────────────────┬───────────────────────────────────┤
+│  前端验证        │  提升用户体验，减少无效请求      │
+│  API 网关验证    │  统一入口验证，过滤恶意请求      │
+│  服务端验证      │  核心安全保障，必须执行          │
+│  数据库验证      │  约束检查，最后防线              │
+└─────────────────┴───────────────────────────────────┘
+
+# 验证内容
+
+## 类型验证
+- 字符串、数字、布尔、数组、对象
+
+## 格式验证
+- 邮箱、URL、日期、手机号
+
+## 范围验证
+- 长度、大小、日期范围
+
+## 业务验证
+- 唯一性、存在性、权限
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用 Zod 验证</h2>
+      <div class="code-block">
+# Zod 类型安全验证
+
+import { z } from 'zod';
+
+// 定义用户输入模式
+const userSchema = z.object({
+  username: z.string()
+    .min(3, '用户名至少 3 个字符')
+    .max(20, '用户名最多 20 个字符')
+    .regex(/^[a-zA-Z0-9_]+$/, '只能包含字母、数字和下划线'),
+
+  email: z.string()
+    .email('请输入有效的邮箱地址'),
+
+  password: z.string()
+    .min(8, '密码至少 8 个字符')
+    .regex(/[A-Z]/, '密码必须包含大写字母')
+    .regex(/[a-z]/, '密码必须包含小写字母')
+    .regex(/[0-9]/, '密码必须包含数字'),
+
+  age: z.number()
+    .int('年龄必须是整数')
+    .min(0, '年龄不能小于 0')
+    .max(150, '年龄不能大于 150')
+    .optional(),
+
+  role: z.enum(['user', 'admin'], {
+    errorMap: () => ({ message: '无效的角色' }),
+  }),
+});
+
+// 类型推导
+type UserInput = z.infer&lt;typeof userSchema&gt;;
+
+// Express 中使用
+import express from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/users', (req, res) => {
+  const result = userSchema.safeParse(req.body);
+
+  if (!result.success) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
+    });
+  }
+
+  // 使用验证后的数据
+  const user = result.data;
+  // ...
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Zod 优势</div>
+          <p>Zod 提供类型推导，可以自动从 schema 生成 TypeScript 类型，同时支持复杂的数据转换和组合。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 查询参数验证</h2>
+      <div class="code-block">
+# 验证 URL 查询参数
+
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  sort: z.enum(['asc', 'desc']).default('asc'),
+  search: z.string().max(100).optional(),
+  status: z.enum(['active', 'inactive', 'pending']).optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+}).refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return data.startDate <= data.endDate;
+    }
+    return true;
+  },
+  { message: '开始日期不能晚于结束日期' }
+);
+
+// Express 中使用
+app.get('/users', (req, res) => {
+  const result = querySchema.safeParse(req.query);
+
+  if (!result.success) {
+    return res.status(400).json({
+      error: 'Invalid query parameters',
+      details: result.error.flatten().fieldErrors,
+    });
+  }
+
+  const { page, limit, sort, search, status } = result.data;
+  // 执行查询
+});
+
+# 路径参数验证
+
+const paramsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+app.get('/users/:id', (req, res) => {
+  const result = paramsSchema.safeParse(req.params);
+  // ...
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 验证中间件封装</h2>
+      <div class="code-block">
+# 通用验证中间件
+
+import { Request, Response, NextFunction } from 'express';
+import { AnyZodObject, ZodError } from 'zod';
+
+// 验证中间件工厂
+function validate(schema: AnyZodObject) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // 验证并替换请求数据
+      req.body = await schema.parseAsync(req.body);
+      next();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({
+          error: 'Validation failed',
+          details: error.flatten().fieldErrors,
+        });
+      }
+      next(error);
+    }
+  };
+}
+
+// 使用
+app.post('/users',
+  validate(userSchema),
+  async (req, res) => {
+    // req.body 已经是验证后的数据
+    const user = await createUser(req.body);
+    res.json(user);
+  }
+);
+
+# 多位置验证
+
+function validateAll(schemas: {
+  body?: AnyZodObject;
+  query?: AnyZodObject;
+  params?: AnyZodObject;
+}) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (schemas.body) {
+        req.body = await schemas.body.parseAsync(req.body);
+      }
+      if (schemas.query) {
+        req.query = await schemas.query.parseAsync(req.query);
+      }
+      if (schemas.params) {
+        req.params = await schemas.params.parseAsync(req.params);
+      }
+      next();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({
+          error: 'Validation failed',
+          details: error.flatten().fieldErrors,
+        });
+      }
+      next(error);
+    }
+  };
+}
+
+// 使用
+app.put('/users/:id',
+  validateAll({
+    params: z.object({ id: z.coerce.number() }),
+    body: updateUserSchema,
+  }),
+  updateUser
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 输入验证是安全的第一道防线</li>
+            <li>• 服务端验证必须执行</li>
+            <li>• 白名单验证优于黑名单验证</li>
+            <li>• 使用 Zod 等库实现类型安全验证</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="93-3-ORM防护.html">← 上一节：ORM 防护</a>
+      <a href="93-5-最小权限原则.html">下一节：最小权限原则 →</a>
+    </div>
+  </div>
+</body>
+</html>

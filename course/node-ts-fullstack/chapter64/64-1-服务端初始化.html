@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.1 服务端初始化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.1 服务端初始化</h1>
+      <p class="subtitle">Socket.IO 服务端完整配置</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Socket.IO 服务端的初始化方式</li>
+        <li>理解各种配置选项的作用</li>
+        <li>学会配置 CORS、传输方式等关键参数</li>
+        <li>了解服务端实例的结构和 API</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 基本初始化</h2>
+
+      <div class="card">
+        <h3 class="card-title">最简单的初始化</h3>
+        <div class="code-block">
+import { Server } from 'socket.io';
+
+// 直接指定端口
+const io = new Server(3000);
+
+io.on('connection', (socket) => {
+  console.log('客户端已连接');
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">与 HTTP 服务器配合</h3>
+        <div class="code-block">
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const httpServer = createServer();
+const io = new Server(httpServer);
+
+httpServer.listen(3000);
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">TypeScript 完整示例</h3>
+        <div class="code-block">
+import { createServer } from 'http';
+import { Server, Socket } from 'socket.io';
+
+interface ServerToClientEvents {
+  message: (data: { content: string }) => void;
+  notification: (data: { title: string; body: string }) => void;
+}
+
+interface ClientToServerEvents {
+  message: (data: { content: string }) => void;
+  joinRoom: (room: string) => void;
+}
+
+interface InterServerEvents {
+  ping: () => void;
+}
+
+interface SocketData {
+  userId: string;
+  username: string;
+}
+
+// 类型化的 Server
+const io = new Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>(httpServer, {
+  cors: {
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST']
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('客户端连接:', socket.id);
+
+  // 设置 socket 数据
+  socket.data.userId = 'user-123';
+  socket.data.username = 'Alice';
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 完整配置选项</h2>
+
+      <div class="code-block">
+import { Server } from 'socket.io';
+
+const io = new Server(httpServer, {
+  // ==================== 路径配置 ====================
+  path: '/socket.io/',  // 客户端连接路径，默认 '/socket.io/'
+
+  // ==================== CORS 配置 ====================
+  cors: {
+    origin: ['http://localhost:3000', 'https://example.com'],
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+  },
+
+  // ==================== 传输配置 ====================
+  transports: ['polling', 'websocket'],  // 传输方式顺序
+
+  // ==================== 心跳配置 ====================
+  pingInterval: 25000,  // 心跳间隔（毫秒），默认 25000
+  pingTimeout: 20000,   // 心跳超时（毫秒），默认 20000
+
+  // ==================== 连接配置 ====================
+  connectTimeout: 45000,  // 连接超时（毫秒）
+
+  // ==================== 升级配置 ====================
+  upgradeTimeout: 10000,  // 升级超时（毫秒）
+  maxHttpBufferSize: 1e6, // 最大消息大小（字节），默认 1MB
+
+  // ==================== 其他配置 ====================
+  serveClient: true,      // 是否提供客户端文件
+  cookie: {
+    name: 'io',
+    httpOnly: true,
+    sameSite: 'strict'
+  },
+
+  // ==================== 适配器配置 ====================
+  adapter: createAdapter(), // 用于多服务器集群
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> CORS 配置详解</h2>
+
+      <div class="card">
+        <h3 class="card-title">开发环境配置</h3>
+        <div class="code-block">
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',  // 允许所有来源（仅开发环境）
+    methods: ['GET', 'POST']
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">生产环境配置</h3>
+        <div class="code-block">
+const io = new Server(httpServer, {
+  cors: {
+    // 允许的来源列表
+    origin: [
+      'https://example.com',
+      'https://www.example.com',
+      'https://app.example.com'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With'
+    ],
+    credentials: true,  // 允许携带 Cookie
+    maxAge: 86400       // 预检请求缓存时间（秒）
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">动态 CORS 配置</h3>
+        <div class="code-block">
+const io = new Server(httpServer, {
+  cors: {
+    origin: (origin, callback) => {
+      // 白名单
+      const whitelist = [
+        'https://example.com',
+        'https://staging.example.com'
+      ];
+
+      // 允许无 origin 的请求（如移动应用）
+      if (!origin) return callback(null, true);
+
+      if (whitelist.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS 不允许'));
+      }
+    }
+  }
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Server 实例 API</h2>
+
+      <div class="card">
+        <h3 class="card-title">核心属性</h3>
+        <div class="code-block">
+// 获取所有连接的 sockets
+io.sockets.sockets  // Map&lt;string, Socket&gt;
+
+// 获取命名空间
+io.of('/chat')  // 获取指定命名空间
+
+// 引擎实例
+io.engine      // 底层引擎实例
+
+// 适配器
+io.of('/').adapter  // 默认命名空间的适配器
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">核心方法</h3>
+        <div class="code-block">
+// ==================== 事件监听 ====================
+io.on('connection', (socket) => { });
+io.on('new_namespace', (namespace) => { });
+
+// ==================== 发送消息 ====================
+// 向所有客户端发送
+io.emit('message', 'Hello All!');
+
+// 向指定房间发送
+io.to('room1').emit('message', 'Hello Room!');
+
+// 除某个 socket 外发送
+io.except(socket.id).emit('message', 'Hello Others!');
+
+// ==================== Socket 操作 ====================
+// 获取特定 socket
+const socket = io.sockets.sockets.get(socketId);
+
+// 断开所有连接
+io.disconnectSockets(true);
+
+// 获取房间内的 sockets
+const sockets = await io.in('room1').fetchSockets();
+
+// ==================== 服务控制 ====================
+// 关闭服务器
+io.close(() => {
+  console.log('服务器已关闭');
+});
+
+// 创建命名空间
+const chatNamespace = io.of('/chat');
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Express 集成完整示例</h2>
+      <div class="code-block">
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const app = express();
+const httpServer = createServer(app);
+
+// Socket.IO 配置
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production'
+      ? ['https://example.com']
+      : ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true
+  },
+  pingInterval: 10000,
+  pingTimeout: 5000
+});
+
+// Express 中间件
+app.use(express.json());
+app.use(express.static('public'));
+
+// Express 路由
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    connections: io.sockets.sockets.size
+  });
+});
+
+// Socket.IO 中间件
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('需要认证'));
+  }
+  // 验证 token...
+  next();
+});
+
+// Socket.IO 连接处理
+io.on('connection', (socket) => {
+  console.log('客户端连接:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('客户端断开:', socket.id);
+  });
+});
+
+// 启动服务器
+const PORT = process.env.PORT || 3000;
+httpServer.listen(PORT, () => {
+  console.log(`服务器运行在 http://localhost:${PORT}`);
+});
+        </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">生产环境建议</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>严格配置 CORS，避免使用 <code>*</code></li>
+          <li>根据实际情况调整心跳间隔</li>
+          <li>设置合理的 maxHttpBufferSize 防止大消息攻击</li>
+          <li>使用 Redis 适配器实现集群支持</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Server 可直接绑定端口或与 HTTP 服务器配合</li>
+            <li>• TypeScript 支持完整的事件类型定义</li>
+            <li>• CORS 配置是跨域场景的关键</li>
+            <li>• 心跳配置影响连接保活和断开检测</li>
+            <li>• Server 实例提供了丰富的消息发送和管理 API</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter63/63-5-建立连接.html">← 上一节</a>
+      <a href="64-2-命名空间.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

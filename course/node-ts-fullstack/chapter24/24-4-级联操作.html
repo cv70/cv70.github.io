@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.4 级联操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="24-1-一对一关系.html">第二十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>24.4 级联操作</h1>
+      <p class="subtitle">自动同步关联实体的变更</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解级联操作的作用</li>
+        <li>掌握 cascade 选项配置</li>
+        <li>学会 onDelete 和 onUpdate 行为</li>
+        <li>了解 orphanedRowAction 的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 级联操作类型</h2>
+      <p>级联操作允许在操作父实体时自动同步子实体的变化，减少手动管理关联数据的代码量。</p>
+
+      <div class="code-block">
+级联操作类型：
+
+1. TypeORM 级联（cascade 选项）
+   ├── insert：保存父实体时自动插入新子实体
+   ├── update：保存父实体时自动更新子实体
+   ├── remove：删除父实体时自动删除子实体
+   ├── soft-remove：软删除父实体时自动软删除子实体
+   └── recover：恢复父实体时自动恢复子实体
+
+2. 数据库级联（onDelete/onUpdate 选项）
+   ├── CASCADE：级联删除/更新
+   ├── SET NULL：设置为 NULL
+   ├── SET DEFAULT：设置为默认值
+   ├── RESTRICT：阻止操作（默认）
+   └── NO ACTION：无操作（类似 RESTRICT）
+
+3. 孤儿记录处理（orphanedRowAction）
+   ├── delete：删除孤儿记录
+   ├── soft-delete：软删除孤儿记录
+   └── nullify：将外键设为 NULL
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> cascade 选项详解</h2>
+      <div class="code-block">
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+
+  // 启用所有级联操作
+  @OneToMany(() => Post, (post) => post.user, {
+    cascade: true,
+  })
+  posts: Post[];
+
+  // 指定级联操作类型
+  @OneToMany(() => Profile, (profile) => profile.user, {
+    cascade: ['insert', 'update'],  // 只级联插入和更新
+  })
+  profile: Profile;
+}
+
+// 级联插入示例
+const user = new User();
+user.username = 'alice';
+
+const post1 = new Post();
+post1.title = 'Post 1';
+
+const post2 = new Post();
+post2.title = 'Post 2';
+
+user.posts = [post1, post2];
+
+// 同时保存 user 和 posts
+await userRepository.save(user);
+// INSERT INTO user (username) VALUES ('alice')
+// INSERT INTO post (title, user_id) VALUES ('Post 1', 1)
+// INSERT INTO post (title, user_id) VALUES ('Post 2', 1)
+
+// 级联更新示例
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+});
+
+user.posts[0].title = 'Updated Title';
+await userRepository.save(user);
+// UPDATE post SET title = 'Updated Title' WHERE id = 1
+
+// 级联删除示例
+@Entity()
+export class User {
+  @OneToMany(() => Post, (post) => post.user, {
+    cascade: true,  // 包含 remove
+  })
+  posts: Post[];
+}
+
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+});
+
+user.posts = [];  // 清空文章
+await userRepository.save(user);
+// 删除所有关联的 posts
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">cascade 注意事项</div>
+          <p>cascade: true 会启用所有级联操作，可能导致意外删除数据。建议明确指定需要的级联类型，如 cascade: ['insert', 'update']。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 数据库级联配置</h2>
+      <div class="code-block">
+@Entity()
+export class Post {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  title: string;
+
+  @ManyToOne(() => User, (user) => user.posts, {
+    // 数据库级别级联删除
+    onDelete: 'CASCADE',
+
+    // 数据库级别级联更新
+    onUpdate: 'CASCADE',
+  })
+  user: User;
+}
+
+// 生成的 SQL
+CREATE TABLE post (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(255),
+  user_id INT,
+  FOREIGN KEY (user_id) REFERENCES user(id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+);
+
+// 不同行为对比
+onDelete: 'CASCADE'    -- 删除用户时，自动删除其文章
+onDelete: 'SET NULL'   -- 删除用户时，文章的 user_id 设为 NULL
+onDelete: 'RESTRICT'   -- 有文章的用户不能删除（默认行为）
+onDelete: 'NO ACTION'  -- 同 RESTRICT
+
+// 使用示例
+@Entity()
+export class Comment {
+  @ManyToOne(() => Post, {
+    onDelete: 'CASCADE',  // 删除文章时删除评论
+  })
+  post: Post;
+
+  @ManyToOne(() => User, {
+    onDelete: 'SET NULL',  // 删除用户时评论保留，user_id 设为 NULL
+  })
+  author: User;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> orphanedRowAction 孤儿处理</h2>
+      <div class="code-block">
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @OneToMany(() => Post, (post) => post.user, {
+    // 自动删除孤儿记录
+    orphanedRowAction: 'delete',
+
+    // 或者软删除孤儿记录（需要实体支持软删除）
+    // orphanedRowAction: 'soft-delete',
+
+    // 或者将外键设为 NULL（需要外键可为空）
+    // orphanedRowAction: 'nullify',
+  })
+  posts: Post[];
+}
+
+// 示例：删除孤儿记录
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+});
+
+// user.posts = [post1, post2, post3]
+
+// 只保留 post1
+user.posts = [user.posts[0]];
+await userRepository.save(user);
+
+// post2 和 post3 会自动被删除
+// DELETE FROM post WHERE id IN (2, 3)
+
+// 与 cascade.remove 的区别：
+// cascade.remove：删除父实体时删除子实体
+// orphanedRowAction：子实体从关联中移除时删除
+
+// 实际应用：订单和订单项
+@Entity()
+export class Order {
+  @OneToMany(() => OrderItem, (item) => item.order, {
+    cascade: true,           // 保存订单时保存订单项
+    orphanedRowAction: 'delete',  // 移除订单项时自动删除
+  })
+  items: OrderItem[];
+}
+
+// 更新订单项
+const order = await orderRepository.findOne({
+  where: { id: 1 },
+  relations: ['items'],
+});
+
+// 移除一个订单项
+order.items = order.items.filter(item => item.id !== 1);
+await orderRepository.save(order);
+// 自动删除被移除的订单项
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• cascade 控制 TypeORM 层面的级联操作</li>
+            <li>• onDelete/onUpdate 控制数据库层面行为</li>
+            <li>• orphanedRowAction 处理孤儿记录</li>
+            <li>• 合理配置可简化关联数据管理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="24-3-多对多关系.html">← 上一节：多对多关系</a>
+      <a href="../chapter25/25-1-querybuilder.html">下一章：QueryBuilder →</a>
+    </div>
+  </div>
+</body>
+</html>

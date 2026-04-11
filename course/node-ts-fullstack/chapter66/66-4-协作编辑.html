@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>66.4 协作编辑 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="66-1-实时聊天室.html">第六十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>66.4 协作编辑</h1>
+      <p class="subtitle">实时多人协作编辑器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解协作编辑的核心原理</li>
+        <li>掌握操作转换（OT）算法基础</li>
+        <li>学会实现实时光标同步</li>
+        <li>了解冲突解决策略</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">协作编辑概述</h3>
+      <p class="card-text">
+        <strong>实时协作编辑</strong>允许多个用户同时编辑同一文档，并实时看到彼此的修改。核心技术挑战包括：
+      </p>
+      <ul class="feature-list">
+        <li><strong>一致性</strong>：所有用户最终看到相同的文档内容</li>
+        <li><strong>意图保持</strong>：操作结果符合用户预期</li>
+        <li><strong>低延迟</strong>：操作快速同步到所有协作者</li>
+        <li><strong>冲突解决</strong>：处理并发编辑的冲突</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 操作转换算法</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本概念</h3>
+        <p class="card-text">操作转换（Operational Transformation, OT）是解决协作编辑冲突的经典算法：</p>
+        <div class="code-block">
+// 操作类型
+type OperationType = 'insert' | 'delete' | 'retain';
+
+interface Operation {
+  type: OperationType;
+  position?: number;    // 操作位置
+  content?: string;     // 插入内容
+  length?: number;      // 删除或保留长度
+}
+
+// 示例：在位置 0 插入 "Hello"
+const insertOp: Operation = {
+  type: 'insert',
+  position: 0,
+  content: 'Hello'
+};
+
+// 示例：从位置 5 删除 3 个字符
+const deleteOp: Operation = {
+  type: 'delete',
+  position: 5,
+  length: 3
+};
+
+// 操作转换函数
+function transform(op1: Operation, op2: Operation): Operation {
+  // 如果两个操作影响不同区域，无需转换
+  if (!isOverlapping(op1, op2)) {
+    return op1;
+  }
+
+  // 根据操作类型进行转换
+  if (op1.type === 'insert' && op2.type === 'insert') {
+    // 两个插入操作冲突
+    if (op1.position! <= op2.position!) {
+      return op1;
+    } else {
+      return {
+        ...op1,
+        position: op1.position! + op2.content!.length
+      };
+    }
+  }
+
+  if (op1.type === 'insert' && op2.type === 'delete') {
+    // 插入和删除冲突
+    if (op1.position! <= op2.position!) {
+      return op1;
+    } else {
+      return {
+        ...op1,
+        position: op1.position! - op2.length!
+      };
+    }
+  }
+
+  // 更多转换规则...
+
+  return op1;
+}
+
+function isOverlapping(op1: Operation, op2: Operation): boolean {
+  return Math.abs(op1.position! - op2.position!) < 10;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖥️</span> 服务端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">协作编辑服务</h3>
+        <div class="code-block">
+import { Server, Socket } from 'socket.io';
+
+interface Document {
+  id: string;
+  content: string;
+  version: number;
+  operations: Operation[];
+  collaborators: Map&lt;string, Collaborator&gt;;
+}
+
+interface Collaborator {
+  id: string;
+  name: string;
+  color: string;
+  cursor: Cursor;
+  selection: Selection;
+}
+
+interface Cursor {
+  line: number;
+  column: number;
+}
+
+interface Selection {
+  start: Cursor;
+  end: Cursor;
+}
+
+interface Operation {
+  type: 'insert' | 'delete';
+  position: number;
+  content?: string;
+  length?: number;
+  version: number;
+  userId: string;
+  timestamp: number;
+}
+
+class CollaborationService {
+  private documents = new Map&lt;string, Document&gt;();
+
+  constructor(private io: Server) {}
+
+  // 加入文档
+  joinDocument(socket: Socket, documentId: string, user: Collaborator) {
+    socket.join(`doc:${documentId}`);
+
+    if (!this.documents.has(documentId)) {
+      this.documents.set(documentId, {
+        id: documentId,
+        content: '',
+        version: 0,
+        operations: [],
+        collaborators: new Map()
+      });
+    }
+
+    const doc = this.documents.get(documentId)!;
+    doc.collaborators.set(user.id, user);
+
+    // 发送当前文档状态
+    socket.emit('document:sync', {
+      content: doc.content,
+      version: doc.version,
+      collaborators: Array.from(doc.collaborators.values())
+    });
+
+    // 通知其他协作者
+    socket.to(`doc:${documentId}`).emit('collaborator:joined', user);
+  }
+
+  // 离开文档
+  leaveDocument(socket: Socket, documentId: string, userId: string) {
+    const doc = this.documents.get(documentId);
+
+    if (doc) {
+      doc.collaborators.delete(userId);
+      socket.to(`doc:${documentId}`).emit('collaborator:left', userId);
+    }
+
+    socket.leave(`doc:${documentId}`);
+  }
+
+  // 应用操作
+  applyOperation(socket: Socket, documentId: string, operation: Operation) {
+    const doc = this.documents.get(documentId);
+    if (!doc) return;
+
+    // 检查版本
+    if (operation.version !== doc.version) {
+      // 需要转换操作
+      const transformedOp = this.transformOperation(operation, doc);
+      operation = transformedOp;
+    }
+
+    // 应用操作到文档
+    doc.content = this.applyOpToContent(doc.content, operation);
+    doc.version++;
+    doc.operations.push(operation);
+
+    // 广播给其他协作者
+    socket.to(`doc:${documentId}`).emit('operation:remote', {
+      ...operation,
+      version: doc.version
+    });
+
+    // 确认给发送者
+    socket.emit('operation:ack', {
+      version: doc.version,
+      operationId: operation.timestamp
+    });
+  }
+
+  // 更新光标
+  updateCursor(socket: Socket, documentId: string, userId: string, cursor: Cursor) {
+    const doc = this.documents.get(documentId);
+    if (!doc) return;
+
+    const collaborator = doc.collaborators.get(userId);
+    if (collaborator) {
+      collaborator.cursor = cursor;
+      socket.to(`doc:${documentId}`).emit('cursor:update', {
+        userId,
+        cursor
+      });
+    }
+  }
+
+  // 更新选择
+  updateSelection(socket: Socket, documentId: string, userId: string, selection: Selection) {
+    socket.to(`doc:${documentId}`).emit('selection:update', {
+      userId,
+      selection
+    });
+  }
+
+  // 私有方法
+  private transformOperation(op: Operation, doc: Document): Operation {
+    // 获取需要转换的操作
+    const opsToTransform = doc.operations.filter(
+      o => o.version >= op.version && o.userId !== op.userId
+    );
+
+    let transformedOp = { ...op };
+
+    for (const remoteOp of opsToTransform) {
+      transformedOp = this.transformAgainst(transformedOp, remoteOp);
+    }
+
+    return transformedOp;
+  }
+
+  private transformAgainst(op1: Operation, op2: Operation): Operation {
+    // 实现操作转换逻辑
+    if (op1.type === 'insert' && op2.type === 'insert') {
+      if (op1.position >= op2.position) {
+        return {
+          ...op1,
+          position: op1.position + (op2.content?.length || 0)
+        };
+      }
+    }
+
+    if (op1.type === 'insert' && op2.type === 'delete') {
+      if (op1.position >= op2.position) {
+        return {
+          ...op1,
+          position: Math.max(op2.position, op1.position - (op2.length || 0))
+        };
+      }
+    }
+
+    return op1;
+  }
+
+  private applyOpToContent(content: string, op: Operation): string {
+    if (op.type === 'insert') {
+      return content.slice(0, op.position) + (op.content || '') + content.slice(op.position);
+    }
+
+    if (op.type === 'delete') {
+      return content.slice(0, op.position) + content.slice(op.position + (op.length || 0));
+    }
+
+    return content;
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Socket 事件处理</h3>
+        <div class="code-block">
+export function setupCollaboration(io: Server) {
+  const service = new CollaborationService(io);
+
+  io.on('connection', (socket) => {
+    const userId = socket.handshake.auth.userId;
+    const username = socket.handshake.auth.username;
+
+    // 加入文档
+    socket.on('document:join', (documentId: string) => {
+      const user: Collaborator = {
+        id: userId,
+        name: username,
+        color: generateUserColor(userId),
+        cursor: { line: 0, column: 0 },
+        selection: { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } }
+      };
+
+      service.joinDocument(socket, documentId, user);
+    });
+
+    // 离开文档
+    socket.on('document:leave', (documentId: string) => {
+      service.leaveDocument(socket, documentId, userId);
+    });
+
+    // 发送操作
+    socket.on('operation:submit', (data: { documentId: string; operation: Operation }) => {
+      service.applyOperation(socket, data.documentId, data.operation);
+    });
+
+    // 光标更新
+    socket.on('cursor:move', (data: { documentId: string; cursor: Cursor }) => {
+      service.updateCursor(socket, data.documentId, userId, data.cursor);
+    });
+
+    // 选择更新
+    socket.on('selection:change', (data: { documentId: string; selection: Selection }) => {
+      service.updateSelection(socket, data.documentId, userId, data.selection);
+    });
+
+    // 断开连接
+    socket.on('disconnect', () => {
+      // 清理用户加入的所有文档
+      const rooms = [...socket.rooms];
+      rooms.forEach(room => {
+        if (room.startsWith('doc:')) {
+          const documentId = room.replace('doc:', '');
+          service.leaveDocument(socket, documentId, userId);
+        }
+      });
+    });
+  });
+}
+
+function generateUserColor(userId: string): string {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+    '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'
+  ];
+  const hash = userId.split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0);
+  return colors[Math.abs(hash) % colors.length];
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚛️</span> 客户端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">协作编辑 Hook</h3>
+        <div class="code-block">
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface UseCollaborativeEditorOptions {
+  documentId: string;
+  userId: string;
+  username: string;
+  serverUrl: string;
+}
+
+export function useCollaborativeEditor(options: UseCollaborativeEditorOptions) {
+  const { documentId, userId, username, serverUrl } = options;
+
+  const [content, setContent] = useState('');
+  const [version, setVersion] = useState(0);
+  const [collaborators, setCollaborators] = useState&lt;Collaborator[]&gt;([]);
+  const [cursors, setCursors] = useState&lt;Map&lt;string, Cursor&gt;&gt;(new Map());
+
+  const socketRef = useRef&lt;Socket | null&gt;(null);
+  const pendingOpsRef = useRef&lt;Operation[]&gt;([]);
+  const isRemoteChangeRef = useRef(false);
+
+  useEffect(() => {
+    const socket = io(serverUrl, {
+      auth: { userId, username }
+    });
+
+    socketRef.current = socket;
+
+    // 同步文档
+    socket.on('document:sync', (data) => {
+      setContent(data.content);
+      setVersion(data.version);
+      setCollaborators(data.collaborators);
+    });
+
+    // 接收远程操作
+    socket.on('operation:remote', (op: Operation) => {
+      isRemoteChangeRef.current = true;
+      setContent(prev => applyOperation(prev, op));
+      setVersion(op.version);
+      isRemoteChangeRef.current = false;
+    });
+
+    // 操作确认
+    socket.on('operation:ack', ({ version }) => {
+      setVersion(version);
+      // 发送待处理的操作
+      if (pendingOpsRef.current.length > 0) {
+        const op = pendingOpsRef.current.shift()!;
+        socket.emit('operation:submit', { documentId, operation: op });
+      }
+    });
+
+    // 协作者加入
+    socket.on('collaborator:joined', (user: Collaborator) => {
+      setCollaborators(prev => [...prev, user]);
+    });
+
+    // 协作者离开
+    socket.on('collaborator:left', (userId: string) => {
+      setCollaborators(prev => prev.filter(c => c.id !== userId));
+      setCursors(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(userId);
+        return newMap;
+      });
+    });
+
+    // 光标更新
+    socket.on('cursor:update', ({ userId, cursor }) => {
+      setCursors(prev => {
+        const newMap = new Map(prev);
+        newMap.set(userId, cursor);
+        return newMap;
+      });
+    });
+
+    // 加入文档
+    socket.emit('document:join', documentId);
+
+    return () => {
+      socket.emit('document:leave', documentId);
+      socket.disconnect();
+    };
+  }, [documentId, userId, username, serverUrl]);
+
+  // 本地内容变更
+  const handleChange = useCallback((newContent: string, changeDelta: { start: number; end: number; text: string }) => {
+    if (isRemoteChangeRef.current) return;
+
+    setContent(newContent);
+
+    // 创建操作
+    const operation: Operation = {
+      type: changeDelta.text.length > 0 && changeDelta.start !== changeDelta.end ? 'delete' : 'insert',
+      position: changeDelta.start,
+      content: changeDelta.text,
+      length: changeDelta.end - changeDelta.start,
+      version,
+      userId,
+      timestamp: Date.now()
+    };
+
+    // 发送操作
+    socketRef.current?.emit('operation:submit', { documentId, operation });
+  }, [documentId, version, userId]);
+
+  // 更新光标
+  const updateCursor = useCallback((cursor: Cursor) => {
+    socketRef.current?.emit('cursor:move', { documentId, cursor });
+  }, [documentId]);
+
+  return {
+    content,
+    version,
+    collaborators,
+    cursors,
+    handleChange,
+    updateCursor
+  };
+}
+
+function applyOperation(content: string, op: Operation): string {
+  if (op.type === 'insert') {
+    return content.slice(0, op.position) + (op.content || '') + content.slice(op.position);
+  }
+  if (op.type === 'delete') {
+    return content.slice(0, op.position) + content.slice(op.position + (op.length || 0));
+  }
+  return content;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 协作编辑需要解决并发操作的一致性问题</li>
+            <li>• 操作转换（OT）算法处理冲突</li>
+            <li>• 版本号用于检测和处理操作冲突</li>
+            <li>• 光标和选择状态实时同步</li>
+            <li>• 区分本地操作和远程操作</li>
+            <li>• 用户颜色帮助识别协作者</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="66-3-实时通知系统.html">← 上一节</a>
+      <a href="66-5-实时游戏.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

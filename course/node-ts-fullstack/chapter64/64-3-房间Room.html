@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.3 房间 Room - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.3 房间 Room</h1>
+      <p class="subtitle">Socket 分组与群组通信</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Room 的概念和作用</li>
+        <li>掌握房间的加入和退出操作</li>
+        <li>学会向房间广播消息</li>
+        <li>了解房间的高级用法和最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是 Room</h3>
+      <p class="card-text">
+        <strong>Room</strong> 是 Socket.IO 提供的一种分组机制，允许将 Socket 加入到特定的组中，然后可以向整个组广播消息。Room 只存在于服务端，客户端无法直接操作房间。
+      </p>
+      <p class="card-text">
+        每个连接的 Socket 会自动加入一个以其 <code>socket.id</code> 为名称的房间，这使得向特定客户端发送消息变得简单。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚪</span> 房间基本操作</h2>
+
+      <div class="card">
+        <h3 class="card-title">加入房间</h3>
+        <div class="code-block">
+io.on('connection', (socket) => {
+  // 加入单个房间
+  socket.join('room1');
+
+  // 加入多个房间
+  socket.join(['room1', 'room2', 'room3']);
+
+  // 异步方式
+  socket.join('room1', () => {
+    console.log('已加入房间');
+    // 加入成功后发送欢迎消息
+    io.to('room1').emit('message', '新用户加入了房间');
+  });
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">退出房间</h3>
+        <div class="code-block">
+// 退出单个房间
+socket.leave('room1');
+
+// 退出多个房间
+socket.leave(['room1', 'room2']);
+
+// 异步方式
+socket.leave('room1', () => {
+  console.log('已退出房间');
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">查看房间信息</h3>
+        <div class="code-block">
+// 获取 socket 所有的房间
+const rooms = socket.rooms;  // Set&lt;string&gt;
+
+// 获取房间内的所有 socket ID
+const roomSockets = await io.in('room1').allSockets();
+console.log(`房间 room1 有 ${roomSockets.size} 个连接`);
+
+// 获取适配器中的所有房间
+const allRooms = io.of('/').adapter.rooms;
+
+// 检查房间是否存在
+if (io.of('/').adapter.rooms.has('room1')) {
+  console.log('房间 room1 存在');
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📢</span> 房间消息广播</h2>
+
+      <div class="code-block">
+// ==================== io.to() ====================
+// 向房间内的所有客户端发送（包括发送者）
+io.to('room1').emit('message', '大家好！');
+
+// 向多个房间发送
+io.to('room1').to('room2').emit('message', '群发消息');
+
+// ==================== socket.to() ====================
+// 向房间内的其他客户端发送（不包括发送者）
+socket.to('room1').emit('message', '有新用户加入');
+
+// ==================== socket.broadcast.to() ====================
+// 广播到房间（不包括发送者）
+socket.broadcast.to('room1').emit('message', '广播消息');
+
+// ==================== 组合使用 ====================
+// 向房间发送，排除某些 socket
+io.to('room1').except(socket.id).emit('message', '排除发送者');
+
+// 向命名空间内的房间发送
+io.of('/chat').to('room1').emit('message', '命名空间房间消息');
+        </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">to() vs in()</div>
+          <p><code>io.to('room1')</code> 和 <code>io.in('room1')</code> 功能相同，只是命名不同。推荐使用 <code>to()</code>，语义更清晰。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 实际应用示例</h2>
+
+      <div class="card">
+        <h3 class="card-title">聊天室实现</h3>
+        <div class="code-block">
+interface User {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  users: Map&lt;string, User&gt;;
+}
+
+const rooms = new Map&lt;string, Room&gt;();
+
+io.on('connection', (socket) => {
+  const user: User = {
+    id: socket.id,
+    name: socket.handshake.query.name as string,
+    avatar: socket.handshake.query.avatar as string
+  };
+
+  // 创建房间
+  socket.on('create-room', (roomName: string, callback) => {
+    const roomId = generateRoomId();
+    const room: Room = {
+      id: roomId,
+      name: roomName,
+      users: new Map()
+    };
+    rooms.set(roomId, room);
+
+    socket.join(roomId);
+    room.users.set(socket.id, user);
+
+    callback({ roomId, success: true });
+
+    // 通知所有人有新房间
+    io.emit('room-created', { id: roomId, name: roomName });
+  });
+
+  // 加入房间
+  socket.on('join-room', (roomId: string, callback) => {
+    const room = rooms.get(roomId);
+    if (!room) {
+      return callback({ success: false, error: '房间不存在' });
+    }
+
+    socket.join(roomId);
+    room.users.set(socket.id, user);
+
+    // 通知房间内其他人
+    socket.to(roomId).emit('user-joined', user);
+
+    // 返回房间信息
+    callback({
+      success: true,
+      room: {
+        id: room.id,
+        name: room.name,
+        users: Array.from(room.users.values())
+      }
+    });
+  });
+
+  // 发送消息
+  socket.on('send-message', (roomId: string, content: string) => {
+    const message = {
+      id: generateMessageId(),
+      user: user,
+      content,
+      timestamp: Date.now()
+    };
+
+    // 向房间内所有人发送
+    io.to(roomId).emit('new-message', message);
+  });
+
+  // 离开房间
+  socket.on('leave-room', (roomId: string) => {
+    handleLeaveRoom(socket, roomId, user);
+  });
+
+  // 断开连接
+  socket.on('disconnect', () => {
+    // 从所有房间中移除
+    socket.rooms.forEach(roomId => {
+      if (roomId !== socket.id) {
+        handleLeaveRoom(socket, roomId, user);
+      }
+    });
+  });
+});
+
+function handleLeaveRoom(socket: any, roomId: string, user: User) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  socket.leave(roomId);
+  room.users.delete(socket.id);
+
+  // 通知其他人
+  socket.to(roomId).emit('user-left', user);
+
+  // 如果房间为空，删除房间
+  if (room.users.size === 0) {
+    rooms.delete(roomId);
+    io.emit('room-deleted', roomId);
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">在线协作编辑</h3>
+        <div class="code-block">
+io.on('connection', (socket) => {
+  let currentDocument: string | null = null;
+
+  // 加入文档编辑
+  socket.on('join-document', async (documentId: string) => {
+    currentDocument = documentId;
+    socket.join(`doc:${documentId}`);
+
+    // 获取文档当前状态
+    const document = await getDocument(documentId);
+
+    // 只向当前 socket 发送文档内容
+    socket.emit('document-content', document);
+
+    // 通知其他人有新协作者
+    socket.to(`doc:${documentId}`).emit('collaborator-joined', {
+      userId: socket.id
+    });
+  });
+
+  // 文档编辑
+  socket.on('edit-document', (edit: { position: number; content: string }) => {
+    if (!currentDocument) return;
+
+    // 向其他协作者广播编辑
+    socket.to(`doc:${currentDocument}`).emit('document-edited', {
+      userId: socket.id,
+      ...edit
+    });
+  });
+
+  // 光标位置更新
+  socket.on('cursor-move', (position: number) => {
+    if (!currentDocument) return;
+
+    socket.to(`doc:${currentDocument}`).emit('cursor-updated', {
+      userId: socket.id,
+      position
+    });
+  });
+
+  // 离开文档
+  socket.on('leave-document', () => {
+    if (currentDocument) {
+      socket.to(`doc:${currentDocument}`).emit('collaborator-left', {
+        userId: socket.id
+      });
+      socket.leave(`doc:${currentDocument}`);
+      currentDocument = null;
+    }
+  });
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 高级用法</h2>
+
+      <div class="card">
+        <h3 class="card-title">获取房间内所有 Socket</h3>
+        <div class="code-block">
+// 获取房间内的 Socket 实例
+const sockets = await io.in('room1').fetchSockets();
+
+sockets.forEach((socket) => {
+  console.log('Socket ID:', socket.id);
+  console.log('Socket 数据:', socket.data);
+  console.log('Socket 房间:', socket.rooms);
+});
+
+// 统计房间人数
+const roomSize = sockets.length;
+console.log(`房间人数: ${roomSize}`);
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">房间事件监听</h3>
+        <div class="code-block">
+// 使用适配器监听房间事件
+io.of('/').adapter.on('join-room', (room, id) => {
+  console.log(`Socket ${id} 加入房间 ${room}`);
+});
+
+io.of('/').adapter.on('leave-room', (room, id) => {
+  console.log(`Socket ${id} 离开房间 ${room}`);
+});
+
+io.of('/').adapter.on('delete-room', (room) => {
+  console.log(`房间 ${room} 已删除`);
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">批量操作房间</h3>
+        <div class="code-block">
+// 断开房间内所有连接
+io.in('room1').disconnectSockets(true);
+
+// 向多个房间发送相同消息
+const targetRooms = ['room1', 'room2', 'room3'];
+targetRooms.forEach(room => {
+  io.to(room).emit('announcement', '系统维护通知');
+});
+
+// 或者使用链式调用
+io.to('room1').to('room2').to('room3')
+  .emit('announcement', '系统维护通知');
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Room 是服务端的分组机制，客户端无法直接操作</li>
+            <li>• 使用 <code>socket.join()</code> 加入，<code>socket.leave()</code> 退出</li>
+            <li>• <code>io.to('room')</code> 向房间所有人发送</li>
+            <li>• <code>socket.to('room')</code> 向房间其他人发送（排除自己）</li>
+            <li>• 每个 Socket 自动加入以其 ID 为名的房间</li>
+            <li>• 适配器事件可监听房间变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="64-2-命名空间.html">← 上一节</a>
+      <a href="64-4-事件处理.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>80.6 请求封装 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>80.6 请求封装</h1>
+      <p class="subtitle">构建可复用的 HTTP 请求模块</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>在实际项目中，我们需要将 HTTP 请求进行统一封装，以便于维护、复用和统一管理。本节将介绍如何构建一个完善的 HTTP 请求模块，包括类型定义、错误处理、API 组织等方面。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 HTTP 请求模块的设计思路</li>
+        <li>学会定义类型安全的 API 接口</li>
+        <li>了解如何组织和管理 API 模块</li>
+        <li>掌握请求封装的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 基础封装结构</h2>
+      <div class="code-block"><span class="comment">// src/utils/http/types.ts</span>
+<span class="keyword">import type</span> { AxiosRequestConfig, AxiosResponse } <span class="keyword">from</span> <span class="string">'axios'</span>;
+
+<span class="comment">// 通用响应结构</span>
+<span class="keyword">export interface</span> ApiResponse&lt;T = <span class="keyword">any</span>&gt; {
+  code: <span class="keyword">number</span>;
+  message: <span class="keyword">string</span>;
+  data: T;
+}
+
+<span class="comment">// 分页响应</span>
+<span class="keyword">export interface</span> PageResponse&lt;T&gt; {
+  list: T[];
+  total: <span class="keyword">number</span>;
+  page: <span class="keyword">number</span>;
+  pageSize: <span class="keyword">number</span>;
+}
+
+<span class="comment">// 请求配置扩展</span>
+<span class="keyword">export interface</span> RequestOptions <span class="keyword">extends</span> AxiosRequestConfig {
+  <span class="comment">// 是否显示加载状态</span>
+  loading?: <span class="keyword">boolean</span>;
+  <span class="comment">// 是否显示错误提示</span>
+  showError?: <span class="keyword">boolean</span>;
+  <span class="comment">// 自定义错误消息</span>
+  errorMessage?: <span class="keyword">string</span>;
+  <span class="comment">// 重试次数</span>
+  retryCount?: <span class="keyword">number</span>;
+}
+
+<span class="comment">// HTTP 实例接口</span>
+<span class="keyword">export interface</span> HttpInstance {
+  get&lt;T&gt;(url: <span class="keyword">string</span>, config?: RequestOptions): Promise&lt;T&gt;;
+  post&lt;T&gt;(url: <span class="keyword">string</span>, data?: <span class="keyword">any</span>, config?: RequestOptions): Promise&lt;T&gt;;
+  put&lt;T&gt;(url: <span class="keyword">string</span>, data?: <span class="keyword">any</span>, config?: RequestOptions): Promise&lt;T&gt;;
+  delete&lt;T&gt;(url: <span class="keyword">string</span>, config?: RequestOptions): Promise&lt;T&gt;;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> HTTP 类封装</h2>
+      <div class="code-block"><span class="comment">// src/utils/http/index.ts</span>
+<span class="keyword">import</span> axios, { AxiosInstance, AxiosError } <span class="keyword">from</span> <span class="string">'axios'</span>;
+<span class="keyword">import type</span> { ApiResponse, RequestOptions } <span class="keyword">from</span> <span class="string">'./types'</span>;
+
+<span class="keyword">class</span> HttpClient {
+  <span class="keyword">private</span> instance: AxiosInstance;
+  <span class="keyword">private</span> loadingCount = <span class="number">0</span>;
+
+  <span class="keyword">constructor</span>(baseURL: <span class="keyword">string</span>) {
+    <span class="keyword">this</span>.instance = axios.create({
+      baseURL,
+      timeout: <span class="number">10000</span>,
+      headers: {
+        <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>
+      }
+    });
+
+    <span class="keyword">this</span>.setupInterceptors();
+  }
+
+  <span class="keyword">private</span> <span class="function">setupInterceptors</span>() {
+    <span class="comment">// 请求拦截器</span>
+    <span class="keyword">this</span>.instance.interceptors.request.use(
+      <span class="function">config</span> => {
+        <span class="keyword">const</span> token = localStorage.getItem(<span class="string">'token'</span>);
+        <span class="keyword">if</span> (token) {
+          config.headers.Authorization = <span class="string">`Bearer ${token}`</span>;
+        }
+        <span class="keyword">return</span> config;
+      },
+      <span class="function">error</span> => Promise.reject(error)
+    );
+
+    <span class="comment">// 响应拦截器</span>
+    <span class="keyword">this</span>.instance.interceptors.response.use(
+      <span class="function">response</span> => {
+        <span class="keyword">const</span> { data } = response;
+        <span class="keyword">if</span> (data.code === <span class="number">0</span> || data.code === <span class="number">200</span>) {
+          <span class="keyword">return</span> data.data;
+        }
+        <span class="keyword">return</span> Promise.reject(<span class="keyword">new</span> Error(data.message));
+      },
+      <span class="function">error</span> => {
+        <span class="keyword">this</span>.handleError(error);
+        <span class="keyword">return</span> Promise.reject(error);
+      }
+    );
+  }
+
+  <span class="keyword">private</span> <span class="function">handleError</span>(error: AxiosError) {
+    <span class="keyword">if</span> (error.response?.status === <span class="number">401</span>) {
+      localStorage.removeItem(<span class="string">'token'</span>);
+      window.location.href = <span class="string">'/login'</span>;
+    }
+  }
+
+  <span class="keyword">async</span> <span class="function">get</span>&lt;T&gt;(url: <span class="keyword">string</span>, config?: RequestOptions): Promise&lt;T&gt; {
+    <span class="keyword">return this</span>.instance.get(url, config);
+  }
+
+  <span class="keyword">async</span> <span class="function">post</span>&lt;T&gt;(url: <span class="keyword">string</span>, data?: <span class="keyword">any</span>, config?: RequestOptions): Promise&lt;T&gt; {
+    <span class="keyword">return this</span>.instance.post(url, data, config);
+  }
+
+  <span class="keyword">async</span> <span class="function">put</span>&lt;T&gt;(url: <span class="keyword">string</span>, data?: <span class="keyword">any</span>, config?: RequestOptions): Promise&lt;T&gt; {
+    <span class="keyword">return this</span>.instance.put(url, data, config);
+  }
+
+  <span class="keyword">async</span> <span class="function">delete</span>&lt;T&gt;(url: <span class="keyword">string</span>, config?: RequestOptions): Promise&lt;T&gt; {
+    <span class="keyword">return this</span>.instance.delete(url, config);
+  }
+}
+
+<span class="comment">// 导出实例</span>
+<span class="keyword">export const</span> http = <span class="keyword">new</span> HttpClient(<span class="string">'/api'</span>);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> API 模块组织</h2>
+      <div class="code-block"><span class="comment">// src/api/types/user.ts</span>
+<span class="keyword">export interface</span> User {
+  id: <span class="keyword">number</span>;
+  name: <span class="keyword">string</span>;
+  email: <span class="keyword">string</span>;
+  avatar?: <span class="keyword">string</span>;
+  createdAt: <span class="keyword">string</span>;
+}
+
+<span class="keyword">export interface</span> LoginParams {
+  email: <span class="keyword">string</span>;
+  password: <span class="keyword">string</span>;
+}
+
+<span class="keyword">export interface</span> LoginResult {
+  token: <span class="keyword">string</span>;
+  user: User;
+}
+
+<span class="keyword">export interface</span> UserQueryParams {
+  page?: <span class="keyword">number</span>;
+  pageSize?: <span class="keyword">number</span>;
+  name?: <span class="keyword">string</span>;
+}</div>
+
+      <div class="code-block"><span class="comment">// src/api/user.ts</span>
+<span class="keyword">import</span> { http } <span class="keyword">from</span> <span class="string">'@/utils/http'</span>;
+<span class="keyword">import type</span> { User, LoginParams, LoginResult, UserQueryParams, PageResponse } <span class="keyword">from</span> <span class="string">'./types/user'</span>;
+
+<span class="keyword">export const</span> userApi = {
+  <span class="comment">// 用户登录</span>
+  <span class="function">login</span>(params: LoginParams) {
+    <span class="keyword">return</span> http.post&lt;LoginResult&gt;(<span class="string">'/auth/login'</span>, params);
+  },
+
+  <span class="comment">// 获取当前用户信息</span>
+  <span class="function">getCurrentUser</span>() {
+    <span class="keyword">return</span> http.get&lt;User&gt;(<span class="string">'/user/current'</span>);
+  },
+
+  <span class="comment">// 获取用户列表</span>
+  <span class="function">getUsers</span>(params?: UserQueryParams) {
+    <span class="keyword">return</span> http.get&lt;PageResponse&lt;User&gt;&gt;(<span class="string">'/users'</span>, { params });
+  },
+
+  <span class="comment">// 获取单个用户</span>
+  <span class="function">getUser</span>(id: <span class="keyword">number</span>) {
+    <span class="keyword">return</span> http.get&lt;User&gt;(<span class="string">`/users/${id}`</span>);
+  },
+
+  <span class="comment">// 创建用户</span>
+  <span class="function">createUser</span>(data: Partial&lt;User&gt;) {
+    <span class="keyword">return</span> http.post&lt;User&gt;(<span class="string">'/users'</span>, data);
+  },
+
+  <span class="comment">// 更新用户</span>
+  <span class="function">updateUser</span>(id: <span class="keyword">number</span>, data: Partial&lt;User&gt;) {
+    <span class="keyword">return</span> http.put&lt;User&gt;(<span class="string">`/users/${id}`</span>, data);
+  },
+
+  <span class="comment">// 删除用户</span>
+  <span class="function">deleteUser</span>(id: <span class="keyword">number</span>) {
+    <span class="keyword">return</span> http.delete&lt;void&gt;(<span class="string">`/users/${id}`</span>);
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> API 统一导出</h2>
+      <div class="code-block"><span class="comment">// src/api/index.ts</span>
+<span class="keyword">export</span> { userApi } <span class="keyword">from</span> <span class="string">'./user'</span>;
+<span class="keyword">export</span> { authApi } <span class="keyword">from</span> <span class="string">'./auth'</span>;
+<span class="keyword">export</span> { productApi } <span class="keyword">from</span> <span class="string">'./product'</span>;
+<span class="keyword">export</span> { orderApi } <span class="keyword">from</span> <span class="string">'./order'</span>;
+
+<span class="comment">// 在组件中使用</span>
+<span class="keyword">import</span> { userApi } <span class="keyword">from</span> <span class="string">'@/api'</span>;
+
+<span class="keyword">const</span> users = <span class="keyword">await</span> userApi.getUsers({ page: <span class="number">1</span>, pageSize: <span class="number">10</span> });</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> React Hooks 封装</h2>
+      <div class="code-block"><span class="comment">// src/hooks/useRequest.ts</span>
+<span class="keyword">import</span> { useState, useCallback } <span class="keyword">from</span> <span class="string">'react'</span>;
+
+<span class="keyword">interface</span> RequestState&lt;T&gt; {
+  data: T | <span class="keyword">null</span>;
+  loading: <span class="keyword">boolean</span>;
+  error: Error | <span class="keyword">null</span>;
+}
+
+<span class="keyword">export function</span> <span class="function">useRequest</span>&lt;T, P = <span class="keyword">void</span>&gt;(
+  requestFn: (params: P) => Promise&lt;T&gt;
+) {
+  <span class="keyword">const</span> [state, setState] = useState&lt;RequestState&lt;T&gt;&gt;({
+    data: <span class="keyword">null</span>,
+    loading: <span class="keyword">false</span>,
+    error: <span class="keyword">null</span>
+  });
+
+  <span class="keyword">const</span> execute = useCallback(<span class="keyword">async</span> (params: P) => {
+    setState({ data: <span class="keyword">null</span>, loading: <span class="keyword">true</span>, error: <span class="keyword">null</span> });
+
+    <span class="keyword">try</span> {
+      <span class="keyword">const</span> data = <span class="keyword">await</span> requestFn(params);
+      setState({ data, loading: <span class="keyword">false</span>, error: <span class="keyword">null</span> });
+      <span class="keyword">return</span> data;
+    } <span class="keyword">catch</span> (error) {
+      setState({ data: <span class="keyword">null</span>, loading: <span class="keyword">false</span>, error: error <span class="keyword">as</span> Error });
+      <span class="keyword">throw</span> error;
+    }
+  }, [requestFn]);
+
+  <span class="keyword">return</span> { ...state, execute };
+}
+
+<span class="comment">// 使用示例</span>
+<span class="keyword">function</span> <span class="function">UserList</span>() {
+  <span class="keyword">const</span> { data: users, loading, error, execute } = useRequest(
+    userApi.getUsers
+  );
+
+  useEffect(() => {
+    execute({ page: <span class="number">1</span>, pageSize: <span class="number">10</span> });
+  }, []);
+
+  <span class="keyword">if</span> (loading) <span class="keyword">return</span> &lt;div&gt;Loading...&lt;/div&gt;;
+  <span class="keyword">if</span> (error) <span class="keyword">return</span> &lt;div&gt;Error: {error.message}&lt;/div&gt;;
+
+  <span class="keyword">return</span> (
+    &lt;ul&gt;
+      {users?.list.map(user =&gt; (
+        &lt;li key={user.id}&gt;{user.name}&lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Vue Composables 封装</h2>
+      <div class="code-block"><span class="comment">// src/composables/useRequest.ts</span>
+<span class="keyword">import</span> { ref, Ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">interface</span> RequestResult&lt;T&gt; {
+  data: Ref&lt;T | <span class="keyword">null</span>&gt;;
+  loading: Ref&lt;<span class="keyword">boolean</span>&gt;;
+  error: Ref&lt;Error | <span class="keyword">null</span>&gt;;
+  execute: () => Promise&lt;T | <span class="keyword">null</span>&gt;;
+}
+
+<span class="keyword">export function</span> <span class="function">useRequest</span>&lt;T&gt;(
+  requestFn: () => Promise&lt;T&gt;,
+  immediate = <span class="keyword">false</span>
+): RequestResult&lt;T&gt; {
+  <span class="keyword">const</span> data = ref&lt;T | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>) <span class="keyword">as</span> Ref&lt;T | <span class="keyword">null</span>&gt;;
+  <span class="keyword">const</span> loading = ref(<span class="keyword">false</span>);
+  <span class="keyword">const</span> error = ref&lt;Error | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+  <span class="keyword">const</span> execute = <span class="keyword">async</span> () => {
+    loading.value = <span class="keyword">true</span>;
+    error.value = <span class="keyword">null</span>;
+
+    <span class="keyword">try</span> {
+      data.value = <span class="keyword">await</span> requestFn();
+      <span class="keyword">return</span> data.value;
+    } <span class="keyword">catch</span> (e) {
+      error.value = e <span class="keyword">as</span> Error;
+      <span class="keyword">return</span> <span class="keyword">null</span>;
+    } <span class="keyword">finally</span> {
+      loading.value = <span class="keyword">false</span>;
+    }
+  };
+
+  <span class="keyword">if</span> (immediate) {
+    execute();
+  }
+
+  <span class="keyword">return</span> { data, loading, error, execute };
+}
+
+<span class="comment">// 使用示例</span>
+<span class="keyword">const</span> { data: users, loading, execute } = useRequest(
+  () => userApi.getUsers({ page: <span class="number">1</span> }),
+  <span class="keyword">true</span> <span class="comment">// 立即执行</span>
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>封装 HTTP 客户端便于统一管理和维护</li>
+        <li>使用 TypeScript 类型确保 API 调用的类型安全</li>
+        <li>按模块组织 API，提高代码可维护性</li>
+        <li>配合 Hooks/Composables 实现状态管理</li>
+        <li>统一的错误处理和响应转换简化业务代码</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="80-5-拦截器.html">← 上一节：拦截器</a>
+      <a href="../chapter81/81-1-Vue3简介.html">下一章：Vue.js 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

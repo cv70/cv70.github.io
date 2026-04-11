@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>59.6 Apollo Server 基础 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="59-1-GraphQL简介.html">第59章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>59.6 Apollo Server 基础</h1>
+      <p class="subtitle">构建生产级 GraphQL 服务器</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Apollo Server 简介</h2>
+      <p>Apollo Server 是一个开源的、符合规范的 GraphQL 服务器，支持多种 Node.js 框架。它提供了丰富的功能，包括 TypeScript 支持、Apollo Studio 集成、订阅支持等。</p>
+
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem;">🚀</div>
+          <h3>易用</h3>
+          <p class="card-text">简单配置即可启动</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem;">📘</div>
+          <h3>TypeScript</h3>
+          <p class="card-text">完整的类型支持</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem;">🔌</div>
+          <h3>可扩展</h3>
+          <p class="card-text">丰富的插件系统</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem;">📊</div>
+          <h3>监控</h3>
+          <p class="card-text">Apollo Studio 集成</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 快速开始</h2>
+
+      <h3>安装依赖</h3>
+      <div class="code-block">
+<span class="comment"># 安装 Apollo Server 和 GraphQL</span>
+npm install @apollo/server graphql
+      </div>
+
+      <h3>基本服务器</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApolloServer } <span class="keyword">from</span> <span class="string">'@apollo/server'</span>;
+<span class="keyword">import</span> { startStandaloneServer } <span class="keyword">from</span> <span class="string">'@apollo/server/standalone'</span>;
+
+<span class="comment">// 定义 Schema</span>
+<span class="keyword">const</span> typeDefs = <span class="string">`#graphql
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+  }
+
+  type Query {
+    users: [User!]!
+    user(id: ID!): User
+  }
+
+  type Mutation {
+    createUser(name: String!, email: String!): User!
+  }
+`</span>;
+
+<span class="comment">// 模拟数据</span>
+<span class="keyword">const</span> users: <span class="keyword">any</span>[] = [
+  { id: <span class="string">'1'</span>, name: <span class="string">'张三'</span>, email: <span class="string">'zhangsan@example.com'</span> },
+  { id: <span class="string">'2'</span>, name: <span class="string">'李四'</span>, email: <span class="string">'lisi@example.com'</span> },
+];
+
+<span class="comment">// 定义 Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    users: () => users,
+    user: (_: <span class="keyword">any</span>, { id }: { id: <span class="keyword">string</span> }) => users.find(u => u.id === id),
+  },
+  Mutation: {
+    createUser: (_: <span class="keyword">any</span>, { name, email }: { name: <span class="keyword">string</span>; email: <span class="keyword">string</span> }) => {
+      <span class="keyword">const</span> user = { id: String(users.length + <span class="number">1</span>), name, email };
+      users.push(user);
+      <span class="keyword">return</span> user;
+    },
+  },
+};
+
+<span class="comment">// 创建服务器</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+});
+
+<span class="comment">// 启动服务器</span>
+<span class="keyword">const</span> { url } = <span class="keyword">await</span> startStandaloneServer(server, {
+  listen: { port: <span class="number">4000</span> },
+});
+
+console.log(<span class="string">`Server ready at: </span>${url}<span class="string">`</span>);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> Schema 定义方式</h2>
+
+      <h3>1. 字符串定义</h3>
+      <div class="code-block">
+<span class="keyword">const</span> typeDefs = <span class="string">`#graphql
+  type User {
+    id: ID!
+    name: String!
+  }
+
+  type Query {
+    users: [User!]!
+  }
+`</span>;
+      </div>
+
+      <h3>2. 使用 gql 标签</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { gql } <span class="keyword">from</span> <span class="string">'graphql-tag'</span>;
+
+<span class="keyword">const</span> typeDefs = gql<span class="string">`
+  type User {
+    id: ID!
+    name: String!
+  }
+
+  type Query {
+    users: [User!]!
+  }
+`</span>;
+      </div>
+
+      <h3>3. 模块化 Schema</h3>
+      <div class="code-block">
+<span class="comment">// user.schema.ts</span>
+<span class="keyword">export const</span> userTypeDefs = <span class="string">`#graphql
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+  }
+
+  extend type Query {
+    users: [User!]!
+    user(id: ID!): User
+  }
+
+  extend type Mutation {
+    createUser(name: String!, email: String!): User!
+  }
+`</span>;
+
+<span class="comment">// post.schema.ts</span>
+<span class="keyword">export const</span> postTypeDefs = <span class="string">`#graphql
+  type Post {
+    id: ID!
+    title: String!
+    content: String!
+    author: User!
+  }
+
+  extend type Query {
+    posts: [Post!]!
+  }
+`</span>;
+
+<span class="comment">// 合并 Schema</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs: [userTypeDefs, postTypeDefs],
+  resolvers,
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Resolvers</h2>
+
+      <p>Resolver 是处理每个字段的函数，返回对应的数据。</p>
+
+      <div class="code-block">
+<span class="comment">// Resolver 结构</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    <span class="comment">// fieldName: (parent, args, context, info) => result</span>
+    users: <span class="keyword">async</span> (_parent, _args, context) => {
+      <span class="keyword">return</span> context.dataSources.userApi.getAll();
+    },
+    user: <span class="keyword">async</span> (_parent, { id }, context) => {
+      <span class="keyword">return</span> context.dataSources.userApi.getById(id);
+    },
+  },
+  Mutation: {
+    createUser: <span class="keyword">async</span> (_parent, { name, email }, context) => {
+      <span class="keyword">return</span> context.dataSources.userApi.create({ name, email });
+    },
+  },
+  User: {
+    <span class="comment">// 关联字段 resolver</span>
+    posts: <span class="keyword">async</span> (user, _args, context) => {
+      <span class="keyword">return</span> context.dataSources.postApi.getByUserId(user.id);
+    },
+  },
+};
+      </div>
+
+      <h3>Resolver 参数</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>参数</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>parent</code></td>
+            <td>父级字段的返回值</td>
+          </tr>
+          <tr>
+            <td><code>args</code></td>
+            <td>查询参数</td>
+          </tr>
+          <tr>
+            <td><code>context</code></td>
+            <td>所有 resolver 共享的上下文</td>
+          </tr>
+          <tr>
+            <td><code>info</code></td>
+            <td>查询的执行状态信息</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Context 配置</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { startStandaloneServer } <span class="keyword">from</span> <span class="string">'@apollo/server/standalone'</span>;
+
+<span class="keyword">interface</span> Context {
+  user?: { id: <span class="keyword">string</span>; role: <span class="keyword">string</span> };
+  dataSources: {
+    userApi: UserAPI;
+    postApi: PostAPI;
+  };
+}
+
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer<Context>({ typeDefs, resolvers });
+
+<span class="keyword">const</span> { url } = <span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> ({ req }) => {
+    <span class="comment">// 获取认证信息</span>
+    <span class="keyword">const</span> token = req.headers.authorization || <span class="string">''</span>;
+    <span class="keyword">const</span> user = <span class="keyword">await</span> getUserFromToken(token);
+
+    <span class="comment">// 返回 context</span>
+    <span class="keyword">return</span> {
+      user,
+      dataSources: {
+        userApi: <span class="keyword">new</span> UserAPI(),
+        postApi: <span class="keyword">new</span> PostAPI(),
+      },
+    };
+  },
+  listen: { port: <span class="number">4000</span> },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 与 Express 集成</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> express <span class="keyword">from</span> <span class="string">'express'</span>;
+<span class="keyword">import</span> { ApolloServer } <span class="keyword">from</span> <span class="string">'@apollo/server'</span>;
+<span class="keyword">import</span> { expressMiddleware } <span class="keyword">from</span> <span class="string">'@apollo/server/express4'</span>;
+<span class="keyword">import</span> cors <span class="keyword">from</span> <span class="string">'cors'</span>;
+<span class="keyword">import</span> bodyParser <span class="keyword">from</span> <span class="string">'body-parser'</span>;
+
+<span class="keyword">const</span> app = express();
+
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+});
+
+<span class="keyword">await</span> server.start();
+
+app.use(
+  <span class="string">'/graphql'</span>,
+  cors(),
+  bodyParser.json(),
+  expressMiddleware(server, {
+    context: <span class="keyword">async</span> ({ req }) => ({
+      token: req.headers.authorization,
+    }),
+  })
+);
+
+app.listen(<span class="number">4000</span>, () => {
+  console.log(<span class="string">'Server running on http://localhost:4000/graphql'</span>);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Data Sources</h2>
+
+      <p>Data Sources 是 Apollo Server 提供的数据获取抽象层，可以封装 REST API、数据库等数据源。</p>
+
+      <div class="code-block">
+<span class="keyword">import</span> { RESTDataSource } <span class="keyword">from</span> <span class="string">'@apollo/datasource-rest'</span>;
+
+<span class="keyword">class</span> <span class="function">UserAPI</span> <span class="keyword">extends</span> RESTDataSource {
+  <span class="keyword">constructor</span>() {
+    <span class="keyword">super</span>();
+    <span class="keyword">this</span>.baseURL = <span class="string">'https://api.example.com/users/'</span>;
+  }
+
+  <span class="keyword">async</span> <span class="function">getAllUsers</span>() {
+    <span class="keyword">return this</span>.get(<span class="string">''</span>);
+  }
+
+  <span class="keyword">async</span> <span class="function">getUser</span>(id: <span class="keyword">string</span>) {
+    <span class="keyword">return this</span>.get(<span class="string">`/</span>${id}<span class="string">`</span>);
+  }
+
+  <span class="keyword">async</span> <span class="function">createUser</span>(user: <span class="keyword">any</span>) {
+    <span class="keyword">return this</span>.post(<span class="string">''</span>, { body: user });
+  }
+}
+
+<span class="comment">// 在 Context 中使用</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+});
+
+<span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> () => ({
+    dataSources: {
+      userApi: <span class="keyword">new</span> UserAPI(),
+    },
+  }),
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 订阅支持</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { ApolloServer } <span class="keyword">from</span> <span class="string">'@apollo/server'</span>;
+<span class="keyword">import</span> { makeExecutableSchema } <span class="keyword">from</span> <span class="string">'@graphql-tools/schema'</span>;
+<span class="keyword">import</span> { WebSocketServer } <span class="keyword">from</span> <span class="string">'ws'</span>;
+<span class="keyword">import</span> { useServer } <span class="keyword">from</span> <span class="string">'graphql-ws/lib/use/server'</span>;
+<span class="keyword">import</span> { PubSub } <span class="keyword">from</span> <span class="string">'graphql-subscriptions'</span>;
+
+<span class="keyword">const</span> pubsub = <span class="keyword">new</span> PubSub();
+
+<span class="keyword">const</span> typeDefs = <span class="string">`#graphql
+  type Subscription {
+    userCreated: User!
+    messageReceived(roomId: ID!): Message!
+  }
+`</span>;
+
+<span class="keyword">const</span> resolvers = {
+  Subscription: {
+    userCreated: {
+      subscribe: () => pubsub.asyncIterator([<span class="string">'USER_CREATED'</span>]),
+    },
+  },
+  Mutation: {
+    createUser: <span class="keyword">async</span> (_parent, { name, email }) => {
+      <span class="keyword">const</span> user = { id: <span class="string">'1'</span>, name, email };
+      pubsub.publish(<span class="string">'USER_CREATED'</span>, { userCreated: user });
+      <span class="keyword">return</span> user;
+    },
+  },
+};
+
+<span class="comment">// 创建 WebSocket 服务器</span>
+<span class="keyword">const</span> wsServer = <span class="keyword">new</span> WebSocketServer({
+  port: <span class="number">4001</span>,
+});
+
+<span class="keyword">const</span> schema = makeExecutableSchema({ typeDefs, resolvers });
+useServer({ schema }, wsServer);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> Apollo Studio 集成</h2>
+
+      <div class="code-block">
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+  <span class="comment">// 启用 Apollo Studio</span>
+  introspection: <span class="keyword">true</span>,  <span class="comment">// 生产环境可关闭</span>
+});
+
+<span class="comment">// 环境变量配置</span>
+<span class="comment">// APOLLO_KEY=your-apollo-key</span>
+<span class="comment">// APOLLO_GRAPH_REF=your-graph@current</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Apollo Server 是功能完善的 GraphQL 服务器</li>
+        <li>支持字符串、gql 标签定义 Schema</li>
+        <li>Resolver 处理每个字段的请求</li>
+        <li>Context 提供共享上下文和认证</li>
+        <li>Data Sources 封装数据源获取</li>
+        <li>Subscription 支持 WebSocket 实时通信</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="59-5-Mutation变更.html">← 上一节：Mutation 变更</a>
+      <a href="../chapter60/60-1-类型系统.html">下一章：类型系统 →</a>
+    </div>
+  </div>
+</body>
+</html>

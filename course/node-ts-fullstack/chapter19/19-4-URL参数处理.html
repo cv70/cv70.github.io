@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.4 URL 参数处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="19-1-URL解析.html">第十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>19.4 URL 参数处理</h1>
+      <p class="subtitle">处理路径参数和查询参数</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握路径参数提取</li>
+        <li>学会参数验证</li>
+        <li>理解参数编码安全</li>
+        <li>掌握参数处理最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 路径参数提取</h2>
+      <div class="code-block">
+// 路径参数模式匹配
+class PathMatcher {
+  constructor(pattern) {
+    this.pattern = pattern;
+    this.paramNames = [];
+
+    // 将 :param 转换为正则
+    const regexStr = pattern.replace(/:(\w+)/g, (_, name) => {
+      this.paramNames.push(name);
+      return '([^/]+)';
+    });
+
+    this.regex = new RegExp(`^${regexStr}$`);
+  }
+
+  match(pathname) {
+    const match = pathname.match(this.regex);
+
+    if (!match) return null;
+
+    const params = {};
+    this.paramNames.forEach((name, i) => {
+      params[name] = decodeURIComponent(match[i + 1]);
+    });
+
+    return params;
+  }
+}
+
+// 使用
+const userMatcher = new PathMatcher('/users/:userId/posts/:postId');
+console.log(userMatcher.match('/users/123/posts/456'));
+// { userId: '123', postId: '456' }
+
+console.log(userMatcher.match('/posts/123'));  // null
+
+// 路由器集成
+class Router {
+  constructor() {
+    this.routes = [];
+  }
+
+  get(pattern, handler) {
+    this.routes.push({
+      matcher: new PathMatcher(pattern),
+      handler
+    });
+  }
+
+  handle(req, res) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    for (const route of this.routes) {
+      const params = route.matcher.match(url.pathname);
+
+      if (params) {
+        req.params = params;
+        req.query = Object.fromEntries(url.searchParams);
+        return route.handler(req, res);
+      }
+    }
+
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 参数验证</h2>
+      <div class="code-block">
+// 参数验证工具
+const validators = {
+  required: (value, name) => {
+    if (value === undefined || value === null || value === '') {
+      throw new Error(`${name} is required`);
+    }
+    return true;
+  },
+
+  isInt: (value, name) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num)) {
+      throw new Error(`${name} must be an integer`);
+    }
+    return num;
+  },
+
+  min: (min) => (value, name) => {
+    const num = Number(value);
+    if (num < min) {
+      throw new Error(`${name} must be at least ${min}`);
+    }
+    return num;
+  },
+
+  max: (max) => (value, name) => {
+    const num = Number(value);
+    if (num > max) {
+      throw new Error(`${name} must be at most ${max}`);
+    }
+    return num;
+  },
+
+  isEmail: (value, name) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+      throw new Error(`${name} must be a valid email`);
+    }
+    return value;
+  },
+
+  isUUID: (value, name) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(value)) {
+      throw new Error(`${name} must be a valid UUID`);
+    }
+    return value;
+  }
+};
+
+// 验证函数
+function validate(value, name, ...rules) {
+  let result = value;
+  for (const rule of rules) {
+    result = rule(result, name);
+  }
+  return result;
+}
+
+// 在路由中使用
+function getUserHandler(req, res) {
+  try {
+    const userId = validate(
+      req.params.userId,
+      'userId',
+      validators.required,
+      validators.isUUID
+    );
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ userId }));
+  } catch (err) {
+    res.writeHead(400);
+    res.end(JSON.stringify({ error: err.message }));
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 参数编码安全</h2>
+      <div class="code-block">
+// 安全编码
+function safeEncodeParam(value) {
+  if (typeof value !== 'string') {
+    value = String(value);
+  }
+  return encodeURIComponent(value);
+}
+
+// 安全解码
+function safeDecodeParam(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (err) {
+    // 处理编码错误
+    console.error('解码失败:', err);
+    return value;
+  }
+}
+
+// 防止注入
+function sanitizeParam(value) {
+  if (typeof value !== 'string') return value;
+
+  // 移除危险字符
+  return value
+    .replace(/[<>]/g, '')  // 防止 XSS
+    .replace(/['"]/g, ''); // 防止 SQL 注入
+}
+
+// 在 HTTP 处理中使用
+function safeGetParam(req, name, defaultValue = null) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const value = url.searchParams.get(name);
+
+  if (value === null) return defaultValue;
+
+  return sanitizeParam(safeDecodeParam(value));
+}
+
+// 白名单验证
+function validateAgainstWhitelist(value, whitelist, name) {
+  if (!whitelist.includes(value)) {
+    throw new Error(`Invalid ${name}: must be one of ${whitelist.join(', ')}`);
+  }
+  return value;
+}
+
+// 示例：分页参数
+function parsePaginationParams(req) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '10', 10)));
+  const sort = validateAgainstWhitelist(
+    url.searchParams.get('sort') || 'created_at',
+    ['created_at', 'updated_at', 'name'],
+    'sort'
+  );
+  const order = validateAgainstWhitelist(
+    url.searchParams.get('order') || 'desc',
+    ['asc', 'desc'],
+    'order'
+  );
+
+  return { page, limit, sort, order, offset: (page - 1) * limit };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 完整示例</h2>
+      <div class="code-block">
+const http = require('http');
+
+class RequestParams {
+  constructor(req) {
+    this.url = new URL(req.url, `http://${req.headers.host}`);
+    this.pathname = this.url.pathname;
+    this.query = Object.fromEntries(this.url.searchParams);
+    this.params = {};
+  }
+
+  // 获取查询参数
+  get(name, defaultValue = null) {
+    const value = this.url.searchParams.get(name);
+    return value !== null ? value : defaultValue;
+  }
+
+  // 获取整数参数
+  getInt(name, defaultValue = 0) {
+    const value = this.get(name);
+    const num = parseInt(value, 10);
+    return isNaN(num) ? defaultValue : num;
+  }
+
+  // 获取布尔参数
+  getBool(name, defaultValue = false) {
+    const value = this.get(name);
+    if (value === null) return defaultValue;
+    return ['true', '1', 'yes'].includes(value.toLowerCase());
+  }
+
+  // 获取数组参数
+  getArray(name) {
+    return this.url.searchParams.getAll(name);
+  }
+
+  // 设置路径参数
+  setParams(params) {
+    this.params = params;
+  }
+
+  // 验证
+  validate(schema) {
+    const errors = [];
+    const validated = {};
+
+    for (const [name, rules] of Object.entries(schema)) {
+      const value = this.query[name];
+
+      for (const rule of rules) {
+        try {
+          validated[name] = rule(value, name);
+        } catch (err) {
+          errors.push(err.message);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(errors.join('; '));
+    }
+
+    return validated;
+  }
+}
+
+// 使用
+const server = http.createServer((req, res) => {
+  const params = new RequestParams(req);
+
+  console.log('路径:', params.pathname);
+  console.log('查询:', params.query);
+  console.log('分页:', {
+    page: params.getInt('page', 1),
+    limit: params.getInt('limit', 10)
+  });
+  console.log('标签:', params.getArray('tag'));
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ query: params.query }));
+});
+
+server.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用正则提取路径参数</li>
+            <li>• 始终验证和清理用户输入</li>
+            <li>• 处理编码和解码错误</li>
+            <li>• 使用白名单限制参数值</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="19-3-QueryString解析.html">← 上一节：Query String 解析</a>
+      <a href="../chapter20/20-1-哈希算法.html">下一章：哈希算法 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>44.4 自定义 Provider - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="44-1-Provider概念.html">第四十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>44.4 自定义 Provider</h1>
+      <p class="subtitle">灵活配置 Provider 的注册方式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Provider 注册语法</li>
+        <li>掌握 useClass、useValue、useFactory</li>
+        <li>学会使用自定义 Token</li>
+        <li>了解现有 Provider 的覆盖</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Provider 注册语法</h2>
+      <div class="code-block">
+// 简写形式
+providers: [UsersService]
+
+// 完整形式
+providers: [
+  {
+    provide: UsersService,
+    useClass: UsersService,
+  }
+]
+
+// 两者等价，provide 是 Token，useClass 是具体实现
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> useClass - 类提供者</h2>
+      <div class="code-block">
+// 接口定义
+export interface LoggerService {
+  log(message: string): void;
+}
+
+// 实现类
+@Injectable()
+class ConsoleLogger implements LoggerService {
+  log(message: string) {
+    console.log(message);
+  }
+}
+
+@Injectable()
+class FileLogger implements LoggerService {
+  log(message: string) {
+    // 写入文件
+  }
+}
+
+// 注册时选择实现
+@Module({
+  providers: [
+    {
+      provide: LoggerService,
+      useClass: process.env.NODE_ENV === 'production'
+        ? FileLogger
+        : ConsoleLogger,
+    },
+  ],
+})
+export class AppModule {}
+
+// 注入时使用接口类型
+@Injectable()
+export class UsersService {
+  constructor(private readonly logger: LoggerService) {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> useValue - 值提供者</h2>
+      <div class="code-block">
+// 注入常量值
+@Module({
+  providers: [
+    {
+      provide: 'DATABASE_URL',
+      useValue: 'postgresql://localhost:5432/mydb',
+    },
+    {
+      provide: 'CONFIG',
+      useValue: {
+        apiUrl: 'https://api.example.com',
+        timeout: 5000,
+      },
+    },
+  ],
+})
+export class AppModule {}
+
+// 注入使用
+@Injectable()
+export class UsersService {
+  constructor(
+    @Inject('DATABASE_URL') private readonly dbUrl: string,
+    @Inject('CONFIG') private readonly config: any,
+  ) {
+    console.log(dbUrl);     // postgresql://localhost:5432/mydb
+    console.log(config.timeout);  // 5000
+  }
+}
+
+// Mock 服务（测试用）
+providers: [
+  {
+    provide: UsersService,
+    useValue: {
+      findAll: jest.fn().mockReturnValue([{ id: 1, name: 'Mock' }]),
+    },
+  },
+]
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">字符串 Token</div>
+          <p>使用字符串作为 Token 时，需要用 @Inject() 装饰器显式注入。建议使用 Symbol 或强类型常量避免冲突。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏭</span> useFactory - 工厂提供者</h2>
+      <div class="code-block">
+// 动态创建 Provider
+@Module({
+  providers: [
+    {
+      provide: 'DATABASE_CONNECTION',
+      useFactory: async (configService: ConfigService) => {
+        const connection = await createConnection({
+          host: configService.get('DB_HOST'),
+          port: configService.get('DB_PORT'),
+        });
+        return connection;
+      },
+      inject: [ConfigService],  // 注入依赖
+    },
+  ],
+})
+export class AppModule {}
+
+// 复杂工厂示例
+providers: [
+  {
+    provide: 'API_SERVICE',
+    useFactory: (
+      configService: ConfigService,
+      logger: LoggerService,
+      cacheService: CacheService,
+    ) => {
+      const apiKey = configService.get('API_KEY');
+      logger.log(`Creating API service with key: ${apiKey}`);
+      return new ApiService(apiKey, cacheService);
+    },
+    inject: [ConfigService, LoggerService, CacheService],
+  },
+]
+
+// 异步工厂
+providers: [
+  {
+    provide: 'ASYNC_DATA',
+    useFactory: async () => {
+      const data = await fetchDataFromRemote();
+      return data;
+    },
+  },
+]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> useExisting - 别名提供者</h2>
+      <div class="code-block">
+@Module({
+  providers: [
+    ConsoleLogger,
+    {
+      provide: LoggerService,  // 别名
+      useExisting: ConsoleLogger,
+    },
+    {
+      provide: 'Logger',       // 字符串别名
+      useExisting: ConsoleLogger,
+    },
+  ],
+})
+export class AppModule {}
+
+// 注入使用
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly logger: ConsoleLogger,  // 原类型
+    private readonly loggerService: LoggerService,  // 别名
+    @Inject('Logger') private readonly aliasLogger: LoggerService,  // 都是同一个实例
+  ) {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• useClass 注册类实现</li>
+            <li>• useValue 注册常量值</li>
+            <li>• useFactory 动态创建 Provider</li>
+            <li>• useExisting 创建别名</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="44-3-依赖注入.html">← 上一节：依赖注入</a>
+      <a href="44-5-可选注入.html">下一节：可选注入 →</a>
+    </div>
+  </div>
+</body>
+</html>

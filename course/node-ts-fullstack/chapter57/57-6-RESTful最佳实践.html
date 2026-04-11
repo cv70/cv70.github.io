@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>57.6 RESTful 最佳实践 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="57-1-REST架构风格.html">第57章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>57.6 RESTful 最佳实践</h1>
+      <p class="subtitle">构建高质量 RESTful API 的实战指南</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 响应格式规范</h2>
+
+      <h3>统一响应结构</h3>
+      <p>保持 API 响应格式的一致性，方便客户端处理。</p>
+
+      <div class="code-block">
+<span class="comment">// 成功响应</span>
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"data"</span>: {
+    <span class="string">"id"</span>: <span class="number">123</span>,
+    <span class="string">"name"</span>: <span class="string">"张三"</span>
+  },
+  <span class="string">"message"</span>: <span class="string">"操作成功"</span>
+}
+
+<span class="comment">// 列表响应</span>
+{
+  <span class="string">"success"</span>: <span class="keyword">true</span>,
+  <span class="string">"data"</span>: [...],
+  <span class="string">"meta"</span>: {
+    <span class="string">"total"</span>: <span class="number">100</span>,
+    <span class="string">"page"</span>: <span class="number">1</span>,
+    <span class="string">"pageSize"</span>: <span class="number">10</span>,
+    <span class="string">"totalPages"</span>: <span class="number">10</span>
+  }
+}
+
+<span class="comment">// 错误响应</span>
+{
+  <span class="string">"success"</span>: <span class="keyword">false</span>,
+  <span class="string">"error"</span>: {
+    <span class="string">"code"</span>: <span class="string">"VALIDATION_ERROR"</span>,
+    <span class="string">"message"</span>: <span class="string">"参数验证失败"</span>,
+    <span class="string">"details"</span>: [
+      {
+        <span class="string">"field"</span>: <span class="string">"email"</span>,
+        <span class="string">"message"</span>: <span class="string">"邮箱格式不正确"</span>
+      }
+    ]
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 分页设计</h2>
+
+      <h3>分页参数</h3>
+      <div class="code-block">
+<span class="comment">// Offset 分页</span>
+GET /users?page=1&pageSize=10
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: [...],
+  <span class="string">"pagination"</span>: {
+    <span class="string">"total"</span>: <span class="number">1000</span>,
+    <span class="string">"page"</span>: <span class="number">1</span>,
+    <span class="string">"pageSize"</span>: <span class="number">10</span>,
+    <span class="string">"totalPages"</span>: <span class="number">100</span>
+  }
+}
+
+<span class="comment">// Cursor 分页（大数据量推荐）</span>
+GET /users?cursor=eyJpZCI6MTAwfQ&limit=10
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: [...],
+  <span class="string">"pagination"</span>: {
+    <span class="string">"nextCursor"</span>: <span class="string">"eyJpZCI6MTEwfQ"</span>,
+    <span class="string">"previousCursor"</span>: <span class="keyword">null</span>,
+    <span class="string">"hasMore"</span>: <span class="keyword">true</span>
+  }
+}
+      </div>
+
+      <h3>NestJS 分页实现</h3>
+      <div class="code-block">
+<span class="keyword">interface</span> PaginationParams {
+  page?: <span class="keyword">number</span>;
+  pageSize?: <span class="keyword">number</span>;
+}
+
+<span class="keyword">interface</span> PaginatedResult<T> {
+  data: T[];
+  total: <span class="keyword">number</span>;
+  page: <span class="keyword">number</span>;
+  pageSize: <span class="keyword">number</span>;
+  totalPages: <span class="keyword">number</span>;
+}
+
+<span class="keyword">@Controller</span>(<span class="string">'users'</span>)
+<span class="keyword">export class</span> <span class="function">UserController</span> {
+  <span class="keyword">constructor</span>(<span class="keyword">private readonly</span> userService: UserService) {}
+
+  @Get()
+  <span class="keyword">async</span> <span class="function">findAll</span>(
+    @Query(<span class="string">'page'</span>) page = <span class="number">1</span>,
+    @Query(<span class="string">'pageSize'</span>) pageSize = <span class="number">10</span>,
+  ): Promise<PaginatedResult<User>> {
+    <span class="keyword">return this</span>.userService.findPaginated({ page, pageSize });
+  }
+}
+
+<span class="comment">// Service 实现</span>
+<span class="keyword">@Injectable</span>()
+<span class="keyword">export class</span> <span class="function">UserService</span> {
+  <span class="keyword">constructor</span>(@InjectRepository(User) <span class="keyword">private</span> userRepo: Repository<User>) {}
+
+  <span class="keyword">async</span> <span class="function">findPaginated</span>({ page, pageSize }: PaginationParams): Promise<PaginatedResult<User>> {
+    <span class="keyword">const</span> [data, total] = <span class="keyword">await this</span>.userRepo.findAndCount({
+      skip: (page - <span class="number">1</span>) * pageSize,
+      take: pageSize,
+      order: { createdAt: <span class="string">'DESC'</span> },
+    });
+
+    <span class="keyword">return</span> {
+      data,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 过滤、排序与字段选择</h2>
+
+      <div class="code-block">
+<span class="comment">// 过滤</span>
+GET /users?status=active&role=admin
+GET /users?createdAt[gte]=2024-01-01&createdAt[lte]=2024-12-31
+
+<span class="comment">// 排序</span>
+GET /users?sort=-createdAt,name  <span class="comment">// - 表示降序</span>
+GET /users?sort=createdAt:desc,name:asc
+
+<span class="comment">// 字段选择</span>
+GET /users?fields=id,name,email
+
+<span class="comment">// 搜索</span>
+GET /users?search=张三
+GET /users?q=张三&fields=name,email
+      </div>
+
+      <h3>查询参数解析实现</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { Transform } <span class="keyword">from</span> <span class="string">'class-transformer'</span>;
+
+<span class="keyword">export class</span> UserQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: <span class="keyword">string</span>;
+
+  @IsOptional()
+  @Transform(({ value }) => value?.split(<span class="string">','</span>))
+  @IsArray()
+  @IsString({ each: <span class="keyword">true</span> })
+  fields?: <span class="keyword">string</span>[];
+
+  @IsOptional()
+  @IsString()
+  sort?: <span class="keyword">string</span>;
+
+  @IsOptional()
+  @IsEnum([<span class="string">'active'</span>, <span class="string">'inactive'</span>])
+  status?: <span class="keyword">string</span>;
+}
+
+<span class="keyword">@Controller</span>(<span class="string">'users'</span>)
+<span class="keyword">export class</span> <span class="function">UserController</span> {
+  @Get()
+  <span class="keyword">async</span> <span class="function">findAll</span>(@Query() query: UserQueryDto) {
+    <span class="keyword">const</span> { search, fields, sort, status } = query;
+    <span class="keyword">return this</span>.userService.findAll({ search, fields, sort, status });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> HATEOAS 实现</h2>
+      <p>HATEOAS（Hypermedia as the Engine of Application State）让 API 更加自描述。</p>
+
+      <div class="code-block">
+<span class="comment">// 带链接的响应</span>
+{
+  <span class="string">"id"</span>: <span class="number">123</span>,
+  <span class="string">"name"</span>: <span class="string">"张三"</span>,
+  <span class="string">"email"</span>: <span class="string">"zhangsan@example.com"</span>,
+  <span class="string">"_links"</span>: {
+    <span class="string">"self"</span>: {
+      <span class="string">"href"</span>: <span class="string">"/api/v1/users/123"</span>,
+      <span class="string">"method"</span>: <span class="string">"GET"</span>
+    },
+    <span class="string">"update"</span>: {
+      <span class="string">"href"</span>: <span class="string">"/api/v1/users/123"</span>,
+      <span class="string">"method"</span>: <span class="string">"PUT"</span>
+    },
+    <span class="string">"delete"</span>: {
+      <span class="string">"href"</span>: <span class="string">"/api/v1/users/123"</span>,
+      <span class="string">"method"</span>: <span class="string">"DELETE"</span>
+    },
+    <span class="string">"orders"</span>: {
+      <span class="string">"href"</span>: <span class="string">"/api/v1/users/123/orders"</span>,
+      <span class="string">"method"</span>: <span class="string">"GET"</span>
+    }
+  }
+}
+
+<span class="comment">// 列表响应中的链接</span>
+{
+  <span class="string">"data"</span>: [...],
+  <span class="string">"_links"</span>: {
+    <span class="string">"self"</span>: { <span class="string">"href"</span>: <span class="string">"/api/v1/users?page=1"</span> },
+    <span class="string">"next"</span>: { <span class="string">"href"</span>: <span class="string">"/api/v1/users?page=2"</span> },
+    <span class="string">"prev"</span>: <span class="keyword">null</span>,
+    <span class="string">"first"</span>: { <span class="string">"href"</span>: <span class="string">"/api/v1/users?page=1"</span> },
+    <span class="string">"last"</span>: { <span class="string">"href"</span>: <span class="string">"/api/v1/users?page=10"</span> }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">压缩响应</h3>
+          <div class="code-block">
+<span class="comment">// main.ts</span>
+<span class="keyword">import</span> compression <span class="keyword">from</span> <span class="string">'compression'</span>;
+
+app.use(compression());
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">缓存控制</h3>
+          <div class="code-block">
+<span class="comment">// 控制器中设置缓存头</span>
+@Get()
+@Header(<span class="string">'Cache-Control'</span>, <span class="string">'max-age=3600'</span>)
+<span class="function">findAll</span>() {
+  <span class="keyword">return this</span>.userService.findAll();
+}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">条件请求</h3>
+          <div class="code-block">
+<span class="comment">// ETag 实现</span>
+@Get(<span class="string">':id'</span>)
+<span class="keyword">async</span> <span class="function">findOne</span>(
+  @Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>,
+  @Headers(<span class="string">'if-none-match'</span>) ifNoneMatch: <span class="keyword">string</span>,
+) {
+  <span class="keyword">const</span> user = <span class="keyword">await this</span>.userService.findOne(+id);
+  <span class="keyword">const</span> etag = <span class="string">`"</span>${hash(user)}<span class="string">"`</span>;
+
+  <span class="keyword">if</span> (ifNoneMatch === etag) {
+    <span class="keyword">throw new</span> NotModifiedException();
+  }
+
+  <span class="keyword">return</span> { ...user, _etag: etag };
+}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">速率限制</h3>
+          <div class="code-block">
+<span class="comment">// 使用 @nestjs/throttler</span>
+<span class="keyword">import</span> { ThrottlerModule } <span class="keyword">from</span> <span class="string">'@nestjs/throttler'</span>;
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot([{
+      ttl: <span class="number">60000</span>,    <span class="comment">// 时间窗口</span>
+      limit: <span class="number">100</span>,     <span class="comment">// 请求数限制</span>
+    }]),
+  ],
+})
+<span class="keyword">export class</span> AppModule {}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 安全最佳实践</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>实践</th>
+            <th>说明</th>
+            <th>实现</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>HTTPS</td>
+            <td>强制使用 HTTPS</td>
+            <td>重定向 HTTP 到 HTTPS</td>
+          </tr>
+          <tr>
+            <td>CORS</td>
+            <td>配置跨域策略</td>
+            <td>白名单域名、限制方法</td>
+          </tr>
+          <tr>
+            <td>输入验证</td>
+            <td>验证所有输入参数</td>
+            <td>class-validator、DTO</td>
+          </tr>
+          <tr>
+            <td>SQL 注入防护</td>
+            <td>使用 ORM 参数化查询</td>
+            <td>TypeORM、Prisma</td>
+          </tr>
+          <tr>
+            <td>XSS 防护</td>
+            <td>转义输出、内容安全策略</td>
+            <td>helmet、sanitize</td>
+          </tr>
+          <tr>
+            <td>敏感信息</td>
+            <td>不暴露内部信息</td>
+            <td>过滤响应字段、错误消息</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+<span class="comment">// 安全配置示例</span>
+<span class="keyword">import</span> helmet <span class="keyword">from</span> <span class="string">'helmet'</span>;
+
+<span class="keyword">async function</span> <span class="function">bootstrap</span>() {
+  <span class="keyword">const</span> app = <span class="keyword">await</span> NestFactory.create(AppModule);
+
+  <span class="comment">// 安全头设置</span>
+  app.use(helmet());
+
+  <span class="comment">// CORS 配置</span>
+  app.enableCors({
+    origin: [<span class="string">'https://example.com'</span>],
+    methods: [<span class="string">'GET'</span>, <span class="string">'POST'</span>, <span class="string">'PUT'</span>, <span class="string">'DELETE'</span>],
+    credentials: <span class="keyword">true</span>,
+  });
+
+  <span class="keyword">await</span> app.listen(<span class="number">3000</span>);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> API 设计检查清单</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">URL 设计</h3>
+          <ul class="feature-list">
+            <li>使用名词复数形式</li>
+            <li>使用小写和连字符</li>
+            <li>层级不超过 3 层</li>
+            <li>避免动词</li>
+            <li>版本号在 URL 中</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">HTTP 方法</h3>
+          <ul class="feature-list">
+            <li>GET - 获取资源</li>
+            <li>POST - 创建资源</li>
+            <li>PUT - 完整更新</li>
+            <li>PATCH - 部分更新</li>
+            <li>DELETE - 删除资源</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">状态码</h3>
+          <ul class="feature-list">
+            <li>200 - 成功</li>
+            <li>201 - 创建成功</li>
+            <li>204 - 删除成功</li>
+            <li>400 - 参数错误</li>
+            <li>401/403 - 认证授权</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">响应格式</h3>
+          <ul class="feature-list">
+            <li>统一响应结构</li>
+            <li>分页信息</li>
+            <li>错误详情</li>
+            <li>时间戳 ISO 格式</li>
+            <li>空值使用 null</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">记住</div>
+        <p>RESTful API 设计原则是指导方针而非教条。在实际项目中，应根据团队规范、项目需求和客户端特点灵活调整，保持一致性和实用性。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>统一响应格式，便于客户端处理</li>
+        <li>合理设计分页、过滤、排序功能</li>
+        <li>HATEOAS 提升 API 可发现性</li>
+        <li>性能优化：压缩、缓存、条件请求</li>
+        <li>安全实践：HTTPS、CORS、输入验证</li>
+        <li>遵循设计检查清单确保 API 质量</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="57-5-API版本管理.html">← 上一节：API 版本管理</a>
+      <a href="../chapter58/58-1-API文档的重要性.html">下一章：API 文档 →</a>
+    </div>
+  </div>
+</body>
+</html>

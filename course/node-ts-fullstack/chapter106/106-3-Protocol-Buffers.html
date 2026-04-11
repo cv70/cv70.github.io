@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>106.3 Protocol Buffers - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="106-1-RPC概念.html">第106章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>106.3 Protocol Buffers</h1>
+      <p class="subtitle">高效的结构化数据序列化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Protocol Buffers的原理</li>
+        <li>掌握Proto3语法</li>
+        <li>学会定义消息类型</li>
+        <li>了解Protobuf与JSON的对比</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Protocol Buffers概述</h2>
+      <div class="code-block">
+// Protocol Buffers（Protobuf）是Google的序列化格式
+
+// 特点
+const features = {
+  efficient: '序列化后体积小，传输快',
+  fast: '序列化和反序列化速度快',
+  typed: '强类型，编译时检查',
+  crossLanguage: '跨语言支持',
+  evolvable: '支持向前向后兼容',
+  selfDescribing: 'Schema即文档'
+};
+
+// 大小对比示例
+const data = {
+  name: 'Alice',
+  age: 30,
+  email: 'alice@example.com',
+  roles: ['admin', 'user']
+};
+
+// JSON大小: ~80 bytes
+const json = JSON.stringify(data);
+
+// Protobuf大小: ~30 bytes
+// 节省约60%的体积
+
+// 性能对比
+const benchmark = {
+  JSON: {
+    serialize: '~1000 ns',
+    deserialize: '~1500 ns',
+    size: '100%'
+  },
+  Protobuf: {
+    serialize: '~300 ns',
+    deserialize: '~400 ns',
+    size: '30-40%'
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">工作原理</div>
+          <p>使用字段编号代替字段名，二进制编码，varint压缩整数。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Proto3语法</h2>
+      <div class="code-block">
+syntax = "proto3";
+
+package example;
+
+// 基本消息定义
+message Person {
+  // 字段格式: 类型 字段名 = 字段编号;
+  string name = 1;
+  int32 age = 2;
+  string email = 3;
+
+  // 数组/列表
+  repeated string phones = 4;
+
+  // 嵌套消息
+  message Address {
+    string street = 1;
+    string city = 2;
+    string country = 3;
+  }
+
+  Address address = 5;
+
+  // 枚举
+  enum Gender {
+    GENDER_UNSPECIFIED = 0;  // 第一个值必须是0
+    GENDER_MALE = 1;
+    GENDER_FEMALE = 2;
+    GENDER_OTHER = 3;
+  }
+
+  Gender gender = 6;
+
+  // Map类型
+  map<string, string> metadata = 7;
+
+  // Optional字段（proto3）
+  optional string nickname = 8;
+
+  // Oneof - 只能设置其中一个
+  oneof contact {
+    string phone = 9;
+    string email2 = 10;
+  }
+
+  // 时间戳
+  google.protobuf.Timestamp created_at = 11;
+
+  // Any类型
+  google.protobuf.Any extra = 12;
+}
+
+// 基本类型
+/*
+类型          说明
+int32/int64   变长整数（负数效率低）
+sint32/sint64 有符号整数（负数效率高）
+uint32/uint64 无符号整数
+fixed32/64    固定长度整数
+float/double  浮点数
+bool          布尔值
+string        UTF-8字符串
+bytes         字节数组
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 字段编号与兼容性</h2>
+      <div class="code-block">
+// 字段编号规则
+
+// 规则1: 编号1-15占用1字节，16-2047占用2字节
+// 常用字段使用小编号
+message OptimizedMessage {
+  string frequently_used = 1;  // 1字节编号
+  int32 count = 2;             // 1字节编号
+  string rarely_used = 100;    // 2字节编号
+}
+
+// 规则2: 编号范围1-536870911，不能使用19000-19999
+message InvalidMessage {
+  // int32 reserved = 19000;  // Error: 保留编号
+}
+
+// 规则3: 不能重复使用编号
+message BadMessage {
+  string name = 1;
+  // int32 age = 1;  // Error: 编号重复
+}
+
+// 向前向后兼容
+message UserV1 {
+  string name = 1;
+  int32 age = 2;
+}
+
+message UserV2 {
+  string name = 1;
+  int32 age = 2;
+  string email = 3;    // 新增字段，旧客户端忽略
+  // 删除的字段要保留编号
+  reserved 4;          // 保留编号4
+  reserved "old_field"; // 保留字段名
+}
+
+// 兼容性最佳实践
+/*
+✅ 添加新字段：兼容
+✅ 删除字段（保留编号）：兼容
+✅ 重命名字段：兼容（编号不变）
+✅ 新增枚举值：兼容
+
+❌ 修改字段编号：不兼容
+❌ 修改字段类型：可能不兼容
+❌ 复用删除的字段编号：不兼容
+❌ 修改repeated与optional：不兼容
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Protobuf比JSON更小更快</li>
+            <li>• 字段编号是序列化的关键</li>
+            <li>• 支持嵌套、枚举、Map等复杂类型</li>
+            <li>• 遵循兼容性规则确保平滑升级</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="106-2-gRPC基础.html">← 上一节：gRPC 基础</a>
+      <a href="106-4-gRPC流式通信.html">下一节：gRPC 流式通信 →</a>
+    </div>
+  </div>
+</body>
+</html>

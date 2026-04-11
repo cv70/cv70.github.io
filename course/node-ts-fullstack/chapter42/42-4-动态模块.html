@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.4 动态模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="42-1-模块概念.html">第四十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>42.4 动态模块</h1>
+      <p class="subtitle">创建可配置的灵活模块</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解动态模块的概念</li>
+        <li>掌握动态模块的创建方式</li>
+        <li>学会模块配置选项</li>
+        <li>了解动态模块的实际应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是动态模块？</h2>
+      <p>动态模块是可以根据配置动态改变其行为的模块。它允许在导入模块时传递配置参数，使模块更加灵活和可复用。</p>
+
+      <div class="code-block">
+// 静态模块 - 固定配置
+@Module({
+  providers: [DatabaseService],
+})
+export class DatabaseModule {}
+
+// 动态模块 - 可配置
+@Module({})
+export class DatabaseModule {
+  static forRoot(options: DatabaseOptions): DynamicModule {
+    return {
+      module: DatabaseModule,
+      providers: [
+        {
+          provide: 'DATABASE_OPTIONS',
+          useValue: options,
+        },
+        DatabaseService,
+      ],
+      exports: [DatabaseService],
+    };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 创建动态模块</h2>
+      <div class="code-block">
+// database.module.ts
+import { Module, DynamicModule } from '@nestjs/common';
+import { DatabaseService } from './database.service';
+
+interface DatabaseModuleOptions {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+}
+
+@Module({})
+export class DatabaseModule {
+  static forRoot(options: DatabaseModuleOptions): DynamicModule {
+    return {
+      module: DatabaseModule,
+      providers: [
+        {
+          provide: 'DATABASE_OPTIONS',
+          useValue: options,
+        },
+        DatabaseService,
+      ],
+      exports: [DatabaseService],
+      global: true,  // 可选：设为全局模块
+    };
+  }
+
+  static forRootAsync(options: {
+    useFactory: (...args: any[]) => Promise<DatabaseModuleOptions>;
+    inject?: any[];
+  }): DynamicModule {
+    return {
+      module: DatabaseModule,
+      providers: [
+        {
+          provide: 'DATABASE_OPTIONS',
+          useFactory: options.useFactory,
+          inject: options.inject || [],
+        },
+        DatabaseService,
+      ],
+      exports: [DatabaseService],
+    };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 使用动态模块</h2>
+      <div class="code-block">
+// app.module.ts - 同步配置
+@Module({
+  imports: [
+    DatabaseModule.forRoot({
+      host: 'localhost',
+      port: 5432,
+      username: 'postgres',
+      password: 'password',
+      database: 'mydb',
+    }),
+  ],
+})
+export class AppModule {}
+
+// app.module.ts - 异步配置
+@Module({
+  imports: [
+    DatabaseModule.forRootAsync({
+      useFactory: (configService: ConfigService) => ({
+        host: configService.get('DB_HOST'),
+        port: configService.get('DB_PORT'),
+        username: configService.get('DB_USERNAME'),
+        password: configService.get('DB_PASSWORD'),
+        database: configService.get('DB_DATABASE'),
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class AppModule {}
+
+// 在服务中使用配置
+@Injectable()
+export class DatabaseService {
+  constructor(@Inject('DATABASE_OPTIONS') private options: DatabaseModuleOptions) {
+    console.log('Database connected to:', options.host);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 实际应用示例</h2>
+      <div class="code-block">
+// TypeORM 动态模块配置
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      username: 'postgres',
+      password: 'password',
+      database: 'mydb',
+      entities: [User, Product],
+      synchronize: true,
+    }),
+  ],
+})
+export class AppModule {}
+
+// ConfigModule 也是动态模块
+import { ConfigModule } from '@nestjs/config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env.development',
+    }),
+  ],
+})
+export class AppModule {}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">命名约定</div>
+          <p>动态模块方法通常命名为 forRoot、forRootAsync、forFeature 等。forRoot 用于全局配置，forFeature 用于特性模块配置。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 动态模块允许导入时传递配置</li>
+            <li>• 使用静态方法返回 DynamicModule</li>
+            <li>• forRoot 用于全局配置，forRootAsync 用于异步配置</li>
+            <li>• TypeOrmModule、ConfigModule 都是动态模块</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="42-3-模块导入导出.html">← 上一节：模块导入导出</a>
+      <a href="42-5-全局模块.html">下一节：全局模块 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.1 守卫概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="47-1-守卫概念.html">第四十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>47.1 守卫概念</h1>
+      <p class="subtitle">理解 NestJS 守卫的作用和原理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解守卫的概念和作用</li>
+        <li>掌握守卫的执行时机</li>
+        <li>了解守卫与中间件的区别</li>
+        <li>理解守卫的返回值含义</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是守卫？</h2>
+      <p>守卫是用 @Injectable() 装饰器注解的类，实现 CanActivate 接口。守卫根据运行时的条件决定请求是否可以继续访问路由处理器。</p>
+
+      <div class="code-block">
+请求处理流程：
+
+客户端请求
+    ↓
+┌─────────────────┐
+│   中间件        │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   守卫          │  ← 在这里决定是否允许访问
+└─────────────────┘
+    ↓ (守卫返回 true)
+┌─────────────────┐
+│   拦截器        │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   管道          │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   路由处理器    │
+└─────────────────┘
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">守卫特点</div>
+          <p>守卫返回 true 时请求继续，返回 false 时请求被拒绝（403 Forbidden）。守卫可以抛出异常来返回自定义的错误响应。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 守卫接口</h2>
+      <div class="code-block">
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Observable } from 'rxjs';
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  canActivate(
+    context: ExecutionContext,
+  ): boolean | Promise<boolean> | Observable<boolean> {
+    const request = context.switchToHttp().getRequest();
+
+    // 验证逻辑
+    const isAuthenticated = this.validateRequest(request);
+
+    // 返回 true 继续请求，返回 false 拒绝请求
+    return isAuthenticated;
+  }
+
+  private validateRequest(request: Request): boolean {
+    // 验证逻辑
+    return true;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 守卫 vs 中间件</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>中间件</th>
+            <th>守卫</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>执行时机</td>
+            <td>路由处理前</td>
+            <td>中间件后</td>
+          </tr>
+          <tr>
+            <td>上下文</td>
+            <td>只有请求/响应对象</td>
+            <td>ExecutionContext（包含执行上下文）</td>
+          </tr>
+          <tr>
+            <td>依赖注入</td>
+            <td>函数式无依赖注入</td>
+            <td>完全支持依赖注入</td>
+          </tr>
+          <tr>
+            <td>主要用途</td>
+            <td>请求预处理</td>
+            <td>权限验证</td>
+          </tr>
+          <tr>
+            <td>返回值</td>
+            <td>无（调用 next() 继续）</td>
+            <td>boolean（决定是否继续）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">守卫选择</div>
+          <p>需要权限验证时使用守卫，需要请求预处理时使用中间件。守卫可以访问 ExecutionContext，获取更多执行信息。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> ExecutionContext</h2>
+      <div class="code-block">
+import { ExecutionContext } from '@nestjs/common';
+
+// ExecutionContext 提供丰富的上下文信息
+@Injectable()
+export class MyGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    // HTTP 请求对象
+    const request = context.switchToHttp().getRequest();
+    const response = context.switchToHttp().getResponse();
+
+    // 获取控制器类和方法名
+    const controllerClass = context.getClass();
+    const handler = context.getHandler();
+
+    // 获取装饰器元数据
+    const roles = this.reflector.get<string[]>('roles', handler);
+
+    console.log('Controller:', controllerClass.name);
+    console.log('Handler:', handler.name);
+    console.log('Roles:', roles);
+
+    return true;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 守卫决定请求是否可以访问路由</li>
+            <li>• 实现 CanActivate 接口</li>
+            <li>• 返回 true 继续，返回 false 拒绝</li>
+            <li>• 可以访问 ExecutionContext 获取上下文信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter46/46-5-数据转换.html">← 上一章：数据转换</a>
+      <a href="47-2-创建守卫.html">下一节：创建守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>77.3 路由参数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="77-1-ReactRouter基础.html">第七十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>77.3 路由参数</h1>
+      <p class="subtitle">URL 参数与查询字符串</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握动态路由参数</li>
+        <li>学会使用查询参数</li>
+        <li>理解路由状态传递</li>
+        <li>了解参数的类型安全</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 动态路由参数</h2>
+      <div class="code-block">
+import { useParams } from 'react-router-dom';
+
+// 路由配置
+const router = createBrowserRouter([
+  {
+    path: '/users/:userId',  // 动态参数
+    element: &lt;UserDetail /&gt;,
+  },
+  {
+    path: '/posts/:postId/comments/:commentId',  // 多个参数
+    element: &lt;CommentDetail /&gt;,
+  },
+  {
+    path: '/files/*',  // 通配符参数
+    element: &lt;FileViewer /&gt;,
+  },
+]);
+
+// 获取参数
+function UserDetail() {
+  const { userId } = useParams();
+
+  const { data: user, isLoading } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () =&gt; fetchUser(userId!),
+  });
+
+  if (isLoading) return &lt;div&gt;Loading...&lt;/div&gt;;
+
+  return (
+    &lt;div&gt;
+      &lt;h1&gt;{user.name}&lt;/h1&gt;
+      &lt;p&gt;ID: {userId}&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+// TypeScript 类型安全
+type UserParams = {
+  userId: string;
+};
+
+function UserDetail() {
+  const { userId } = useParams&lt;UserParams&gt;();
+
+  // userId 类型为 string | undefined
+  // 使用非空断言或类型守卫
+  if (!userId) {
+    return &lt;Navigate to="/users" /&gt;;
+  }
+
+  // 现在 userId 是 string 类型
+}
+
+// 多个参数
+function CommentDetail() {
+  const { postId, commentId } = useParams();
+
+  return (
+    &lt;div&gt;
+      Post: {postId}, Comment: {commentId}
+    &lt;/div&gt;
+  );
+}
+
+// 通配符参数
+function FileViewer() {
+  const { '*': filePath } = useParams();
+
+  return &lt;div&gt;File path: {filePath}&lt;/div&gt;;
+}
+
+// 访问 /files/docs/readme.md
+// filePath = 'docs/readme.md'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 查询参数</h2>
+      <div class="code-block">
+import { useSearchParams, useNavigate } from 'react-router-dom';
+
+function ProductList() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // 获取参数
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const category = searchParams.get('category') || 'all';
+  const sort = searchParams.get('sort') || 'newest';
+  const search = searchParams.get('q') || '';
+
+  // 获取所有参数
+  const allParams = Object.fromEntries(searchParams.entries());
+
+  // 更新参数
+  const updateParams = (updates: Record&lt;string, string | null&gt;) =&gt; {
+    const newParams = new URLSearchParams(searchParams);
+
+    Object.entries(updates).forEach(([key, value]) =&gt; {
+      if (value === null || value === '') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+
+    setSearchParams(newParams);
+  };
+
+  const handlePageChange = (newPage: number) =&gt; {
+    updateParams({ page: newPage.toString() });
+    // URL 变为 /products?page=2&category=...
+  };
+
+  const handleCategoryChange = (newCategory: string) =&gt; {
+    updateParams({ category: newCategory, page: '1' });  // 重置页码
+  };
+
+  const handleSearch = (query: string) =&gt; {
+    updateParams({ q: query, page: '1' });
+  };
+
+  const handleSort = (sortOption: string) =&gt; {
+    updateParams({ sort: sortOption });
+  };
+
+  return (
+    &lt;div&gt;
+      &lt;input
+        placeholder="Search..."
+        value={search}
+        onChange={e =&gt; handleSearch(e.target.value)}
+      /&gt;
+
+      &lt;select value={category} onChange={e =&gt; handleCategoryChange(e.target.value)}&gt;
+        &lt;option value="all"&gt;All&lt;/option&gt;
+        &lt;option value="electronics"&gt;Electronics&lt;/option&gt;
+        &lt;option value="clothing"&gt;Clothing&lt;/option&gt;
+      &lt;/select&gt;
+
+      &lt;select value={sort} onChange={e =&gt; handleSort(e.target.value)}&gt;
+        &lt;option value="newest"&gt;Newest&lt;/option&gt;
+        &lt;option value="price-asc"&gt;Price: Low to High&lt;/option&gt;
+        &lt;option value="price-desc"&gt;Price: High to Low&lt;/option&gt;
+      &lt;/select&gt;
+
+      {/* 产品列表 */}
+      &lt;ProductGrid page={page} category={category} sort={sort} search={search} /&gt;
+
+      {/* 分页 */}
+      &lt;Pagination current={page} onChange={handlePageChange} /&gt;
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 路由状态传递</h2>
+      <div class="code-block">
+import { useNavigate, useLocation } from 'react-router-dom';
+
+// 传递状态
+function UserList() {
+  const navigate = useNavigate();
+
+  const handleView = (userId: string) =&gt; {
+    navigate(`/users/${userId}`, {
+      state: {
+        from: '/users',
+        timestamp: Date.now(),
+        referrer: 'user-list',
+      },
+    });
+  };
+
+  return (
+    &lt;ul&gt;
+      {users.map(user =&gt; (
+        &lt;li key={user.id}&gt;
+          {user.name}
+          &lt;button onClick={() =&gt; handleView(user.id)}&gt;View&lt;/button&gt;
+        &lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}
+
+// 获取状态
+function UserDetail() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const from = location.state?.from;
+  const referrer = location.state?.referrer;
+
+  const handleBack = () =&gt; {
+    if (from) {
+      navigate(from);
+    } else {
+      navigate('/users');
+    }
+  };
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={handleBack}&gt;
+        Back to {referrer || 'User List'}
+      &lt;/button&gt;
+      {/* 用户详情 */}
+    &lt;/div&gt;
+  );
+}
+
+// TypeScript 类型
+interface LocationState {
+  from: string;
+  timestamp: number;
+  referrer?: string;
+}
+
+function UserDetail() {
+  const location = useLocation() as { state: LocationState | null };
+  const state = location.state;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• useParams 获取动态路由参数</li>
+            <li>• useSearchParams 管理查询参数</li>
+            <li>• state 传递非 URL 数据</li>
+            <li>• 使用 TypeScript 增强类型安全</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="77-2-路由配置.html">← 上一节：路由配置</a>
+      <a href="77-4-嵌套路由.html">下一节：嵌套路由 →</a>
+    </div>
+  </div>
+</body>
+</html>

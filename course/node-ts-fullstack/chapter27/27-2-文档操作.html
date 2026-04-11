@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.2 文档操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="27-1-mongodb简介.html">第二十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>27.2 文档操作</h1>
+      <p class="subtitle">CRUD 操作详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握插入文档的方法</li>
+        <li>学会查询文档的各种方式</li>
+        <li>理解更新操作符</li>
+        <li>熟悉删除操作</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 插入文档</h2>
+      <div class="code-block">
+// 插入单个文档
+db.users.insertOne({
+  name: "Alice",
+  email: "alice@mail.com",
+  age: 25,
+  status: "active"
+})
+
+// 返回结果
+{
+  "acknowledged": true,
+  "insertedId": ObjectId("...")
+}
+
+// 插入多个文档
+db.users.insertMany([
+  { name: "Bob", email: "bob@mail.com", age: 30 },
+  { name: "Charlie", email: "charlie@mail.com", age: 28 },
+  { name: "Diana", email: "diana@mail.com", age: 22 }
+])
+
+// 指定 _id
+db.users.insertOne({
+  _id: "user_001",
+  name: "Eve",
+  email: "eve@mail.com"
+})
+
+// 嵌套文档
+db.users.insertOne({
+  name: "Frank",
+  email: "frank@mail.com",
+  address: {
+    city: "Beijing",
+    street: "Main Street",
+    zip: "100000"
+  },
+  tags: ["developer", "nodejs"]
+})
+
+// 使用 Node.js 驱动
+const { MongoClient } = require('mongodb');
+
+const client = new MongoClient('mongodb://localhost:27017');
+
+async function main() {
+  await client.connect();
+  const db = client.db('myapp');
+  const users = db.collection('users');
+
+  const result = await users.insertOne({
+    name: "Alice",
+    email: "alice@mail.com"
+  });
+
+  console.log(result.insertedId);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 查询文档</h2>
+      <div class="code-block">
+// 查询所有文档
+db.users.find()
+
+// 格式化输出
+db.users.find().pretty()
+
+// 条件查询
+db.users.find({ name: "Alice" })
+
+// 查询单个文档
+db.users.findOne({ email: "alice@mail.com" })
+
+// 比较操作符
+db.users.find({ age: { $eq: 25 } })      // 等于
+db.users.find({ age: { $ne: 25 } })      // 不等于
+db.users.find({ age: { $gt: 20 } })      // 大于
+db.users.find({ age: { $gte: 20 } })     // 大于等于
+db.users.find({ age: { $lt: 30 } })      // 小于
+db.users.find({ age: { $lte: 30 } })     // 小于等于
+db.users.find({ age: { $in: [20, 25, 30] } })   // 在列表中
+db.users.find({ age: { $nin: [15, 16, 17] } })  // 不在列表中
+
+// 逻辑操作符
+db.users.find({
+  $and: [
+    { age: { $gte: 20 } },
+    { status: "active" }
+  ]
+})
+
+db.users.find({
+  $or: [
+    { status: "admin" },
+    { status: "moderator" }
+  ]
+})
+
+db.users.find({
+  $not: { age: { $lt: 18 } }
+})
+
+// 字段存在性
+db.users.find({ phone: { $exists: true } })   // 存在
+db.users.find({ phone: { $exists: false } })  // 不存在
+
+// NULL 值查询
+db.users.find({ phone: null })  // 字段不存在或为 null
+
+// 嵌套文档查询
+db.users.find({ "address.city": "Beijing" })
+
+// 数组查询
+db.users.find({ tags: "nodejs" })  // 数组包含元素
+db.users.find({ tags: { $all: ["nodejs", "mongodb"] } })  // 包含所有
+db.users.find({ tags: { $size: 2 } })  // 数组长度
+db.users.find({ "tags.0": "developer" })  // 按索引
+
+// 正则表达式
+db.users.find({ name: /^A/i })  // 以 A 开头，不区分大小写
+db.users.find({ email: /@mail\.com$/ })  // 以 @mail.com 结尾
+
+// 投影（选择字段）
+db.users.find({}, { name: 1, email: 1, _id: 0 })
+
+// 排序
+db.users.find().sort({ age: 1 })   // 升序
+db.users.find().sort({ age: -1 })  // 降序
+db.users.find().sort({ age: -1, name: 1 })  // 多字段排序
+
+// 分页
+db.users.find().skip(0).limit(10)
+db.users.find().skip(10).limit(10)  // 第 2 页
+
+// 计数
+db.users.countDocuments({ status: "active" })
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 更新文档</h2>
+      <div class="code-block">
+// 更新单个文档
+db.users.updateOne(
+  { name: "Alice" },
+  { $set: { age: 26 } }
+)
+
+// 更新多个文档
+db.users.updateMany(
+  { status: "pending" },
+  { $set: { status: "active" } }
+)
+
+// 替换整个文档
+db.users.replaceOne(
+  { name: "Alice" },
+  { name: "Alice", email: "new@mail.com", age: 26 }
+)
+
+// 更新操作符
+db.users.updateOne(
+  { name: "Alice" },
+  {
+    $set: { status: "active" },           // 设置字段
+    $unset: { tempField: "" },            // 删除字段
+    $inc: { loginCount: 1 },              // 增加数值
+    $mul: { score: 2 },                   // 乘以数值
+    $rename: { oldName: "newName" },      // 重命名字段
+    $push: { tags: "mongodb" },           // 数组添加元素
+    $pull: { tags: "old-tag" },           // 数组删除元素
+    $addToSet: { tags: "unique-tag" },    // 数组添加不重复元素
+    $pop: { tags: 1 },                    // 删除数组末尾元素（-1 删除开头）
+    $currentDate: { updatedAt: true }     // 设置当前日期
+  }
+)
+
+// 条件更新
+db.users.updateOne(
+  { name: "Alice", "tags": { $ne: "admin" } },
+  { $push: { tags: "admin" } }
+)
+
+// upsert（不存在则插入）
+db.users.updateOne(
+  { email: "new@mail.com" },
+  { $set: { name: "New User", age: 20 } },
+  { upsert: true }
+)
+
+// 更新嵌套字段
+db.users.updateOne(
+  { name: "Alice" },
+  { $set: { "address.city": "Shanghai" } }
+)
+
+// 更新数组元素
+db.users.updateOne(
+  { "tags": "nodejs" },
+  { $set: { "tags.$": "Node.js" } }  // $ 表示匹配的元素
+)
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">$set vs 直接替换</div>
+          <p>$set 只更新指定字段，其他字段保持不变；直接替换会删除未指定的字段。建议始终使用 $set 来更新字段。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> 删除文档</h2>
+      <div class="code-block">
+// 删除单个文档
+db.users.deleteOne({ name: "Alice" })
+
+// 删除多个文档
+db.users.deleteMany({ status: "inactive" })
+
+// 删除所有文档
+db.users.deleteMany({})
+
+// 条件删除
+db.users.deleteMany({
+  createdAt: { $lt: new Date("2024-01-01") }
+})
+
+// 返回删除的文档并删除
+db.users.findOneAndDelete({ name: "Alice" })
+
+// 返回结果
+{
+  "acknowledged": true,
+  "deletedCount": 3
+}
+
+// Node.js 驱动示例
+const result = await users.deleteMany({
+  status: "inactive"
+});
+
+console.log(`Deleted ${result.deletedCount} documents`);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• insertOne/insertMany 插入文档</li>
+            <li>• find/findOne 查询文档</li>
+            <li>• updateOne/updateMany 配合 $set 更新</li>
+            <li>• deleteOne/deleteMany 删除文档</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="27-1-mongodb简介.html">← 上一节：MongoDB 简介</a>
+      <a href="27-3-查询语法.html">下一节：查询语法 →</a>
+    </div>
+  </div>
+</body>
+</html>

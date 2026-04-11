@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>98.4 CDN 加速 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="98-1-资源优化.html">第九十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>98.4 CDN 加速</h1>
+      <p class="subtitle">内容分发网络优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 CDN 的工作原理</li>
+        <li>掌握静态资源 CDN 配置</li>
+        <li>学会 CDN 缓存策略</li>
+        <li>了解 CDN 安全配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> CDN 概述</h2>
+      <div class="code-block">
+# 什么是 CDN
+
+CDN (Content Delivery Network) 内容分发网络
+将内容缓存到全球各地的边缘节点
+用户从最近的节点获取内容
+
+# CDN 工作原理
+
+用户请求 → DNS 解析 → 最近边缘节点 → 缓存命中?
+                                      ↓
+                                   是 ↓ 否
+                                   返回 ↓ 回源获取
+                                   内容 ↓ 并缓存
+
+# CDN 架构
+
+┌─────────────────────────────────────────────────────┐
+│                    用户                              │
+└───────────────────────┬─────────────────────────────┘
+                        │
+    ┌───────────────────┼───────────────────┐
+    │                   │                   │
+    ▼                   ▼                   ▼
+┌───────┐         ┌───────┐         ┌───────┐
+│边缘节点│         │边缘节点│         │边缘节点│
+│ 北京  │         │ 上海  │         │ 广州  │
+└───┬───┘         └───┬───┘         └───┬───┘
+    │                 │                 │
+    └─────────────────┼─────────────────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │   源服务器     │
+              │  (Origin)     │
+              └───────────────┘
+
+# CDN 优势
+- 降低延迟：就近访问
+- 提高可用性：多节点冗余
+- 减轻源站压力：缓存分担
+- 节省带宽：边缘节点处理
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 静态资源 CDN</h2>
+      <div class="code-block">
+# 使用公共 CDN
+
+&lt;!-- 加载 React --&gt;
+&lt;script src="https://unpkg.com/react@18/umd/react.production.min.js"&gt;&lt;/script&gt;
+&lt;script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"&gt;&lt;/script&gt;
+
+&lt;!-- 加载 Vue --&gt;
+&lt;script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"&gt;&lt;/script&gt;
+
+&lt;!-- 使用 cdnjs --&gt;
+&lt;script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"&gt;&lt;/script&gt;
+
+# Vite 配置 CDN
+
+import { defineConfig } from 'vite';
+import external from 'rollup-plugin-external-globals';
+
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      external: ['react', 'react-dom'],
+      plugins: [
+        external({
+          react: 'React',
+          'react-dom': 'ReactDOM',
+        }),
+      ],
+    },
+  },
+});
+
+# Webpack 外部化
+
+// webpack.config.js
+module.exports = {
+  externals: {
+    react: 'React',
+    'react-dom': 'ReactDOM',
+    lodash: '_',
+  },
+};
+
+# 自动注入 CDN 链接
+
+import cdn from 'vite-plugin-cdn-import';
+
+export default defineConfig({
+  plugins: [
+    cdn({
+      modules: [
+        {
+          name: 'react',
+          var: 'React',
+          path: 'https://unpkg.com/react@18/umd/react.production.min.js',
+        },
+        {
+          name: 'react-dom',
+          var: 'ReactDOM',
+          path: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+        },
+      ],
+    }),
+  ],
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">CDN 选择</div>
+          <p>生产环境建议使用可靠的 CDN 服务商，如 Cloudflare、AWS CloudFront、阿里云 CDN 等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> CDN 缓存策略</h2>
+      <div class="code-block">
+# 缓存控制头
+
+# 静态资源（长期缓存）
+Cache-Control: public, max-age=31536000, immutable
+
+# HTML（不缓存或短期缓存）
+Cache-Control: no-cache
+# 或
+Cache-Control: max-age=0, must-revalidate
+
+# API 响应
+Cache-Control: private, max-age=300
+
+# Nginx 配置示例
+
+server {
+  location /static/ {
+    # 静态资源缓存 1 年
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+
+    # CDN 缓存控制
+    add_header CDN-Cache-Control "max-age=31536000";
+  }
+
+  location /api/ {
+    # API 不缓存
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+  }
+}
+
+# 版本化文件名
+
+// 使用 contenthash 实现长期缓存
+// vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+      },
+    },
+  },
+});
+
+# CDN 缓存刷新
+
+// Cloudflare API
+await fetch(
+  `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      files: ['https://example.com/style.css'],
+    }),
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> Cloudflare 配置</h2>
+      <div class="code-block">
+# Cloudflare Page Rules
+
+# 静态资源缓存
+URL: *example.com/static/*
+设置: Cache Level = Cache Everything
+      Edge Cache TTL = 1 year
+      Browser Cache TTL = 1 year
+
+# HTML 不缓存
+URL: *example.com/*.html
+设置: Cache Level = Bypass
+
+# Cloudflare Workers
+
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request));
+});
+
+async function handleRequest(request) {
+  const cache = caches.default;
+  let response = await cache.match(request);
+
+  if (!response) {
+    response = await fetch(request);
+    const headers = new Headers(response.headers);
+    headers.set('Cache-Control', 'public, max-age=86400');
+
+    response = new Response(response.body, {
+      ...response,
+      headers,
+    });
+
+    event.waitUntil(cache.put(request, response.clone()));
+  }
+
+  return response;
+}
+
+# Cloudflare 配置建议
+
+1. 开启 Auto Minify (CSS, JS, HTML)
+2. 开启 Brotli 压缩
+3. 开启 HTTP/3 (QUIC)
+4. 配置 Page Rules 优化缓存
+5. 使用 Workers 处理边缘逻辑
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CDN 将内容缓存到全球边缘节点</li>
+            <li>• 静态资源使用长期缓存 + 版本化文件名</li>
+            <li>• HTML 不缓存或使用 no-cache</li>
+            <li>• Cloudflare 提供免费 CDN 服务</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="98-3-懒加载.html">← 上一节：懒加载</a>
+      <a href="98-5-性能监控.html">下一节：性能监控 →</a>
+    </div>
+  </div>
+</body>
+</html>

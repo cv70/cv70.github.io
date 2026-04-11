@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>109.5 部署上线 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="109-1-需求分析.html">第109章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>109.5 部署上线</h1>
+      <p class="subtitle">将博客系统部署到生产环境</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握Docker容器化部署</li>
+        <li>学会使用Docker Compose</li>
+        <li>了解CI/CD流程</li>
+        <li>掌握生产环境配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Dockerfile编写</h2>
+      <div class="code-block">
+# 后端Dockerfile
+# Dockerfile.backend
+
+# 构建阶段
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# 生产阶段
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY --from=builder /app/dist ./dist
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+CMD ["node", "dist/main.js"]
+
+# ----------------------------------------
+
+# 前端Dockerfile
+# Dockerfile.frontend
+
+# 构建阶段
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# 生产阶段 - 使用Nginx
+FROM nginx:alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">多阶段构建</div>
+          <p>使用多阶段构建减小镜像体积，构建依赖不进入生产镜像。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Docker Compose配置</h2>
+      <div class="code-block">
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: blog_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: blog_redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  # 后端API服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: blog_backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: blog_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> CI/CD配置</h2>
+      <div class="code-block">
+# .github/workflows/deploy.yml
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Build Docker image
+        run: |
+          docker build -t blog-backend:${{ github.sha }} ./backend
+          docker build -t blog-frontend:${{ github.sha }} ./frontend
+
+      - name: Push to Registry
+        run: |
+          echo ${{ secrets.REGISTRY_PASSWORD }} | docker login -u ${{ secrets.REGISTRY_USER }} --password-stdin
+          docker push blog-backend:${{ github.sha }}
+          docker push blog-frontend:${{ github.sha }}
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/blog
+            docker-compose pull
+            docker-compose up -d
+            docker image prune -f
+
+# 生产环境配置
+# .env.production
+
+NODE_ENV=production
+PORT=3000
+
+# 数据库配置
+DATABASE_URL=postgresql://user:password@postgres:5432/blog
+
+# Redis配置
+REDIS_URL=redis://redis:6379
+
+# JWT配置
+JWT_SECRET=your-super-secret-key
+JWT_EXPIRES_IN=7d
+
+# 日志配置
+LOG_LEVEL=info
+
+# 文件上传配置
+UPLOAD_DIR=/uploads
+MAX_FILE_SIZE=10485760
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Dockerfile定义容器镜像</li>
+            <li>• Docker Compose编排多个服务</li>
+            <li>• GitHub Actions实现CI/CD</li>
+            <li>• 生产环境需要完善的配置管理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="109-4-前端页面开发.html">← 上一节：前端页面开发</a>
+      <a href="../chapter110/110-1-需求分析.html">下一章：电商平台实战 →</a>
+    </div>
+  </div>
+</body>
+</html>

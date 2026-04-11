@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>43.5 路由参数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="43-1-控制器基础.html">第四十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>43.5 路由参数</h1>
+      <p class="subtitle">深入理解各种参数装饰器的使用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握路径参数的使用</li>
+        <li>学会查询参数处理</li>
+        <li>了解参数验证和转换</li>
+        <li>掌握参数装饰器自定义</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 路径参数 @Param</h2>
+      <div class="code-block">
+import { Controller, Get, Param } from '@nestjs/common';
+
+@Controller('users')
+export class UsersController {
+
+  // 单个参数
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return `User ID: ${id}`;
+  }
+
+  // 多个参数
+  @Get(':userId/posts/:postId')
+  findPost(
+    @Param('userId') userId: string,
+    @Param('postId') postId: string,
+  ) {
+    return `User: ${userId}, Post: ${postId}`;
+  }
+
+  // 获取所有参数
+  @Get('category/:category/item/:item')
+  findByCategory(@Param() params: { category: string; item: string }) {
+    return params;
+  }
+
+  // 使用管道转换类型
+  @Get(':id/details')
+  findDetails(@Param('id', ParseIntPipe) id: number) {
+    console.log(typeof id);  // number
+    return `User ID: ${id}`;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 查询参数 @Query</h2>
+      <div class="code-block">
+import { Controller, Get, Query, DefaultValuePipe } from '@nestjs/common';
+
+@Controller('products')
+export class ProductsController {
+
+  // 单个查询参数
+  @Get()
+  findAll(@Query('keyword') keyword: string) {
+    return { keyword };
+  }
+
+  // 默认值
+  @Get('list')
+  list(
+    @Query('page', new DefaultValuePipe(1)) page: number,
+    @Query('limit', new DefaultValuePipe(10)) limit: number,
+  ) {
+    return { page, limit };
+  }
+
+  // 多个查询参数
+  @Get('search')
+  search(
+    @Query('keyword') keyword: string,
+    @Query('category') category: string,
+    @Query('sort') sort: 'asc' | 'desc' = 'asc',
+  ) {
+    return { keyword, category, sort };
+  }
+
+  // 使用 DTO
+  @Get('filter')
+  filter(@Query() query: FilterDto) {
+    return query;
+  }
+}
+
+// filter.dto.ts
+import { IsOptional, IsString, IsNumber, Min } from 'class-validator';
+
+class FilterDto {
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  limit?: number = 10;
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">查询参数类型</div>
+          <p>查询参数默认都是字符串类型。可以使用 DefaultValuePipe 设置默认值，使用 ParseIntPipe 转换为数字。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 参数管道</h2>
+      <div class="code-block">
+import {
+  Controller, Get, Param, Query, ParseIntPipe,
+  ParseBoolPipe, ParseUUIDPipe, ParseArrayPipe
+} from '@nestjs/common';
+
+@Controller('examples')
+export class ExamplesController {
+
+  // ParseIntPipe: 转换为整数，失败则抛出 400
+  @Get('int/:num')
+  parseNum(@Param('num', ParseIntPipe) num: number) {
+    return { value: num, type: typeof num };
+  }
+
+  // ParseBoolPipe: 转换为布尔值
+  @Get('bool')
+  parseBool(@Query('active', ParseBoolPipe) active: boolean) {
+    return { active };
+  }
+
+  // ParseUUIDPipe: 验证 UUID
+  @Get('uuid/:id')
+  parseUUID(@Param('id', ParseUUIDPipe) id: string) {
+    return { id };
+  }
+
+  // ParseArrayPipe: 解析数组
+  @Get('tags')
+  parseArray(
+    @Query('tags', new ParseArrayPipe({ items: String, separator: ',' }))
+    tags: string[],
+  ) {
+    return { tags };
+  }
+  // GET /tags?tags=a,b,c => { tags: ['a', 'b', 'c'] }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 自定义参数装饰器</h2>
+      <div class="code-block">
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+// 获取当前用户
+export const User = createParamDecorator(
+  (data: string, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user;
+
+    return data ? user?.[data] : user;
+  },
+);
+
+// 使用自定义装饰器
+@Controller('profile')
+export class ProfileController {
+
+  @Get()
+  getProfile(@User() user: UserEntity) {
+    return user;
+  }
+
+  @Get('name')
+  getUserName(@User('name') name: string) {
+    return { name };
+  }
+
+  @Get('email')
+  getUserEmail(@User('email') email: string) {
+    return { email };
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">自定义装饰器</div>
+          <p>自定义参数装饰器可以封装常用的参数获取逻辑，使代码更加简洁。常用于获取当前用户、提取特定请求头等场景。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @Param() 获取路径参数</li>
+            <li>• @Query() 获取查询参数</li>
+            <li>• 管道可以验证和转换参数类型</li>
+            <li>• 可创建自定义参数装饰器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="43-4-响应格式化.html">← 上一节：响应格式化</a>
+      <a href="../chapter44/44-1-Provider概念.html">下一章：Provider 概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

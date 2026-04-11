@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.2 Readonly 和 Mutable - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.2 Readonly 和 Mutable</h1>
+      <p class="subtitle">控制属性的只读性</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Readonly 的实现原理</li>
+        <li>学会创建 Mutable 工具类型</li>
+        <li>掌握深层只读类型的实现</li>
+        <li>了解实际项目中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Readonly 深入</h2>
+      <div class="code-block">
+// Readonly 将所有属性变为只读
+// 内置实现：
+type MyReadonly<T> = {
+  readonly [P in keyof T]: T[P];
+};
+
+interface Config {
+  apiUrl: string;
+  timeout: number;
+  retries: number;
+}
+
+// 使用 Readonly
+type ReadonlyConfig = Readonly<Config>;
+// { readonly apiUrl: string; readonly timeout: number; readonly retries: number; }
+
+const config: ReadonlyConfig = {
+  apiUrl: 'https://api.example.com',
+  timeout: 5000,
+  retries: 3
+};
+
+// config.timeout = 10000;  // Error: 只读属性不能修改
+
+// 函数参数保护
+function processConfig(config: Readonly<Config>): void {
+  // config.timeout = 1000;  // Error
+  console.log(config.apiUrl);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Mutable 工具类型</h2>
+      <div class="code-block">
+// TypeScript 没有内置 Mutable，需要自定义
+type Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+
+interface ReadonlyUser {
+  readonly id: number;
+  readonly name: string;
+  readonly email: string;
+}
+
+// 移除只读修饰
+type EditableUser = Mutable<ReadonlyUser>;
+// { id: number; name: string; email: string; }
+
+const user: EditableUser = { id: 1, name: 'Alice', email: 'alice@example.com' };
+user.name = 'Bob';  // OK
+
+// 部分属性可变
+type MutableKeys<T, K extends keyof T> = Omit<T, K> & {
+  -readonly [P in K]: T[P];
+};
+
+interface StrictConfig {
+  readonly apiUrl: string;
+  readonly timeout: number;
+  readonly debug: boolean;
+}
+
+type ConfigWithMutableDebug = MutableKeys<StrictConfig, 'debug'>;
+// { readonly apiUrl: string; readonly timeout: number; debug: boolean; }
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">-readonly 语法</div>
+          <p>-readonly 用于移除只读修饰符，与 -? 移除可选修饰符类似。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 深层只读</h2>
+      <div class="code-block">
+// 内置 Readonly 只处理第一层
+// 自定义深层只读
+type DeepReadonly<T> = {
+  readonly [P in keyof T]: T[P] extends object
+    ? T[P] extends Function
+      ? T[P]
+      : DeepReadonly<T[P]>
+    : T[P];
+};
+
+interface NestedConfig {
+  api: {
+    url: string;
+    headers: {
+      authorization: string;
+      contentType: string;
+    };
+  };
+  database: {
+    host: string;
+    port: number;
+  };
+}
+
+type DeepConfig = DeepReadonly<NestedConfig>;
+
+const deepConfig: DeepConfig = {
+  api: {
+    url: 'https://api.example.com',
+    headers: {
+      authorization: 'Bearer token',
+      contentType: 'application/json'
+    }
+  },
+  database: {
+    host: 'localhost',
+    port: 5432
+  }
+};
+
+// 所有层级都是只读
+// deepConfig.api.url = '';  // Error
+// deepConfig.api.headers.authorization = '';  // Error
+
+// 深层可变
+type DeepMutable<T> = {
+  -readonly [P in keyof T]: T[P] extends object
+    ? T[P] extends Function
+      ? T[P]
+      : DeepMutable<T[P]>
+    : T[P];
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实际应用</h2>
+      <div class="code-block">
+// Redux 状态
+interface AppState {
+  user: {
+    id: number;
+    name: string;
+  };
+  settings: {
+    theme: string;
+    lang: string;
+  };
+}
+
+// Redux 状态应该是只读的
+type ReduxState = DeepReadonly<AppState>;
+
+// 函数返回值保护
+function getDefaultConfig(): Readonly<Config> {
+  return {
+    apiUrl: 'https://api.example.com',
+    timeout: 3000,
+    retries: 3
+  };
+}
+
+const defaultConfig = getDefaultConfig();
+// defaultConfig.timeout = 5000;  // Error
+
+// 冻结对象运行时保护
+function freezeConfig<T extends object>(config: T): Readonly<T> {
+  return Object.freeze(config);
+}
+
+const frozen = freezeConfig({ a: 1, b: 2 });
+// frozen.a = 3;  // Error (类型和运行时都报错)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Readonly 使所有属性变为只读</li>
+            <li>• Mutable 移除只读修饰符</li>
+            <li>• DeepReadonly 实现深层只读</li>
+            <li>• 常用于状态管理和配置保护</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-1-Partial和Required.html">← 上一节：Partial 和 Required</a>
+      <a href="10-3-Pick和Omit.html">下一节：Pick 和 Omit →</a>
+    </div>
+  </div>
+</body>
+</html>

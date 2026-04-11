@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>55.4 动态权限 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="55-1-RBAC模型.html">第五十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>55.4 动态权限</h1>
+      <p class="subtitle">运行时权限配置与动态权限系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解动态权限的概念和应用场景</li>
+        <li>学会设计可配置的权限系统</li>
+        <li>实现权限的动态加载和更新</li>
+        <li>掌握权限变更的实时通知机制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 动态权限概述</h2>
+      <p>动态权限系统允许在运行时修改权限配置，无需重启服务。这适用于需要灵活权限配置的场景，如 SaaS 系统、多租户平台等。</p>
+
+      <div class="code-block">
+// 静态权限 vs 动态权限
+
+// 静态权限：权限在代码中硬编码
+@RequirePermission('article:delete')
+async deleteArticle() { ... }
+
+// 动态权限：权限从数据库或配置中心加载
+// 可在运行时添加、修改、删除权限
+// 支持条件表达式、时间限制、上下文判断
+
+// 典型应用场景
+// 1. SaaS 多租户：不同租户有不同的功能权限
+// 2. 临时授权：限时访问某些功能
+// 3. 条件权限：根据业务状态动态判断
+// 4. 自定义角色：用户自定义角色和权限
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">设计优势</div>
+          <p>动态权限系统提供了最大的灵活性，支持权限的热更新，适合复杂的业务场景。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 动态权限数据模型</h2>
+      <div class="code-block">
+// Prisma Schema - 动态权限模型
+
+model DynamicPermission {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  code        String    @unique      // 权限代码
+  resource    String                 // 资源类型
+  action      String                 // 操作类型
+  condition   Json?                  // 权限条件表达式
+  priority    Int      @default(0)   // 优先级
+  enabled     Boolean  @default(true)
+  roles       Role[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DynamicRole {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  code        String   @unique
+  tenantId    Int?     // 租户ID（多租户场景）
+  permissions DynamicPermission[]
+  inherits    DynamicRole[] @relation("RoleInheritance")
+  inheritedBy DynamicRole[] @relation("RoleInheritance")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 权限条件表达式示例
+{
+  "and": [
+    { "field": "status", "operator": "=", "value": "active" },
+    { "or": [
+      { "field": "department", "operator": "=", "value": "${user.department}" },
+      { "field": "isPublic", "operator": "=", "value": true }
+    ]}
+  ]
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 权限条件引擎</h2>
+      <div class="code-block">
+// src/services/permission-engine.service.ts
+
+interface PermissionContext {
+  user: {
+    id: number;
+    roles: string[];
+    department?: string;
+    [key: string]: any;
+  };
+  resource?: {
+    id: number;
+    type: string;
+    [key: string]: any;
+  };
+  time?: Date;
+}
+
+interface ConditionExpression {
+  field: string;
+  operator: string;
+  value: any;
+}
+
+export class PermissionEngine {
+  /**
+   * 评估条件表达式
+   */
+  evaluateCondition(
+    condition: ConditionExpression | { and: any[] } | { or: any[] },
+    context: PermissionContext
+  ): boolean {
+    // AND 条件
+    if ('and' in condition) {
+      return condition.and.every(c => this.evaluateCondition(c, context));
+    }
+
+    // OR 条件
+    if ('or' in condition) {
+      return condition.or.some(c => this.evaluateCondition(c, context));
+    }
+
+    // 基础条件
+    const { field, operator, value } = condition;
+    const actualValue = this.resolveValue(field, context);
+    const expectedValue = this.resolveValue(value, context);
+
+    return this.compare(actualValue, operator, expectedValue);
+  }
+
+  /**
+   * 解析值（支持变量引用）
+   */
+  private resolveValue(value: any, context: PermissionContext): any {
+    if (typeof value === 'string' && value.startsWith('${')) {
+      // 解析变量引用 ${user.department}
+      const path = value.slice(2, -1).split('.');
+      let result: any = context;
+      for (const key of path) {
+        result = result?.[key];
+      }
+      return result;
+    }
+    return value;
+  }
+
+  /**
+   * 比较操作
+   */
+  private compare(actual: any, operator: string, expected: any): boolean {
+    switch (operator) {
+      case '=':  return actual === expected;
+      case '!=': return actual !== expected;
+      case '>':  return actual > expected;
+      case '>=': return actual >= expected;
+      case '<':  return actual < expected;
+      case '<=': return actual <= expected;
+      case 'in': return Array.isArray(expected) && expected.includes(actual);
+      case 'contains': return String(actual).includes(String(expected));
+      default: return false;
+    }
+  }
+
+  /**
+   * 检查动态权限
+   */
+  async checkDynamicPermission(
+    userId: number,
+    permissionCode: string,
+    context: PermissionContext
+  ): Promise<boolean> {
+    // 获取权限定义
+    const permission = await prisma.dynamicPermission.findFirst({
+      where: {
+        code: permissionCode,
+        enabled: true
+      },
+      include: {
+        roles: {
+          where: { enabled: true }
+        }
+      }
+    });
+
+    if (!permission) return false;
+
+    // 检查用户角色是否匹配
+    const hasRole = permission.roles.some(role =>
+      context.user.roles.includes(role.code)
+    );
+
+    if (!hasRole) return false;
+
+    // 评估条件表达式
+    if (permission.condition) {
+      return this.evaluateCondition(
+        permission.condition as any,
+        context
+      );
+    }
+
+    return true;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 权限缓存与热更新</h2>
+      <div class="code-block">
+// src/services/permission-cache.service.ts
+import { Redis } from 'ioredis';
+
+export class PermissionCacheService {
+  private redis: Redis;
+  private readonly PREFIX = 'permission:';
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL);
+  }
+
+  /**
+   * 获取用户权限（带缓存）
+   */
+  async getUserPermissions(userId: number): Promise<string[]> {
+    const cacheKey = `${this.PREFIX}user:${userId}`;
+
+    // 尝试从 Redis 获取
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    // 从数据库加载
+    const permissions = await this.loadUserPermissions(userId);
+
+    // 写入缓存，设置过期时间
+    await this.redis.setex(cacheKey, 300, JSON.stringify(permissions));
+
+    return permissions;
+  }
+
+  /**
+   * 权限变更通知
+   */
+  async invalidateUserPermission(userId: number): Promise<void> {
+    const cacheKey = `${this.PREFIX}user:${userId}`;
+    await this.redis.del(cacheKey);
+
+    // 发布权限变更事件
+    await this.redis.publish('permission:changed', JSON.stringify({
+      type: 'user',
+      id: userId,
+      timestamp: Date.now()
+    }));
+  }
+
+  /**
+   * 角色权限变更 - 影响所有拥有该角色的用户
+   */
+  async invalidateRolePermission(roleId: number): Promise<void> {
+    // 获取所有拥有该角色的用户
+    const users = await prisma.user.findMany({
+      where: { roles: { some: { id: roleId } } },
+      select: { id: true }
+    });
+
+    // 批量清除缓存
+    const pipeline = this.redis.pipeline();
+    for (const user of users) {
+      pipeline.del(`${this.PREFIX}user:${user.id}`);
+    }
+    await pipeline.exec();
+
+    // 发布变更事件
+    await this.redis.publish('permission:changed', JSON.stringify({
+      type: 'role',
+      id: roleId,
+      timestamp: Date.now()
+    }));
+  }
+}
+
+// 权限变更监听
+export class PermissionChangeListener {
+  private redis: Redis;
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL);
+    this.subscribe();
+  }
+
+  private subscribe() {
+    this.redis.subscribe('permission:changed', (err, count) => {
+      if (err) {
+        console.error('订阅失败:', err);
+        return;
+      }
+      console.log(`已订阅 ${count} 个频道`);
+    });
+
+    this.redis.on('message', (channel, message) => {
+      const event = JSON.parse(message);
+      console.log('权限变更事件:', event);
+
+      // 可以在此触发 WebSocket 推送，通知客户端刷新权限
+      this.notifyClients(event);
+    });
+  }
+
+  private notifyClients(event: any) {
+    // WebSocket 通知实现
+    // websocketServer.emit('permission:refresh', event);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 权限管理 API</h2>
+      <div class="code-block">
+// src/routes/permission.routes.ts
+import { Router } from 'express';
+import { authenticate, requirePermission } from '../middleware/auth.middleware';
+
+const router = Router();
+const permissionService = new DynamicPermissionService();
+
+// 所有路由需要认证和管理员权限
+router.use(authenticate);
+router.use(requirePermission('permission:manage'));
+
+// 获取所有权限
+router.get('/permissions', async (req, res) => {
+  const permissions = await permissionService.getAllPermissions();
+  res.json(permissions);
+});
+
+// 创建权限
+router.post('/permissions', async (req, res) => {
+  const permission = await permissionService.createPermission(req.body);
+  res.status(201).json(permission);
+});
+
+// 更新权限
+router.put('/permissions/:id', async (req, res) => {
+  const permission = await permissionService.updatePermission(
+    parseInt(req.params.id),
+    req.body
+  );
+  res.json(permission);
+});
+
+// 删除权限
+router.delete('/permissions/:id', async (req, res) => {
+  await permissionService.deletePermission(parseInt(req.params.id));
+  res.status(204).send();
+});
+
+// 为角色分配权限
+router.post('/roles/:roleId/permissions', async (req, res) => {
+  const { permissionIds } = req.body;
+  await permissionService.assignPermissionsToRole(
+    parseInt(req.params.roleId),
+    permissionIds
+  );
+  res.status(200).json({ message: '权限分配成功' });
+});
+
+// 为用户分配角色
+router.post('/users/:userId/roles', async (req, res) => {
+  const { roleIds } = req.body;
+  await permissionService.assignRolesToUser(
+    parseInt(req.params.userId),
+    roleIds
+  );
+  res.status(200).json({ message: '角色分配成功' });
+});
+
+export default router;
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全建议</div>
+          <p>权限管理 API 应有严格的访问控制，建议记录所有权限变更日志，便于审计追踪。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 动态权限支持运行时修改权限配置</li>
+            <li>• 条件引擎支持复杂的权限判断逻辑</li>
+            <li>• 使用缓存提升权限检查性能</li>
+            <li>• 权限变更需要及时更新缓存并通知客户端</li>
+            <li>• 权限管理 API 需要严格的访问控制和审计日志</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="55-3-资源权限.html">← 上一节：资源权限</a>
+      <a href="../chapter56/56-1-NestJS认证模块.html">下一节：NestJS 认证模块 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.1 TypeORM 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="50-1-TypeORM集成.html">第五十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>50.1 TypeORM 集成</h1>
+      <p class="subtitle">在 NestJS 中集成 TypeORM</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>安装和配置 TypeORM</li>
+        <li>创建数据库连接</li>
+        <li>定义实体类</li>
+        <li>使用 Repository 进行数据操作</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装 TypeORM 和数据库驱动
+npm install @nestjs/typeorm typeorm
+
+# PostgreSQL
+npm install pg
+
+# MySQL
+npm install mysql2
+
+# SQLite
+npm install better-sqlite3
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 配置 TypeORM</h2>
+      <div class="code-block">
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      username: 'postgres',
+      password: 'password',
+      database: 'mydb',
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      synchronize: true,  // 开发环境自动同步表结构
+      logging: true,
+    }),
+  ],
+})
+export class AppModule {}
+
+// 使用配置文件
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get('DB_HOST'),
+        port: config.get('DB_PORT'),
+        username: config.get('DB_USERNAME'),
+        password: config.get('DB_PASSWORD'),
+        database: config.get('DB_DATABASE'),
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: config.get('NODE_ENV') !== 'production',
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class AppModule {}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">synchronize 选项</div>
+          <p>synchronize: true 会自动同步实体定义到数据库表结构。生产环境应该设置为 false，使用迁移脚本管理数据库变更。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 定义实体</h2>
+      <div class="code-block">
+// users/user.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Order } from '../orders/order.entity';
+
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ length: 100 })
+  name: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @Column({ select: false })  // 默认不查询此字段
+  password: string;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'enum', enum: ['user', 'admin'], default: 'user' })
+  role: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @OneToMany(() => Order, order => order.user)
+  orders: Order[];
+}
+
+// orders/order.entity.ts
+@Entity('orders')
+export class Order {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  total: number;
+
+  @ManyToOne(() => User, user => user.orders)
+  user: User;
+
+  @Column()
+  userId: number;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 使用 Repository</h2>
+      <div class="code-block">
+// users.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+import { User } from './user.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([User])],
+  controllers: [UsersController],
+  providers: [UsersService],
+})
+export class UsersModule {}
+
+// users.service.ts
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './user.entity';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    @InjectRepository(User)
+    private usersRepository: Repository<User>,
+  ) {}
+
+  findAll(): Promise<User[]> {
+    return this.usersRepository.find();
+  }
+
+  findOne(id: number): Promise<User | null> {
+    return this.usersRepository.findOneBy({ id });
+  }
+
+  findByEmail(email: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ email });
+  }
+
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const user = this.usersRepository.create(createUserDto);
+    return this.usersRepository.save(user);
+  }
+
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+    await this.usersRepository.update(id, updateUserDto);
+    return this.findOne(id);
+  }
+
+  async remove(id: number): Promise<void> {
+    await this.usersRepository.delete(id);
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">Repository 模式</div>
+          <p>TypeORM 的 Repository 提供了丰富的数据操作方法。使用 @InjectRepository 注入 Repository 实例。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @nestjs/typeorm 提供 TypeORM 集成</li>
+            <li>• TypeOrmModule.forRoot() 配置数据库连接</li>
+            <li>• @Entity() 定义数据库表映射</li>
+            <li>• Repository 提供数据操作方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter49/49-5-异常日志.html">← 上一章：异常日志</a>
+      <a href="50-2-Prisma集成.html">下一节：Prisma 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

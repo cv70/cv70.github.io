@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>59.4 Query 查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="59-1-GraphQL简介.html">第59章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>59.4 Query 查询</h1>
+      <p class="subtitle">GraphQL 数据查询详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Query 基础</h2>
+      <p>Query 是 GraphQL 中用于读取数据的操作类型。客户端通过 Query 精确指定需要的数据字段。</p>
+
+      <h3>基本语法</h3>
+      <div class="code-block">
+<span class="comment">// 基本查询结构</span>
+query {
+  fieldName {
+    subField1
+    subField2
+  }
+}
+
+<span class="comment">// 示例：查询用户</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    id
+    name
+    email
+  }
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"user"</span>: {
+      <span class="string">"id"</span>: <span class="string">"123"</span>,
+      <span class="string">"name"</span>: <span class="string">"张三"</span>,
+      <span class="string">"email"</span>: <span class="string">"zhangsan@example.com"</span>
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> 操作名称</h2>
+
+      <p>为 Query 添加名称可以提高可读性，便于调试和日志追踪。</p>
+
+      <div class="code-block">
+<span class="comment">// 匿名查询</span>
+query {
+  user(id: <span class="string">"123"</span>) { name }
+}
+
+<span class="comment">// 命名查询（推荐）</span>
+query GetUser {
+  user(id: <span class="string">"123"</span>) {
+    id
+    name
+    email
+  }
+}
+
+<span class="comment">// 多个查询</span>
+query GetUserData {
+  user(id: <span class="string">"123"</span>) {
+    name
+  }
+  posts {
+    title
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 变量（Variables）</h2>
+
+      <p>变量使查询更加动态和可复用，避免硬编码参数值。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义变量</span>
+query GetUser($id: ID!, $withPosts: Boolean!) {
+  user(id: $id) {
+    id
+    name
+    email
+    posts @include(if: $withPosts) {
+      title
+    }
+  }
+}
+
+<span class="comment">// 变量值（JSON 格式）</span>
+{
+  <span class="string">"id"</span>: <span class="string">"123"</span>,
+  <span class="string">"withPosts"</span>: <span class="keyword">true</span>
+}
+
+<span class="comment">// 变量默认值</span>
+query GetUsers($limit: Int = 10, $offset: Int = 0) {
+  users(limit: $limit, offset: $offset) {
+    id
+    name
+  }
+}
+      </div>
+
+      <h3>变量类型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>$id: ID!</code></td>
+            <td>必填 ID 类型</td>
+            <td>"123"</td>
+          </tr>
+          <tr>
+            <td><code>$limit: Int</code></td>
+            <td>可选整数</td>
+            <td>10, null</td>
+          </tr>
+          <tr>
+            <td><code>$ids: [ID!]!</code></td>
+            <td>必填 ID 数组</td>
+            <td>["1", "2"]</td>
+          </tr>
+          <tr>
+            <td><code>$filter: UserFilter</code></td>
+            <td>输入对象类型</td>
+            <td>{"name": "张"}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 字段别名</h2>
+
+      <p>别名允许为字段指定不同的名称，解决字段冲突或提高可读性。</p>
+
+      <div class="code-block">
+<span class="comment">// 使用别名查询多个用户</span>
+query {
+  user1: user(id: <span class="string">"1"</span>) {
+    name
+  }
+  user2: user(id: <span class="string">"2"</span>) {
+    name
+  }
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"user1"</span>: { <span class="string">"name"</span>: <span class="string">"张三"</span> },
+    <span class="string">"user2"</span>: { <span class="string">"name"</span>: <span class="string">"李四"</span> }
+  }
+}
+
+<span class="comment">// 复杂场景</span>
+query {
+  activeUsers: users(status: ACTIVE) {
+    name
+  }
+  inactiveUsers: users(status: INACTIVE) {
+    name
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 片段（Fragments）</h2>
+
+      <p>片段是可复用的字段集合，减少重复代码。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义片段</span>
+<span class="keyword">fragment</span> UserFields <span class="keyword">on</span> User {
+  id
+  name
+  email
+  createdAt
+}
+
+<span class="comment">// 使用片段</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    ...UserFields
+    posts {
+      title
+    }
+  }
+  users {
+    ...UserFields
+  }
+}
+
+<span class="comment">// 响应同：</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    id
+    name
+    email
+    createdAt
+    posts {
+      title
+    }
+  }
+  users {
+    id
+    name
+    email
+    createdAt
+  }
+}
+      </div>
+
+      <h3>片段的高级用法</h3>
+      <div class="code-block">
+<span class="comment">// 嵌套片段</span>
+<span class="keyword">fragment</span> PostFields <span class="keyword">on</span> Post {
+  id
+  title
+  createdAt
+}
+
+<span class="keyword">fragment</span> UserWithPosts <span class="keyword">on</span> User {
+  ...UserFields
+  posts {
+    ...PostFields
+  }
+}
+
+<span class="comment">// 带变量的片段</span>
+<span class="keyword">fragment</span> UserPosts <span class="keyword">on</span> User {
+  posts(limit: $postLimit) {
+    title
+  }
+}
+
+query GetUser($id: ID!, $postLimit: Int!) {
+  user(id: $id) {
+    ...UserFields
+    ...UserPosts
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 内联片段</h2>
+
+      <p>内联片段用于处理接口和联合类型。</p>
+
+      <div class="code-block">
+<span class="comment">// 搜索返回联合类型</span>
+query Search {
+  search(query: <span class="string">"test"</span>) {
+    ... <span class="keyword">on</span> User {
+      id
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      id
+      title
+      content
+    }
+    ... <span class="keyword">on</span> Comment {
+      id
+      content
+    }
+  }
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"search"</span>: [
+      { <span class="string">"id"</span>: <span class="string">"1"</span>, <span class="string">"name"</span>: <span class="string">"张三"</span>, <span class="string">"email"</span>: <span class="string">"..."</span> },
+      { <span class="string">"id"</span>: <span class="string">"2"</span>, <span class="string">"title"</span>: <span class="string">"文章标题"</span>, <span class="string">"content"</span>: <span class="string">"..."</span> },
+      { <span class="string">"id"</span>: <span class="string">"3"</span>, <span class="string">"content"</span>: <span class="string">"评论内容"</span> }
+    ]
+  }
+}
+
+<span class="comment">// 接口类型查询</span>
+query {
+  node(id: <span class="string">"123"</span>) {
+    id
+    ... <span class="keyword">on</span> User {
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      title
+      author {
+        name
+      }
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 指令（Directives）</h2>
+
+      <p>指令用于动态控制查询的行为。</p>
+
+      <h3>内置指令</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>指令</th>
+            <th>作用</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@include(if: Boolean)</code></td>
+            <td>条件为真时包含字段</td>
+            <td>@include(if: $showEmail)</td>
+          </tr>
+          <tr>
+            <td><code>@skip(if: Boolean)</code></td>
+            <td>条件为真时跳过字段</td>
+            <td>@skip(if: $hidePosts)</td>
+          </tr>
+          <tr>
+            <td><code>@deprecated</code></td>
+            <td>标记字段已废弃</td>
+            <td>@deprecated(reason: "使用 newUser")</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+<span class="comment">// @include 指令</span>
+query GetUser($id: ID!, $withPosts: Boolean!) {
+  user(id: $id) {
+    name
+    email
+    posts @include(if: $withPosts) {
+      title
+    }
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"id"</span>: <span class="string">"123"</span>,
+  <span class="string">"withPosts"</span>: <span class="keyword">true</span>
+}
+
+<span class="comment">// @skip 指令</span>
+query GetUsers($hideInactive: Boolean!) {
+  users {
+    name
+    isActive
+    lastLogin @skip(if: $hideInactive)
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 多层嵌套查询</h2>
+
+      <p>GraphQL 的强大之处在于可以在一个请求中查询多层关联数据。</p>
+
+      <div class="code-block">
+<span class="comment">// 多层嵌套查询</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    id
+    name
+    email
+    posts(limit: <span class="number">5</span>) {
+      id
+      title
+      content
+      comments(limit: <span class="number">3</span>) {
+        id
+        content
+        author {
+          id
+          name
+          avatar {
+            url
+          }
+        }
+      }
+      tags {
+        name
+      }
+    }
+    followers {
+      id
+      name
+    }
+  }
+}
+
+<span class="comment">// 一次请求获取完整数据</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 分页查询</h2>
+
+      <h3>Offset 分页</h3>
+      <div class="code-block">
+query GetUsers($limit: Int!, $offset: Int!) {
+  users(limit: $limit, offset: $offset) {
+    id
+    name
+    email
+  }
+  userCount
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"limit"</span>: <span class="number">10</span>,
+  <span class="string">"offset"</span>: <span class="number">20</span>
+}
+      </div>
+
+      <h3>Cursor 分页（Relay 规范）</h3>
+      <div class="code-block">
+query GetUsers($first: Int, $after: String, $last: Int, $before: String) {
+  users(first: $first, after: $after, last: $last, before: $before) {
+    edges {
+      cursor
+      node {
+        id
+        name
+        email
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"first"</span>: <span class="number">10</span>,
+  <span class="string">"after"</span>: <span class="string">"YXJyYXljb25uZWN0aW9uOjE5"</span>
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"users"</span>: {
+      <span class="string">"edges"</span>: [
+        {
+          <span class="string">"cursor"</span>: <span class="string">"YXJyYXljb25uZWN0aW9uOjIw"</span>,
+          <span class="string">"node"</span>: { <span class="string">"id"</span>: <span class="string">"20"</span>, <span class="string">"name"</span>: <span class="string">"用户20"</span> }
+        }
+      ],
+      <span class="string">"pageInfo"</span>: {
+        <span class="string">"hasNextPage"</span>: <span class="keyword">true</span>,
+        <span class="string">"hasPreviousPage"</span>: <span class="keyword">true</span>
+      },
+      <span class="string">"totalCount"</span>: <span class="number">100</span>
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> TypeScript 中使用 Query</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { gql, useQuery } <span class="keyword">from</span> <span class="string">'@apollo/client'</span>;
+
+<span class="comment">// 定义 Query</span>
+<span class="keyword">const</span> GET_USER = gql<span class="string">`
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      id
+      name
+      email
+      posts {
+        id
+        title
+      }
+    }
+  }
+`</span>;
+
+<span class="comment">// React 组件中使用</span>
+<span class="keyword">function</span> <span class="function">UserProfile</span>({ userId }: { userId: <span class="keyword">string</span> }) {
+  <span class="keyword">const</span> { loading, error, data } = useQuery(GET_USER, {
+    variables: { id: userId },
+  });
+
+  <span class="keyword">if</span> (loading) <span class="keyword">return</span> <span class="string">'加载中...'</span>;
+  <span class="keyword">if</span> (error) <span class="keyword">return</span> <span class="string">`错误: </span>${error.message}<span class="string">`</span>;
+
+  <span class="keyword">return</span> (
+    <div>
+      <h1>{data.user.name}</h1>
+      <p>{data.user.email}</p>
+      <ul>
+        {data.user.posts.map((post: <span class="keyword">any</span>) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Query 是 GraphQL 中读取数据的操作</li>
+        <li>操作名称提高可读性和调试效率</li>
+        <li>变量使查询更加动态和可复用</li>
+        <li>别名解决字段冲突问题</li>
+        <li>片段实现字段集合的复用</li>
+        <li>指令动态控制查询行为</li>
+        <li>支持多层嵌套查询和分页</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="59-3-Schema定义.html">← 上一节：Schema 定义</a>
+      <a href="59-5-Mutation变更.html">下一节：Mutation 变更 →</a>
+    </div>
+  </div>
+</body>
+</html>

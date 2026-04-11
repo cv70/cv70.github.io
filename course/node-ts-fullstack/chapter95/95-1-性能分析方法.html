@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>95.1 性能分析方法 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="95-1-性能分析方法.html">第九十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>95.1 性能分析方法</h1>
+      <p class="subtitle">Node.js 性能分析工具与方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Node.js 性能分析的重要性</li>
+        <li>掌握常用性能分析工具</li>
+        <li>学会性能监控方法</li>
+        <li>了解性能指标体系</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 性能分析概述</h2>
+      <div class="code-block">
+# 为什么需要性能分析
+
+## 用户体验
+- 响应速度直接影响用户满意度
+- 慢请求导致用户流失
+
+## 资源效率
+- 发现资源浪费
+- 优化成本
+
+## 可扩展性
+- 发现性能瓶颈
+- 为扩展做准备
+
+# 性能分析维度
+
+┌─────────────────┬──────────────────────────────────┐
+│     维度         │              指标                │
+├─────────────────┼──────────────────────────────────┤
+│ CPU            │ 使用率、负载、函数执行时间        │
+│ 内存           │ 使用量、泄漏、GC 频率            │
+│ 事件循环       │ 延迟、阻塞、任务队列长度         │
+│ I/O            │ 磁盘读写、网络延迟               │
+│ 应用           │ 响应时间、吞吐量、错误率         │
+└─────────────────┴──────────────────────────────────┘
+
+# Node.js 性能特点
+- 单线程事件循环
+- 非阻塞 I/O
+- V8 引擎优化
+- 异步编程模型
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内置诊断工具</h2>
+      <div class="code-block">
+# Node.js 内置性能标志
+
+## 启动参数
+node --inspect app.js           # 启用调试器
+node --inspect-brk app.js       # 启动时断点
+node --prof app.js              # 生成性能分析文件
+node --trace-opt app.js         # 追踪优化
+node --trace-deopt app.js       # 追踪反优化
+
+## 生成 CPU 分析
+# 运行应用
+node --prof app.js
+
+# 生成报告
+node --prof-process isolate-*.log > processed.txt
+
+# 使用 Chrome DevTools
+node --inspect app.js
+# 打开 chrome://inspect
+# 点击 "Open dedicated DevTools for Node"
+# 选择 "Profiler" 标签
+
+# V8 分析 API
+
+const v8 = require('v8');
+const fs = require('fs');
+
+// 获取堆统计
+const stats = v8.getHeapStatistics();
+console.log(stats);
+
+// 获取堆快照
+const snapshotStream = v8.getHeapSnapshot();
+const fileStream = fs.createWriteStream('heap.heapsnapshot');
+snapshotStream.pipe(fileStream);
+
+// 代码覆盖
+if (process.env.NODE_V8_COVERAGE) {
+  // 自动输出覆盖率到指定目录
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Chrome DevTools</div>
+          <p>Chrome DevTools 是分析 Node.js 性能的强大工具，可以查看 CPU 分析、内存快照、调用栈等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 性能监控中间件</h2>
+      <div class="code-block">
+# Express 性能监控
+
+import express from 'express';
+
+const app = express();
+
+// 请求时间监控
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+
+  res.on('finish', () => {
+    const end = process.hrtime.bigint();
+    const duration = Number(end - start) / 1e6; // 毫秒
+
+    console.log({
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      duration: `${duration.toFixed(2)}ms`,
+    });
+  });
+
+  next();
+});
+
+// 事件循环延迟监控
+let lastCheck = process.hrtime.bigint();
+
+setInterval(() => {
+  const now = process.hrtime.bigint();
+  const delay = Number(now - lastCheck) / 1e6 - 1000; // 预期 1 秒
+
+  if (delay > 10) {
+    console.warn(`Event loop delay: ${delay.toFixed(2)}ms`);
+  }
+
+  lastCheck = now;
+}, 1000);
+
+# 使用 clinic.js
+
+# 安装
+npm install -g clinic
+
+# CPU 分析
+clinic doctor -- node app.js
+# 自动打开浏览器显示分析结果
+
+# 内存分析
+clinic heapprofiler -- node app.js
+
+# 事件循环分析
+clinic bubbleprof -- node app.js
+
+# 综合分析
+clinic flame -- node app.js
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> APM 工具集成</h2>
+      <div class="code-block">
+# New Relic 集成
+
+# 安装
+npm install newrelic
+
+# 配置 newrelic.js
+exports.config = {
+  app_name: ['My Application'],
+  license_key: 'YOUR_LICENSE_KEY',
+  logging: {
+    level: 'info',
+  },
+};
+
+# 在应用入口最先引入
+import 'newrelic';
+
+# Elastic APM
+
+import apm from 'elastic-apm-node';
+
+apm.start({
+  serviceName: 'my-service',
+  serverUrl: 'http://localhost:8200',
+  environment: 'production',
+});
+
+# 自定义事务
+const transaction = apm.startTransaction('CustomTransaction', 'custom');
+const span = transaction.startSpan('operation');
+
+// 执行操作...
+
+span.end();
+transaction.end();
+
+# Prometheus + Grafana
+
+import client from 'prom-client';
+
+// 启用默认指标
+client.collectDefaultMetrics();
+
+// 自定义指标
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.1, 0.5, 1, 2, 5],
+});
+
+// 在中间件中使用
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    end({ method: req.method, route: req.path, status_code: res.statusCode });
+  });
+  next();
+});
+
+// 暴露指标端点
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.send(await client.register.metrics());
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 Node.js 内置 --inspect 和 --prof 标志</li>
+            <li>• Chrome DevTools 是强大的分析工具</li>
+            <li>• clinic.js 提供可视化性能分析</li>
+            <li>• 生产环境使用 APM 工具持续监控</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter94/94-5-依赖安全审计.html">← 上一章：依赖安全审计</a>
+      <a href="95-2-内存管理.html">下一节：内存管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

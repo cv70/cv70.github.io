@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>43.2 路由定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="43-1-控制器基础.html">第四十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>43.2 路由定义</h1>
+      <p class="subtitle">掌握 NestJS 路由配置技巧</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解路由的组成方式</li>
+        <li>掌握路由参数的定义</li>
+        <li>学会定义子路由</li>
+        <li>了解路由重定向</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 路由组成</h2>
+      <p>NestJS 路由由控制器装饰器和方法装饰器组合而成：</p>
+      <div class="code-block">
+// 完整路由 = 控制器前缀 + 方法路径
+
+@Controller('users')      // 前缀: /users
+export class UsersController {
+
+  @Get()                  // GET /users
+  findAll() {}
+
+  @Get('active')          // GET /users/active
+  findActive() {}
+
+  @Get(':id')             // GET /users/:id
+  findOne(@Param('id') id: string) {}
+
+  @Post()                 // POST /users
+  create() {}
+
+  @Put(':id')             // PUT /users/:id
+  update(@Param('id') id: string) {}
+
+  @Delete(':id')          // DELETE /users/:id
+  remove(@Param('id') id: string) {}
+}
+
+// 嵌套路由示例
+@Controller('users/:userId/posts')
+export class PostsController {
+
+  @Get()                  // GET /users/:userId/posts
+  findAll(@Param('userId') userId: string) {}
+
+  @Get(':postId')         // GET /users/:userId/posts/:postId
+  findOne(
+    @Param('userId') userId: string,
+    @Param('postId') postId: string
+  ) {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 路由参数</h2>
+      <div class="code-block">
+import { Controller, Get, Post, Param, Body, Query } from '@nestjs/common';
+
+@Controller('products')
+export class ProductsController {
+
+  // 路径参数
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return `Product ${id}`;
+  }
+
+  // 多个路径参数
+  @Get('category/:categoryId/product/:productId')
+  findByCategory(
+    @Param('categoryId') categoryId: string,
+    @Param('productId') productId: string,
+  ) {
+    return `Category: ${categoryId}, Product: ${productId}`;
+  }
+
+  // 查询参数
+  @Get()
+  findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('sort') sort: string = 'createdAt',
+  ) {
+    return { page, limit, sort };
+  }
+
+  // 获取所有参数
+  @Get('search')
+  search(@Query() query: any) {
+    return query;  // { keyword: 'xxx', category: 'yyy', ... }
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">参数顺序</div>
+          <p>当定义多个路由时，更具体的路由应该放在前面。例如 @Get('active') 应该放在 @Get(':id') 之前，否则 'active' 会被当作 id 参数匹配。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 路由重定向</h2>
+      <div class="code-block">
+import { Controller, Get, Redirect } from '@nestjs/common';
+
+@Controller()
+export class AppController {
+
+  @Get()
+  @Redirect('https://docs.nestjs.com', 302)
+  root() {}
+
+  @Get('docs')
+  @Redirect('https://docs.nestjs.com', 301)
+  getDocs() {}
+
+  // 动态重定向
+  @Get('blog/:id')
+  @Redirect('https://blog.example.com')
+  getBlog(@Param('id') id: string) {
+    return { url: `https://blog.example.com/posts/${id}` };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 通配符路由</h2>
+      <div class="code-block">
+@Controller('files')
+export class FilesController {
+
+  // 匹配 /files/abc, /files/abc/def, /files/abc/def/ghi ...
+  @Get('*')
+  getFile(@Req() req: Request) {
+    const path = req.path.replace('/files/', '');
+    return { path };
+  }
+
+  // 匹配特定模式
+  @Get('image/*')
+  getImage(@Req() req: Request) {
+    // 匹配 /files/image/xxx.jpg
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">通配符注意</div>
+          <p>通配符路由使用 glob 模式匹配。注意不要与具体路由冲突，通配符路由通常放在最后。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 路由 = 控制器前缀 + 方法路径</li>
+            <li>• @Param() 获取路径参数</li>
+            <li>• @Query() 获取查询参数</li>
+            <li>• 具体路由应在参数路由之前</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="43-1-控制器基础.html">← 上一节：控制器基础</a>
+      <a href="43-3-请求处理.html">下一节：请求处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

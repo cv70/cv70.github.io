@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.5 最佳实践 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-项目配置.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.5 最佳实践</h1>
+      <p class="subtitle">构建生产级 Koa + TypeScript 应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握项目结构最佳实践</li>
+        <li>学会错误处理和日志管理</li>
+        <li>理解依赖注入模式</li>
+        <li>了解测试和部署策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 项目结构</h2>
+      <div class="code-block">
+src/
+├── index.ts                 # 入口文件
+├── app.ts                   # Koa 应用配置
+├── config/
+│   ├── index.ts             # 配置入口
+│   ├── database.ts          # 数据库配置
+│   └── redis.ts             # Redis 配置
+├── controllers/
+│   ├── index.ts             # 控制器导出
+│   ├── authController.ts
+│   └── userController.ts
+├── middlewares/
+│   ├── index.ts             # 中间件导出
+│   ├── errorHandler.ts
+│   ├── auth.ts
+│   └── validate.ts
+├── models/
+│   ├── index.ts             # 模型导出
+│   ├── User.ts
+│   └── Post.ts
+├── routes/
+│   ├── index.ts             # 路由入口
+│   ├── authRoutes.ts
+│   └── userRoutes.ts
+├── services/
+│   ├── index.ts             # 服务导出
+│   ├── authService.ts
+│   └── userService.ts
+├── repositories/
+│   ├── index.ts             # 数据访问层
+│   └── userRepository.ts
+├── types/
+│   ├── index.ts             # 类型导出
+│   ├── user.ts
+│   └── response.ts
+├── utils/
+│   ├── logger.ts            # 日志工具
+│   ├── hash.ts              # 加密工具
+│   └── validator.ts         # 验证工具
+└── validators/
+    ├── index.ts             # 验证器导出
+    └── userValidator.ts
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 分层架构</h2>
+      <div class="code-block">
+┌─────────────────────────────────────────┐
+│              Routes (路由层)              │
+│         定义 API 端点和 HTTP 方法          │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│           Controllers (控制层)            │
+│       处理请求、调用服务、返回响应           │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│            Services (服务层)              │
+│       业务逻辑、事务管理、服务编排           │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│         Repositories (数据访问层)          │
+│          数据库操作、缓存操作               │
+└─────────────────────────────────────────┘
+      </div>
+
+      <div class="code-block">
+// src/controllers/userController.ts
+export class UserController {
+  constructor(private userService: UserService) {}
+
+  async index(ctx: RouterContext) {
+    const users = await this.userService.findAll();
+    ctx.body = { success: true, data: users };
+  }
+}
+
+// src/services/userService.ts
+export class UserService {
+  constructor(private userRepo: UserRepository) {}
+
+  async findAll() {
+    return this.userRepo.findAll();
+  }
+}
+
+// src/repositories/userRepository.ts
+export class UserRepository {
+  async findAll() {
+    return User.findAll();
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 日志管理</h2>
+      <div class="code-block">
+# 安装 winston
+npm install winston
+      </div>
+
+      <div class="code-block">
+// src/utils/logger.ts
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    // 错误日志
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error'
+    }),
+    // 所有日志
+    new winston.transports.File({
+      filename: 'logs/combined.log'
+    })
+  ]
+});
+
+// 开发环境输出到控制台
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.simple()
+  }));
+}
+
+export default logger;
+      </div>
+
+      <div class="code-block">
+// 日志中间件
+import logger from '@/utils/logger';
+
+app.use(async (ctx, next) => {
+  const start = Date.now();
+
+  await next();
+
+  const ms = Date.now() - start;
+
+  logger.info({
+    method: ctx.method,
+    url: ctx.url,
+    status: ctx.status,
+    duration: ms,
+    ip: ctx.ip
+  });
+});
+
+// 错误日志
+app.on('error', (err, ctx) => {
+  logger.error({
+    error: err.message,
+    stack: err.stack,
+    url: ctx.url,
+    method: ctx.method
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💉</span> 依赖注入</h2>
+      <div class="code-block">
+# 安装 tsyringe
+npm install tsyringe reflect-metadata
+      </div>
+
+      <div class="code-block">
+// tsconfig.json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+      </div>
+
+      <div class="code-block">
+// src/index.ts
+import 'reflect-metadata';
+import { container } from 'tsyringe';
+
+// 注册依赖
+container.registerSingleton(UserRepository);
+container.registerSingleton(UserService);
+container.registerSingleton(UserController);
+
+// src/repositories/userRepository.ts
+import { injectable } from 'tsyringe';
+
+@injectable()
+export class UserRepository {
+  async findAll() {
+    return User.findAll();
+  }
+}
+
+// src/services/userService.ts
+import { injectable, inject } from 'tsyringe';
+
+@injectable()
+export class UserService {
+  constructor(
+    @inject(UserRepository) private userRepo: UserRepository
+  ) {}
+
+  async findAll() {
+    return this.userRepo.findAll();
+  }
+}
+
+// src/controllers/userController.ts
+import { injectable, inject } from 'tsyringe';
+
+@injectable()
+export class UserController {
+  constructor(
+    @inject(UserService) private userService: UserService
+  ) {}
+
+  async index(ctx: RouterContext) {
+    const users = await this.userService.findAll();
+    ctx.body = { success: true, data: users };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> 单元测试</h2>
+      <div class="code-block">
+# 安装测试工具
+npm install -D jest ts-jest @types/jest supertest @types/supertest
+      </div>
+
+      <div class="code-block">
+// jest.config.js
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src'],
+  testMatch: ['**/__tests__/**/*.ts', '**/*.spec.ts'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1'
+  }
+};
+      </div>
+
+      <div class="code-block">
+// src/__tests__/user.test.ts
+import request from 'supertest';
+import app from '@/app';
+
+describe('User API', () => {
+  describe('GET /api/users', () => {
+    it('should return users list', async () => {
+      const response = await request(app.callback())
+        .get('/api/users')
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+    });
+  });
+
+  describe('POST /api/users', () => {
+    it('should create a new user', async () => {
+      const response = await request(app.callback())
+        .post('/api/users')
+        .send({
+          username: 'testuser',
+          email: 'test@example.com',
+          password: 'password123'
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.username).toBe('testuser');
+    });
+
+    it('should validate input', async () => {
+      const response = await request(app.callback())
+        .post('/api/users')
+        .send({ username: '' })
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+    });
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 生产部署</h2>
+      <div class="code-block">
+# Dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+CMD ["node", "dist/index.js"]
+      </div>
+
+      <div class="code-block">
+# docker-compose.yml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 最佳实践清单</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">代码质量</h3>
+          <ul class="feature-list">
+            <li>使用 ESLint + Prettier</li>
+            <li>启用 strict 模式</li>
+            <li>编写单元测试</li>
+            <li>Code Review</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">安全</h3>
+          <ul class="feature-list">
+            <li>使用 HTTPS</li>
+            <li>设置安全响应头</li>
+            <li>验证所有输入</li>
+            <li>使用参数化查询</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">性能</h3>
+          <ul class="feature-list">
+            <li>启用响应压缩</li>
+            <li>使用 Redis 缓存</li>
+            <li>数据库连接池</li>
+            <li>静态文件 CDN</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">运维</h3>
+          <ul class="feature-list">
+            <li>日志集中管理</li>
+            <li>健康检查端点</li>
+            <li>优雅关闭</li>
+            <li>监控告警</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 采用分层架构：Routes -> Controllers -> Services -> Repositories</li>
+            <li>• 使用依赖注入解耦组件</li>
+            <li>• 集中管理日志，便于排查问题</li>
+            <li>• 编写单元测试保证代码质量</li>
+            <li>• 使用 Docker 容器化部署</li>
+            <li>• 遵循安全、性能、运维最佳实践</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-4-路由类型.html">← 上一节：路由类型</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

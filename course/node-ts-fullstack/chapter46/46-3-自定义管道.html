@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.3 自定义管道 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="46-1-管道概念.html">第四十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>46.3 自定义管道</h1>
+      <p class="subtitle">创建自己的验证和转换管道</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握自定义管道的创建方式</li>
+        <li>学会参数验证管道的实现</li>
+        <li>了解带配置的管道</li>
+        <li>掌握管道的注册和使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 创建自定义管道</h2>
+      <div class="code-block">
+import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException } from '@nestjs/common';
+
+@Injectable()
+export class ParseIntPipe implements PipeTransform<string, number> {
+  transform(value: string, metadata: ArgumentMetadata): number {
+    const val = parseInt(value, 10);
+
+    if (isNaN(val)) {
+      throw new BadRequestException('Validation failed: must be a number');
+    }
+
+    return val;
+  }
+}
+
+// 参数元数据
+interface ArgumentMetadata {
+  type: 'body' | 'query' | 'param' | 'custom';
+  metatype: Type<unknown>;  // 参数类型
+  data: string;             // 参数名称（如 @Param('id') 中的 'id'）
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">PipeTransform 接口</div>
+          <p>PipeTransform<T, R> 是泛型接口，T 是输入类型，R 是输出类型。transform 方法必须返回转换后的值或抛出异常。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 验证管道示例</h2>
+      <div class="code-block">
+// email-validation.pipe.ts
+import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
+
+@Injectable()
+export class EmailValidationPipe implements PipeTransform {
+  transform(value: string) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(value)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    return value.toLowerCase();  // 转换为小写
+  }
+}
+
+// 使用
+@Controller('users')
+export class UsersController {
+  @Get()
+  findByEmail(@Query('email', EmailValidationPipe) email: string) {
+    return { email };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 带配置的管道</h2>
+      <div class="code-block">
+// parse-int-with-range.pipe.ts
+import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
+
+interface ParseIntOptions {
+  min?: number;
+  max?: number;
+  defaultValue?: number;
+}
+
+@Injectable()
+export class ParseIntWithRangePipe implements PipeTransform {
+  constructor(private options: ParseIntOptions = {}) {}
+
+  transform(value: string) {
+    // 处理空值
+    if (!value && this.options.defaultValue !== undefined) {
+      return this.options.defaultValue;
+    }
+
+    const num = parseInt(value, 10);
+
+    if (isNaN(num)) {
+      throw new BadRequestException('Value must be a number');
+    }
+
+    if (this.options.min !== undefined && num < this.options.min) {
+      throw new BadRequestException(`Value must be at least ${this.options.min}`);
+    }
+
+    if (this.options.max !== undefined && num > this.options.max) {
+      throw new BadRequestException(`Value must be at most ${this.options.max}`);
+    }
+
+    return num;
+  }
+}
+
+// 使用
+@Controller('pagination')
+export class PaginationController {
+  @Get()
+  findAll(
+    @Query('page', new ParseIntWithRangePipe({ min: 1, defaultValue: 1 }))
+    page: number,
+    @Query('limit', new ParseIntWithRangePipe({ min: 1, max: 100, defaultValue: 10 }))
+    limit: number,
+  ) {
+    return { page, limit };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 基于元数据的管道</h2>
+      <div class="code-block">
+import { PipeTransform, Injectable, ArgumentMetadata } from '@nestjs/common';
+
+@Injectable()
+export class TrimPipe implements PipeTransform {
+  transform(value: any, metadata: ArgumentMetadata) {
+    // 只处理字符串类型的 body 和 query 参数
+    if (metadata.type === 'body' || metadata.type === 'query') {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+
+      // 递归处理对象
+      if (typeof value === 'object' && value !== null) {
+        return this.trimObject(value);
+      }
+    }
+
+    return value;
+  }
+
+  private trimObject(obj: any): any {
+    const result = {};
+    for (const key in obj) {
+      const value = obj[key];
+      if (typeof value === 'string') {
+        result[key] = value.trim();
+      } else if (typeof value === 'object') {
+        result[key] = this.trimObject(value);
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+}
+
+// 全局注册
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new TrimPipe());
+  await app.listen(3000);
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">管道执行顺序</div>
+          <p>全局管道会应用到所有路由。多个管道按注册顺序执行。如果管道抛出异常，后续管道和路由处理器不会执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 实现 PipeTransform 接口创建自定义管道</li>
+            <li>• transform 方法返回转换后的值</li>
+            <li>• 抛出异常阻止请求继续</li>
+            <li>• 可以根据 metadata 实现条件处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="46-2-内置管道.html">← 上一节：内置管道</a>
+      <a href="46-4-数据验证.html">下一节：数据验证 →</a>
+    </div>
+  </div>
+</body>
+</html>

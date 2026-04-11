@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.5 数字签名 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="20-1-哈希算法.html">第二十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>20.5 数字签名</h1>
+      <p class="subtitle">数据完整性与身份验证</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解数字签名原理</li>
+        <li>掌握签名和验证 API</li>
+        <li>学会文件签名</li>
+        <li>了解 JWT 签名实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 签名与验证</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成密钥对
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+});
+
+// 创建签名
+function createSignature(data, privateKey) {
+  const sign = crypto.createSign('SHA256');
+  sign.write(data);
+  sign.end();
+  return sign.sign(privateKey, 'hex');
+}
+
+// 验证签名
+function verifySignature(data, signature, publicKey) {
+  const verify = crypto.createVerify('SHA256');
+  verify.write(data);
+  verify.end();
+  return verify.verify(publicKey, signature, 'hex');
+}
+
+// 使用
+const message = '这是一条重要消息';
+const signature = createSignature(message, privateKey);
+console.log('签名:', signature);
+
+const isValid = verifySignature(message, signature, publicKey);
+console.log('验证结果:', isValid);  // true
+
+// 流式签名
+const sign = crypto.createSign('SHA256');
+sign.write('部分数据 1\n');
+sign.write('部分数据 2\n');
+sign.end();
+const streamSig = sign.sign(privateKey, 'hex');
+
+// 使用不同算法
+const algorithms = ['RSA-SHA256', 'RSA-SHA384', 'RSA-SHA512'];
+algorithms.forEach(algo => {
+  const sig = crypto.sign(algo, Buffer.from('test'), privateKey);
+  console.log(`${algo}: ${sig.toString('hex').slice(0, 32)}...`);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 文件签名</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+const fs = require('fs');
+
+// 签名文件
+function signFile(filepath, privateKey) {
+  const sign = crypto.createSign('SHA256');
+  const stream = fs.createReadStream(filepath);
+
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => sign.update(chunk));
+    stream.on('end', () => resolve(sign.sign(privateKey, 'hex')));
+    stream.on('error', reject);
+  });
+}
+
+// 验证文件签名
+function verifyFileSignature(filepath, signature, publicKey) {
+  const verify = crypto.createVerify('SHA256');
+  const stream = fs.createReadStream(filepath);
+
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => verify.update(chunk));
+    stream.on('end', () => resolve(verify.verify(publicKey, signature, 'hex')));
+    stream.on('error', reject);
+  });
+}
+
+// 使用示例
+async function demo() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048
+  });
+
+  // 创建测试文件
+  fs.writeFileSync('test.txt', 'Hello World');
+
+  const signature = await signFile('test.txt', privateKey);
+  console.log('文件签名:', signature);
+
+  const isValid = await verifyFileSignature('test.txt', signature, publicKey);
+  console.log('验证结果:', isValid);
+}
+
+demo();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 对象签名</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+class ObjectSigner {
+  constructor(privateKey, publicKey) {
+    this.privateKey = privateKey;
+    this.publicKey = publicKey;
+  }
+
+  // 签名对象
+  sign(obj) {
+    const data = JSON.stringify(obj);
+    const signature = crypto.sign('RSA-SHA256', Buffer.from(data), this.privateKey);
+    return {
+      ...obj,
+      _signature: signature.toString('base64'),
+      _timestamp: Date.now()
+    };
+  }
+
+  // 验证对象
+  verify(signedObj) {
+    const { _signature, _timestamp, ...data } = signedObj;
+    const dataStr = JSON.stringify(data);
+
+    return crypto.verify(
+      'RSA-SHA256',
+      Buffer.from(dataStr),
+      this.publicKey,
+      Buffer.from(_signature, 'base64')
+    );
+  }
+
+  // 提取数据
+  extract(signedObj) {
+    const { _signature, _timestamp, ...data } = signedObj;
+    return data;
+  }
+
+  // 检查过期
+  isExpired(signedObj, maxAge = 3600000) {
+    return Date.now() - signedObj._timestamp > maxAge;
+  }
+}
+
+// 使用
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+});
+
+const signer = new ObjectSigner(privateKey, publicKey);
+
+const signed = signer.sign({ userId: '123', role: 'admin' });
+console.log('签名对象:', signed);
+
+console.log('验证结果:', signer.verify(signed));
+console.log('是否过期:', signer.isExpired(signed));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> JWT 风格签名</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 简化版 JWT 实现
+class SimpleJWT {
+  constructor(secret) {
+    this.secret = secret;
+  }
+
+  // Base64URL 编码
+  base64UrlEncode(data) {
+    return Buffer.from(data)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  // Base64URL 解码
+  base64UrlDecode(str) {
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    return Buffer.from(str, 'base64').toString();
+  }
+
+  // 生成 Token
+  sign(payload, expiresIn = 3600) {
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+
+    const finalPayload = {
+      ...payload,
+      iat: now,
+      exp: now + expiresIn
+    };
+
+    const headerB64 = this.base64UrlEncode(JSON.stringify(header));
+    const payloadB64 = this.base64UrlEncode(JSON.stringify(finalPayload));
+
+    const signature = crypto.createHmac('sha256', this.secret)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    return `${headerB64}.${payloadB64}.${signature}`;
+  }
+
+  // 验证 Token
+  verify(token) {
+    const [headerB64, payloadB64, signature] = token.split('.');
+
+    // 验证签名
+    const expectedSig = crypto.createHmac('sha256', this.secret)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    if (signature !== expectedSig) {
+      throw new Error('Invalid signature');
+    }
+
+    // 解析 payload
+    const payload = JSON.parse(this.base64UrlDecode(payloadB64));
+
+    // 检查过期
+    if (payload.exp < Math.floor(Date.now() / 1000)) {
+      throw new Error('Token expired');
+    }
+
+    return payload;
+  }
+}
+
+// 使用
+const jwt = new SimpleJWT('my-secret-key');
+
+const token = jwt.sign({ userId: '123', role: 'user' });
+console.log('Token:', token);
+
+const payload = jwt.verify(token);
+console.log('Payload:', payload);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 数字签名验证数据来源和完整性</li>
+            <li>• createSign/createVerify 用于签名验证</li>
+            <li>• 文件签名使用流式处理</li>
+            <li>• JWT 是签名在实际应用中的典型例子</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="20-4-随机数生成.html">← 上一节：随机数生成</a>
+      <a href="../chapter21/21-1-进程管理.html">下一章：进程管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

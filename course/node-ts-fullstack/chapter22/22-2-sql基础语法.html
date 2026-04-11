@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.2 SQL 基础语法 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="22-1-mysql安装配置.html">第二十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>22.2 SQL 基础语法</h1>
+      <p class="subtitle">掌握 SQL 语句的核心操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 DDL 数据定义语句</li>
+        <li>学会 DML 数据操作语句</li>
+        <li>理解 DQL 数据查询语句</li>
+        <li>熟悉常用函数和表达式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> DDL 数据定义语言</h2>
+      <div class="code-block">
+-- 创建数据库
+CREATE DATABASE IF NOT EXISTS myapp
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+-- 使用数据库
+USE myapp;
+
+-- 创建表
+CREATE TABLE users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  email VARCHAR(100) NOT NULL,
+  age INT CHECK (age >= 0 AND age <= 150),
+  status ENUM('active', 'inactive', 'banned') DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 修改表结构
+ALTER TABLE users ADD COLUMN phone VARCHAR(20);
+ALTER TABLE users DROP COLUMN phone;
+ALTER TABLE users MODIFY COLUMN email VARCHAR(150);
+
+-- 删除表
+DROP TABLE IF EXISTS users;
+
+-- 清空表（保留结构）
+TRUNCATE TABLE users;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> DML 数据操作语言</h2>
+      <div class="code-block">
+-- 插入数据
+INSERT INTO users (username, email, age) VALUES
+  ('alice', 'alice@mail.com', 25),
+  ('bob', 'bob@mail.com', 30),
+  ('charlie', 'charlie@mail.com', 28);
+
+-- 更新数据
+UPDATE users
+SET age = 26, status = 'active'
+WHERE username = 'alice';
+
+-- 安全更新：先查询再更新
+UPDATE users
+SET status = 'inactive'
+WHERE id IN (
+  SELECT id FROM users WHERE created_at < '2024-01-01'
+);
+
+-- 删除数据
+DELETE FROM users WHERE status = 'banned';
+
+-- 条件删除
+DELETE FROM users
+WHERE id = 1
+LIMIT 1;  -- 限制删除数量
+
+-- 插入或更新（UPSERT）
+INSERT INTO users (username, email, age)
+VALUES ('alice', 'alice@mail.com', 27)
+ON DUPLICATE KEY UPDATE age = 27;
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意安全</div>
+          <p>执行 UPDATE 或 DELETE 时，务必使用 WHERE 条件，否则会影响所有数据。建议先用 SELECT 验证条件是否正确。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> DQL 数据查询语言</h2>
+      <div class="code-block">
+-- 基础查询
+SELECT id, username, email FROM users;
+
+-- 条件查询
+SELECT * FROM users WHERE age >= 25 AND status = 'active';
+SELECT * FROM users WHERE age BETWEEN 25 AND 30;
+SELECT * FROM users WHERE username IN ('alice', 'bob');
+SELECT * FROM users WHERE email LIKE '%@mail.com';
+SELECT * FROM users WHERE phone IS NULL;
+
+-- 排序和分页
+SELECT * FROM users
+ORDER BY created_at DESC, username ASC
+LIMIT 10 OFFSET 20;  -- 第 3 页，每页 10 条
+
+-- 聚合函数
+SELECT
+  COUNT(*) AS total,
+  AVG(age) AS avg_age,
+  MAX(age) AS max_age,
+  MIN(age) AS min_age,
+  SUM(score) AS total_score
+FROM users;
+
+-- 分组查询
+SELECT status, COUNT(*) AS count
+FROM users
+GROUP BY status
+HAVING count > 1;
+
+-- 连接查询
+SELECT u.username, o.product, o.amount
+FROM users u
+INNER JOIN orders o ON u.id = o.user_id
+WHERE o.amount > 100;
+
+-- 左连接（包含所有用户）
+SELECT u.username, o.product
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id;
+
+-- 子查询
+SELECT * FROM users
+WHERE id IN (SELECT DISTINCT user_id FROM orders);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• DDL 用于定义数据库结构（CREATE、ALTER、DROP）</li>
+            <li>• DML 用于操作数据（INSERT、UPDATE、DELETE）</li>
+            <li>• DQL 用于查询数据（SELECT、WHERE、JOIN）</li>
+            <li>• 执行修改操作前务必验证条件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="22-1-mysql安装配置.html">← 上一节：MySQL 安装配置</a>
+      <a href="22-3-数据库设计.html">下一节：数据库设计 →</a>
+    </div>
+  </div>
+</body>
+</html>

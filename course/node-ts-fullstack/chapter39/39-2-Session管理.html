@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>39.2 Session 管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="39-1-文件上传.html">第三十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>39.2 Session 管理</h1>
+      <p class="subtitle">使用 Session 实现用户状态管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Session 的工作原理</li>
+        <li>学会使用 koa-session</li>
+        <li>掌握 Session 存储配置</li>
+        <li>了解 Session 与 Cookie 的关系</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Session 原理</h2>
+      <p>Session 是服务端存储用户状态的机制，通过 Cookie 中的 Session ID 关联服务端数据。</p>
+
+      <div class="code-block">
+┌──────────┐                    ┌──────────┐
+│  客户端   │                    │  服务端   │
+└────┬─────┘                    └────┬─────┘
+     │                               │
+     │  1. 首次请求                   │
+     │ ─────────────────────────────>│
+     │                               │ 创建 Session
+     │                               │ 生成 Session ID
+     │  2. 返回 Set-Cookie: sid=xxx  │
+     │ <─────────────────────────────│
+     │                               │
+     │  3. 携带 Cookie: sid=xxx      │
+     │ ─────────────────────────────>│
+     │                               │ 查找 Session
+     │  4. 返回用户数据               │
+     │ <─────────────────────────────│
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Session vs Cookie</div>
+          <p>Session 存储在服务端，Cookie 存储在客户端。Session 更安全，适合存储敏感信息。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装 koa-session</h2>
+      <div class="code-block">
+# 安装 koa-session
+npm install koa-session
+      </div>
+
+      <div class="code-block">
+const Koa = require('koa');
+const session = require('koa-session');
+
+const app = new Koa();
+
+// 设置密钥（用于签名）
+app.keys = ['secret-key-1', 'secret-key-2'];
+
+// Session 配置
+const CONFIG = {
+  key: 'koa:sess',        // Cookie 名称
+  maxAge: 86400000,       // 过期时间（毫秒）
+  autoCommit: true,       // 自动提交
+  overwrite: true,        // 允许覆盖
+  httpOnly: true,         // 仅 HTTP 访问
+  signed: true,           // 签名
+  rolling: false,         // 每次请求更新过期时间
+  renew: false,           // 快过期时自动续期
+};
+
+app.use(session(CONFIG, app));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 基本使用</h2>
+      <div class="code-block">
+// 设置 Session
+router.get('/login', async ctx => {
+  ctx.session.user = {
+    id: 1,
+    username: 'admin',
+    role: 'admin'
+  };
+
+  ctx.body = { message: 'Logged in' };
+});
+
+// 获取 Session
+router.get('/profile', async ctx => {
+  const user = ctx.session.user;
+
+  if (!user) {
+    ctx.status = 401;
+    ctx.body = { error: 'Not logged in' };
+    return;
+  }
+
+  ctx.body = { user };
+});
+
+// 销毁 Session
+router.get('/logout', async ctx => {
+  ctx.session = null;  // 方式1：设为 null
+
+  // 或方式2
+  // ctx.session = {};
+
+  ctx.body = { message: 'Logged out' };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 登录认证示例</h2>
+      <div class="code-block">
+const Router = require('koa-router');
+const bcrypt = require('bcryptjs');
+const router = new Router();
+
+// 登录
+router.post('/auth/login', async ctx => {
+  const { username, password } = ctx.request.body;
+
+  // 验证用户（示例）
+  const user = await User.findOne({ where: { username } });
+
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    ctx.status = 401;
+    ctx.body = { error: 'Invalid credentials' };
+    return;
+  }
+
+  // 设置 Session
+  ctx.session.user = {
+    id: user.id,
+    username: user.username,
+    role: user.role
+  };
+
+  ctx.body = { message: 'Login successful', user: ctx.session.user };
+});
+
+// 登出
+router.post('/auth/logout', async ctx => {
+  ctx.session = null;
+  ctx.body = { message: 'Logged out' };
+});
+
+// 获取当前用户
+router.get('/auth/me', async ctx => {
+  if (!ctx.session.user) {
+    ctx.status = 401;
+    ctx.body = { error: 'Not authenticated' };
+    return;
+  }
+
+  ctx.body = { user: ctx.session.user };
+});
+
+// 认证中间件
+function requireAuth(ctx, next) {
+  if (!ctx.session.user) {
+    ctx.status = 401;
+    ctx.body = { error: 'Please login first' };
+    return;
+  }
+  return next();
+}
+
+// 受保护的路由
+router.get('/protected', requireAuth, async ctx => {
+  ctx.body = { message: 'Protected content', user: ctx.session.user });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> Session 存储</h2>
+      <p>默认 Session 存储在内存中，重启服务器会丢失。生产环境建议使用外部存储。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">内存存储（默认）</h3>
+          <ul class="feature-list">
+            <li>简单易用</li>
+            <li>重启丢失</li>
+            <li>不适合生产环境</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Redis 存储</h3>
+          <ul class="feature-list">
+            <li>持久化存储</li>
+            <li>支持分布式</li>
+            <li>高性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Redis 存储配置</h2>
+      <div class="code-block">
+# 安装依赖
+npm install koa-session koa-generic-session koa-redis
+      </div>
+
+      <div class="code-block">
+const session = require('koa-generic-session');
+const RedisStore = require('koa-redis');
+
+app.keys = ['secret-key'];
+
+app.use(session({
+  store: RedisStore({
+    host: 'localhost',
+    port: 6379,
+    password: '',
+    db: 0
+  }),
+  prefix: 'sess:',        // Redis key 前缀
+  cookie: {
+    maxAge: 86400000,
+    httpOnly: true,
+    signed: true
+  }
+}));
+
+// 使用方式相同
+router.get('/login', async ctx => {
+  ctx.session.user = { id: 1, name: 'John' };
+  ctx.body = { message: 'OK' };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Session 配置详解</h2>
+      <div class="code-block">
+const CONFIG = {
+  // Cookie 键名
+  key: 'koa:sess',
+
+  // 过期时间（毫秒）
+  maxAge: 86400000,  // 1 天
+
+  // 自动设置 Set-Cookie 头
+  autoCommit: true,
+
+  // 是否覆盖同名 Cookie
+  overwrite: true,
+
+  // 是否禁止 JS 访问（安全）
+  httpOnly: true,
+
+  // 是否签名 Cookie
+  signed: true,
+
+  // 每次请求都重新设置过期时间
+  rolling: false,
+
+  // Session 快过期时自动续期
+  renew: true,
+
+  // 安全 Cookie（仅 HTTPS）
+  secure: process.env.NODE_ENV === 'production',
+
+  // 同站策略
+  sameSite: 'strict'
+};
+
+app.use(session(CONFIG, app));
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">生产环境注意</div>
+          <p>生产环境必须设置 secure: true 和 signed: true，确保 Cookie 安全。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Session 管理工具</h2>
+      <div class="code-block">
+// 查看所有 Session（需 Redis）
+router.get('/admin/sessions', async ctx => {
+  const client = require('redis').createClient();
+  const keys = await client.keys('sess:*');
+
+  const sessions = [];
+  for (const key of keys) {
+    const data = await client.get(key);
+    sessions.push({
+      id: key,
+      data: JSON.parse(data)
+    });
+  }
+
+  ctx.body = { count: sessions.length, sessions };
+});
+
+// 强制登出用户
+router.delete('/admin/sessions/:sessionId', async ctx => {
+  const client = require('redis').createClient();
+  await client.del(ctx.params.sessionId);
+  ctx.body = { message: 'Session deleted' };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Session 是服务端存储，通过 Cookie 关联</li>
+            <li>• 使用 koa-session 管理 Session</li>
+            <li>• 生产环境使用 Redis 存储 Session</li>
+            <li>• 设置 httpOnly、secure、signed 确保安全</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="39-1-文件上传.html">← 上一节：文件上传</a>
+      <a href="39-3-模板引擎.html">下一节：模板引擎 →</a>
+    </div>
+  </div>
+</body>
+</html>

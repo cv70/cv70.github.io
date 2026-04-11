@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.1 同步与异步操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-同步与异步操作.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.1 同步与异步操作</h1>
+      <p class="subtitle">理解 Node.js 的异步编程模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解同步与异步的区别</li>
+        <li>掌握回调函数的使用</li>
+        <li>了解阻塞与非阻塞</li>
+        <li>学会选择合适的操作方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 同步 vs 异步</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 同步操作 - 阻塞代码执行
+console.log('开始');
+const data = fs.readFileSync('file.txt', 'utf8');  // 阻塞等待
+console.log('读取完成:', data);
+console.log('结束');
+
+// 执行顺序：
+// 开始 -> 读取文件（阻塞） -> 读取完成 -> 结束
+
+// 异步操作 - 不阻塞代码执行
+console.log('开始');
+fs.readFile('file.txt', 'utf8', (err, data) => {
+  console.log('读取完成:', data);
+});
+console.log('结束');
+
+// 执行顺序：
+// 开始 -> 发起读取请求 -> 结束 -> 读取完成（回调执行）
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">关键区别</div>
+          <p>同步操作会阻塞后续代码执行，异步操作立即返回，结果通过回调函数获取。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 回调函数</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 异步操作的回调模式
+// 回调函数参数：(error, result)
+
+fs.readFile('file.txt', 'utf8', (err, data) => {
+  if (err) {
+    console.error('读取失败:', err);
+    return;
+  }
+  console.log('读取成功:', data);
+});
+
+// 自定义异步函数
+function readFileAsync(filepath, callback) {
+  fs.readFile(filepath, 'utf8', (err, data) => {
+    if (err) {
+      callback(err, null);
+      return;
+    }
+    callback(null, data);
+  });
+}
+
+// 使用
+readFileAsync('file.txt', (err, data) => {
+  if (err) {
+    console.error(err);
+    return;
+  }
+  console.log(data);
+});
+
+// 回调地狱问题
+fs.readFile('file1.txt', 'utf8', (err, data1) => {
+  if (err) throw err;
+  fs.readFile('file2.txt', 'utf8', (err, data2) => {
+    if (err) throw err;
+    fs.readFile('file3.txt', 'utf8', (err, data3) => {
+      if (err) throw err;
+      // 嵌套越来越深...
+      console.log(data1, data2, data3);
+    });
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Promise 与 async/await</h2>
+      <div class="code-block">
+const fs = require('fs').promises;  // 使用 Promise 版本
+
+// Promise 方式
+fs.readFile('file.txt', 'utf8')
+  .then(data => {
+    console.log('读取成功:', data);
+    return fs.readFile('file2.txt', 'utf8');
+  })
+  .then(data2 => {
+    console.log('第二个文件:', data2);
+  })
+  .catch(err => {
+    console.error('出错了:', err);
+  });
+
+// async/await 方式（推荐）
+async function readFiles() {
+  try {
+    const data1 = await fs.readFile('file1.txt', 'utf8');
+    const data2 = await fs.readFile('file2.txt', 'utf8');
+    const data3 = await fs.readFile('file3.txt', 'utf8');
+    console.log(data1, data2, data3);
+  } catch (err) {
+    console.error('读取失败:', err);
+  }
+}
+
+readFiles();
+
+// 并行读取
+async function readFilesParallel() {
+  const [data1, data2, data3] = await Promise.all([
+    fs.readFile('file1.txt', 'utf8'),
+    fs.readFile('file2.txt', 'utf8'),
+    fs.readFile('file3.txt', 'utf8')
+  ]);
+  return { data1, data2, data3 };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 选择同步还是异步</h2>
+      <div class="code-block">
+// 使用同步的场景：
+// 1. 应用启动时加载配置
+// 2. 命令行工具
+// 3. 简单脚本
+
+// 同步加载配置
+const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+console.log('配置加载完成:', config);
+
+// 使用异步的场景：
+// 1. Web 服务器处理请求
+// 2. 高并发应用
+// 3. 需要高性能的场景
+
+// HTTP 服务器必须使用异步
+const http = require('http');
+http.createServer((req, res) => {
+  // 异步读取文件
+  fs.readFile('public' + req.url, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not Found');
+      return;
+    }
+    res.end(data);
+  });
+}).listen(3000);
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>生产环境的服务器代码必须使用异步操作。同步操作会阻塞事件循环，影响并发性能。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 同步操作阻塞代码执行，异步操作不阻塞</li>
+            <li>• 异步操作通过回调函数返回结果</li>
+            <li>• 推荐使用 async/await 处理异步操作</li>
+            <li>• 服务器应用必须使用异步操作</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter14/14-4-跨平台路径处理.html">← 上一章：跨平台路径处理</a>
+      <a href="15-2-文件读写.html">下一节：文件读写 →</a>
+    </div>
+  </div>
+</body>
+</html>

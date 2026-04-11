@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>109.2 数据库设计 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="109-1-需求分析.html">第109章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>109.2 数据库设计</h1>
+      <p class="subtitle">博客系统的数据模型设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握数据库表设计</li>
+        <li>理解表关系设计</li>
+        <li>学会索引优化</li>
+        <li>了解数据迁移</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> ER模型设计</h2>
+      <div class="code-block">
+// 博客系统核心实体关系
+
+/*
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│    User     │       │   Article   │       │   Comment   │
+├─────────────┤       ├─────────────┤       ├─────────────┤
+│ id          │───┐   │ id          │───┐   │ id          │
+│ email       │   │   │ title       │   │   │ content     │
+│ password    │   │   │ content     │   │   │ article_id  │──┐
+│ nickname    │   │   │ author_id   │──┘   │ user_id     │──┼──┐
+│ avatar      │   │   │ category_id │      │ parent_id   │  │  │
+│ created_at  │   │   │ created_at  │      │ created_at  │  │  │
+└─────────────┘   │   └─────────────┘      └─────────────┘  │  │
+      ▲           │         │                               │  │
+      │           │         │                               │  │
+      │           │         ▼                               │  │
+      │           │   ┌─────────────┐                       │  │
+      │           │   │   Category  │                       │  │
+      │           │   ├─────────────┤                       │  │
+      │           │   │ id          │                       │  │
+      │           │   │ name        │                       │  │
+      │           │   │ slug        │                       │  │
+      │           │   └─────────────┘                       │  │
+      │           │                                         │  │
+      │           │   ┌─────────────┐      ┌─────────────┐  │  │
+      │           │   │ ArticleTag  │      │     Tag     │  │  │
+      │           │   ├─────────────┤      ├─────────────┤  │  │
+      │           │   │ article_id  │──────│ id          │  │  │
+      │           └───│ tag_id      │      │ name        │  │  │
+      │               └─────────────┘      │ slug        │  │  │
+      │                                    └─────────────┘  │  │
+      │                                                    │  │
+      │               ┌─────────────┐                      │  │
+      │               │    Like     │                      │  │
+      │               ├─────────────┤                      │  │
+      └───────────────│ user_id     │                      │  │
+                      │ article_id  │──────────────────────┘  │
+                      └─────────────┘                         │
+                                                              │
+                      ┌─────────────┐                         │
+                      │   Follow    │                         │
+                      ├─────────────┤                         │
+                      │ follower_id │─────────────────────────┘
+                      │ followee_id │
+                      └─────────────┘
+*/
+
+// 实体关系说明
+const relationships = {
+  'User-Article': '一对多，一个用户可以发布多篇文章',
+  'Article-Comment': '一对多，一篇文章可以有多个评论',
+  'Article-Category': '多对一，多篇文章属于一个分类',
+  'Article-Tag': '多对多，通过ArticleTag关联表实现',
+  'User-Like': '多对多，用户可以点赞多篇文章',
+  'User-Follow': '多对多，用户可以关注多个用户'
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeORM实体定义</h2>
+      <div class="code-block">
+// user.entity.ts
+import {
+  Entity, PrimaryGeneratedColumn, Column,
+  OneToMany, ManyToMany, JoinTable, CreateDateColumn
+} from 'typeorm';
+
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @Column()
+  password: string;
+
+  @Column()
+  nickname: string;
+
+  @Column({ nullable: true })
+  avatar: string;
+
+  @Column({ default: 'user' })
+  role: string;
+
+  @Column({ default: '' })
+  bio: string;
+
+  @OneToMany(() => Article, article => article.author)
+  articles: Article[];
+
+  @OneToMany(() => Comment, comment => comment.user)
+  comments: Comment[];
+
+  @ManyToMany(() => User, user => user.followers)
+  @JoinTable()
+  following: User[];
+
+  @ManyToMany(() => User, user => user.following)
+  followers: User[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// article.entity.ts
+@Entity('articles')
+export class Article {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  title: string;
+
+  @Column()
+  slug: string;
+
+  @Column({ type: 'text' })
+  content: string;
+
+  @Column({ type: 'text' })
+  summary: string;
+
+  @Column({ default: 'draft' })
+  status: 'draft' | 'published';
+
+  @Column({ default: 0 })
+  viewCount: number;
+
+  @Column({ default: 0 })
+  likeCount: number;
+
+  @Column({ default: 0 })
+  commentCount: number;
+
+  @ManyToOne(() => User, user => user.articles)
+  author: User;
+
+  @Column()
+  authorId: string;
+
+  @ManyToOne(() => Category, category => category.articles)
+  category: Category;
+
+  @Column({ nullable: true })
+  categoryId: string;
+
+  @ManyToMany(() => Tag, tag => tag.articles)
+  @JoinTable({ name: 'article_tags' })
+  tags: Tag[];
+
+  @OneToMany(() => Comment, comment => comment.article)
+  comments: Comment[];
+
+  @OneToMany(() => Like, like => like.article)
+  likes: Like[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @DeleteDateColumn()
+  deletedAt: Date;
+}
+
+// tag.entity.ts
+@Entity('tags')
+export class Tag {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ unique: true })
+  name: string;
+
+  @Column({ unique: true })
+  slug: string;
+
+  @ManyToMany(() => Article, article => article.tags)
+  articles: Article[];
+}
+
+// comment.entity.ts
+@Entity('comments')
+export class Comment {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'text' })
+  content: string;
+
+  @ManyToOne(() => User, user => user.comments)
+  user: User;
+
+  @Column()
+  userId: string;
+
+  @ManyToOne(() => Article, article => article.comments)
+  article: Article;
+
+  @Column()
+  articleId: string;
+
+  @ManyToOne(() => Comment, comment => comment.replies, { nullable: true })
+  parent: Comment;
+
+  @OneToMany(() => Comment, comment => comment.parent)
+  replies: Comment[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 索引设计</h2>
+      <div class="code-block">
+// 数据库索引优化
+
+// TypeORM索引定义
+@Entity('articles')
+@Index(['authorId', 'status'])  // 复合索引：按作者查询已发布文章
+@Index(['categoryId', 'createdAt'])  // 复合索引：按分类查询最新文章
+@Index(['status', 'createdAt'])  // 复合索引：查询最新发布文章
+export class Article {
+  // ...
+}
+
+// SQL索引创建语句
+const indexes = `
+-- 用户邮箱唯一索引
+CREATE UNIQUE INDEX idx_users_email ON users(email);
+
+-- 文章标题索引
+CREATE INDEX idx_articles_title ON articles(title);
+
+-- 文章slug唯一索引
+CREATE UNIQUE INDEX idx_articles_slug ON articles(slug);
+
+-- 评论文章ID索引
+CREATE INDEX idx_comments_article_id ON comments(article_id);
+
+-- 评论用户ID索引
+CREATE INDEX idx_comments_user_id ON comments(user_id);
+
+-- 全文搜索索引（PostgreSQL）
+CREATE INDEX idx_articles_content_search ON articles
+  USING gin(to_tsvector('english', title || ' ' || content));
+`;
+
+// 索引使用场景
+const indexUsage = {
+  'idx_users_email': '登录时查询用户',
+  'idx_articles_slug': '文章详情页查询',
+  'idx_articles_author_status': '用户文章列表页',
+  'idx_comments_article_id': '文章评论列表',
+  'idx_articles_content_search': '全文搜索'
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 设计合理的ER模型</li>
+            <li>• 使用TypeORM定义实体</li>
+            <li>• 创建适当的索引提升查询性能</li>
+            <li>• 考虑数据关系的完整性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="109-1-需求分析.html">← 上一节：需求分析</a>
+      <a href="109-3-后端API实现.html">下一节：后端 API 实现 →</a>
+    </div>
+  </div>
+</body>
+</html>

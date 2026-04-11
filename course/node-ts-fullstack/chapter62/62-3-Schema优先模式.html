@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>62.3 Schema 优先模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="62-1-GraphQL模块配置.html">第62章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>62.3 Schema 优先模式</h1>
+      <p class="subtitle">先设计 Schema 再实现 Resolver</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Schema 优先概述</h2>
+      <p>Schema 优先模式先编写 GraphQL Schema 文件，再根据 Schema 实现 Resolver。这种方式强调 API 设计先行。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Schema 优先优势</div>
+          <ul>
+            <li>API 设计先行</li>
+            <li>Schema 即文档</li>
+            <li>前后端并行开发</li>
+            <li>更好的 API 规划</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 编写 Schema 文件</h2>
+
+      <div class="code-block">
+<span class="comment">// user.graphql</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  bio: String
+  posts: [Post!]!
+  createdAt: DateTime!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!
+  createdAt: DateTime!
+}
+
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+}
+
+<span class="keyword">input</span> UpdateUserInput {
+  name: String
+  email: String
+}
+
+<span class="keyword">type</span> Query {
+  users: [User!]!
+  user(id: ID!): User
+}
+
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User
+  deleteUser(id: ID!): Boolean!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 生成 TypeScript 类型</h2>
+
+      <div class="code-block">
+<span class="comment"># 安装 CLI 工具</span>
+npm install @graphql-codegen/cli @graphql-codegen/typescript @graphql-codegen/typescript-resolvers
+
+<span class="comment"># codegen.yml 配置</span>
+overwrite: <span class="keyword">true</span>
+schema: <span class="string">"src/**/*.graphql"</span>
+generates:
+  src/generated/graphql.ts:
+    plugins:
+      - <span class="string">"typescript"</span>
+      - <span class="string">"typescript-resolvers"</span>
+
+<span class="comment"># 运行生成</span>
+npx graphql-codegen
+
+<span class="comment">// 生成的类型文件</span>
+<span class="keyword">export type</span> User = {
+  id: Scalars[<span class="string">'ID'</span>];
+  name: Scalars[<span class="string">'String'</span>];
+  email: Scalars[<span class="string">'String'</span>];
+  bio?: Maybe<Scalars[<span class="string">'String'</span>]>;
+  posts: Array<Post>;
+  createdAt: Scalars[<span class="string">'DateTime'</span>];
+};
+
+<span class="keyword">export type</span> Query = {
+  users: Array<User>;
+  user?: Maybe<User>;
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实现 Resolver</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Resolver, Query, Mutation, Args } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { UserService } <span class="keyword">from</span> <span class="string">'./user.service'</span>;
+
+<span class="keyword">@Resolver</span>(<span class="string">'User'</span>)
+<span class="keyword">export class</span> <span class="function">UserResolver</span> {
+  <span class="keyword">constructor</span>(<span class="keyword">private readonly</span> userService: UserService) {}
+
+  <span class="keyword">@Query</span>()
+  <span class="keyword">async</span> <span class="function">users</span>() {
+    <span class="keyword">return this</span>.userService.findAll();
+  }
+
+  <span class="keyword">@Query</span>()
+  <span class="keyword">async</span> <span class="function">user</span>(<span class="keyword">@Args</span>(<span class="string">'id'</span>) id: <span class="keyword">string</span>) {
+    <span class="keyword">return this</span>.userService.findOne(+id);
+  }
+
+  <span class="keyword">@Mutation</span>()
+  <span class="keyword">async</span> <span class="function">createUser</span>(<span class="keyword">@Args</span>(<span class="string">'input'</span>) input: CreateUserInput) {
+    <span class="keyword">return this</span>.userService.create(input);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>先编写 .graphql Schema 文件</li>
+        <li>使用 graphql-codegen 生成类型</li>
+        <li>实现 Resolver 处理业务逻辑</li>
+        <li>Schema 即 API 文档</li>
+        <li>适合 API 设计先行场景</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="62-2-代码优先模式.html">← 上一节：代码优先模式</a>
+      <a href="62-4-Resolver实现.html">下一节：Resolver 实现 →</a>
+    </div>
+  </div>
+</body>
+</html>

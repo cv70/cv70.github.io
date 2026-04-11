@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.1 路由方法 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter31.html">第31章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>31.1 路由方法</h1>
+      <p class="subtitle">深入理解 Express 路由方法的各种用法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握所有 HTTP 方法的路由定义</li>
+        <li>理解 app.route() 链式路由</li>
+        <li>学会使用 app.all() 处理所有方法</li>
+        <li>了解特殊路由方法的使用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> Express 支持的路由方法</h2>
+      <p>Express 支持以下 HTTP 方法的路由方法，对应 HTTP 请求方法：</p>
+
+      <div class="code-block">
+// 常用路由方法
+app.get()      // 获取资源
+app.post()     // 创建资源
+app.put()      // 完整更新资源
+app.patch()    // 部分更新资源
+app.delete()   // 删除资源
+app.head()     // 只获取响应头
+app.options()  // 获取支持的HTTP方法
+
+// 其他方法
+app.connect()  // HTTP CONNECT 方法
+app.trace()    // HTTP TRACE 方法
+app.copy()     // WebDAV 方法
+app.lock()     // WebDAV 方法
+app.mkcol()    // WebDAV 方法
+app.move()     // WebDAV 方法
+app.purge()    // 缓存清除
+app.unlock()   // WebDAV 方法</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">RESTful 设计</div>
+          <p>路由方法对应 RESTful API 设计中的不同操作，正确使用 HTTP 方法是良好的 API 设计基础。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> CRUD 操作示例</h2>
+      <p>以下是一个完整的用户 CRUD 示例：</p>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+app.use(express.json());
+
+// 模拟数据库
+let users = [
+  { id: 1, name: 'Alice', email: 'alice@example.com' },
+  { id: 2, name: 'Bob', email: 'bob@example.com' }
+];
+
+// CREATE - 创建用户
+app.post('/users', (req, res) => {
+  const { name, email } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({
+      success: false,
+      message: 'Name and email are required'
+    });
+  }
+
+  const newUser = {
+    id: users.length + 1,
+    name,
+    email,
+    createdAt: new Date()
+  };
+
+  users.push(newUser);
+
+  res.status(201).json({
+    success: true,
+    data: newUser
+  });
+});
+
+// READ - 获取所有用户
+app.get('/users', (req, res) => {
+  res.json({
+    success: true,
+    data: users,
+    total: users.length
+  });
+});
+
+// READ - 获取单个用户
+app.get('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const user = users.find(u => u.id === id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    data: user
+  });
+});
+
+// UPDATE - 完整更新用户
+app.put('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name, email } = req.body;
+  const userIndex = users.findIndex(u => u.id === id);
+
+  if (userIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  // PUT 需要完整更新
+  users[userIndex] = {
+    ...users[userIndex],
+    name,
+    email,
+    updatedAt: new Date()
+  };
+
+  res.json({
+    success: true,
+    data: users[userIndex]
+  });
+});
+
+// UPDATE - 部分更新用户
+app.patch('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const updates = req.body;
+  const userIndex = users.findIndex(u => u.id === id);
+
+  if (userIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  // PATCH 只更新提供的字段
+  users[userIndex] = {
+    ...users[userIndex],
+    ...updates,
+    updatedAt: new Date()
+  };
+
+  res.json({
+    success: true,
+    data: users[userIndex]
+  });
+});
+
+// DELETE - 删除用户
+app.delete('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const userIndex = users.findIndex(u => u.id === id);
+
+  if (userIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  const deletedUser = users.splice(userIndex, 1)[0];
+
+  res.json({
+    success: true,
+    message: 'User deleted',
+    data: deletedUser
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> app.route() - 链式路由</h2>
+      <p>使用 <code>app.route()</code> 可以为同一个路径定义多个路由处理程序，避免代码重复：</p>
+
+      <div class="code-block">
+// 传统写法 - 路径重复
+app.get('/articles', (req, res) => { /* ... */ });
+app.post('/articles', (req, res) => { /* ... */ });
+app.put('/articles', (req, res) => { /* ... */ });
+
+// 链式路由写法 - 更简洁
+app.route('/articles')
+  .get((req, res) => {
+    res.json({ message: 'Get all articles' });
+  })
+  .post((req, res) => {
+    res.status(201).json({ message: 'Create article' });
+  })
+  .put((req, res) => {
+    res.json({ message: 'Update articles' });
+  })
+  .delete((req, res) => {
+    res.json({ message: 'Delete all articles' });
+  });
+
+// 带参数的链式路由
+app.route('/articles/:id')
+  .get((req, res) => {
+    res.json({ message: `Get article ${req.params.id}` });
+  })
+  .put((req, res) => {
+    res.json({ message: `Update article ${req.params.id}` });
+  })
+  .patch((req, res) => {
+    res.json({ message: `Patch article ${req.params.id}` });
+  })
+  .delete((req, res) => {
+    res.json({ message: `Delete article ${req.params.id}` });
+  });</div>
+
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <div class="title">链式路由优势</div>
+          <p>减少代码重复，提高可读性，便于维护同一资源的所有操作。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> app.all() - 处理所有方法</h2>
+      <p><code>app.all()</code> 用于对所有 HTTP 方法的请求进行处理，常用于：</p>
+
+      <h3>1. 认证检查</h3>
+      <div class="code-block">
+// 对所有 /api 路由进行认证检查
+app.all('/api/*', (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+
+  // 验证 token...
+  req.user = { id: 1, role: 'admin' };
+  next();
+});</div>
+
+      <h3>2. 日志记录</h3>
+      <div class="code-block">
+// 记录所有请求
+app.all('*', (req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});</div>
+
+      <h3>3. CORS 预检</h3>
+      <div class="code-block">
+// 处理 CORS 预检请求
+app.all('*', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // OPTIONS 预检请求直接返回
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});</div>
+
+      <h3>4. 路径验证</h3>
+      <div class="code-block">
+// 验证 API 版本
+app.all('/api/:version/*', (req, res, next) => {
+  const { version } = req.params;
+  const supportedVersions = ['v1', 'v2'];
+
+  if (!supportedVersions.includes(version)) {
+    return res.status(400).json({
+      success: false,
+      message: `API version ${version} not supported`
+    });
+  }
+
+  req.apiVersion = version;
+  next();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> HTTP 方法对比表</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>幂等性</th>
+            <th>安全性</th>
+            <th>请求体</th>
+            <th>响应体</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GET</td>
+            <td>是</td>
+            <td>是</td>
+            <td>否</td>
+            <td>是</td>
+            <td>获取资源</td>
+          </tr>
+          <tr>
+            <td>POST</td>
+            <td>否</td>
+            <td>否</td>
+            <td>是</td>
+            <td>是</td>
+            <td>创建资源</td>
+          </tr>
+          <tr>
+            <td>PUT</td>
+            <td>是</td>
+            <td>否</td>
+            <td>是</td>
+            <td>是</td>
+            <td>完整更新</td>
+          </tr>
+          <tr>
+            <td>PATCH</td>
+            <td>否</td>
+            <td>否</td>
+            <td>是</td>
+            <td>是</td>
+            <td>部分更新</td>
+          </tr>
+          <tr>
+            <td>DELETE</td>
+            <td>是</td>
+            <td>否</td>
+            <td>否</td>
+            <td>是</td>
+            <td>删除资源</td>
+          </tr>
+          <tr>
+            <td>HEAD</td>
+            <td>是</td>
+            <td>是</td>
+            <td>否</td>
+            <td>否</td>
+            <td>检查资源</td>
+          </tr>
+          <tr>
+            <td>OPTIONS</td>
+            <td>是</td>
+            <td>是</td>
+            <td>否</td>
+            <td>是</td>
+            <td>CORS 预检</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">幂等性和安全性</div>
+          <p><strong>幂等性</strong>：多次相同请求产生相同结果。<strong>安全性</strong>：请求不会修改服务器状态。GET 是安全和幂等的，POST 既不安全也不幂等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 路由方法最佳实践</h2>
+
+      <h3>1. 正确使用 HTTP 方法</h3>
+      <div class="code-block">
+// ❌ 错误示例：用 GET 修改数据
+app.get('/users/:id/delete', (req, res) => {
+  // 不要这样做！GET 应该是安全的
+});
+
+// ✅ 正确示例：使用 DELETE 方法
+app.delete('/users/:id', (req, res) => {
+  // 正确使用 DELETE 删除资源
+});</div>
+
+      <h3>2. 返回适当的状态码</h3>
+      <div class="code-block">
+// 创建资源返回 201
+app.post('/users', (req, res) => {
+  res.status(201).json({ /* ... */ });
+});
+
+// 删除成功返回 204（无内容）
+app.delete('/users/:id', (req, res) => {
+  res.status(204).send();
+});
+
+// 或返回 200 并包含被删除的资源
+app.delete('/users/:id', (req, res) => {
+  res.json({ message: 'Deleted', data: deletedUser });
+});</div>
+
+      <h3>3. PUT vs PATCH</h3>
+      <div class="code-block">
+// PUT - 需要发送完整资源
+app.put('/users/:id', (req, res) => {
+  const { name, email, age, address } = req.body;
+  // 必须提供所有字段，否则可能丢失数据
+});
+
+// PATCH - 只发送需要更新的字段
+app.patch('/users/:id', (req, res) => {
+  const updates = req.body;
+  // 只更新提供的字段
+});</div>
+
+      <h3>4. HEAD 方法的使用</h3>
+      <div class="code-block">
+// HEAD 方法用于检查资源是否存在
+app.head('/files/:filename', (req, res) => {
+  const { filename } = req.params;
+
+  if (fileExists(filename)) {
+    res.header('Content-Length', getFileSize(filename));
+    res.header('Content-Type', getMimeType(filename));
+    res.status(200).end();
+  } else {
+    res.status(404).end();
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Express 支持所有标准 HTTP 方法的路由方法</li>
+            <li>app.route() 可以链式定义同一路径的不同方法</li>
+            <li>app.all() 处理所有 HTTP 方法，常用于认证和日志</li>
+            <li>正确使用 HTTP 方法和状态码是良好 API 设计的基础</li>
+            <li>理解幂等性和安全性有助于正确选择 HTTP 方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>实现一个完整的文章 CRUD API，使用链式路由</li>
+        <li>使用 app.all() 实现一个简单的 API 版本控制</li>
+        <li>实现一个 HEAD 方法检查文件是否存在</li>
+        <li>对比 PUT 和 PATCH 的区别，编写测试验证</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter30/30-6-Express中间件概念.html">← 上一节：Express 中间件概念</a>
+      <a href="31-2-路由路径模式.html">下一节：路由路径模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

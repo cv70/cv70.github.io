@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65.4 错误处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="65-1-浏览器客户端.html">第六十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>65.4 错误处理</h1>
+      <p class="subtitle">客户端异常处理与调试</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握客户端错误处理方法</li>
+        <li>理解不同错误类型的处理策略</li>
+        <li>学会调试 Socket.IO 连接问题</li>
+        <li>了解错误处理的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 错误类型</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">连接错误</h3>
+          <ul class="feature-list">
+            <li>无法连接到服务器</li>
+            <li>认证失败</li>
+            <li>网络问题</li>
+            <li>CORS 配置错误</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">运行时错误</h3>
+          <ul class="feature-list">
+            <li>消息格式错误</li>
+            <li>服务端处理异常</li>
+            <li>连接意外断开</li>
+            <li>心跳超时</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 连接错误处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本错误监听</h3>
+        <div class="code-block">
+// 连接错误
+socket.on('connect_error', (error) => {
+  console.error('连接错误:', error.message);
+
+  // 根据错误类型处理
+  if (error.message.includes('Authentication')) {
+    // 认证失败
+    showLoginPrompt();
+  } else if (error.message.includes('CORS')) {
+    // CORS 错误
+    showError('服务器配置错误，请联系管理员');
+  } else {
+    // 网络错误
+    showError('无法连接到服务器，请检查网络');
+  }
+});
+
+// 断开连接
+socket.on('disconnect', (reason) => {
+  console.log('断开原因:', reason);
+
+  switch (reason) {
+    case 'io server disconnect':
+      // 服务端主动断开，不自动重连
+      showError('您已被服务器断开');
+      break;
+    case 'ping timeout':
+      // 心跳超时
+      showError('网络不稳定，正在重连...');
+      break;
+    case 'transport close':
+    case 'transport error':
+      // 传输问题，会自动重连
+      showWarning('连接中断，正在重连...');
+      break;
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">认证错误处理</h3>
+        <div class="code-block">
+let isRefreshing = false;
+
+socket.on('connect_error', async (error) => {
+  // Token 过期
+  if (error.message === 'jwt expired') {
+    if (!isRefreshing) {
+      isRefreshing = true;
+
+      try {
+        // 刷新 Token
+        const newToken = await refreshToken();
+        localStorage.setItem('token', newToken);
+
+        // 更新认证信息并重连
+        socket.auth = { token: newToken };
+        socket.connect();
+      } catch (refreshError) {
+        // 刷新失败，跳转登录
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      } finally {
+        isRefreshing = false;
+      }
+    }
+  }
+
+  // Token 无效
+  if (error.message === 'Invalid token') {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
+});
+
+// Token 刷新函数
+async function refreshToken(): Promise&lt;string&gt; {
+  const response = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      refreshToken: localStorage.getItem('refreshToken')
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error('Token refresh failed');
+  }
+
+  const data = await response.json();
+  return data.token;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📨</span> 消息错误处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">回调确认错误</h3>
+        <div class="code-block">
+// 发送消息时处理错误
+socket.emit('send-message', message, (response) => {
+  if (response.error) {
+    console.error('发送失败:', response.error);
+
+    switch (response.error.code) {
+      case 'RATE_LIMIT':
+        showError('发送太频繁，请稍后再试');
+        break;
+      case 'CONTENT_VIOLATION':
+        showError('消息内容违规');
+        break;
+      case 'PERMISSION_DENIED':
+        showError('您没有发送权限');
+        break;
+      default:
+        showError('发送失败，请重试');
+    }
+  } else {
+    console.log('发送成功:', response.messageId);
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">超时处理</h3>
+        <div class="code-block">
+// 封装带超时的 emit
+function emitWithTimeout(
+  event: string,
+  data: any,
+  timeout: number = 5000
+): Promise&lt;any&gt; {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('请求超时'));
+    }, timeout);
+
+    socket.emit(event, data, (response) => {
+      clearTimeout(timer);
+      resolve(response);
+    });
+  });
+}
+
+// 使用
+async function joinRoom(roomId: string) {
+  try {
+    const response = await emitWithTimeout('join-room', roomId);
+    console.log('加入成功:', response);
+  } catch (error) {
+    if (error.message === '请求超时') {
+      showError('服务器响应超时，请检查网络');
+    } else {
+      showError('加入失败: ' + error.message);
+    }
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 调试技巧</h2>
+
+      <div class="card">
+        <h3 class="card-title">启用调试日志</h3>
+        <div class="code-block">
+// 浏览器控制台设置
+localStorage.debug = 'socket.io-client:socket';
+
+// 或针对所有模块
+localStorage.debug = '*';
+
+// 只针对特定模块
+localStorage.debug = 'socket.io-client:socket,socket.io-client:manager';
+
+// 禁用调试
+localStorage.removeItem('debug');
+
+// 刷新页面生效
+location.reload();
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">自定义日志</h3>
+        <div class="code-block">
+// 创建带日志的 socket
+const socket = io('http://localhost:3000');
+
+// 记录所有发送
+const originalEmit = socket.emit.bind(socket);
+socket.emit = (event: string, ...args: any[]) => {
+  console.log(`[SEND] ${event}`, args);
+  return originalEmit(event, ...args);
+};
+
+// 记录所有接收
+const originalOn = socket.on.bind(socket);
+socket.on = (event: string, handler: Function) => {
+  const wrappedHandler = (...args: any[]) => {
+    console.log(`[RECV] ${event}`, args);
+    handler(...args);
+  };
+  return originalOn(event, wrappedHandler);
+};
+
+// 使用
+socket.emit('message', 'Hello');
+// 控制台: [SEND] message ["Hello"]
+
+socket.on('response', (data) => {});
+// 收到消息时: [RECV] response [{ ... }]
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">连接状态检查</h3>
+        <div class="code-block">
+// 定期检查连接状态
+setInterval(() => {
+  console.log('Socket 状态:', {
+    id: socket.id,
+    connected: socket.connected,
+    disconnected: socket.disconnected
+  });
+}, 5000);
+
+// 网络状态监听
+window.addEventListener('online', () => {
+  console.log('网络已恢复');
+  if (!socket.connected) {
+    socket.connect();
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log('网络已断开');
+  showWarning('网络连接已断开');
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 错误处理最佳实践</h2>
+
+      <div class="card">
+        <h3 class="card-title">全局错误处理器</h3>
+        <div class="code-block">
+class SocketManager {
+  private socket: Socket;
+  private errorHandlers = new Map&lt;string, Function[]&gt;();
+  private messageQueue: any[] = [];
+
+  constructor(url: string) {
+    this.socket = io(url, { autoConnect: false });
+    this.setupErrorHandling();
+  }
+
+  private setupErrorHandling() {
+    // 连接错误
+    this.socket.on('connect_error', (error) => {
+      this.handleError('connection', error);
+    });
+
+    // 断开连接
+    this.socket.on('disconnect', (reason) => {
+      this.handleError('disconnect', { reason });
+    });
+
+    // 重连失败
+    this.socket.on('reconnect_failed', () => {
+      this.handleError('reconnect_failed', new Error('重连失败'));
+    });
+
+    // 连接成功
+    this.socket.on('connect', () => {
+      this.flushMessageQueue();
+    });
+  }
+
+  // 注册错误处理器
+  onError(type: string, handler: Function) {
+    if (!this.errorHandlers.has(type)) {
+      this.errorHandlers.set(type, []);
+    }
+    this.errorHandlers.get(type)!.push(handler);
+  }
+
+  // 触发错误处理
+  private handleError(type: string, error: any) {
+    const handlers = this.errorHandlers.get(type) || [];
+    handlers.forEach(handler => {
+      try {
+        handler(error);
+      } catch (e) {
+        console.error('错误处理器异常:', e);
+      }
+    });
+
+    // 全局错误处理
+    if (type !== 'global') {
+      this.handleError('global', { type, error });
+    }
+  }
+
+  // 安全发送
+  safeEmit(event: string, data: any, callback?: Function) {
+    if (this.socket.connected) {
+      this.socket.emit(event, data, callback);
+    } else {
+      // 离线时缓存
+      this.messageQueue.push({ event, data, callback });
+      console.log('消息已缓存，等待连接');
+    }
+  }
+
+  private flushMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const { event, data, callback } = this.messageQueue.shift()!;
+      this.socket.emit(event, data, callback);
+    }
+  }
+}
+
+// 使用
+const manager = new SocketManager('http://localhost:3000');
+
+manager.onError('connection', (error) => {
+  showError('连接失败: ' + error.message);
+});
+
+manager.onError('disconnect', ({ reason }) => {
+  showWarning('连接断开: ' + reason);
+});
+
+manager.onError('global', ({ type, error }) => {
+  // 发送到错误监控服务
+  trackError(type, error);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">常见问题排查</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li><strong>CORS 错误</strong>：检查服务端 CORS 配置</li>
+          <li><strong>认证失败</strong>：确认 Token 有效且格式正确</li>
+          <li><strong>连接超时</strong>：检查服务器是否运行，防火墙设置</li>
+          <li><strong>频繁断开</strong>：检查心跳配置，网络稳定性</li>
+          <li><strong>消息丢失</strong>：使用回调确认机制</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• <code>connect_error</code> 处理连接错误</li>
+            <li>• 不同断开原因需要不同处理策略</li>
+            <li>• Token 过期时可自动刷新重连</li>
+            <li>• 使用回调确认确保消息送达</li>
+            <li>• 生产环境应添加超时处理</li>
+            <li>• 启用调试日志方便排查问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="65-3-事件监听与触发.html">← 上一节</a>
+      <a href="65-5-重连机制.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

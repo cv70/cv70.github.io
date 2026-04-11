@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.3 查询语法 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="27-1-mongodb简介.html">第二十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>27.3 查询语法</h1>
+      <p class="subtitle">深入理解 MongoDB 查询</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握查询操作符的使用</li>
+        <li>学会复杂条件组合</li>
+        <li>理解数组查询技巧</li>
+        <li>熟悉索引优化方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 查询操作符详解</h2>
+      <div class="code-block">
+// 比较操作符
+$eq   - 等于
+$ne   - 不等于
+$gt   - 大于
+$gte  - 大于等于
+$lt   - 小于
+$lte  - 小于等于
+$in   - 在数组中
+$nin  - 不在数组中
+
+// 示例
+db.products.find({ price: { $gte: 100, $lte: 500 } })
+db.users.find({ status: { $in: ["active", "pending"] } })
+
+// 逻辑操作符
+$and  - 与
+$or   - 或
+$not  - 非
+$nor  - 或非
+
+// 示例
+db.users.find({
+  $and: [
+    { age: { $gte: 18 } },
+    { status: "active" }
+  ]
+})
+
+db.users.find({
+  $or: [
+    { role: "admin" },
+    { role: "moderator" }
+  ]
+})
+
+// 简写形式（多个条件默认 AND）
+db.users.find({
+  age: { $gte: 18 },
+  status: "active"
+})
+
+// 元素操作符
+$exists  - 字段是否存在
+$type    - 字段类型
+
+db.users.find({ phone: { $exists: true } })
+db.users.find({ age: { $type: "number" } })
+
+// 评估操作符
+$regex    - 正则表达式
+$text     - 文本搜索
+$expr     - 聚合表达式
+
+db.users.find({ name: { $regex: "^A", $options: "i" } })
+db.users.find({ $text: { $search: "nodejs mongodb" } })
+db.users.find({ $expr: { $gt: ["$spending", "$budget"] } })
+
+// 地理空间操作符
+$near         - 附近
+$geoWithin    - 在区域内
+$geoIntersects - 相交
+
+db.stores.find({
+  location: {
+    $near: {
+      $geometry: { type: "Point", coordinates: [116.4, 39.9] },
+      $maxDistance: 1000
+    }
+  }
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 数组查询</h2>
+      <div class="code-block">
+// 数组包含元素
+db.users.find({ tags: "nodejs" })
+
+// 包含所有元素
+db.users.find({ tags: { $all: ["nodejs", "mongodb"] } })
+
+// 数组长度
+db.users.find({ tags: { $size: 3 } })
+
+// 数组元素匹配
+db.users.find({
+  scores: { $elemMatch: { $gt: 80, $lt: 90 } }
+})
+
+// 数组元素为对象
+db.orders.find({
+  items: {
+    $elemMatch: {
+      product: "iPhone",
+      quantity: { $gt: 1 }
+    }
+  }
+})
+
+// 按索引查询
+db.users.find({ "tags.0": "first-tag" })
+db.users.find({ "scores.0": { $gt: 80 } })
+
+// 数组更新操作符
+$push        - 添加元素
+$pull        - 删除匹配元素
+$addToSet    - 添加不重复元素
+$pop         - 删除首/尾元素
+$pullAll     - 删除所有匹配元素
+
+// 添加到数组
+db.users.updateOne(
+  { name: "Alice" },
+  { $push: { tags: "new-tag" } }
+)
+
+// 添加多个元素
+db.users.updateOne(
+  { name: "Alice" },
+  { $push: { tags: { $each: ["tag1", "tag2"] } } }
+)
+
+// 限制数组长度
+db.users.updateOne(
+  { name: "Alice" },
+  {
+    $push: {
+      logs: {
+        $each: ["log1", "log2"],
+        $slice: -10  // 只保留最后 10 个
+      }
+    }
+  }
+)
+
+// 删除元素
+db.users.updateOne(
+  { name: "Alice" },
+  { $pull: { tags: "old-tag" } }
+)
+
+// 条件删除
+db.users.updateOne(
+  { name: "Alice" },
+  { $pull: { scores: { $lt: 60 } } }
+)
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">$elemMatch 的重要性</div>
+          <p>当数组元素是对象，且需要同时满足多个条件时，必须使用 $elemMatch。直接写条件会被解释为任意元素满足任意条件。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 嵌套文档查询</h2>
+      <div class="code-block">
+// 示例文档
+{
+  name: "Alice",
+  address: {
+    city: "Beijing",
+    country: "China",
+    location: {
+      lat: 39.9,
+      lng: 116.4
+    }
+  },
+  contacts: [
+    { type: "email", value: "alice@mail.com" },
+    { type: "phone", value: "1234567890" }
+  ]
+}
+
+// 点号访问嵌套字段
+db.users.find({ "address.city": "Beijing" })
+db.users.find({ "address.location.lat": 39.9 })
+
+// 精确匹配嵌套文档
+db.users.find({
+  address: {
+    city: "Beijing",
+    country: "China"
+  }
+})  // 必须完全匹配，顺序也必须一致
+
+// 使用 $elemMatch 匹配数组中的嵌套文档
+db.users.find({
+  contacts: {
+    $elemMatch: {
+      type: "email",
+      value: "alice@mail.com"
+    }
+  }
+})
+
+// 组合条件
+db.users.find({
+  $and: [
+    { "address.city": "Beijing" },
+    { "contacts.type": "email" }
+  ]
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 索引优化</h2>
+      <div class="code-block">
+// 创建索引
+db.users.createIndex({ email: 1 })  // 1 升序，-1 降序
+
+// 组合索引
+db.users.createIndex({ status: 1, createdAt: -1 })
+
+// 唯一索引
+db.users.createIndex({ email: 1 }, { unique: true })
+
+// 文本索引
+db.articles.createIndex({ title: "text", content: "text" })
+
+// 地理空间索引
+db.stores.createIndex({ location: "2dsphere" })
+
+// 查看索引
+db.users.getIndexes()
+
+// 查看查询执行计划
+db.users.find({ email: "alice@mail.com" }).explain("executionStats")
+
+// 强制使用索引
+db.users.find({ email: "alice@mail.com" }).hint({ email: 1 })
+
+// 删除索引
+db.users.dropIndex("email_1")
+db.users.dropIndexes()  // 删除所有索引（除 _id）
+
+// 索引策略
+├── 为常用查询条件创建索引
+├── 组合索引注意顺序（ESR 规则）
+│   ├── Equality（等值条件在前）
+│   ├── Sort（排序条件）
+│   └── Range（范围条件）
+├── 避免过多索引（影响写入性能）
+└── 定期使用 explain 分析慢查询
+
+// explain 输出关键字段
+{
+  "executionStats": {
+    "totalDocsExamined": 1000,   // 扫描文档数
+    "nReturned": 10,             // 返回文档数
+    "executionTimeMillis": 5     // 执行时间
+  },
+  "winningPlan": {
+    "stage": "IXSCAN",           // 使用索引扫描
+    "indexName": "email_1"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 丰富的查询操作符支持复杂条件</li>
+            <li>• 数组查询使用 $elemMatch 精确匹配</li>
+            <li>• 使用点号访问嵌套文档字段</li>
+            <li>• 合理创建索引优化查询性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="27-2-文档操作.html">← 上一节：文档操作</a>
+      <a href="27-4-聚合管道.html">下一节：聚合管道 →</a>
+    </div>
+  </div>
+</body>
+</html>

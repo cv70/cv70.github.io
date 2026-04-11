@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.3 中间件类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-项目配置.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.3 中间件类型</h1>
+      <p class="subtitle">编写类型安全的中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握中间件的类型定义</li>
+        <li>学会编写类型安全的中间件</li>
+        <li>理解中间件工厂模式</li>
+        <li>掌握中间件组合类型</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本中间件类型</h2>
+      <div class="code-block">
+import { Middleware, Context, Next } from 'koa';
+
+// 方式1：使用 Middleware 类型
+const loggerMiddleware: Middleware = async (ctx, next) => {
+  const start = Date.now();
+  await next();
+  const ms = Date.now() - start;
+  console.log(`${ctx.method} ${ctx.url} - ${ms}ms`);
+};
+
+// 方式2：使用 Context 和 Next
+async function authMiddleware(ctx: Context, next: Next) {
+  const token = ctx.headers.authorization;
+
+  if (!token) {
+    ctx.status = 401;
+    ctx.body = { error: 'Unauthorized' };
+    return;
+  }
+
+  ctx.state.user = await verifyToken(token);
+  await next();
+}
+
+// 注册中间件
+app.use(loggerMiddleware);
+app.use(authMiddleware);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏭</span> 中间件工厂模式</h2>
+      <div class="code-block">
+import { Middleware } from 'koa';
+
+// 日志中间件工厂
+function createLoggerMiddleware(options: {
+  logBody?: boolean;
+  logHeaders?: boolean;
+} = {}): Middleware {
+  const { logBody = false, logHeaders = false } = options;
+
+  return async (ctx, next) => {
+    console.log(`--> ${ctx.method} ${ctx.url}`);
+
+    if (logHeaders) {
+      console.log('Headers:', ctx.headers);
+    }
+
+    if (logBody && ctx.request.body) {
+      console.log('Body:', ctx.request.body);
+    }
+
+    await next();
+
+    console.log(`<-- ${ctx.status}`);
+  };
+}
+
+// 使用
+app.use(createLoggerMiddleware({
+  logBody: true,
+  logHeaders: true
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证中间件类型</h2>
+      <div class="code-block">
+// src/middlewares/auth.ts
+import { Middleware, Context, Next } from 'koa';
+import jwt from 'jsonwebtoken';
+
+// 扩展 Context 类型
+declare module 'koa' {
+  interface DefaultState {
+    user?: {
+      id: string;
+      username: string;
+      role: string;
+    };
+  }
+}
+
+// 认证配置
+interface AuthOptions {
+  secret: string;
+  excludePaths?: string[];
+}
+
+// 认证中间件工厂
+export function authMiddleware(options: AuthOptions): Middleware {
+  const { secret, excludePaths = [] } = options;
+
+  return async (ctx: Context, next: Next) => {
+    // 排除不需要认证的路径
+    if (excludePaths.some(path => ctx.path.startsWith(path))) {
+      return next();
+    }
+
+    const authHeader = ctx.headers.authorization;
+
+    if (!authHeader?.startsWith('Bearer ')) {
+      ctx.status = 401;
+      ctx.body = { error: 'No token provided' };
+      return;
+    }
+
+    const token = authHeader.slice(7);
+
+    try {
+      const decoded = jwt.verify(token, secret) as {
+        id: string;
+        username: string;
+        role: string;
+      };
+
+      ctx.state.user = decoded;
+      await next();
+    } catch (err) {
+      ctx.status = 401;
+      ctx.body = { error: 'Invalid token' };
+    }
+  };
+}
+
+// 使用
+app.use(authMiddleware({
+  secret: process.env.JWT_SECRET!,
+  excludePaths: ['/api/auth/login', '/api/auth/register']
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 限流中间件类型</h2>
+      <div class="code-block">
+// src/middlewares/rateLimit.ts
+import { Middleware, Context, Next } from 'koa';
+
+interface RateLimitOptions {
+  windowMs: number;   // 时间窗口（毫秒）
+  max: number;        // 最大请求数
+  message?: string;
+  keyGenerator?: (ctx: Context) => string;
+}
+
+interface RateLimitRecord {
+  count: number;
+  startTime: number;
+}
+
+export function rateLimitMiddleware(options: RateLimitOptions): Middleware {
+  const {
+    windowMs,
+    max,
+    message = 'Too many requests',
+    keyGenerator = (ctx) => ctx.ip
+  } = options;
+
+  const requests = new Map<string, RateLimitRecord>();
+
+  return async (ctx: Context, next: Next) => {
+    const key = keyGenerator(ctx);
+    const now = Date.now();
+
+    let record = requests.get(key);
+
+    if (!record || now - record.startTime > windowMs) {
+      record = { count: 1, startTime: now };
+      requests.set(key, record);
+    } else {
+      record.count++;
+    }
+
+    // 设置响应头
+    ctx.set('X-RateLimit-Limit', String(max));
+    ctx.set('X-RateLimit-Remaining', String(Math.max(0, max - record.count)));
+
+    if (record.count > max) {
+      ctx.status = 429;
+      ctx.body = { error: message };
+      return;
+    }
+
+    await next();
+  };
+}
+
+// 使用
+app.use(rateLimitMiddleware({
+  windowMs: 60000,  // 1 分钟
+  max: 100          // 最多 100 次
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 错误处理中间件</h2>
+      <div class="code-block">
+// src/middlewares/errorHandler.ts
+import { Middleware, Context, Next } from 'koa';
+
+// 自定义错误类
+export class AppError extends Error {
+  constructor(
+    public message: string,
+    public statusCode: number = 500,
+    public code: string = 'APP_ERROR'
+  ) {
+    super(message);
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(message: string) {
+    super(message, 400, 'VALIDATION_ERROR');
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(message: string = 'Resource not found') {
+    super(message, 404, 'NOT_FOUND');
+  }
+}
+
+// 错误处理中间件
+export function errorHandler(): Middleware {
+  return async (ctx: Context, next: Next) => {
+    try {
+      await next();
+    } catch (err) {
+      // 判断错误类型
+      if (err instanceof AppError) {
+        ctx.status = err.statusCode;
+        ctx.body = {
+          success: false,
+          error: err.message,
+          code: err.code
+        };
+      } else {
+        // 未知错误
+        ctx.status = 500;
+        ctx.body = {
+          success: false,
+          error: 'Internal Server Error',
+          code: 'INTERNAL_ERROR'
+        };
+
+        // 记录错误
+        console.error(err);
+      }
+
+      // 触发错误事件
+      ctx.app.emit('error', err, ctx);
+    }
+  };
+}
+
+// 使用
+app.use(errorHandler());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 验证中间件类型</h2>
+      <div class="code-block">
+// src/middlewares/validate.ts
+import { Middleware, Context, Next } from 'koa';
+import { ObjectSchema, ValidationError } from 'joi';
+
+interface ValidateOptions {
+  source?: 'body' | 'query' | 'params';
+}
+
+export function validate<T>(
+  schema: ObjectSchema<T>,
+  options: ValidateOptions = {}
+): Middleware {
+  const { source = 'body' } = options;
+
+  return async (ctx: Context, next: Next) => {
+    const data = source === 'body'
+      ? ctx.request.body
+      : source === 'query'
+        ? ctx.query
+        : ctx.params;
+
+    try {
+      const value = await schema.validateAsync(data, {
+        abortEarly: false
+      });
+
+      // 替换验证后的数据
+      if (source === 'body') {
+        ctx.request.body = value;
+      }
+
+      await next();
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        ctx.status = 400;
+        ctx.body = {
+          success: false,
+          error: 'Validation failed',
+          details: err.details
+        };
+        return;
+      }
+      throw err;
+    }
+  };
+}
+
+// 使用
+import Joi from 'joi';
+
+const registerSchema = Joi.object({
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required()
+});
+
+router.post('/register',
+  validate(registerSchema),
+  async (ctx) => {
+    const { username, email, password } = ctx.request.body;
+    // ...
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 中间件组合</h2>
+      <div class="code-block">
+// src/middlewares/compose.ts
+import { Middleware } from 'koa';
+
+// 组合多个中间件
+export function compose(...middlewares: Middleware[]): Middleware {
+  return async (ctx, next) => {
+    let index = -1;
+
+    async function dispatch(i: number): Promise<void> {
+      if (i <= index) {
+        throw new Error('next() called multiple times');
+      }
+      index = i;
+
+      const middleware = middlewares[i];
+
+      if (i === middlewares.length) {
+        return next();
+      }
+
+      await middleware(ctx, () => dispatch(i + 1));
+    }
+
+    await dispatch(0);
+  };
+}
+
+// 使用
+import { compose } from '@/middlewares/compose';
+
+const protectedRoute = compose(
+  authMiddleware({ secret: 'secret' }),
+  rateLimitMiddleware({ windowMs: 60000, max: 100 })
+);
+
+router.get('/protected', protectedRoute, async (ctx) => {
+  ctx.body = { message: 'Protected content' };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 Middleware 类型定义中间件</li>
+            <li>• 工厂模式创建可配置中间件</li>
+            <li>• 使用 declare module 扩展 Context</li>
+            <li>• 自定义错误类统一错误处理</li>
+            <li>• compose 函数组合多个中间件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-2-类型定义.html">← 上一节：类型定义</a>
+      <a href="40-4-路由类型.html">下一节：路由类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

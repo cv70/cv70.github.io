@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>88.4 构建优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="88-1-Vite简介.html">第八十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>88.4 构建优化</h1>
+      <p class="subtitle">Vite 生产构建优化技巧</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Vite 构建优化策略</li>
+        <li>掌握代码分割配置</li>
+        <li>学会资源优化技巧</li>
+        <li>了解性能分析方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 代码分割</h2>
+      <div class="code-block">
+// vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        // 手动分割代码块
+        manualChunks: (id) => {
+          // 第三方库
+          if (id.includes('node_modules')) {
+            // Vue 生态
+            if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
+              return 'vue-vendor'
+            }
+            // UI 库
+            if (id.includes('element-plus') || id.includes('ant-design-vue')) {
+              return 'ui-vendor'
+            }
+            // 工具库
+            if (id.includes('lodash') || id.includes('axios')) {
+              return 'utils-vendor'
+            }
+            // 其他第三方
+            return 'vendor'
+          }
+        },
+
+        // 或者使用对象形式
+        manualChunks: {
+          vue: ['vue', 'vue-router', 'pinia'],
+          ui: ['element-plus'],
+          utils: ['lodash', 'axios', 'dayjs'],
+        },
+      },
+    },
+
+    // 分块大小警告阈值
+    chunkSizeWarningLimit: 1000,
+  },
+})
+
+// 路由级代码分割
+const routes = [
+  {
+    path: '/home',
+    component: () => import('@/views/Home.vue'), // 懒加载
+  },
+  {
+    path: '/admin',
+    component: () => import('@/views/Admin.vue'),
+  },
+]
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">代码分割原则</div>
+          <p>将不常变化的第三方库单独打包，业务代码分离，利用浏览器缓存提高加载效率。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 资源优化</h2>
+      <div class="code-block">
+import viteCompression from 'vite-plugin-compression'
+import viteImagemin from 'vite-plugin-imagemin'
+
+export default defineConfig({
+  build: {
+    // CSS 代码分割
+    cssCodeSplit: true,
+
+    // 资源文件名
+    rollupOptions: {
+      output: {
+        chunkFileNames: 'js/[name]-[hash].js',
+        entryFileNames: 'js/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
+
+    // 资源内联阈值
+    assetsInlineLimit: 4096, // 4KB 以下内联
+
+    // 清空输出目录
+    emptyOutDir: true,
+  },
+
+  plugins: [
+    // Gzip 压缩
+    viteCompression({
+      algorithm: 'gzip',
+      ext: '.gz',
+      threshold: 1024, // 大于 1KB 才压缩
+    }),
+
+    // Brotli 压缩
+    viteCompression({
+      algorithm: 'brotliCompress',
+      ext: '.br',
+    }),
+
+    // 图片压缩
+    viteImagemin({
+      gifsicle: { optimizationLevel: 3 },
+      optipng: { optimizationLevel: 7 },
+      mozjpeg: { quality: 80 },
+      pngquant: { quality: [0.8, 0.9] },
+      svgo: {
+        plugins: [
+          { name: 'removeViewBox', active: false },
+        ],
+      },
+    }),
+  ],
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 构建性能优化</h2>
+      <div class="code-block">
+export default defineConfig({
+  // 依赖预构建
+  optimizeDeps: {
+    // 预包含的依赖
+    include: ['vue', 'vue-router', 'pinia', 'axios'],
+
+    // 排除预构建
+    exclude: ['your-linked-package'],
+
+    // 强制重新构建
+    force: false,
+  },
+
+  // esbuild 配置
+  esbuild: {
+    // 移除 console
+    drop: ['console', 'debugger'],
+    // JSX 支持
+    jsxFactory: 'h',
+    jsxFragment: 'Fragment',
+  },
+
+  build: {
+    // 使用 esbuild 压缩（更快）
+    minify: 'esbuild', // 'terser' 压缩率更高但更慢
+
+    // Source Map
+    sourcemap: false, // 生产环境关闭
+
+    // 报告压缩后大小
+    reportCompressedSize: true,
+
+    // 禁用 brotli 大小报告
+    brotliSize: false,
+
+    // 并行处理
+    maxParallelFileOps: 20,
+  },
+
+  // CSS 优化
+  css: {
+    devSourcemap: false,
+  },
+})
+
+// Terser 配置（需要安装）
+export default defineConfig({
+  build: {
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ['console.log'],
+      },
+      format: {
+        comments: false,
+      },
+    },
+  },
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 构建分析</h2>
+      <div class="code-block">
+import { visualizer } from 'rollup-plugin-visualizer'
+
+export default defineConfig({
+  plugins: [
+    visualizer({
+      open: true, // 自动打开分析页面
+      gzipSize: true,
+      brotliSize: true,
+      filename: 'stats.html', // 输出文件名
+    }),
+  ],
+})
+
+// 使用 rollup-plugin-visualizer 后
+// 运行 npm run build
+// 自动生成 stats.html 文件
+// 可视化展示各模块大小
+
+# 分析构建产物
+npm run build
+
+# 查看输出
+dist/
+├── assets/
+│   ├── index-abc123.js    150KB
+│   ├── vue-vendor-def456.js  80KB
+│   └── index-ghi789.css   20KB
+├── index.html
+└── stats.html
+
+# 手动分析
+npx vite-bundle-visualizer
+
+# 使用 rollup-plugin-visualizer
+import { visualizer } from 'rollup-plugin-visualizer'
+
+export default defineConfig({
+  plugins: [
+    visualizer({
+      template: 'treemap', // 'treemap' | 'sunburst' | 'network'
+    }),
+  ],
+})
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 manualChunks 进行代码分割</li>
+            <li>• 路由级懒加载减少初始包体积</li>
+            <li>• 开启 Gzip/Brotli 压缩减少传输体积</li>
+            <li>• 使用分析工具定位优化点</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="88-3-插件系统.html">← 上一节：插件系统</a>
+      <a href="88-5-与Webpack对比.html">下一节：与 Webpack 对比 →</a>
+    </div>
+  </div>
+</body>
+</html>

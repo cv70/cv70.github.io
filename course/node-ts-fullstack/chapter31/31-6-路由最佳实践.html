@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.6 路由最佳实践 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter31.html">第31章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>31.6 路由最佳实践</h1>
+      <p class="subtitle">掌握 Express 路由设计的最佳实践和设计模式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 RESTful API 设计原则</li>
+        <li>学会合理的路由组织方式</li>
+        <li>理解路由安全注意事项</li>
+        <li>掌握路由性能优化技巧</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> RESTful API 设计原则</h2>
+
+      <h3>1. 使用名词而非动词</h3>
+      <div class="code-block">
+// ❌ 错误：使用动词
+app.get('/getUsers', ...);
+app.post('/createUser', ...);
+app.delete('/deleteUser/:id', ...);
+
+// ✅ 正确：使用名词
+app.get('/users', ...);
+app.post('/users', ...);
+app.delete('/users/:id', ...);</div>
+
+      <h3>2. 使用复数名词</h3>
+      <div class="code-block">
+// ❌ 不推荐
+app.get('/user', ...);
+app.get('/user/:id', ...);
+
+// ✅ 推荐：复数形式
+app.get('/users', ...);
+app.get('/users/:id', ...);</div>
+
+      <h3>3. 表达资源层级关系</h3>
+      <div class="code-block">
+// 获取某用户的所有文章
+GET /users/:userId/posts
+
+// 获取某用户的某篇文章
+GET /users/:userId/posts/:postId
+
+// 创建某用户的文章
+POST /users/:userId/posts
+
+// 但避免过深的嵌套（建议不超过 2 层）
+// ❌ 不推荐
+GET /users/:userId/posts/:postId/comments/:commentId/author</div>
+
+      <h3>4. 使用正确的 HTTP 方法</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>操作</th>
+            <th>HTTP 方法</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>获取列表</td>
+            <td>GET</td>
+            <td>GET /users</td>
+          </tr>
+          <tr>
+            <td>获取单个</td>
+            <td>GET</td>
+            <td>GET /users/:id</td>
+          </tr>
+          <tr>
+            <td>创建</td>
+            <td>POST</td>
+            <td>POST /users</td>
+          </tr>
+          <tr>
+            <td>完整更新</td>
+            <td>PUT</td>
+            <td>PUT /users/:id</td>
+          </tr>
+          <tr>
+            <td>部分更新</td>
+            <td>PATCH</td>
+            <td>PATCH /users/:id</td>
+          </tr>
+          <tr>
+            <td>删除</td>
+            <td>DELETE</td>
+            <td>DELETE /users/:id</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5. 使用查询参数进行过滤、排序、分页</h3>
+      <div class="code-block">
+// 过滤
+GET /products?category=electronics&brand=apple
+
+// 排序
+GET /products?sort=price&order=asc
+
+// 分页
+GET /products?page=1&limit=20
+
+// 搜索
+GET /products?search=iphone
+
+// 字段选择
+GET /products?fields=id,name,price</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 路由组织最佳实践</h2>
+
+      <h3>1. 分离路由定义和处理逻辑</h3>
+      <div class="code-block">
+// ❌ 不推荐：路由和处理逻辑混在一起
+router.get('/users/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ✅ 推荐：控制器分离
+// controllers/userController.js
+exports.show = async (req, res, next) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'Not found' });
+  }
+  res.json(user);
+};
+
+// routes/users.js
+router.get('/users/:id', userController.show);</div>
+
+      <h3>2. 使用路由中间件进行验证</h3>
+      <div class="code-block">
+// middleware/validate.js
+const validate = (schema) => {
+  return (req, res, next) => {
+    const { error } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        errors: error.details.map(d => d.message)
+      });
+    }
+    next();
+  };
+};
+
+// routes/users.js
+const userSchema = Joi.object({
+  name: Joi.string().required(),
+  email: Joi.string().email().required()
+});
+
+router.post('/users', validate(userSchema), userController.create);</div>
+
+      <h3>3. 统一错误处理</h3>
+      <div class="code-block">
+// 包装异步路由处理函数
+const asyncHandler = fn => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// 使用
+router.get('/users/:id', asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  res.json(user);
+}));
+
+// 全局错误处理
+app.use((err, req, res, next) => {
+  console.error(err);
+
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ message: err.message });
+  }
+
+  if (err.name === 'NotFoundError') {
+    return res.status(404).json({ message: err.message });
+  }
+
+  res.status(500).json({ message: 'Internal Server Error' });
+});</div>
+
+      <h3>4. 版本控制</h3>
+      <div class="code-block">
+// 方式一：URL 路径版本
+app.use('/api/v1', v1Routes);
+app.use('/api/v2', v2Routes);
+
+// 方式二：请求头版本
+app.use('/api', (req, res, next) => {
+  const version = req.headers['accept-version'] || 'v1';
+  req.apiVersion = version;
+  next();
+});
+
+// 方式三：查询参数版本
+// GET /api/users?version=2</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 路由安全最佳实践</h2>
+
+      <h3>1. 输入验证</h3>
+      <div class="code-block">
+// 验证路由参数
+router.get('/users/:id(\\d+)', getUser);  // 只匹配数字
+
+// 验证请求体
+const createUserSchema = Joi.object({
+  name: Joi.string().trim().max(100).required(),
+  email: Joi.string().email().required(),
+  role: Joi.string().valid('user', 'admin').default('user')
+});
+
+router.post('/users', validate(createUserSchema), createUser);</div>
+
+      <h3>2. 防止 SQL/NoSQL 注入</h3>
+      <div class="code-block">
+// ❌ 危险：直接使用用户输入
+const query = `SELECT * FROM users WHERE id = ${req.params.id}`;
+
+// ✅ 安全：使用参数化查询
+const user = await db.query('SELECT * FROM users WHERE id = ?', [req.params.id]);
+
+// ✅ 安全：使用 ORM
+const user = await User.findById(req.params.id);</div>
+
+      <h3>3. 权限控制</h3>
+      <div class="code-block">
+// RBAC 中间件
+const checkPermission = (resource, action) => {
+  return async (req, res, next) => {
+    const user = req.user;
+    const hasPermission = await PermissionService.check(user.role, resource, action);
+
+    if (!hasPermission) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    next();
+  };
+};
+
+// 使用
+router.delete('/users/:id',
+  authMiddleware,
+  checkPermission('users', 'delete'),
+  userController.destroy
+);</div>
+
+      <h3>4. 速率限制</h3>
+      <div class="code-block">
+const rateLimit = require('express-rate-limit');
+
+// API 速率限制
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分钟
+  max: 100,                 // 最多 100 次请求
+  message: 'Too many requests'
+});
+
+// 登录速率限制（更严格）
+const loginLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 小时
+  max: 5,                    // 最多 5 次尝试
+  message: 'Too many login attempts'
+});
+
+app.use('/api', apiLimiter);
+app.use('/auth/login', loginLimiter);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 路由性能优化</h2>
+
+      <h3>1. 路由顺序优化</h3>
+      <div class="code-block">
+// 高频路由放前面
+router.get('/users/popular', getPopularUsers);  // 高频
+router.get('/users/recent', getRecentUsers);    // 高频
+router.get('/users/:id', getUserById);          // 参数化路由放后面
+
+// 静态路由放前面
+router.get('/about', aboutPage);
+router.get('/contact', contactPage);
+router.get('/:page', dynamicPage);  // 参数化路由放最后</div>
+
+      <h3>2. 缓存策略</h3>
+      <div class="code-block">
+// 对不常变化的数据设置缓存
+const cacheMiddleware = (duration) => {
+  return (req, res, next) => {
+    res.set('Cache-Control', `public, max-age=${duration}`);
+    next();
+  };
+};
+
+// 使用
+router.get('/categories',
+  cacheMiddleware(3600),  // 缓存 1 小时
+  categoryController.list
+);
+
+router.get('/static-data',
+  cacheMiddleware(86400), // 缓存 1 天
+  staticDataController.get
+);</div>
+
+      <h3>3. 延迟加载</h3>
+      <div class="code-block">
+// 懒加载大型路由模块
+let adminRoutes = null;
+
+app.use('/admin', (req, res, next) => {
+  if (!adminRoutes) {
+    adminRoutes = require('./routes/admin');
+  }
+  adminRoutes(req, res, next);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 路由清单</h2>
+      <p>设计 API 路由时的检查清单：</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">URL 设计</h3>
+          <ul style="padding-left: 1.5rem;">
+            <li>使用名词而非动词</li>
+            <li>使用复数形式</li>
+            <li>层级不超过 2 层</li>
+            <li>使用小写和连字符</li>
+            <li>版本号放在 URL 或 Header</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">HTTP 方法</h3>
+          <ul style="padding-left: 1.5rem;">
+            <li>GET 获取资源（幂等）</li>
+            <li>POST 创建资源</li>
+            <li>PUT 完整更新（幂等）</li>
+            <li>PATCH 部分更新</li>
+            <li>DELETE 删除（幂等）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">状态码</h3>
+          <ul style="padding-left: 1.5rem;">
+            <li>200 成功</li>
+            <li>201 创建成功</li>
+            <li>400 请求错误</li>
+            <li>401 未认证</li>
+            <li>403 无权限</li>
+            <li>404 未找到</li>
+            <li>500 服务器错误</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">安全考虑</h3>
+          <ul style="padding-left: 1.5rem;">
+            <li>输入验证</li>
+            <li>权限控制</li>
+            <li>速率限制</li>
+            <li>HTTPS</li>
+            <li>错误信息脱敏</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>遵循 RESTful 设计原则：使用名词、复数、正确的 HTTP 方法</li>
+            <li>分离路由定义和处理逻辑，使用控制器模式</li>
+            <li>统一错误处理，使用异步包装器</li>
+            <li>实施安全措施：输入验证、权限控制、速率限制</li>
+            <li>优化性能：合理的路由顺序、缓存、延迟加载</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>设计一个电商产品的 RESTful API 路由</li>
+        <li>实现一个完整的权限控制系统中间件</li>
+        <li>为一个现有项目添加速率限制功能</li>
+        <li>编写 API 文档，描述所有路由的用途和参数</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="31-5-Router类使用.html">← 上一节：Router 类使用</a>
+      <a href="../chapter32/32-1-应用级中间件.html">下一章：Express 中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

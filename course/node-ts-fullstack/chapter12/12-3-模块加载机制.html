@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.3 模块加载机制 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="12-1-CommonJS模块.html">第十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>12.3 模块加载机制</h1>
+      <p class="subtitle">深入理解 Node.js 如何加载模块</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解模块解析规则</li>
+        <li>掌握路径查找顺序</li>
+        <li>了解 node_modules 查找机制</li>
+        <li>学会调试模块加载问题</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 模块解析规则</h2>
+      <div class="code-block">
+// require() 加载模块的查找顺序：
+
+// 1. 内置模块
+const fs = require('fs');      // Node.js 内置模块
+const http = require('http');  // 直接加载，不查找文件
+
+// 2. 相对路径模块（以 ./ 或 ../ 开头）
+const math = require('./math');      // 当前目录
+const utils = require('../utils');   // 上级目录
+
+// 3. 绝对路径模块（以 / 开头）
+const config = require('/etc/config');
+
+// 4. node_modules 查找（无路径前缀）
+const express = require('express');
+const lodash = require('lodash');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 文件扩展名查找</h2>
+      <div class="code-block">
+// require('./math') 会按顺序查找：
+// 1. ./math.js
+// 2. ./math.json
+// 3. ./math.node（C++ 扩展）
+// 4. ./math/index.js
+// 5. ./math/index.json
+// 6. ./math/index.node
+
+// 示例目录结构：
+// project/
+// ├── app.js
+// ├── utils/
+// │   ├── index.js      <- require('./utils') 加载此文件
+// │   └── helper.js
+// └── math.js           <- require('./math') 加载此文件
+
+// 在 app.js 中
+const utils = require('./utils');   // 加载 utils/index.js
+const math = require('./math');     // 加载 math.js
+const helper = require('./utils/helper');  // 必须完整路径
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">目录作为模块</div>
+          <p>当 require 的路径是目录时，会自动查找目录下的 index.js 文件。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> node_modules 查找</h2>
+      <div class="code-block">
+// require('express') 的查找过程：
+
+// 项目结构：
+// /home/user/project/
+// └── node_modules/
+//     └── express/   <- 找到！
+//         └── index.js
+
+// 如果当前目录没有 node_modules，向上查找：
+// 1. /home/user/project/node_modules/express
+// 2. /home/user/node_modules/express
+// 3. /home/node_modules/express
+// 4. /node_modules/express
+// 5. NODE_PATH 环境变量指定的路径
+
+// 查看模块路径
+console.log(module.paths);
+// [
+//   '/home/user/project/node_modules',
+//   '/home/user/node_modules',
+//   '/home/node_modules',
+//   '/node_modules'
+// ]
+
+// 查看模块实际路径
+console.log(require.resolve('express'));
+// /home/user/project/node_modules/express/index.js
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 模块包装</h2>
+      <div class="code-block">
+// Node.js 加载模块时会包装函数：
+(function(exports, require, module, __filename, __dirname) {
+  // 模块代码实际在这里执行
+
+  console.log(__filename);  // 当前模块的绝对路径
+  console.log(__dirname);   // 当前模块所在目录
+});
+
+// 示例模块 module.js
+console.log('__filename:', __filename);
+console.log('__dirname:', __dirname);
+console.log('module.id:', module.id);
+console.log('module.filename:', module.filename);
+console.log('module.loaded:', module.loaded);
+console.log('module.children:', module.children);
+
+// 运行 node module.js 输出：
+// __filename: /path/to/module.js
+// __dirname: /path/to
+// module.id: .
+// module.filename: /path/to/module.js
+// module.loaded: false
+// module.children: []
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 调试模块加载</h2>
+      <div class="code-block">
+# 查看模块加载过程
+node --trace-modules app.js
+
+# 查看模块缓存
+node -e "console.log(Object.keys(require.cache))"
+
+# 设置 NODE_PATH
+export NODE_PATH=/usr/local/lib/node_modules
+# 或 Windows
+set NODE_PATH=C:\nodejs\node_modules
+
+# 使用 module.createRequire
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+# 解析模块路径（不加载）
+node -e "console.log(require.resolve('express'))"
+
+# 查看模块详情
+node -p "require.resolve.paths('express')"
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 模块查找：内置 -> 相对路径 -> node_modules</li>
+            <li>• 文件扩展名按 .js -> .json -> .node 顺序查找</li>
+            <li>• 目录模块自动加载 index.js</li>
+            <li>• node_modules 向上递归查找</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="12-2-ESModules.html">← 上一节：ES Modules</a>
+      <a href="12-4-package.json详解.html">下一节：package.json 详解 →</a>
+    </div>
+  </div>
+</body>
+</html>

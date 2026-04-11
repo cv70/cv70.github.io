@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.1 异常过滤器 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="49-1-异常过滤器.html">第四十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>49.1 异常过滤器</h1>
+      <p class="subtitle">理解 NestJS 异常处理机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解异常过滤器的作用</li>
+        <li>掌握异常过滤器的接口</li>
+        <li>了解异常传播机制</li>
+        <li>理解过滤器的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是异常过滤器？</h2>
+      <p>异常过滤器是处理应用中未捕获异常的组件。当异常抛出时，NestJS 会查找匹配的异常过滤器来处理该异常。</p>
+
+      <div class="code-block">
+异常处理流程：
+
+路由处理器抛出异常
+        ↓
+检查是否有匹配的过滤器
+        ├─ 有 → 执行过滤器的 catch 方法
+        │         ↓
+        │      返回自定义响应
+        │
+        └─ 无 → 使用内置异常处理器
+                  ↓
+             返回标准错误响应
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">异常过滤器特点</div>
+          <p>异常过滤器可以捕获特定类型的异常，返回自定义的响应格式，记录日志，或执行其他错误处理逻辑。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 异常过滤器接口</h2>
+      <div class="code-block">
+import { ExceptionFilter, Catch, ArgumentsHost } from '@nestjs/common';
+import { Request, Response } from 'express';
+
+@Catch()  // 捕获所有异常
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    const message =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : 'Internal server error';
+
+    response.status(status).json({
+      code: status,
+      message,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
+
+// ArgumentsHost 提供访问请求上下文的能力
+interface ArgumentsHost {
+  switchToHttp(): HttpArgumentsHost;
+  switchToRpc(): RpcArgumentsHost;
+  switchToWs(): WsArgumentsHost;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 异常过滤器作用范围</h2>
+      <div class="code-block">
+// 1. 方法级
+@Controller('users')
+export class UsersController {
+  @UseFilters(HttpExceptionFilter)
+  @Get()
+  findAll() {}
+}
+
+// 2. 控制器级
+@Controller('users')
+@UseFilters(HttpExceptionFilter)
+export class UsersController {}
+
+// 3. 全局级
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new HttpExceptionFilter());
+  await app.listen(3000);
+}
+
+// 4. 模块级
+@Module({
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 异常过滤器与其他组件</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>组件</th>
+            <th>处理时机</th>
+            <th>主要用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>管道</td>
+            <td>参数验证时</td>
+            <td>验证失败抛出异常</td>
+          </tr>
+          <tr>
+            <td>守卫</td>
+            <td>权限验证时</td>
+            <td>权限拒绝抛出异常</td>
+          </tr>
+          <tr>
+            <td>拦截器</td>
+            <td>方法执行后</td>
+            <td>可捕获方法异常</td>
+          </tr>
+          <tr>
+            <td>过滤器</td>
+            <td>异常抛出后</td>
+            <td>统一处理异常响应</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">过滤器执行</div>
+          <p>当异常被抛出时，NestJS 会从最近的作用域开始查找匹配的过滤器。找到匹配的过滤器后，异常不会再继续传播。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 异常过滤器处理未捕获的异常</li>
+            <li>• @Catch() 指定捕获的异常类型</li>
+            <li>• 实现 ExceptionFilter 接口</li>
+            <li>• 支持方法级、控制器级、全局级</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter48/48-5-缓存拦截.html">← 上一章：缓存拦截</a>
+      <a href="49-2-内置异常.html">下一节：内置异常 →</a>
+    </div>
+  </div>
+</body>
+</html>

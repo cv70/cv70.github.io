@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>54.3 JWT 策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="54-1-Passport简介.html">第五十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>54.3 JWT 策略</h1>
+      <p class="subtitle">使用 Passport 实现 JWT 认证</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 passport-jwt 的配置</li>
+        <li>理解 JWT 提取方式</li>
+        <li>学会无状态认证实现</li>
+        <li>掌握多策略组合使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装 passport-jwt
+npm install passport-jwt
+
+# 安装类型定义
+npm install -D @types/passport-jwt
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 配置 JWT 策略</h2>
+      <div class="code-block">
+// src/config/passport.ts
+import passport from 'passport';
+import { Strategy as JwtStrategy, ExtractJwt, StrategyOptions } from 'passport-jwt';
+import { User } from '../models/User';
+
+// JWT 策略选项
+const jwtOptions: StrategyOptions = {
+  // 从 Authorization: Bearer <token> 提取
+  jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+
+  // 密钥
+  secretOrKey: process.env.JWT_SECRET!,
+
+  // 发行者验证
+  issuer: 'my-app',
+
+  // 受众验证
+  audience: 'my-app-users',
+
+  // 不使用 Session
+  passReqToCallback: false,
+};
+
+// 配置 JWT 策略
+passport.use('jwt', new JwtStrategy(jwtOptions, async (payload, done) => {
+  try {
+    // payload 是解码后的 JWT 内容
+    // { sub: 'userId', iat: 1234567890, exp: 1234571490 }
+
+    // 查找用户
+    const user = await User.findById(payload.sub);
+
+    if (!user) {
+      return done(null, false);
+    }
+
+    // 检查用户状态
+    if (!user.isActive) {
+      return done(null, false);
+    }
+
+    return done(null, user);
+  } catch (error) {
+    return done(error, false);
+  }
+}));
+
+export default passport;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">JWT 策略说明</div>
+          <p>JWT策略不需要Session，验证通过后直接将用户信息附加到req.user。payload.sub通常存储用户ID。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔑</span> JWT 提取方式</h2>
+      <div class="code-block">
+import { ExtractJwt } from 'passport-jwt';
+
+// 1. 从 Authorization Header 提取（最常用）
+const fromHeader = ExtractJwt.fromAuthHeaderAsBearerToken();
+// Authorization: Bearer <token>
+
+// 2. 从 Authorization Header 提取（自定义方案）
+const fromAuthHeader = ExtractJwt.fromAuthHeaderWithScheme('Token');
+// Authorization: Token <token>
+
+// 3. 从请求体提取
+const fromBody = ExtractJwt.fromBodyField('token');
+// POST body: { token: '<jwt>' }
+
+// 4. 从 URL 查询参数提取
+const fromQuery = ExtractJwt.fromUrlQueryParameter('token');
+// GET /api/resource?token=<jwt>
+
+// 5. 从 Cookie 提取
+const fromCookie = ExtractJwt.fromCookieField('jwt');
+// Cookie: jwt=<token>
+
+// 6. 自定义提取函数
+const customExtractor = (req: Request) => {
+  let token = null;
+
+  // 从 Header 提取
+  if (req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      token = parts[1];
+    }
+  }
+
+  // Header 没有则从 Cookie 提取
+  if (!token && req.cookies) {
+    token = req.cookies.jwt;
+  }
+
+  return token;
+};
+
+// 使用自定义提取器
+const jwtOptions = {
+  jwtFromRequest: customExtractor,
+  secretOrKey: process.env.JWT_SECRET!,
+};
+
+// 7. 多来源组合提取
+const multiExtractor = ExtractJwt.fromExtractors([
+  ExtractJwt.fromAuthHeaderAsBearerToken(),
+  ExtractJwt.fromUrlQueryParameter('token'),
+  ExtractJwt.fromCookieField('jwt'),
+]);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 登录生成 JWT</h2>
+      <div class="code-block">
+// src/controllers/auth.controller.ts
+import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
+import { User } from '../models/User';
+import bcrypt from 'bcryptjs';
+
+export class AuthController {
+  // 登录并返回 JWT
+  async login(req: Request, res: Response) {
+    try {
+      const { email, password } = req.body;
+
+      // 查找用户
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: '邮箱或密码错误',
+        });
+      }
+
+      // 验证密码
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: '邮箱或密码错误',
+        });
+      }
+
+      // 生成 JWT
+      const payload = {
+        sub: user._id.toString(),
+        email: user.email,
+        role: user.role,
+      };
+
+      const token = jwt.sign(payload, process.env.JWT_SECRET!, {
+        expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+        issuer: 'my-app',
+        audience: 'my-app-users',
+      });
+
+      res.json({
+        success: true,
+        data: {
+          token,
+          tokenType: 'Bearer',
+          expiresIn: 3600,
+          user: {
+            id: user._id,
+            email: user.email,
+            username: user.username,
+            role: user.role,
+          },
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: '服务器错误' });
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 保护 API 路由</h2>
+      <div class="code-block">
+// src/routes/api.routes.ts
+import express from 'express';
+import passport from '../config/passport';
+
+const router = express.Router();
+
+// 所有路由都需要 JWT 认证
+router.use(passport.authenticate('jwt', { session: false }));
+
+// 获取用户信息
+router.get('/profile', (req, res) => {
+  res.json({ user: req.user });
+});
+
+// 更新用户信息
+router.put('/profile', async (req, res) => {
+  const user = req.user as any;
+  // 更新逻辑...
+  res.json({ message: '更新成功' });
+});
+
+// 单个路由认证
+router.get('/public', (req, res) => {
+  res.json({ message: '公开接口' });
+});
+
+router.get('/protected',
+  passport.authenticate('jwt', { session: false }),
+  (req, res) => {
+    res.json({ message: '受保护接口', user: req.user });
+  }
+);
+
+// 可选认证（有 token 则验证）
+router.get('/optional',
+  passport.authenticate(['jwt', 'anonymous'], { session: false }),
+  (req, res) => {
+    res.json({
+      message: req.user ? '已登录用户' : '匿名用户',
+      user: req.user,
+    });
+  }
+);
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 组合本地策略和 JWT 策略</h2>
+      <div class="code-block">
+// src/app.ts
+import express from 'express';
+import passport from './config/passport';
+
+const app = express();
+
+// 初始化 Passport
+app.use(passport.initialize());
+
+// 登录路由（使用本地策略）
+app.post('/api/auth/login',
+  passport.authenticate('local', { session: false }),
+  (req, res) => {
+    // 生成 JWT
+    const token = jwt.sign(
+      { sub: (req.user as any)._id },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token, user: req.user });
+  }
+);
+
+// API 路由（使用 JWT 策略）
+app.use('/api',
+  passport.authenticate('jwt', { session: false }),
+  apiRoutes
+);
+
+// 刷新 Token 端点
+app.post('/api/auth/refresh',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res) => {
+    const user = req.user as any;
+
+    // 生成新 Token
+    const newToken = jwt.sign(
+      { sub: user._id },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token: newToken });
+  }
+);
+
+// 角色检查中间件
+function requireRole(role: string) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const user = req.user as any;
+
+    if (user.role !== role) {
+      return res.status(403).json({ error: '权限不足' });
+    }
+
+    next();
+  };
+}
+
+// 管理员路由
+app.get('/api/admin/users',
+  passport.authenticate('jwt', { session: false }),
+  requireRole('admin'),
+  (req, res) => {
+    res.json({ message: '管理员面板' });
+  }
+);
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">Session 设置</div>
+          <p>使用JWT策略时，务必设置session: false，否则Passport会尝试创建Session，增加不必要的开销。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• passport-jwt 用于无状态认证</li>
+            <li>• 常用 fromAuthHeaderAsBearerToken 提取 Token</li>
+            <li>• JWT 策略必须设置 session: false</li>
+            <li>• 可以组合本地策略和 JWT 策略</li>
+            <li>• payload.sub 存储用户 ID 用于查找用户</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="54-2-本地策略.html">← 上一节：本地策略</a>
+      <a href="54-4-OAuth集成.html">下一节：OAuth 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

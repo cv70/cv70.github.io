@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.4 Cookie 处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter33.html">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.4 Cookie 处理</h1>
+      <p class="subtitle">掌握 Express 中 Cookie 的读写和安全配置</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Cookie 的工作原理</li>
+        <li>掌握 cookie-parser 中间件的使用</li>
+        <li>学会安全地设置和读取 Cookie</li>
+        <li>理解 Cookie 安全相关的配置选项</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🍪</span> Cookie 基础知识</h2>
+      <p>Cookie 是服务器发送到浏览器的小数据片段，浏览器会存储并在后续请求中发送回服务器。</p>
+
+      <h3>Cookie 的属性</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>属性</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>name=value</code></td>
+            <td>Cookie 名称和值</td>
+          </tr>
+          <tr>
+            <td><code>Expires</code></td>
+            <td>过期时间（绝对时间）</td>
+          </tr>
+          <tr>
+            <td><code>Max-Age</code></td>
+            <td>存活时间（秒）</td>
+          </tr>
+          <tr>
+            <td><code>Domain</code></td>
+            <td>作用域名</td>
+          </tr>
+          <tr>
+            <td><code>Path</code></td>
+            <td>作用路径</td>
+          </tr>
+          <tr>
+            <td><code>Secure</code></td>
+            <td>仅 HTTPS 传输</td>
+          </tr>
+          <tr>
+            <td><code>HttpOnly</code></td>
+            <td>JavaScript 无法访问</td>
+          </tr>
+          <tr>
+            <td><code>SameSite</code></td>
+            <td>跨站请求限制</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> cookie-parser 中间件</h2>
+
+      <div class="code-block">
+# 安装
+npm install cookie-parser</div>
+
+      <div class="code-block">
+const express = require('express');
+const cookieParser = require('cookie-parser');
+
+const app = express();
+
+// 基本使用
+app.use(cookieParser());
+
+// 带密钥（用于签名 Cookie）
+app.use(cookieParser('your-secret-key'));
+
+// 读取 Cookie
+app.get('/', (req, res) => {
+  // 所有 Cookie
+  console.log(req.cookies);
+
+  // 签名的 Cookie
+  console.log(req.signedCookies);
+
+  res.send('OK');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 设置 Cookie</h2>
+
+      <h3>基本设置</h3>
+      <div class="code-block">
+app.get('/set-cookie', (req, res) => {
+  // 基本设置
+  res.cookie('name', 'value');
+
+  // 带选项设置
+  res.cookie('name', 'value', {
+    maxAge: 900000,       // 存活时间（毫秒）
+    expires: new Date('2024-12-31'),  // 过期时间
+    httpOnly: true,       // 仅 HTTP 访问
+    secure: true,         // 仅 HTTPS
+    domain: 'example.com',
+    path: '/admin',
+    sameSite: 'strict',   // strict | lax | none
+    signed: true          // 签名
+  });
+
+  res.send('Cookie set');
+});</div>
+
+      <h3>不同类型 Cookie 的设置</h3>
+      <div class="code-block">
+// 会话 Cookie（浏览器关闭后删除）
+res.cookie('session', 'abc123');
+
+// 持久 Cookie（设置过期时间）
+res.cookie('remember', 'true', {
+  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 天
+});
+
+// 安全 Cookie（仅 HTTPS）
+res.cookie('token', 'xyz', {
+  secure: true,
+  httpOnly: true,
+  sameSite: 'strict'
+});
+
+// 签名 Cookie（防篡改）
+res.cookie('userId', '123', {
+  signed: true,
+  secret: 'your-secret'  // 或使用全局密钥
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 读取 Cookie</h2>
+
+      <div class="code-block">
+app.get('/read-cookie', (req, res) => {
+  // 读取普通 Cookie
+  const name = req.cookies.name;
+
+  // 读取签名 Cookie（验证签名）
+  const userId = req.signedCookies.userId;
+
+  // 检查 Cookie 是否存在
+  if (!req.cookies.session) {
+    return res.send('No session cookie');
+  }
+
+  res.json({
+    cookies: req.cookies,
+    signedCookies: req.signedCookies
+  });
+});
+
+// 签名 Cookie 验证失败返回 false
+app.get('/check-signed', (req, res) => {
+  const userId = req.signedCookies.userId;
+
+  if (userId === false) {
+    return res.status(400).send('Cookie tampered!');
+  }
+
+  res.send(`User ID: ${userId}`);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> 删除 Cookie</h2>
+
+      <div class="code-block">
+// 删除 Cookie
+app.get('/clear-cookie', (req, res) => {
+  // 清除单个 Cookie
+  res.clearCookie('name');
+
+  // 需要匹配 domain 和 path
+  res.clearCookie('name', {
+    domain: 'example.com',
+    path: '/admin'
+  });
+
+  res.send('Cookie cleared');
+});
+
+// 清除多个 Cookie
+app.get('/clear-all', (req, res) => {
+  Object.keys(req.cookies).forEach(name => {
+    res.clearCookie(name);
+  });
+
+  res.send('All cookies cleared');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Cookie 安全配置</h2>
+
+      <h3>安全选项详解</h3>
+      <div class="code-block">
+// 推荐的安全配置
+
+// 1. Session Cookie（短期会话）
+res.cookie('sessionId', sessionId, {
+  httpOnly: true,      // 防止 XSS 攻击
+  secure: true,        // 仅 HTTPS 传输
+  sameSite: 'strict',  // 防止 CSRF 攻击
+  maxAge: 30 * 60 * 1000  // 30 分钟
+});
+
+// 2. 认证 Token
+res.cookie('authToken', token, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',
+  signed: true,
+  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 天
+});
+
+// 3. 用户偏好（不敏感）
+res.cookie('theme', 'dark', {
+  maxAge: 365 * 24 * 60 * 60 * 1000  // 1 年
+});
+
+// 4. 追踪 Cookie（需要用户同意）
+res.cookie('_ga', gaId, {
+  maxAge: 2 * 365 * 24 * 60 * 60 * 1000,
+  sameSite: 'lax'
+});</div>
+
+      <h3>SameSite 选项</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>值</th>
+            <th>行为</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>strict</code></td>
+            <td>完全禁止跨站发送</td>
+            <td>敏感操作（银行、支付）</td>
+          </tr>
+          <tr>
+            <td><code>lax</code></td>
+            <td>允许顶级导航的 GET 请求</td>
+            <td>大多数网站（默认推荐）</td>
+          </tr>
+          <tr>
+            <td><code>none</code></td>
+            <td>允许跨站发送</td>
+            <td>需要跨站嵌入的场景</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 实战示例：记住登录状态</h2>
+
+      <div class="code-block">
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
+
+const app = express();
+app.use(cookieParser(process.env.COOKIE_SECRET));
+
+// 模拟数据库
+const sessions = new Map();
+
+// 登录
+app.post('/login', async (req, res) => {
+  const { username, password, remember } = req.body;
+
+  // 验证用户（示例）
+  const user = await authenticateUser(username, password);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // 生成 session token
+  const token = crypto.randomBytes(32).toString('hex');
+
+  // 存储 session
+  sessions.set(token, {
+    userId: user.id,
+    createdAt: Date.now()
+  });
+
+  // 设置 Cookie
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    signed: true
+  };
+
+  if (remember) {
+    cookieOptions.maxAge = 30 * 24 * 60 * 60 * 1000;  // 30 天
+  } else {
+    cookieOptions.maxAge = 24 * 60 * 60 * 1000;  // 1 天
+  }
+
+  res.cookie('authToken', token, cookieOptions);
+
+  res.json({ message: 'Logged in', user });
+});
+
+// 认证中间件
+function requireAuth(req, res, next) {
+  const token = req.signedCookies.authToken;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const session = sessions.get(token);
+
+  if (!session) {
+    res.clearCookie('authToken');
+    return res.status(401).json({ error: 'Session expired' });
+  }
+
+  req.userId = session.userId;
+  next();
+}
+
+// 受保护的路由
+app.get('/profile', requireAuth, (req, res) => {
+  res.json({ userId: req.userId });
+});
+
+// 登出
+app.post('/logout', (req, res) => {
+  const token = req.signedCookies.authToken;
+
+  if (token) {
+    sessions.delete(token);
+  }
+
+  res.clearCookie('authToken');
+  res.json({ message: 'Logged out' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题</h2>
+
+      <h3>Cookie 不生效</h3>
+      <div class="code-block">
+// 检查以下几点：
+
+// 1. domain 配置是否正确
+res.cookie('name', 'value', {
+  domain: '.example.com'  // 点开头表示子域名共享
+});
+
+// 2. path 是否匹配
+res.cookie('name', 'value', {
+  path: '/admin'  // 只在 /admin 路径下有效
+});
+
+// 3. secure 选项在开发环境
+if (process.env.NODE_ENV === 'production') {
+  res.cookie('name', 'value', { secure: true });
+} else {
+  res.cookie('name', 'value', { secure: false });
+}
+
+// 4. SameSite=None 需要 Secure
+res.cookie('name', 'value', {
+  sameSite: 'none',
+  secure: true  // 必须同时设置
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 cookie-parser 中间件处理 Cookie</li>
+            <li>res.cookie() 设置，req.cookies/req.signedCookies 读取</li>
+            <li>httpOnly 防止 XSS，sameSite 防止 CSRF</li>
+            <li>secure 确保仅 HTTPS 传输</li>
+            <li>敏感数据应使用签名 Cookie</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-3-文件上传multer.html">← 上一节：文件上传 multer</a>
+      <a href="33-5-请求头处理.html">下一节：请求头处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

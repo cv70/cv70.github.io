@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.4 双工流 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="17-1-流的概念.html">第十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>17.4 双工流</h1>
+      <p class="subtitle">可读可写的双向流</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解双工流的概念</li>
+        <li>掌握 Duplex 类的使用</li>
+        <li>学会创建自定义双工流</li>
+        <li>理解转换流 Transform</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Duplex 双工流</h2>
+      <div class="code-block">
+const { Duplex } = require('stream');
+
+// Duplex 既可读又可写
+// 但读写是独立的，不互相影响
+
+// 创建双工流
+const duplex = new Duplex({
+  read(size) {
+    // 可读逻辑
+    this.push('data from read');
+    this.push(null);
+  },
+  write(chunk, encoding, callback) {
+    // 可写逻辑
+    console.log('写入:', chunk.toString());
+    callback();
+  }
+});
+
+// 读操作
+duplex.on('data', (chunk) => {
+  console.log('读取:', chunk.toString());
+});
+
+// 写操作
+duplex.write('hello');
+duplex.write('world');
+duplex.end();
+
+// 内置双工流示例
+const net = require('net');
+
+// TCP Socket 是双工流
+const server = net.createServer((socket) => {
+  // socket 既是可读流也是可写流
+  socket.on('data', (data) => {
+    console.log('收到:', data.toString());
+    socket.write('Echo: ' + data);  // 写回
+  });
+});
+
+server.listen(3000);
+
+// 客户端
+const client = net.connect(3000, 'localhost');
+client.write('Hello');
+client.on('data', (data) => {
+  console.log('响应:', data.toString());
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Transform 转换流</h2>
+      <div class="code-block">
+const { Transform } = require('stream');
+
+// Transform 是特殊的双工流
+// 写入的数据经过转换后变为读取的数据
+
+// 创建转换流
+const upperCase = new Transform({
+  transform(chunk, encoding, callback) {
+    // chunk: 输入数据
+    // 通过 this.push() 输出转换后的数据
+    this.push(chunk.toString().toUpperCase());
+    callback();
+  }
+});
+
+// 使用
+process.stdin
+  .pipe(upperCase)
+  .pipe(process.stdout);
+
+// 带 flush 的转换流
+const myTransform = new Transform({
+  transform(chunk, encoding, callback) {
+    this.push(chunk);
+    callback();
+  },
+  flush(callback) {
+    // 流结束时调用，用于输出剩余数据
+    this.push('--- End ---');
+    callback();
+  }
+});
+
+// 示例：JSON 解析
+const jsonParser = new Transform({
+  objectMode: true,  // 处理对象而非 Buffer
+  transform(chunk, encoding, callback) {
+    try {
+      const obj = JSON.parse(chunk.toString());
+      this.push(obj);
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Duplex vs Transform</div>
+          <p>Duplex 的读写是独立的，Transform 的输出依赖输入。Transform 更适合数据转换场景。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 自定义转换流</h2>
+      <div class="code-block">
+const { Transform } = require('stream');
+
+// 1. 加密转换流
+const crypto = require('crypto');
+
+class EncryptStream extends Transform {
+  constructor(key, iv) {
+    super();
+    this.cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  }
+
+  _transform(chunk, encoding, callback) {
+    const encrypted = this.cipher.update(chunk);
+    this.push(encrypted);
+    callback();
+  }
+
+  _flush(callback) {
+    const final = this.cipher.final();
+    this.push(final);
+    callback();
+  }
+}
+
+// 2. 行处理转换流
+class LineTransform extends Transform {
+  constructor(options) {
+    super(options);
+    this.buffer = '';
+  }
+
+  _transform(chunk, encoding, callback) {
+    this.buffer += chunk.toString();
+    const lines = this.buffer.split('\n');
+    this.buffer = lines.pop();
+
+    lines.forEach(line => {
+      this.push(line + '\n');
+    });
+    callback();
+  }
+
+  _flush(callback) {
+    if (this.buffer) {
+      this.push(this.buffer);
+    }
+    callback();
+  }
+}
+
+// 3. 过滤转换流
+class FilterStream extends Transform {
+  constructor(predicate, options) {
+    super({ ...options, objectMode: true });
+    this.predicate = predicate;
+  }
+
+  _transform(chunk, encoding, callback) {
+    if (this.predicate(chunk)) {
+      this.push(chunk);
+    }
+    callback();
+  }
+}
+
+// 使用
+const filter = new FilterStream(x => x > 5);
+filter.on('data', console.log);
+[1, 3, 5, 7, 9].forEach(n => filter.write(n));
+filter.end();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实际应用示例</h2>
+      <div class="code-block">
+const { Transform, pipeline } = require('stream');
+const fs = require('fs');
+const zlib = require('zlib');
+
+// 1. 日志处理管道
+class LogParser extends Transform {
+  constructor() {
+    super({ objectMode: true });
+  }
+
+  _transform(chunk, encoding, callback) {
+    const line = chunk.toString();
+    const match = line.match(/^\[(.+?)\]\s+(.+)$/);
+    if (match) {
+      this.push({
+        timestamp: new Date(match[1]),
+        message: match[2]
+      });
+    }
+    callback();
+  }
+}
+
+class ErrorFilter extends Transform {
+  constructor() {
+    super({ objectMode: true });
+  }
+
+  _transform(log, encoding, callback) {
+    if (log.message.includes('ERROR')) {
+      this.push(log);
+    }
+    callback();
+  }
+}
+
+class JsonStringify extends Transform {
+  constructor() {
+    super({ objectMode: true });
+  }
+
+  _transform(obj, encoding, callback) {
+    this.push(JSON.stringify(obj) + '\n');
+    callback();
+  }
+}
+
+// 使用 pipeline
+pipeline(
+  fs.createReadStream('app.log'),
+  new LogParser(),
+  new ErrorFilter(),
+  new JsonStringify(),
+  fs.createWriteStream('errors.json'),
+  (err) => {
+    if (err) console.error('管道失败:', err);
+    else console.log('处理完成');
+  }
+);
+
+// 2. 实时数据转换
+class DataAggregator extends Transform {
+  constructor(interval) {
+    super({ objectMode: true });
+    this.interval = interval;
+    this.data = [];
+    this.timer = null;
+  }
+
+  _transform(chunk, encoding, callback) {
+    this.data.push(chunk);
+    callback();
+  }
+
+  _flush(callback) {
+    if (this.data.length > 0) {
+      this.push(this.aggregate(this.data));
+    }
+    callback();
+  }
+
+  aggregate(data) {
+    return data.reduce((acc, val) => acc + val, 0);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Duplex 是可读可写的双向流</li>
+            <li>• Transform 是特殊的双工流，输出依赖输入</li>
+            <li>• 实现 _transform() 创建自定义转换流</li>
+            <li>• objectMode: true 处理对象而非 Buffer</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="17-3-可写流.html">← 上一节：可写流</a>
+      <a href="17-5-管道操作.html">下一节：管道操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

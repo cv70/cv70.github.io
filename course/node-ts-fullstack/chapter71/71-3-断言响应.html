@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.3 断言响应 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="71-2-请求构建.html">上一节</a></li>
+      <li><a href="71-4-测试Express应用.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>71.3 断言响应</h1>
+      <p class="subtitle">第十部分：测试篇 - 验证 HTTP 响应的正确性</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 响应对象结构</h2>
+
+      <div class="code-block">const response = await request(app).get('/users/1');
+
+// 响应对象包含：
+response.status      // HTTP 状态码
+response.statusCode  // 状态码别名
+response.headers     // 响应头对象
+response.body        // 解析后的响应体
+response.text        // 原始响应文本
+response.type        // Content-Type</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 状态码断言</h2>
+
+      <div class="code-block">// Jest 断言方式
+const response = await request(app).get('/users');
+expect(response.status).toBe(200);
+
+// Supertest 链式断言
+await request(app).get('/users').expect(200);
+
+// 常见状态码
+await request(app).get('/users').expect(200);      // OK
+await request(app).post('/users').expect(201);     // Created
+await request(app).get('/users/1').expect(200);    // OK
+await request(app).put('/users/1').expect(200);    // Updated
+await request(app).delete('/users/1').expect(204); // No Content
+
+// 错误状态码
+await request(app).get('/invalid').expect(404);    // Not Found
+await request(app).post('/users').expect(400);     // Bad Request
+await request(app).get('/protected').expect(401);  // Unauthorized
+await request(app).get('/forbidden').expect(403);  // Forbidden
+
+// 状态码范围
+await request(app).get('/users').expect(200); // 等于 200
+// 使用 Jest 检查范围
+const response = await request(app).get('/users');
+expect(response.status).toBeGreaterThanOrEqual(200);
+expect(response.status).toBeLessThan(300);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 响应头断言</h2>
+
+      <div class="code-block">// Jest 断言方式
+const response = await request(app).get('/users');
+expect(response.headers['content-type']).toMatch(/json/);
+
+// Supertest 链式断言
+await request(app)
+  .get('/users')
+  .expect('Content-Type', /json/);
+
+// 检查特定头部
+await request(app)
+  .get('/users')
+  .expect('Content-Type', 'application/json; charset=utf-8');
+
+// 检查头部存在
+const response = await request(app).get('/users');
+expect(response.headers).toHaveProperty('x-request-id');
+
+// 多个头部
+await request(app)
+  .get('/users')
+  .expect('Content-Type', /json/)
+  .expect('X-Powered-By', /Express/);
+
+// CORS 头部
+await request(app)
+  .get('/users')
+  .expect('Access-Control-Allow-Origin', '*');
+
+// Cache 头部
+await request(app)
+  .get('/static/file.js')
+  .expect('Cache-Control', /max-age/);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 响应体断言</h2>
+
+      <div class="code-block">// JSON 响应体
+const response = await request(app).get('/users/1');
+expect(response.body).toEqual({
+  id: 1,
+  name: 'John',
+  email: 'john@example.com'
+});
+
+// 使用 Supertest 断言
+await request(app)
+  .get('/users/1')
+  .expect(200, { id: 1, name: 'John' });
+
+// 部分匹配
+const response = await request(app).get('/users/1');
+expect(response.body).toMatchObject({
+  name: 'John'
+});
+
+// 检查属性
+const response = await request(app).get('/users/1');
+expect(response.body).toHaveProperty('id');
+expect(response.body).toHaveProperty('name', 'John');
+
+// 数组响应
+const response = await request(app).get('/users');
+expect(response.body).toBeInstanceOf(Array);
+expect(response.body).toHaveLength(3);
+expect(response.body[0]).toHaveProperty('id');
+
+// 嵌套对象
+const response = await request(app).get('/users/1');
+expect(response.body.address.city).toBe('NYC');
+expect(response.body).toHaveProperty('address.city', 'NYC');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 错误响应断言</h2>
+
+      <div class="code-block">// 验证错误格式
+test('returns validation errors', async () => {
+  const response = await request(app)
+    .post('/users')
+    .send({}); // 缺少必填字段
+
+  expect(response.status).toBe(400);
+  expect(response.body).toMatchObject({
+    error: true,
+    message: expect.any(String)
+  });
+});
+
+// 验证错误详情
+test('returns detailed validation errors', async () => {
+  const response = await request(app)
+    .post('/users')
+    .send({ email: 'invalid' });
+
+  expect(response.status).toBe(400);
+  expect(response.body.errors).toBeInstanceOf(Array);
+  expect(response.body.errors).toContainEqual(
+    expect.objectContaining({
+      field: 'email',
+      message: expect.any(String)
+    })
+  );
+});
+
+// 验证错误响应结构
+test('error response has correct structure', async () => {
+  const response = await request(app)
+    .get('/nonexistent');
+
+  expect(response.status).toBe(404);
+  expect(response.body).toEqual({
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Resource not found'
+    }
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 使用 expect 函数</h2>
+
+      <div class="code-block">// Supertest 的 expect 函数
+await request(app)
+  .get('/users')
+  .expect((res) => {
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body[0]).toHaveProperty('id');
+  });
+
+// 复杂断言
+await request(app)
+  .post('/users')
+  .send({ name: 'John' })
+  .expect((res) => {
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeDefined();
+    expect(res.body.name).toBe('John');
+    expect(res.headers).toHaveProperty('location');
+    expect(res.headers.location).toMatch(/\/users\/\d+/);
+  });
+
+// 条件断言
+await request(app)
+  .get('/users')
+  .expect((res) => {
+    if (res.body.length === 0) {
+      expect(res.body.message).toBe('No users found');
+    } else {
+      expect(res.body[0]).toHaveProperty('name');
+    }
+  });</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 分页响应断言</h2>
+
+      <div class="code-block">test('returns paginated results', async () => {
+  const response = await request(app)
+    .get('/users')
+    .query({ page: 1, limit: 10 });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({
+    data: expect.any(Array),
+    pagination: {
+      page: 1,
+      limit: 10,
+      total: expect.any(Number),
+      totalPages: expect.any(Number)
+    }
+  });
+
+  expect(response.body.data.length).toBeLessThanOrEqual(10);
+});
+
+test('pagination works correctly', async () => {
+  // 第一页
+  const page1 = await request(app)
+    .get('/users')
+    .query({ page: 1, limit: 5 });
+
+  // 第二页
+  const page2 = await request(app)
+    .get('/users')
+    .query({ page: 2, limit: 5 });
+
+  // 验证数据不同
+  expect(page1.body.data[0].id).not.toBe(page2.body.data[0].id);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 响应时间断言</h2>
+
+      <div class="code-block">// 检查响应时间
+test('responds within reasonable time', async () => {
+  const start = Date.now();
+  await request(app).get('/users');
+  const duration = Date.now() - start;
+
+  expect(duration).toBeLessThan(1000); // 1 秒内
+});
+
+// 性能测试
+describe('Performance Tests', () => {
+  test('list endpoint responds quickly', async () => {
+    const start = Date.now();
+    await request(app).get('/users').expect(200);
+    const duration = Date.now() - start;
+
+    console.log(`List endpoint took ${duration}ms`);
+    expect(duration).toBeLessThan(500);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 自定义断言</h2>
+
+      <div class="code-block">// 自定义响应断言函数
+function expectUserResponse(response: any) {
+  expect(response.status).toBe(200);
+  expect(response.body).toHaveProperty('id');
+  expect(response.body).toHaveProperty('name');
+  expect(response.body).toHaveProperty('email');
+  expect(response.body.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+  return response;
+}
+
+// 使用自定义断言
+test('returns valid user', async () => {
+  const response = await request(app).get('/users/1');
+  expectUserResponse(response);
+});
+
+// 断言辅助函数集合
+const assertions = {
+  hasValidId(response: any) {
+    expect(response.body.id).toMatch(/^[a-f0-9]{24}$/); // MongoDB ObjectId
+  },
+
+  hasTimestamps(response: any) {
+    expect(response.body.createdAt).toBeDefined();
+    expect(response.body.updatedAt).toBeDefined();
+    expect(new Date(response.body.createdAt).getTime()).not.toBeNaN();
+  },
+
+  hasPagination(response: any) {
+    expect(response.body.pagination).toEqual({
+      page: expect.any(Number),
+      limit: expect.any(Number),
+      total: expect.any(Number)
+    });
+  }
+};
+
+test('full user validation', async () => {
+  const response = await request(app).get('/users/1');
+  assertions.hasValidId(response);
+  assertions.hasTimestamps(response);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 expect() 函数进行链式断言</li>
+            <li>使用 response.body 访问解析后的响应体</li>
+            <li>使用 toMatchObject 进行部分匹配</li>
+            <li>验证错误响应的结构和内容</li>
+            <li>创建自定义断言函数提高测试可读性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="71-2-请求构建.html">← 上一节：请求构建</a>
+      <a href="71-4-测试Express应用.html">下一节：测试 Express 应用 →</a>
+    </div>
+  </div>
+</body>
+</html>

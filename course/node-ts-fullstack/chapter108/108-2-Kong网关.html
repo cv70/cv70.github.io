@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>108.2 Kong 网关 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="108-1-网关概念.html">第108章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>108.2 Kong 网关</h1>
+      <p class="subtitle">云原生API网关实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Kong的架构和特点</li>
+        <li>掌握Kong的基本配置</li>
+        <li>学会使用Kong管理API</li>
+        <li>了解Kong插件的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Kong概述</h2>
+      <div class="code-block">
+// Kong是基于Nginx和OpenResty的API网关
+
+const features = {
+  highPerformance: '基于Nginx，高性能高并发',
+  plugins: '丰富的插件生态，开箱即用',
+  cloudNative: '云原生设计，支持Kubernetes',
+  scalability: '水平扩展，无状态设计',
+  adminAPI: '完善的Admin API和管理界面'
+};
+
+// Kong架构
+const architecture = `
+┌────────────────────────────────────────┐
+│            Kong Gateway                │
+│  ┌──────────────────────────────────┐  │
+│  │          Nginx/OpenResty         │  │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐│  │
+│  │  │Router  │ │Plugins │ │Cluster ││  │
+│  │  └────────┘ └────────┘ └────────┘│  │
+│  └──────────────────────────────────┘  │
+│                 ↓                       │
+│  ┌──────────────────────────────────┐  │
+│  │       Data Store (PostgreSQL)    │  │
+│  └──────────────────────────────────┘  │
+└────────────────────────────────────────┘
+        ↓                    ↓
+   Upstream Services    Admin API
+`;
+
+// 核心概念
+const concepts = {
+  Service: '上游服务，后端API的抽象',
+  Route: '路由规则，匹配请求并转发到Service',
+  Consumer: '消费者，API的使用者',
+  Plugin: '插件，扩展功能如认证、限流',
+  Upstream: '上游服务器组，支持负载均衡'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Kong特点</div>
+          <p>高性能、插件丰富、易于扩展、云原生支持、活跃的社区。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Kong配置示例</h2>
+      <div class="code-block">
+// 使用Kong Admin API配置
+
+// 1. 创建Service
+curl -X POST http://localhost:8001/services \
+  -d "name=user-service" \
+  -d "url=http://user-service:3001"
+
+// 2. 创建Route
+curl -X POST http://localhost:8001/services/user-service/routes \
+  -d "paths[]=/api/users"
+
+// 3. 添加插件 - JWT认证
+curl -X POST http://localhost:8001/services/user-service/plugins \
+  -d "name=jwt"
+
+// 4. 添加插件 - 限流
+curl -X POST http://localhost:8001/services/user-service/plugins \
+  -d "name=rate-limiting" \
+  -d "config.second=100" \
+  -d "config.policy=local"
+
+// 使用Kong Deck配置（YAML）
+
+/*
+_format_version: "3.0"
+
+services:
+  - name: user-service
+    url: http://user-service:3001
+    routes:
+      - name: users-route
+        paths:
+          - /api/users
+    plugins:
+      - name: jwt
+      - name: rate-limiting
+        config:
+          second: 100
+          policy: local
+
+  - name: order-service
+    url: http://order-service:3002
+    routes:
+      - name: orders-route
+        paths:
+          - /api/orders
+    plugins:
+      - name: key-auth
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 10
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> Kong插件使用</h2>
+      <div class="code-block">
+// 常用Kong插件
+
+const plugins = {
+  authentication: {
+    'jwt': 'JWT认证',
+    'key-auth': 'API Key认证',
+    'basic-auth': 'Basic认证',
+    'oauth2': 'OAuth2认证'
+  },
+  security: {
+    'cors': '跨域处理',
+    'ip-restriction': 'IP白名单/黑名单',
+    'bot-detection': '爬虫检测'
+  },
+  traffic: {
+    'rate-limiting': '限流',
+    'request-size-limiting': '请求大小限制',
+    'response-ratelimiting': '响应限流'
+  },
+  transformation: {
+    'request-transformer': '请求转换',
+    'response-transformer': '响应转换',
+    'correlation-id': '请求ID注入'
+  }
+};
+
+// Node.js管理Kong
+import axios from 'axios';
+
+class KongAdminClient {
+  private baseUrl = 'http://localhost:8001';
+
+  // 创建服务
+  async createService(name: string, url: string) {
+    const response = await axios.post(`${this.baseUrl}/services`, {
+      name,
+      url
+    });
+    return response.data;
+  }
+
+  // 创建路由
+  async createRoute(serviceName: string, paths: string[]) {
+    const response = await axios.post(
+      `${this.baseUrl}/services/${serviceName}/routes`,
+      { paths }
+    );
+    return response.data;
+  }
+
+  // 添加插件
+  async addPlugin(serviceName: string, pluginName: string, config: any) {
+    const response = await axios.post(
+      `${this.baseUrl}/services/${serviceName}/plugins`,
+      { name: pluginName, config }
+    );
+    return response.data;
+  }
+
+  // 创建消费者
+  async createConsumer(username: string) {
+    const response = await axios.post(`${this.baseUrl}/consumers`, {
+      username
+    });
+    return response.data;
+  }
+
+  // 为消费者生成API Key
+  async createApiKey(consumerId: string) {
+    const response = await axios.post(
+      `${this.baseUrl}/consumers/${consumerId}/key-auth`
+    );
+    return response.data;
+  }
+}
+
+// 使用示例
+const kong = new KongAdminClient();
+
+// 创建服务和路由
+await kong.createService('user-service', 'http://user-service:3001');
+await kong.createRoute('user-service', ['/api/users']);
+
+// 添加限流插件
+await kong.addPlugin('user-service', 'rate-limiting', {
+  second: 100,
+  policy: 'local'
+});
+
+// 创建消费者
+const consumer = await kong.createConsumer('client-app');
+const apiKey = await kong.createApiKey(consumer.id);
+console.log('API Key:', apiKey.key);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Kong是基于Nginx的高性能网关</li>
+            <li>• Service和Route是核心概念</li>
+            <li>• 丰富的插件扩展功能</li>
+            <li>• 支持Admin API和声明式配置</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="108-1-网关概念.html">← 上一节：网关概念</a>
+      <a href="108-3-Nginx网关.html">下一节：Nginx 网关 →</a>
+    </div>
+  </div>
+</body>
+</html>

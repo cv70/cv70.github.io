@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.2 洋葱模型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="38-1-中间件原理.html">第三十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>38.2 洋葱模型</h1>
+      <p class="subtitle">深入理解 Koa 的中间件执行模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解洋葱模型的概念和原理</li>
+        <li>掌握中间件的执行顺序</li>
+        <li>学会利用洋葱模型解决问题</li>
+        <li>理解与 Express 线性模型的区别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 洋葱模型图解</h2>
+      <div class="code-block">
+                    ┌─────────────────────────────────────┐
+                    │          请求进入 Request            │
+                    └─────────────────────────────────────┘
+                                      │
+                                      ▼
+              ┌───────────────────────────────────────────────┐
+              │         中间件 1 (前置处理)                     │
+              │   console.log('1-start')                      │
+              └───────────────────────────────────────────────┘
+                                      │
+                                      ▼
+              ┌───────────────────────────────────────────────┐
+              │         中间件 2 (前置处理)                     │
+              │   console.log('2-start')                      │
+              └───────────────────────────────────────────────┘
+                                      │
+                                      ▼
+              ┌───────────────────────────────────────────────┐
+              │         中间件 3 (核心处理)                     │
+              │   console.log('3-core')                       │
+              │   ctx.body = 'Hello'                          │
+              └───────────────────────────────────────────────┘
+                                      │
+                                      ▼
+              ┌───────────────────────────────────────────────┐
+              │         中间件 2 (后置处理)                     │
+              │   console.log('2-end')                        │
+              └───────────────────────────────────────────────┘
+                                      │
+                                      ▼
+              ┌───────────────────────────────────────────────┐
+              │         中间件 1 (后置处理)                     │
+              │   console.log('1-end')                        │
+              └───────────────────────────────────────────────┘
+                                      │
+                                      ▼
+                    ┌─────────────────────────────────────┐
+                    │          响应返回 Response           │
+                    └─────────────────────────────────────┘
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">核心特点</div>
+          <p>请求从外向内穿过所有中间件，响应从内向外返回，形成一个完整的"洋葱"结构。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 代码演示</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const app = new Koa();
+
+// 中间件 1
+app.use(async (ctx, next) => {
+  console.log('1. 中间件1 - 进入');
+  await next();
+  console.log('6. 中间件1 - 退出');
+});
+
+// 中间件 2
+app.use(async (ctx, next) => {
+  console.log('2. 中间件2 - 进入');
+  await next();
+  console.log('5. 中间件2 - 退出');
+});
+
+// 中间件 3
+app.use(async (ctx, next) => {
+  console.log('3. 中间件3 - 进入');
+  await next();
+  console.log('4. 中间件3 - 退出');
+});
+
+// 核心处理
+app.use(async ctx => {
+  console.log('--- 核心处理 ---');
+  ctx.body = 'Hello Koa';
+});
+
+app.listen(3000);
+
+// 控制台输出:
+// 1. 中间件1 - 进入
+// 2. 中间件2 - 进入
+// 3. 中间件3 - 进入
+// --- 核心处理 ---
+// 4. 中间件3 - 退出
+// 5. 中间件2 - 退出
+// 6. 中间件1 - 退出
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Koa vs Express 模型对比</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Koa 洋葱模型</h3>
+          <div class="code-block">
+app.use(async (ctx, next) => {
+  // 前置处理
+  const start = Date.now();
+  await next();
+  // 后置处理
+  console.log(Date.now() - start);
+});
+          </div>
+          <ul class="feature-list">
+            <li>可以轻松获取响应时间</li>
+            <li>前后逻辑在同一函数内</li>
+            <li>代码更加内聚</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Express 线性模型</h3>
+          <div class="code-block">
+app.use((req, res, next) => {
+  // 前置处理
+  const start = Date.now();
+  res.on('finish', () => {
+    // 需要监听事件
+    console.log(Date.now() - start);
+  });
+  next();
+});
+          </div>
+          <ul class="feature-list">
+            <li>需要监听事件获取响应时间</li>
+            <li>前后逻辑分离</li>
+            <li>代码相对分散</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 洋葱模型的应用场景</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">请求耗时统计</h3>
+          <div class="code-block">
+app.use(async (ctx, next) => {
+  const start = Date.now();
+  await next();
+  const ms = Date.now() - start;
+  ctx.set('X-Response-Time', `${ms}ms`);
+});
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">请求日志记录</h3>
+          <div class="code-block">
+app.use(async (ctx, next) => {
+  console.log(`--> ${ctx.method} ${ctx.url}`);
+  await next();
+  console.log(`<-- ${ctx.status}`);
+});
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证与权限控制</h2>
+      <div class="code-block">
+// 认证中间件
+app.use(async (ctx, next) => {
+  const token = ctx.headers.authorization;
+
+  if (!token) {
+    ctx.status = 401;
+    return; // 阻止继续执行
+  }
+
+  try {
+    ctx.state.user = await verifyToken(token);
+  } catch (err) {
+    ctx.status = 401;
+    ctx.body = { error: 'Invalid token' };
+    return;
+  }
+
+  await next();
+});
+
+// 权限中间件
+app.use(async (ctx, next) => {
+  const { user } = ctx.state;
+
+  if (!user.isAdmin) {
+    ctx.status = 403;
+    ctx.body = { error: 'Forbidden' };
+    return;
+  }
+
+  await next();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 数据库事务管理</h2>
+      <div class="code-block">
+// 事务中间件
+app.use(async (ctx, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    ctx.state.transaction = transaction;
+    await next();
+    await transaction.commit();
+    console.log('Transaction committed');
+  } catch (err) {
+    await transaction.rollback();
+    console.log('Transaction rolled back');
+    throw err;
+  }
+});
+
+// 业务处理
+app.use(async ctx => {
+  const { transaction } = ctx.state;
+
+  await User.create({ name: 'John' }, { transaction });
+  await Order.create({ userId: 1 }, { transaction });
+
+  ctx.body = { success: true };
+});
+      </div>
+
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <div class="title">事务处理优势</div>
+          <p>洋葱模型天然适合事务管理，前置开启事务，后置根据结果提交或回滚。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题</h2>
+      <div class="code-block">
+// 错误示例：忘记 await next()
+app.use(async (ctx, next) => {
+  console.log('1');
+  next();  // 缺少 await
+  console.log('2');  // 会立即执行
+});
+
+// 正确示例
+app.use(async (ctx, next) => {
+  console.log('1');
+  await next();  // 等待下游完成
+  console.log('2');  // 下游完成后执行
+});
+
+// 错误示例：多次调用 next()
+app.use(async (ctx, next) => {
+  await next();
+  await next();  // 错误：不能多次调用
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 洋葱模型：请求从外向内，响应从内向外</li>
+            <li>• await next() 之前的代码在请求阶段执行</li>
+            <li>• await next() 之后的代码在响应阶段执行</li>
+            <li>• 适合处理日志、计时、事务等场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="38-1-中间件原理.html">← 上一节：中间件原理</a>
+      <a href="38-3-常用中间件.html">下一节：常用中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

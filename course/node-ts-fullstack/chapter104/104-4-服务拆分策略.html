@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>104.4 服务拆分策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="104-1-微服务概念.html">第104章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>104.4 服务拆分策略</h1>
+      <p class="subtitle">如何合理拆分服务边界</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握按业务能力拆分</li>
+        <li>理解按子域拆分</li>
+        <li>学习服务拆分步骤</li>
+        <li>了解拆分注意事项</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 按业务能力拆分</h2>
+      <div class="code-block">
+// 根据业务功能定义服务边界
+
+// 电商系统业务能力分析
+const businessCapabilities = {
+  '用户管理': {
+    service: 'UserService',
+    capabilities: ['注册', '登录', '个人信息管理', '收货地址管理'],
+    data: ['用户信息', '地址信息']
+  },
+  '商品管理': {
+    service: 'ProductService',
+    capabilities: ['商品发布', '商品编辑', '商品搜索', '类目管理'],
+    data: ['商品信息', '类目信息', '品牌信息']
+  },
+  '订单管理': {
+    service: 'OrderService',
+    capabilities: ['创建订单', '订单查询', '订单取消', '订单状态管理'],
+    data: ['订单信息', '订单明细']
+  },
+  '库存管理': {
+    service: 'InventoryService',
+    capabilities: ['库存查询', '库存扣减', '库存预警', '入库出库'],
+    data: ['库存信息', '出入库记录']
+  },
+  '支付管理': {
+    service: 'PaymentService',
+    capabilities: ['支付', '退款', '支付记录查询'],
+    data: ['支付记录', '退款记录']
+  }
+};
+
+// 服务定义示例
+class ProductService {
+  // 商品相关的所有功能
+  async createProduct(data: CreateProductDto) {}
+  async updateProduct(id: string, data: UpdateProductDto) {}
+  async searchProducts(query: SearchQuery) {}
+  async getProductDetail(id: string) {}
+  async manageCategories(categoryData: CategoryDto) {}
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">业务能力识别</div>
+          <p>业务能力是组织创造价值的核心活动，通常对应组织的业务部门或团队职责。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 按子域拆分（DDD方法）</h2>
+      <div class="code-block">
+// 使用领域驱动设计识别子域
+
+// 核心子域：业务核心竞争力
+const coreSubdomains = {
+  '商品推荐': {
+    type: 'core',
+    reason: '核心竞争力，需要重点投入',
+    service: 'RecommendationService'
+  }
+};
+
+// 支撑子域：支持核心业务
+const supportingSubdomains = {
+  '用户管理': {
+    type: 'supporting',
+    reason: '业务必需，但不是核心差异',
+    service: 'UserService'
+  },
+  '订单管理': {
+    type: 'supporting',
+    reason: '支持核心业务流程',
+    service: 'OrderService'
+  }
+};
+
+// 通用子域：可复用的功能
+const genericSubdomains = {
+  '认证授权': {
+    type: 'generic',
+    reason: '可使用现成解决方案',
+    service: 'AuthService',
+    solution: '可考虑使用OAuth2.0服务'
+  },
+  '消息通知': {
+    type: 'generic',
+    reason: '通用功能',
+    service: 'NotificationService'
+  }
+};
+
+// 根据子域类型决定投入
+const investmentStrategy = {
+  core: '自研，投入最优秀的团队',
+  supporting: '自研或适度定制',
+  generic: '使用现成方案或外包'
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 服务拆分步骤</h2>
+      <div class="code-block">
+// 从单体到微服务的演进步骤
+
+// 步骤1：识别边界上下文
+// 步骤2：定义服务接口
+// 步骤3：逐步拆分
+
+// 示例：将订单功能从单体中拆分
+
+// 阶段1：在单体中定义清晰的模块边界
+// monolith/src/modules/order/order.module.ts
+class OrderModule {
+  // 清晰的公共接口
+  public async createOrder(userId: string, items: CartItem[]): Promise<Order> {}
+  public async getOrder(orderId: string): Promise<Order> {}
+  public async cancelOrder(orderId: string): Promise<void> {}
+
+  // 内部实现细节保持私有
+  private validateItems(items: CartItem[]): void {}
+  private calculateTotal(items: CartItem[]): number {}
+}
+
+// 阶段2：创建独立服务，代理到单体
+// order-service/src/app.ts
+class OrderServiceProxy {
+  // 代理模式：转发请求到单体
+  async createOrder(userId: string, items: CartItem[]) {
+    return http.post('http://monolith/api/orders', { userId, items });
+  }
+}
+
+// 阶段3：逐步迁移数据到独立数据库
+class OrderService {
+  // 新服务使用自己的数据库
+  constructor(private orderRepository: OrderRepository) {}
+
+  async createOrder(userId: string, items: CartItem[]) {
+    // 直接操作自己的数据库
+    const order = await this.orderRepository.create({
+      userId,
+      items,
+      status: 'pending',
+      total: this.calculateTotal(items)
+    });
+
+    // 通过事件同步数据
+    this.eventBus.publish('order.created', order);
+
+    return order;
+  }
+}
+
+// 阶段4：移除单体中的对应代码
+// 完成拆分
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 按业务能力拆分是主要方法</li>
+            <li>• DDD子域分析帮助识别服务边界</li>
+            <li>• 渐进式拆分降低风险</li>
+            <li>• 保持服务边界清晰，避免循环依赖</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="104-3-微服务设计原则.html">← 上一节：微服务设计原则</a>
+      <a href="104-5-微服务通信.html">下一节：微服务通信 →</a>
+    </div>
+  </div>
+</body>
+</html>

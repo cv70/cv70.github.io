@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.3 创建第一个 Express 应用 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter30.html">第30章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.3 创建第一个 Express 应用</h1>
+      <p class="subtitle">从零开始手动搭建一个 Express Web 应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握手动创建 Express 项目的完整流程</li>
+        <li>理解 Express 应用的基本结构</li>
+        <li>学会配置和使用常用中间件</li>
+        <li>能够编写简单的路由处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 项目初始化</h2>
+      <p>让我们从零开始创建一个 Express 应用，深入理解每个步骤：</p>
+
+      <div class="code-block">
+# 1. 创建项目目录
+mkdir my-first-express
+cd my-first-express
+
+# 2. 初始化 package.json
+npm init -y
+
+# 3. 安装 Express
+npm install express
+
+# 4. 安装开发依赖（可选）
+npm install -D nodemon</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">关于 nodemon</div>
+          <p>nodemon 是一个开发工具，监听文件变化自动重启服务器，大大提高开发效率。生产环境不需要安装。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 创建基本服务器</h2>
+      <p>创建 <code>index.js</code> 文件，编写最简单的 Express 应用：</p>
+
+      <div class="code-block">
+// index.js
+const express = require('express');
+
+// 创建 Express 应用实例
+const app = express();
+const PORT = 3000;
+
+// 定义根路由
+app.get('/', (req, res) => {
+  res.send('Hello, Express!');
+});
+
+// 启动服务器
+app.listen(PORT, () => {
+  console.log(`服务器已启动: http://localhost:${PORT}`);
+});</div>
+
+      <div class="code-block">
+# 运行应用
+node index.js
+
+# 或使用 nodemon（开发模式）
+npx nodemon index.js</div>
+
+      <p>访问 http://localhost:3000，你将看到 "Hello, Express!" 的响应。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 完善项目结构</h2>
+      <p>为了更好的代码组织，我们创建完整的项目结构：</p>
+
+      <div class="code-block">
+my-first-express/
+├── src/
+│   ├── routes/
+│   │   ├── index.js      # 路由汇总
+│   │   ├── home.js       # 首页路由
+│   │   └── api.js        # API 路由
+│   ├── middleware/
+│   │   └── logger.js     # 日志中间件
+│   ├── config/
+│   │   └── index.js      # 配置文件
+│   └── app.js            # Express 配置
+├── public/               # 静态文件
+│   ├── css/
+│   ├── js/
+│   └── images/
+├── views/                # 模板文件
+├── index.js              # 入口文件
+└── package.json</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置 Express 应用</h2>
+
+      <h3>1. 创建配置文件 (src/config/index.js)</h3>
+      <div class="code-block">
+// src/config/index.js
+module.exports = {
+  port: process.env.PORT || 3000,
+  env: process.env.NODE_ENV || 'development',
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+};</div>
+
+      <h3>2. 创建 Express 配置 (src/app.js)</h3>
+      <div class="code-block">
+// src/app.js
+const express = require('express');
+const path = require('path');
+
+// 引入路由
+const routes = require('./routes');
+
+// 创建应用
+const app = express();
+
+// ========== 中间件配置 ==========
+
+// JSON 请求体解析
+app.use(express.json());
+
+// URL 编码请求体解析
+app.use(express.urlencoded({ extended: true }));
+
+// 静态文件服务
+app.use(express.static(path.join(__dirname, '../public')));
+
+// ========== 路由配置 ==========
+
+// 注册路由
+app.use('/', routes);
+
+// 404 处理
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Not Found'
+  });
+});
+
+// 全局错误处理
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : {}
+  });
+});
+
+module.exports = app;</div>
+
+      <h3>3. 创建路由文件</h3>
+      <div class="code-block">
+// src/routes/index.js
+const express = require('express');
+const router = express.Router();
+
+const homeRouter = require('./home');
+const apiRouter = require('./api');
+
+// 首页路由
+router.use('/', homeRouter);
+
+// API 路由
+router.use('/api', apiRouter);
+
+module.exports = router;</div>
+
+      <div class="code-block">
+// src/routes/home.js
+const express = require('express');
+const router = express.Router();
+
+// GET / - 首页
+router.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to Express!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// GET /health - 健康检查
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime()
+  });
+});
+
+module.exports = router;</div>
+
+      <div class="code-block">
+// src/routes/api.js
+const express = require('express');
+const router = express.Router();
+
+// 模拟数据
+let users = [
+  { id: 1, name: 'Alice', email: 'alice@example.com' },
+  { id: 2, name: 'Bob', email: 'bob@example.com' }
+];
+
+// GET /api/users - 获取用户列表
+router.get('/users', (req, res) => {
+  res.json({
+    success: true,
+    data: users
+  });
+});
+
+// GET /api/users/:id - 获取单个用户
+router.get('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const user = users.find(u => u.id === id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    data: user
+  });
+});
+
+// POST /api/users - 创建用户
+router.post('/users', (req, res) => {
+  const { name, email } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({
+      success: false,
+      message: 'Name and email are required'
+    });
+  }
+
+  const newUser = {
+    id: users.length + 1,
+    name,
+    email
+  };
+
+  users.push(newUser);
+
+  res.status(201).json({
+    success: true,
+    data: newUser
+  });
+});
+
+// PUT /api/users/:id - 更新用户
+router.put('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const userIndex = users.findIndex(u => u.id === id);
+
+  if (userIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  const { name, email } = req.body;
+  users[userIndex] = { ...users[userIndex], name, email };
+
+  res.json({
+    success: true,
+    data: users[userIndex]
+  });
+});
+
+// DELETE /api/users/:id - 删除用户
+router.delete('/users/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const userIndex = users.findIndex(u => u.id === id);
+
+  if (userIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  users.splice(userIndex, 1);
+
+  res.json({
+    success: true,
+    message: 'User deleted'
+  });
+});
+
+module.exports = router;</div>
+
+      <h3>4. 更新入口文件 (index.js)</h3>
+      <div class="code-block">
+// index.js
+const app = require('./src/app');
+const config = require('./src/config');
+
+app.listen(config.port, () => {
+  console.log(`服务器已启动: http://localhost:${config.port}`);
+  console.log(`运行环境: ${config.env}`);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 添加自定义中间件</h2>
+
+      <h3>创建日志中间件 (src/middleware/logger.js)</h3>
+      <div class="code-block">
+// src/middleware/logger.js
+const logger = (req, res, next) => {
+  const start = Date.now();
+
+  // 响应完成后记录日志
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const timestamp = new Date().toISOString();
+
+    console.log(`[${timestamp}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+  });
+
+  next();
+};
+
+module.exports = logger;</div>
+
+      <h3>在 app.js 中使用</h3>
+      <div class="code-block">
+// 在路由之前添加
+const logger = require('./middleware/logger');
+app.use(logger);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 更新 package.json</h2>
+      <div class="code-block">
+{
+  "name": "my-first-express",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> 测试 API</h2>
+      <p>启动服务器后，可以使用浏览器、Postman 或 curl 测试 API：</p>
+
+      <div class="code-block">
+# 测试首页
+curl http://localhost:3000/
+
+# 获取用户列表
+curl http://localhost:3000/api/users
+
+# 获取单个用户
+curl http://localhost:3000/api/users/1
+
+# 创建用户
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Charlie","email":"charlie@example.com"}'
+
+# 更新用户
+curl -X PUT http://localhost:3000/api/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Alice Updated"}'
+
+# 删除用户
+curl -X DELETE http://localhost:3000/api/users/1</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>手动创建 Express 项目需要：初始化 npm、安装 express、创建入口文件</li>
+            <li>良好的项目结构有助于代码维护和扩展</li>
+            <li>app.js 负责应用配置，routes 负责路由处理</li>
+            <li>中间件是 Express 的核心概念，按顺序执行</li>
+            <li>路由参数、请求体解析、错误处理是常用功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>按照本节内容手动创建一个完整的 Express 项目</li>
+        <li>添加一个新的路由模块，实现文章的 CRUD 操作</li>
+        <li>实现一个简单的请求计时中间件</li>
+        <li>尝试使用环境变量配置端口号</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-2-Express应用生成器.html">← 上一节：Express 应用生成器</a>
+      <a href="30-4-路由基础.html">下一节：路由基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

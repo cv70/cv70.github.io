@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.7 实战：编写自定义中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.7 实战：编写自定义中间件</h1>
+      <p class="subtitle">通过实战案例掌握自定义中间件的开发技巧</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握自定义中间件的设计模式</li>
+        <li>学会编写可配置的中间件</li>
+        <li>理解中间件的最佳实践</li>
+        <li>能够编写实用的生产级中间件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 中间件开发基础</h2>
+
+      <h3>基本结构</h3>
+      <div class="code-block">
+// 简单中间件
+function myMiddleware(req, res, next) {
+  // 1. 执行前置逻辑
+
+  // 2. 调用 next() 传递控制权
+  next();
+
+  // 3. 执行后置逻辑（可选）
+}
+
+// 使用
+app.use(myMiddleware);</div>
+
+      <h3>可配置中间件</h3>
+      <div class="code-block">
+// 工厂函数模式
+function createMiddleware(options) {
+  // 默认配置
+  const config = {
+    enabled: true,
+    message: 'Default message',
+    ...options
+  };
+
+  // 返回中间件函数
+  return (req, res, next) => {
+    if (!config.enabled) {
+      return next();
+    }
+
+    console.log(config.message);
+    next();
+  };
+}
+
+// 使用
+app.use(createMiddleware({
+  enabled: true,
+  message: 'Custom message'
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 实战案例 1：请求日志中间件</h2>
+
+      <div class="code-block">
+// middleware/logger.js
+function requestLogger(options = {}) {
+  const {
+    logBody = false,
+    logHeaders = false,
+    logQuery = true,
+    skip = null
+  } = options;
+
+  return (req, res, next) => {
+    // 跳过条件
+    if (skip && skip(req)) {
+      return next();
+    }
+
+    const start = Date.now();
+    const timestamp = new Date().toISOString();
+
+    // 构建日志数据
+    const logData = {
+      timestamp,
+      method: req.method,
+      url: req.originalUrl,
+      ip: req.ip || req.connection.remoteAddress
+    };
+
+    if (logQuery && Object.keys(req.query).length > 0) {
+      logData.query = req.query;
+    }
+
+    if (logHeaders) {
+      logData.headers = req.headers;
+    }
+
+    if (logBody && req.body && Object.keys(req.body).length > 0) {
+      logData.body = req.body;
+    }
+
+    // 响应完成时记录
+    res.on('finish', () => {
+      logData.statusCode = res.statusCode;
+      logData.duration = `${Date.now() - start}ms`;
+      logData.contentLength = res.get('content-length') || 0;
+
+      // 根据状态码选择日志级别
+      if (res.statusCode >= 400) {
+        console.error('[ERROR]', JSON.stringify(logData));
+      } else {
+        console.log('[INFO]', JSON.stringify(logData));
+      }
+    });
+
+    next();
+  };
+}
+
+module.exports = requestLogger;
+
+// 使用
+const logger = require('./middleware/logger');
+
+app.use(logger({
+  logBody: true,
+  logHeaders: process.env.NODE_ENV === 'development',
+  skip: (req) => req.path === '/health'
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 实战案例 2：JWT 认证中间件</h2>
+
+      <div class="code-block">
+// middleware/auth.js
+const jwt = require('jsonwebtoken');
+
+function authMiddleware(options = {}) {
+  const {
+    secret = process.env.JWT_SECRET,
+    algorithm = 'HS256',
+    expiresIn = '7d',
+    header = 'authorization',
+    prefix = 'Bearer ',
+    required = true
+  } = options;
+
+  return async (req, res, next) => {
+    try {
+      // 获取 token
+      const authHeader = req.headers[header.toLowerCase()];
+
+      if (!authHeader) {
+        if (required) {
+          return res.status(401).json({
+            success: false,
+            message: 'Authorization header missing'
+          });
+        }
+        return next();
+      }
+
+      // 提取 token
+      const token = authHeader.startsWith(prefix)
+        ? authHeader.slice(prefix.length)
+        : authHeader;
+
+      if (!token) {
+        if (required) {
+          return res.status(401).json({
+            success: false,
+            message: 'Token missing'
+          });
+        }
+        return next();
+      }
+
+      // 验证 token
+      const decoded = jwt.verify(token, secret, { algorithms: [algorithm] });
+
+      // 附加用户信息到请求对象
+      req.user = decoded;
+      req.token = token;
+
+      next();
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          message: 'Token expired',
+          code: 'TOKEN_EXPIRED'
+        });
+      }
+
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid token',
+          code: 'INVALID_TOKEN'
+        });
+      }
+
+      next(error);
+    }
+  };
+}
+
+// 角色检查中间件
+function requireRoles(...roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions'
+      });
+    }
+
+    next();
+  };
+}
+
+module.exports = { authMiddleware, requireRoles };
+
+// 使用
+const { authMiddleware, requireRoles } = require('./middleware/auth');
+
+// API 认证
+app.use('/api', authMiddleware({ required: true }));
+
+// 管理员路由
+app.use('/api/admin', requireRoles('admin'));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 实战案例 3：请求验证中间件</h2>
+
+      <div class="code-block">
+// middleware/validate.js
+const Joi = require('joi');
+
+function validate(schema, property = 'body') {
+  return (req, res, next) => {
+    const data = req[property];
+
+    const { error, value } = schema.validate(data, {
+      abortEarly: false,      // 返回所有错误
+      allowUnknown: false,    // 不允许未知字段
+      stripUnknown: true,     // 移除未知字段
+      convert: true           // 自动类型转换
+    });
+
+    if (error) {
+      const errors = error.details.map(detail => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+        type: detail.type
+      }));
+
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors
+      });
+    }
+
+    // 使用验证后的数据替换原始数据
+    req[property] = value;
+    next();
+  };
+}
+
+// 参数验证
+function validateParams(schema) {
+  return validate(schema, 'params');
+}
+
+// 查询验证
+function validateQuery(schema) {
+  return validate(schema, 'query');
+}
+
+// Body 验证
+function validateBody(schema) {
+  return validate(schema, 'body');
+}
+
+module.exports = { validate, validateParams, validateQuery, validateBody };
+
+// 使用
+const { validateBody, validateParams, validateQuery } = require('./middleware/validate');
+
+const userSchema = Joi.object({
+  name: Joi.string().min(2).max(50).required(),
+  email: Joi.string().email().required(),
+  age: Joi.number().integer().min(0).max(150).optional()
+});
+
+const idSchema = Joi.object({
+  id: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+});
+
+const paginationSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  sort: Joi.string().valid('createdAt', 'name').default('createdAt'),
+  order: Joi.string().valid('asc', 'desc').default('desc')
+});
+
+// 应用验证
+app.post('/users', validateBody(userSchema), userController.create);
+app.get('/users/:id', validateParams(idSchema), userController.show);
+app.get('/users', validateQuery(paginationSchema), userController.list);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 实战案例 4：缓存中间件</h2>
+
+      <div class="code-block">
+// middleware/cache.js
+const NodeCache = require('node-cache');
+
+function cacheMiddleware(options = {}) {
+  const {
+    ttl = 300,           // 默认缓存 5 分钟
+    prefix = 'cache:',
+    keyGenerator = null,
+    cache = new NodeCache({ stdTTL: ttl })
+  } = options;
+
+  return async (req, res, next) => {
+    // 只缓存 GET 请求
+    if (req.method !== 'GET') {
+      return next();
+    }
+
+    // 生成缓存键
+    const cacheKey = keyGenerator
+      ? keyGenerator(req)
+      : `${prefix}${req.originalUrl}`;
+
+    // 检查缓存
+    const cachedData = cache.get(cacheKey);
+
+    if (cachedData) {
+      console.log(`Cache hit: ${cacheKey}`);
+      return res.json(cachedData);
+    }
+
+    console.log(`Cache miss: ${cacheKey}`);
+
+    // 保存原始 json 方法
+    const originalJson = res.json.bind(res);
+
+    // 重写 json 方法以缓存响应
+    res.json = (data) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        cache.set(cacheKey, data);
+      }
+      return originalJson(data);
+    };
+
+    next();
+  };
+}
+
+// 清除缓存中间件
+function clearCache(pattern) {
+  return (req, res, next) => {
+    // 保存原始 json 方法
+    const originalJson = res.json.bind(res);
+
+    res.json = (data) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        // 清除匹配的缓存
+        cache.flushAll();
+        console.log(`Cache cleared: ${pattern}`);
+      }
+      return originalJson(data);
+    };
+
+    next();
+  };
+}
+
+module.exports = { cacheMiddleware, clearCache };
+
+// 使用
+const { cacheMiddleware, clearCache } = require('./middleware/cache');
+
+// 缓存列表数据
+app.get('/articles', cacheMiddleware({ ttl: 600 }), articleController.list);
+
+// 创建文章时清除缓存
+app.post('/articles', clearCache('/articles'), articleController.create);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 实战案例 5：异步处理包装器</h2>
+
+      <div class="code-block">
+// middleware/asyncHandler.js
+
+// 基本异步包装器
+function asyncHandler(fn) {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+// 带错误转换的包装器
+function asyncHandlerWithError(errorClass = Error) {
+  return (fn) => {
+    return (req, res, next) => {
+      Promise.resolve(fn(req, res, next)).catch(error => {
+        // 转换为自定义错误类
+        if (!(error instanceof errorClass)) {
+          error = new errorClass(error.message);
+        }
+        next(error);
+      });
+    };
+  };
+}
+
+// 带超时的包装器
+function asyncHandlerWithTimeout(timeout = 30000) {
+  return (fn) => {
+    return (req, res, next) => {
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Request timeout after ${timeout}ms`));
+        }, timeout);
+      });
+
+      Promise.race([
+        fn(req, res, next),
+        timeoutPromise
+      ]).catch(next);
+    };
+  };
+}
+
+module.exports = { asyncHandler, asyncHandlerWithError, asyncHandlerWithTimeout };
+
+// 使用
+const { asyncHandler } = require('./middleware/asyncHandler');
+
+// 简单使用
+router.get('/users/:id', asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new NotFoundError('User not found');
+  res.json(user);
+}));
+
+// 带超时
+const { asyncHandlerWithTimeout } = require('./middleware/asyncHandler');
+
+router.get('/slow-operation',
+  asyncHandlerWithTimeout(5000)(async (req, res) => {
+    const result = await slowOperation();
+    res.json(result);
+  })
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 中间件开发最佳实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">单一职责</h3>
+          <p class="card-text">每个中间件只做一件事，保持简洁和可复用</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">可配置性</h3>
+          <p class="card-text">使用工厂函数模式，支持配置选项</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">错误处理</h3>
+          <p class="card-text">正确处理异步错误，使用 next(error) 传递</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">文档注释</h3>
+          <p class="card-text">添加清晰的 JSDoc 注释，说明用法和参数</p>
+        </div>
+      </div>
+
+      <div class="code-block">
+/**
+ * 请求日志中间件
+ * @param {Object} options - 配置选项
+ * @param {boolean} [options.logBody=false] - 是否记录请求体
+ * @param {boolean} [options.logHeaders=false] - 是否记录请求头
+ * @param {Function} [options.skip] - 跳过条件函数
+ * @returns {Function} Express 中间件函数
+ */
+function requestLogger(options = {}) {
+  // 实现...
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用工厂函数模式创建可配置的中间件</li>
+            <li>请求日志中间件记录请求详情和响应时间</li>
+            <li>JWT 认证中间件处理 token 验证和用户信息提取</li>
+            <li>验证中间件使用 Joi 进行请求参数验证</li>
+            <li>异步包装器简化异步错误处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-6-中间件执行顺序.html">← 上一节：中间件执行顺序</a>
+      <a href="../chapter33/33-1-获取请求参数.html">下一章：请求处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

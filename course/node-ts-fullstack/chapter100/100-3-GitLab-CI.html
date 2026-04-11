@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>100.3 GitLab CI - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="100-1-CICD概念.html">第100章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>100.3 GitLab CI</h1>
+      <p class="subtitle">使用 GitLab CI/CD 构建自动化流水线</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 GitLab CI/CD 的架构与特点</li>
+        <li>掌握 .gitlab-ci.yml 配置文件编写</li>
+        <li>学会使用 Runner 和变量管理</li>
+        <li>了解 GitLab Auto DevOps 功能</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=800" alt="GitLab CI" class="card-image">
+      <h3 class="card-title">GitLab CI/CD 简介</h3>
+      <p class="card-text">
+        <strong>GitLab CI/CD</strong> 是 GitLab 内置的持续集成和持续交付平台。
+        它与 GitLab 代码仓库深度集成，配置简单，支持 Docker 容器、Kubernetes 部署，适合企业级使用。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 核心概念</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Pipeline</strong></td>
+            <td>流水线，包含多个 Stage，按顺序执行</td>
+          </tr>
+          <tr>
+            <td><strong>Stage</strong></td>
+            <td>阶段，同一阶段的 Job 并行执行</td>
+          </tr>
+          <tr>
+            <td><strong>Job</strong></td>
+            <td>任务，定义具体操作，在 Runner 上执行</td>
+          </tr>
+          <tr>
+            <td><strong>Runner</strong></td>
+            <td>执行器，可以是共享的或项目专用的</td>
+          </tr>
+          <tr>
+            <td><strong>Artifact</strong></td>
+            <td>制品，Job 产出的文件，可在 Job 间传递</td>
+          </tr>
+          <tr>
+            <td><strong>Cache</strong></td>
+            <td>缓存，加速后续 Pipeline 执行</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 基础配置文件</h2>
+      <div class="code-block">
+<span class="comment"># .gitlab-ci.yml</span>
+<span class="keyword">stages</span>:
+  - <span class="string">build</span>
+  - <span class="string">test</span>
+  - <span class="string">deploy</span>
+
+<span class="keyword">variables</span>:
+  <span class="keyword">NODE_VERSION</span>: <span class="string">"20"</span>
+  <span class="keyword">DOCKER_REGISTRY</span>: <span class="string">registry.example.com</span>
+
+<span class="comment"># 构建任务</span>
+<span class="keyword">build</span>:
+  <span class="keyword">stage</span>: <span class="string">build</span>
+  <span class="keyword">image</span>: <span class="string">node:${NODE_VERSION}</span>
+  <span class="keyword">script</span>:
+    - <span class="string">npm ci</span>
+    - <span class="string">npm run build</span>
+  <span class="keyword">artifacts</span>:
+    <span class="keyword">paths</span>:
+      - <span class="string">dist/</span>
+    <span class="keyword">expire_in</span>: <span class="string">1 hour</span>
+
+<span class="comment"># 测试任务</span>
+<span class="keyword">test</span>:
+  <span class="keyword">stage</span>: <span class="string">test</span>
+  <span class="keyword">image</span>: <span class="string">node:${NODE_VERSION}</span>
+  <span class="keyword">script</span>:
+    - <span class="string">npm ci</span>
+    - <span class="string">npm run lint</span>
+    - <span class="string">npm test</span>
+  <span class="keyword">coverage</span>: <span class="string">'/Statements\s*:\s*(\d+\.?\d*)%/'</span>
+
+<span class="comment"># 部署任务</span>
+<span class="keyword">deploy</span>:
+  <span class="keyword">stage</span>: <span class="string">deploy</span>
+  <span class="keyword">image</span>: <span class="string">docker:latest</span>
+  <span class="keyword">services</span>:
+    - <span class="string">docker:dind</span>
+  <span class="keyword">script</span>:
+    - <span class="string">docker build -t ${DOCKER_REGISTRY}/myapp:${CI_COMMIT_SHA} .</span>
+    - <span class="string">docker push ${DOCKER_REGISTRY}/myapp:${CI_COMMIT_SHA}</span>
+  <span class="keyword">only</span>:
+    - <span class="string">main</span>
+  <span class="keyword">when</span>: <span class="string">manual</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 完整 CI/CD 配置</h2>
+      <div class="code-block">
+<span class="comment"># .gitlab-ci.yml</span>
+<span class="keyword">stages</span>:
+  - <span class="string">lint</span>
+  - <span class="string">test</span>
+  - <span class="string">build</span>
+  - <span class="string">deploy_staging</span>
+  - <span class="string">deploy_production</span>
+
+<span class="keyword">variables</span>:
+  <span class="keyword">DOCKER_TLS_CERTDIR</span>: <span class="string">"/certs"</span>
+  <span class="keyword">DOCKER_HOST</span>: <span class="string">"tcp://docker:2376"</span>
+
+<span class="keyword">cache</span>:
+  <span class="keyword">key</span>: <span class="string">${CI_COMMIT_REF_SLUG}</span>
+  <span class="keyword">paths</span>:
+    - <span class="string">node_modules/</span>
+
+<span class="comment"># ========== Lint 阶段 ==========</span>
+<span class="keyword">lint</span>:
+  <span class="keyword">stage</span>: <span class="string">lint</span>
+  <span class="keyword">image</span>: <span class="string">node:20-alpine</span>
+  <span class="keyword">script</span>:
+    - <span class="string">npm ci</span>
+    - <span class="string">npm run lint</span>
+
+<span class="comment"># ========== 测试阶段 ==========</span>
+<span class="keyword">test:unit</span>:
+  <span class="keyword">stage</span>: <span class="string">test</span>
+  <span class="keyword">image</span>: <span class="string">node:20-alpine</span>
+  <span class="keyword">script</span>:
+    - <span class="string">npm ci</span>
+    - <span class="string">npm run test:unit -- --coverage</span>
+  <span class="keyword">coverage</span>: <span class="string">'/All files\s*\|\s*(\d+\.?\d*)/'</span>
+  <span class="keyword">artifacts</span>:
+    <span class="keyword">reports</span>:
+      <span class="keyword">coverage_report</span>:
+        <span class="keyword">coverage_format</span>: <span class="string">cobertura</span>
+        <span class="keyword">path</span>: <span class="string">coverage/cobertura-coverage.xml</span>
+
+<span class="keyword">test:integration</span>:
+  <span class="keyword">stage</span>: <span class="string">test</span>
+  <span class="keyword">image</span>: <span class="string">node:20-alpine</span>
+  <span class="keyword">services</span>:
+    - <span class="string">postgres:15-alpine</span>
+    - <span class="string">redis:7-alpine</span>
+  <span class="keyword">variables</span>:
+    <span class="keyword">POSTGRES_HOST</span>: <span class="string">postgres</span>
+    <span class="keyword">POSTGRES_PASSWORD</span>: <span class="string">test</span>
+    <span class="keyword">REDIS_HOST</span>: <span class="string">redis</span>
+  <span class="keyword">script</span>:
+    - <span class="string">npm ci</span>
+    - <span class="string">npm run test:integration</span>
+
+<span class="comment"># ========== 构建阶段 ==========</span>
+<span class="keyword">build:image</span>:
+  <span class="keyword">stage</span>: <span class="string">build</span>
+  <span class="keyword">image</span>: <span class="string">docker:24</span>
+  <span class="keyword">services</span>:
+    - <span class="string">docker:24-dind</span>
+  <span class="keyword">before_script</span>:
+    - <span class="string">docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY</span>
+  <span class="keyword">script</span>:
+    - <span class="string">docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .</span>
+    - <span class="string">docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA</span>
+    - <span class="string">|
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi</span>
+  <span class="keyword">only</span>:
+    - <span class="string">main</span>
+    - <span class="string">develop</span>
+
+<span class="comment"># ========== 部署阶段 ==========</span>
+<span class="keyword">deploy:staging</span>:
+  <span class="keyword">stage</span>: <span class="string">deploy_staging</span>
+  <span class="keyword">image</span>: <span class="string">alpine:latest</span>
+  <span class="keyword">before_script</span>:
+    - <span class="string">apk add --no-cache openssh-client</span>
+  <span class="keyword">script</span>:
+    - <span class="string">|
+      ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$STAGING_SERVER << EOF
+        cd /app/myapp
+        docker compose -f docker-compose.staging.yml pull
+        docker compose -f docker-compose.staging.yml up -d
+      EOF</span>
+  <span class="keyword">environment</span>:
+    <span class="keyword">name</span>: <span class="string">staging</span>
+    <span class="keyword">url</span>: <span class="string">https://staging.example.com</span>
+  <span class="keyword">only</span>:
+    - <span class="string">develop</span>
+
+<span class="keyword">deploy:production</span>:
+  <span class="keyword">stage</span>: <span class="string">deploy_production</span>
+  <span class="keyword">image</span>: <span class="string">alpine:latest</span>
+  <span class="keyword">before_script</span>:
+    - <span class="string">apk add --no-cache openssh-client</span>
+  <span class="keyword">script</span>:
+    - <span class="string">|
+      ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$PRODUCTION_SERVER << EOF
+        cd /app/myapp
+        docker compose pull
+        docker compose up -d --no-deps --build app
+      EOF</span>
+  <span class="keyword">environment</span>:
+    <span class="keyword">name</span>: <span class="string">production</span>
+    <span class="keyword">url</span>: <span class="string">https://example.com</span>
+  <span class="keyword">only</span>:
+    - <span class="string">main</span>
+  <span class="keyword">when</span>: <span class="string">manual</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Runner 配置</h2>
+      <h3>注册 GitLab Runner</h3>
+      <div class="code-block">
+<span class="comment"># 安装 GitLab Runner</span>
+<span class="comment"># Linux</span>
+curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | sudo bash
+sudo apt-get install gitlab-runner
+
+<span class="comment"># 注册 Runner</span>
+sudo gitlab-runner register
+<span class="comment"># 输入 GitLab URL 和注册令牌</span>
+<span class="comment"># 选择执行器 (docker, shell, kubernetes 等)</span>
+
+<span class="comment"># 启动 Runner</span>
+sudo gitlab-runner start
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 变量管理</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">预定义变量</h3>
+          <ul class="feature-list">
+            <li>CI_COMMIT_SHA - 提交哈希</li>
+            <li>CI_COMMIT_REF_NAME - 分支名</li>
+            <li>CI_REGISTRY - 容器仓库地址</li>
+            <li>CI_PROJECT_DIR - 项目目录</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">自定义变量</h3>
+          <ul class="feature-list">
+            <li>Settings -> CI/CD -> Variables</li>
+            <li>支持 Protected 和 Masked</li>
+            <li>可设置环境范围</li>
+            <li>支持文件类型变量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Auto DevOps</div>
+        <p>GitLab 提供开箱即用的 Auto DevOps 功能，自动检测项目类型并配置完整的 CI/CD 流水线。只需启用即可获得：自动构建、测试、代码质量检查、安全扫描、部署等功能。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• GitLab CI 内置于 GitLab，配置文件是 .gitlab-ci.yml</li>
+            <li>• Pipeline 由多个 Stage 组成，Stage 内 Job 并行执行</li>
+            <li>• 使用 Artifact 在 Job 间传递构建产物</li>
+            <li>• 支持 Docker-in-Docker 构建镜像</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="100-2-GitHub-Actions.html">← 上一节</a>
+      <a href="100-4-自动化测试集成.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

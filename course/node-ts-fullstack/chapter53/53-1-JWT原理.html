@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>53.1 JWT 原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="53-1-JWT原理.html">第五十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>53.1 JWT 原理</h1>
+      <p class="subtitle">深入理解 JSON Web Token 的工作机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 JWT 的概念和用途</li>
+        <li>掌握 JWT 的三部分结构</li>
+        <li>了解 JWT 与 Session 的区别</li>
+        <li>理解 JWT 的工作流程</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是 JWT？</h2>
+      <p>JWT（JSON Web Token）是一种开放标准（RFC 7519），用于在各方之间安全地传输信息。它是一种紧凑、URL 安全的方式，用于在客户端和服务器之间传递声明（claims）。</p>
+
+      <div class="code-block">
+// JWT 示例
+// 由三部分组成，用 . 分隔
+const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+
+// 解码后：
+// Header: { "alg": "HS256", "typ": "JWT" }
+// Payload: { "sub": "1234567890", "name": "John Doe", "iat": 1516239022 }
+// Signature: HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), secret)
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">JWT 特点</div>
+          <p>JWT 是自包含的，所有必要信息都在 token 中，无需在服务器端存储会话状态，这使得它非常适合分布式系统和微服务架构。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> JWT 的三部分结构</h2>
+      <div class="code-block">
+// 1. Header（头部）
+// 包含令牌类型和签名算法
+const header = {
+  "alg": "HS256",    // 签名算法：HMAC SHA256
+  "typ": "JWT"       // 令牌类型
+};
+
+// 2. Payload（载荷）
+// 包含声明（claims），即用户信息和元数据
+const payload = {
+  "sub": "1234567890",        // Subject - 用户ID
+  "name": "John Doe",         // 用户名
+  "email": "john@example.com", // 邮箱
+  "role": "admin",            // 角色
+  "iat": 1516239022,          // Issued At - 签发时间
+  "exp": 1516242622           // Expiration - 过期时间
+};
+
+// 3. Signature（签名）
+// 用于验证 token 是否被篡改
+// HMACSHA256(
+//   base64UrlEncode(header) + "." + base64UrlEncode(payload),
+//   secret
+// )
+
+// Base64Url 编码示例
+function base64UrlEncode(str: string): string {
+  return Buffer.from(str)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> JWT vs Session 对比</h2>
+      <div class="code-block">
+┌─────────────────┬──────────────────────┬──────────────────────┐
+│     特性        │       Session        │         JWT          │
+├─────────────────┼──────────────────────┼──────────────────────┤
+│ 存储位置        │ 服务器端             │ 客户端               │
+│ 扩展性          │ 需要共享存储         │ 天然支持分布式       │
+│ 跨域支持        │ 需要额外配置         │ 天然支持             │
+│ 性能            │ 需要查询存储         │ 无需查询，直接验证   │
+│ 注销            │ 立即生效             │ 需要额外机制         │
+│ 安全性          │ CSRF 风险            │ XSS 风险             │
+│ 大小            │ Cookie 大小限制      │ Token 可能较大       │
+└─────────────────┴──────────────────────┴──────────────────────┘
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>JWT 不适合存储敏感信息，因为 Payload 只是 Base64 编码，不是加密，任何人都可以解码查看内容。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> JWT 认证流程</h2>
+      <div class="code-block">
+// 1. 用户登录
+POST /api/login
+{
+  "username": "john",
+  "password": "secret123"
+}
+
+// 2. 服务器验证后返回 JWT
+Response:
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresIn": 3600
+}
+
+// 3. 客户端存储 Token（localStorage / cookie）
+localStorage.setItem('token', token);
+
+// 4. 后续请求携带 Token
+GET /api/profile
+Headers: {
+  "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..."
+}
+
+// 5. 服务器验证 Token 并返回数据
+// - 验证签名
+// - 检查过期时间
+// - 提取用户信息
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• JWT 由 Header、Payload、Signature 三部分组成</li>
+            <li>• JWT 是无状态的，所有信息都存储在 token 中</li>
+            <li>• JWT 适合分布式系统和微服务架构</li>
+            <li>• 不要在 JWT 中存储敏感信息</li>
+            <li>• JWT 认证流程：登录 → 获取 Token → 携带 Token 请求</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter52/52-4-分布式Session.html">← 上一节：分布式 Session</a>
+      <a href="53-2-JWT生成与验证.html">下一节：JWT 生成与验证 →</a>
+    </div>
+  </div>
+</body>
+</html>

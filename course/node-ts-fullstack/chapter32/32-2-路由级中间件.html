@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.2 路由级中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.2 路由级中间件</h1>
+      <p class="subtitle">掌握路由级中间件的使用场景和最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解路由级中间件与应用级中间件的区别</li>
+        <li>掌握 router.use() 的使用方法</li>
+        <li>学会在路由模块中应用中间件</li>
+        <li>理解中间件的作用域范围</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 路由级中间件概述</h2>
+      <p>路由级中间件与应用级中间件类似，但它绑定到 express.Router() 实例上。它只对挂载该路由器的请求生效，提供更好的模块化和隔离性。</p>
+
+      <h3>对比应用级中间件</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>应用级中间件</th>
+            <th>路由级中间件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>绑定对象</td>
+            <td><code>app.use()</code></td>
+            <td><code>router.use()</code></td>
+          </tr>
+          <tr>
+            <td>作用范围</td>
+            <td>整个应用</td>
+            <td>特定路由模块</td>
+          </tr>
+          <tr>
+            <td>生命周期</td>
+            <td>应用启动时加载</td>
+            <td>路由加载时生效</td>
+          </tr>
+          <tr>
+            <td>适合场景</td>
+            <td>全局功能</td>
+            <td>模块特定功能</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> router.use() 基本用法</h2>
+
+      <h3>基本示例</h3>
+      <div class="code-block">
+const express = require('express');
+const router = express.Router();
+
+// 路由级中间件 - 只对此路由模块生效
+router.use((req, res, next) => {
+  console.log('Router middleware');
+  next();
+});
+
+// 路由处理
+router.get('/users', (req, res) => {
+  res.json({ users: [] });
+});
+
+module.exports = router;</div>
+
+      <h3>路径限定的路由级中间件</h3>
+      <div class="code-block">
+const router = express.Router();
+
+// 只对 /admin 路径下的请求生效
+router.use('/admin', (req, res, next) => {
+  console.log('Admin section accessed');
+  next();
+});
+
+// 认证中间件
+router.use('/admin', (req, res, next) => {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+});
+
+// 路由
+router.get('/admin/dashboard', (req, res) => {
+  res.json({ message: 'Admin Dashboard' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 路由模块中的中间件</h2>
+
+      <h3>完整的路由模块示例</h3>
+      <div class="code-block">
+// routes/api/users.js
+const express = require('express');
+const router = express.Router();
+const userController = require('../../controllers/userController');
+const authMiddleware = require('../../middleware/auth');
+const validateMiddleware = require('../../middleware/validate');
+
+// ============ 路由级中间件 ============
+
+// 所有用户路由需要认证
+router.use(authMiddleware.requireAuth);
+
+// 加载用户参数
+router.param('id', async (req, res, next, id) => {
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    req.targetUser = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============ 路由定义 ============
+
+// 用户列表
+router.get('/',
+  userController.list
+);
+
+// 创建用户
+router.post('/',
+  validateMiddleware.userSchema,
+  userController.create
+);
+
+// 获取单个用户
+router.get('/:id',
+  userController.show
+);
+
+// 更新用户
+router.put('/:id',
+  validateMiddleware.userSchema,
+  userController.update
+);
+
+// 删除用户 - 需要管理员权限
+router.delete('/:id',
+  authMiddleware.requireAdmin,
+  userController.destroy
+);
+
+module.exports = router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 认证中间件示例</h2>
+
+      <div class="code-block">
+// middleware/auth.js
+const jwt = require('jsonwebtoken');
+
+// 需要认证
+exports.requireAuth = (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired token'
+    });
+  }
+};
+
+// 需要管理员权限
+exports.requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin access required'
+    });
+  }
+  next();
+};
+
+// 可选认证（不强制）
+exports.optionalAuth = (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+    } catch (error) {
+      // 忽略错误，继续但不设置用户
+    }
+  }
+  next();
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 中间件组合模式</h2>
+
+      <h3>1. 中间件工厂</h3>
+      <div class="code-block">
+// 创建角色检查中间件
+const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Insufficient permissions' });
+    }
+
+    next();
+  };
+};
+
+// 使用
+router.get('/admin',
+  authMiddleware.requireAuth,
+  requireRole('admin'),
+  adminController.dashboard
+);
+
+router.get('/editor',
+  authMiddleware.requireAuth,
+  requireRole('admin', 'editor'),
+  editorController.dashboard
+);</div>
+
+      <h3>2. 条件中间件</h3>
+      <div class="code-block">
+// 条件中间件
+const conditionalMiddleware = (condition, middleware) => {
+  return (req, res, next) => {
+    if (condition(req)) {
+      return middleware(req, res, next);
+    }
+    next();
+  };
+};
+
+// 使用：只对 POST 请求验证
+router.post('/posts',
+  conditionalMiddleware(
+    req => req.method === 'POST',
+    validatePostSchema
+  ),
+  postController.create
+);</div>
+
+      <h3>3. 中间件链</h3>
+      <div class="code-block">
+// 组合多个中间件
+const middlewareChain = (...middlewares) => {
+  return (req, res, next) => {
+    const executeMiddleware = (index) => {
+      if (index >= middlewares.length) {
+        return next();
+      }
+
+      middlewares[index](req, res, (err) => {
+        if (err) return next(err);
+        executeMiddleware(index + 1);
+      });
+    };
+
+    executeMiddleware(0);
+  };
+};
+
+// 使用
+router.get('/protected',
+  middlewareChain(
+    authMiddleware.requireAuth,
+    authMiddleware.requireAdmin,
+    rateLimitMiddleware
+  ),
+  protectedHandler
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 实战：API 路由完整示例</h2>
+
+      <div class="code-block">
+// routes/api/index.js
+const express = require('express');
+const router = express.Router();
+
+// API 通用中间件
+router.use((req, res, next) => {
+  // 设置响应类型
+  res.set('Content-Type', 'application/json');
+
+  // API 日志
+  console.log(`[API] ${req.method} ${req.path}`);
+
+  next();
+});
+
+// API 速率限制
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+router.use(apiLimiter);
+
+// 子路由
+router.use('/users', require('./users'));
+router.use('/posts', require('./posts'));
+router.use('/auth', require('./auth'));
+
+// 404 处理
+router.use((req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
+module.exports = router;
+
+// routes/api/posts.js
+const express = require('express');
+const router = express.Router();
+const postController = require('../../controllers/postController');
+const auth = require('../../middleware/auth');
+
+// 获取文章列表 - 不需要认证
+router.get('/', postController.list);
+
+// 获取单篇文章 - 不需要认证
+router.get('/:id', postController.show);
+
+// 以下路由需要认证
+router.use(auth.requireAuth);
+
+// 创建文章
+router.post('/',
+  validate.postSchema,
+  postController.create
+);
+
+// 更新文章 - 需要是作者
+router.put('/:id',
+  postController.checkOwner,
+  postController.update
+);
+
+// 删除文章 - 需要是作者或管理员
+router.delete('/:id',
+  postController.checkOwnerOrAdmin,
+  postController.destroy
+);
+
+module.exports = router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>路由级中间件绑定到 Router 实例，只对该路由模块生效</li>
+            <li>使用 router.use() 添加路由级中间件</li>
+            <li>适合模块特定的功能：认证、验证、权限控制等</li>
+            <li>可以通过中间件工厂创建可配置的中间件</li>
+            <li>中间件可以组合、链式调用，实现复杂逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>创建一个路由级中间件，验证用户对资源的所有权</li>
+        <li>实现一个中间件工厂，根据配置限制访问权限</li>
+        <li>为 API 路由模块添加完整的认证和权限控制</li>
+        <li>实现一个条件中间件，只对特定 HTTP 方法进行验证</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-1-应用级中间件.html">← 上一节：应用级中间件</a>
+      <a href="32-3-错误处理中间件.html">下一节：错误处理中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

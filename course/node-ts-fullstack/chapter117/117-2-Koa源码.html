@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>117.2 Koa 源码 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="117-1-Express源码.html">第117章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>117.2 Koa 源码</h1>
+      <p class="subtitle">洋葱模型的优雅实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Koa 的洋葱模型</li>
+        <li>掌握 async/await 中间件实现</li>
+        <li>了解 Context 对象的设计</li>
+        <li>比较 Koa 与 Express 的区别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Koa 架构概览</h2>
+      <div class="code-block">
+// Koa 核心目录结构
+/*
+koa/
+├── lib/
+│   ├── application.js    # 应用核心
+│   ├── context.js        # 上下文对象
+│   ├── request.js        # 请求对象
+│   └── response.js       # 响应对象
+└── index.js
+*/
+
+// Koa vs Express
+const comparison = {
+  Express: {
+    模型: '线性中间件',
+    回调: '回调函数',
+    响应: '手动 res.send()',
+    内置功能: '丰富',
+    学习曲线: '较低'
+  },
+  Koa: {
+    模型: '洋葱模型',
+    回调: 'async/await',
+    响应: '自动响应',
+    内置功能: '精简',
+    学习曲线: '中等'
+  }
+};
+
+// 洋葱模型示意
+/*
+  请求 →
+    ┌─────────────────┐
+    │   Middleware 1  │
+    │  ┌───────────┐  │
+    │  │   MW 2    │  │
+    │  │  ┌─────┐  │  │
+    │  │  │ MW3│  │  │
+    │  │  │     │  │  │
+    │  │  └─────┘  │  │
+    │  └───────────┘  │
+    └─────────────────┘
+  ← 响应
+*/
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Koa 特点</div>
+          <p>代码量极少（约2000行），没有内置路由，高度可定制。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 核心源码解析</h2>
+      <div class="code-block">
+// 1. Application 核心
+
+const Emitter = require('events');
+const compose = require('koa-compose');
+const context = require('./context');
+const request = require('./request');
+const response = require('./response');
+
+class Application extends Emitter {
+  constructor(options = {}) {
+    super();
+    this.proxy = options.proxy || false;
+    this.subdomainOffset = options.subdomainOffset || 2;
+    this.proxyIpHeader = options.proxyIpHeader || 'X-Forwarded-For';
+    this.maxIpsCount = options.maxIpsCount || 0;
+    this.env = options.env || process.env.NODE_ENV || 'development';
+    this.middleware = [];
+    this.context = Object.create(context);
+    this.request = Object.create(request);
+    this.response = Object.create(response);
+  }
+
+  // 监听端口
+  listen(...args) {
+    const server = http.createServer(this.callback());
+    return server.listen(...args);
+  }
+
+  // 使用中间件
+  use(fn) {
+    if (typeof fn !== 'function') throw new TypeError('middleware must be a function!');
+    this.middleware.push(fn);
+    return this;
+  }
+
+  // 回调函数
+  callback() {
+    const fn = compose(this.middleware);
+
+    if (!this.listenerCount('error')) {
+      this.on('error', this.onerror);
+    }
+
+    const handleRequest = (req, res) => {
+      const ctx = this.createContext(req, res);
+      return this.handleRequest(ctx, fn);
+    };
+
+    return handleRequest;
+  }
+
+  // 处理请求
+  handleRequest(ctx, fnMiddleware) {
+    const res = ctx.res;
+    res.statusCode = 404;
+    const onerror = err => ctx.onerror(err);
+    const handleResponse = () => respond(ctx);
+    onFinished(res, onerror);
+    return fnMiddleware(ctx).then(handleResponse).catch(onerror);
+  }
+
+  // 创建上下文
+  createContext(req, res) {
+    const context = Object.create(this.context);
+    const request = context.request = Object.create(this.request);
+    const response = context.response = Object.create(this.response);
+
+    context.app = request.app = response.app = this;
+    context.req = request.req = response.req = req;
+    context.res = request.res = response.res = res;
+    request.ctx = response.ctx = context;
+    request.response = response;
+    response.request = request;
+
+    context.originalUrl = request.originalUrl = req.url;
+    context.state = {};
+
+    return context;
+  }
+}
+
+// 2. koa-compose 洋葱模型核心
+
+function compose(middleware) {
+  if (!Array.isArray(middleware)) throw new TypeError('Middleware stack must be an array!');
+  for (const fn of middleware) {
+    if (typeof fn !== 'function') throw new TypeError('Middleware must be composed of functions!');
+  }
+
+  return function(context, next) {
+    let index = -1;
+
+    return dispatch(0);
+
+    function dispatch(i) {
+      if (i <= index) return Promise.reject(new Error('next() called multiple times'));
+      index = i;
+
+      let fn = middleware[i];
+      if (i === middleware.length) fn = next;
+
+      if (!fn) return Promise.resolve();
+
+      try {
+        return Promise.resolve(fn(context, dispatch.bind(null, i + 1)));
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+  };
+}
+
+// 使用示例
+app.use(async (ctx, next) => {
+  console.log('1 start');
+  await next();
+  console.log('1 end');
+});
+
+app.use(async (ctx, next) => {
+  console.log('2 start');
+  await next();
+  console.log('2 end');
+});
+
+app.use(async (ctx, next) => {
+  console.log('3 start');
+  ctx.body = 'Hello Koa';
+  console.log('3 end');
+});
+
+// 输出: 1 start -> 2 start -> 3 start -> 3 end -> 2 end -> 1 end
+
+// 3. Context 对象
+
+const proto = module.exports = {
+  // 代理 request 和 response 的属性
+  get url() {
+    return this.request.url;
+  },
+
+  get method() {
+    return this.request.method;
+  },
+
+  get status() {
+    return this.response.status;
+  },
+
+  set status(code) {
+    this.response.status = code;
+  },
+
+  get body() {
+    return this.response.body;
+  },
+
+  set body(val) {
+    this.response.body = val;
+  },
+
+  // 抛出错误
+  throw(status, msg, opts) {
+    throw createError(status, msg, opts);
+  },
+
+  // 错误处理
+  onerror(err) {
+    if (!(err instanceof Error)) throw new TypeError(util.format('non-error thrown: %j', err));
+
+    if (404 === err.status || err.expose) return;
+    if (500 === err.status) return;
+
+    const msg = err.stack || err.toString();
+    console.error(`\n${msg}\n`);
+  }
+};
+
+// 4. 自动响应 respond
+
+function respond(ctx) {
+  // 判断是否已经处理过
+  if (ctx.respond === false) return;
+
+  if (!ctx.writable) return;
+
+  const res = ctx.res;
+  let body = ctx.body;
+
+  // codes
+  const code = ctx.status;
+
+  // ignore body
+  if (statuses.empty[code]) {
+    ctx.body = null;
+    return res.end();
+  }
+
+  if (ctx.method === 'HEAD') {
+    if (!res.headersSent && !ctx.response.has('Content-Length')) {
+      const length = ctx.response.length;
+      if (Number.isInteger(length)) res.setHeader('Content-Length', length);
+    }
+    return res.end();
+  }
+
+  // status body
+  if (body === null || body === undefined) {
+    if (ctx.response._explicitNullBody) {
+      ctx.response.remove('Content-Type');
+      ctx.response.remove('Transfer-Encoding');
+      return res.end();
+    }
+
+    body = ctx.status;
+    if (body) {
+      body = statuses.message[body] || String(body);
+    }
+  }
+
+  // responses
+  if (Buffer.isBuffer(body)) return res.end(body);
+  if (typeof body === 'string') return res.end(body);
+  if (body instanceof Stream) return body.pipe(res);
+
+  // body: json
+  body = JSON.stringify(body);
+  if (!res.headersSent) {
+    ctx.length = Buffer.byteLength(body);
+  }
+  res.end(body);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Koa 使用洋葱模型处理请求</li>
+            <li>• compose 函数实现中间件链式调用</li>
+            <li>• Context 封装 request 和 response</li>
+            <li>• 自动响应机制简化开发</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="117-1-Express源码.html">← 上一节：Express 源码</a>
+      <a href="117-3-NestJS核心.html">下一节：NestJS 核心 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.2 创建中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="45-1-中间件概念.html">第四十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>45.2 创建中间件</h1>
+      <p class="subtitle">实现自定义中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握中间件的创建方式</li>
+        <li>学会使用函数式中间件</li>
+        <li>了解中间件的依赖注入</li>
+        <li>掌握多个中间件的组合</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 类中间件</h2>
+      <div class="code-block">
+import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+
+@Injectable()
+export class LoggerMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    const start = Date.now();
+
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+
+    // 监听响应完成事件
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      console.log(`[${req.method} ${req.url}] ${res.statusCode} - ${duration}ms`);
+    });
+
+    next();
+  }
+}
+
+// 在模块中配置
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(LoggerMiddleware)
+      .forRoutes('users');  // 应用到 /users 路由
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">NestMiddleware 接口</div>
+          <p>类中间件需要实现 NestMiddleware 接口，并使用 @Injectable() 装饰器，支持依赖注入。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 函数式中间件</h2>
+      <div class="code-block">
+// 简单的函数式中间件
+import { Request, Response, NextFunction } from 'express';
+
+export function loggerMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  console.log(`${req.method} ${req.url}`);
+  next();
+}
+
+// 使用
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(loggerMiddleware)
+      .forRoutes('*');  // 应用到所有路由
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 带依赖注入的中间件</h2>
+      <div class="code-block">
+import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+
+@Injectable()
+export class AuthMiddleware implements NestMiddleware {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly logger: LoggerService,
+  ) {}
+
+  async use(req: Request, res: Response, next: NextFunction) {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    try {
+      const user = await this.authService.verifyToken(token);
+      req['user'] = user;  // 将用户信息附加到请求对象
+      next();
+    } catch (error) {
+      this.logger.error('Token verification failed', error);
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+  }
+}
+
+// 配置
+@Module({
+  imports: [AuthModule],
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(AuthMiddleware)
+      .exclude('auth/login', 'auth/register')  // 排除某些路由
+      .forRoutes('*');
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 多个中间件组合</h2>
+      <div class="code-block">
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(
+        CorsMiddleware,
+        LoggerMiddleware,
+        AuthMiddleware,
+      )
+      .forRoutes('*');
+  }
+}
+
+// 中间件按顺序执行：
+// CorsMiddleware -> LoggerMiddleware -> AuthMiddleware -> 路由处理器
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">中间件顺序</div>
+          <p>多个中间件按 apply() 中的顺序依次执行。如果某个中间件不调用 next()，后续中间件和路由处理器都不会执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 类中间件实现 NestMiddleware 接口</li>
+            <li>• 函数式中间件更简洁</li>
+            <li>• consumer.apply().forRoutes() 配置中间件</li>
+            <li>• 多个中间件按顺序执行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="45-1-中间件概念.html">← 上一节：中间件概念</a>
+      <a href="45-3-应用中间件.html">下一节：应用中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

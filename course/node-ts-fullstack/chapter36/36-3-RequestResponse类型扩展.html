@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.3 Request/Response 类型扩展 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter36.html">第36章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>36.3 Request/Response 类型扩展</h1>
+      <p class="subtitle">学习如何扩展 Express 的 Request 和 Response 类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Express 类型结构</li>
+        <li>学会扩展 Request 类型</li>
+        <li>掌握声明合并的使用</li>
+        <li>学会创建自定义类型</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 为什么需要扩展类型</h2>
+      <p>Express 的 Request 和 Response 是基础类型，但在实际应用中，我们经常需要添加自定义属性：</p>
+
+      <div class="code-block">
+// 常见场景
+app.use((req, res, next) => {
+  req.user = getUserFromToken(req);  // 添加用户信息
+  req.session = getSession(req);     // 添加会话
+  req.requestId = generateId();      // 添加请求 ID
+  next();
+});
+
+// TypeScript 会报错：Property 'user' does not exist on type 'Request'</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">类型错误</div>
+          <p>如果不扩展类型，TypeScript 无法识别我们添加的自定义属性，导致类型错误。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 扩展 Request 类型</h2>
+
+      <div class="code-block">
+// src/types/express.d.ts
+import { User } from '../models/User';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: User;           // 当前用户
+      sessionId?: string;    // 会话 ID
+      requestId?: string;    // 请求 ID
+    }
+  }
+}
+
+// 导出空对象使文件成为模块
+export {};</div>
+
+      <h3>使用扩展后的类型</h3>
+      <div class="code-block">
+// src/middleware/auth.ts
+import { Request, Response, NextFunction } from 'express';
+
+export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// 现在可以正常使用 req.user
+app.get('/profile', requireAuth, (req: Request, res: Response) => {
+  res.json(req.user);  // TypeScript 知道 req.user 存在
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 定义完整类型</h2>
+
+      <div class="code-block">
+// src/types/express.d.ts
+import { User, UserRole } from '../models/User';
+
+interface SessionData {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+interface RequestMeta {
+  id: string;
+  startTime: number;
+  ip: string;
+  userAgent: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      // 用户相关
+      user?: User;
+      userId?: string;
+      userRole?: UserRole;
+
+      // 会话相关
+      session?: SessionData;
+      sessionId?: string;
+
+      // 请求元数据
+      meta?: RequestMeta;
+      requestId?: string;
+
+      // 其他自定义属性
+      body: any;  // 可以覆盖 body 类型
+    }
+
+    interface Response {
+      // 自定义响应方法
+      success: (data: any) => Response;
+      error: (message: string, code?: number) => Response;
+      paginated: (data: any[], total: number, page: number, limit: number) => Response;
+    }
+  }
+}
+
+export {};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 泛型 Request 类型</h2>
+
+      <div class="code-block">
+// 定义请求体类型
+interface CreateUserBody {
+  name: string;
+  email: string;
+  password: string;
+}
+
+// 使用泛型指定 body 类型
+app.post<{}, any, CreateUserBody>('/users', (req, res) => {
+  const { name, email, password } = req.body;
+  // req.body 自动推断为 CreateUserBody 类型
+});
+
+// 更完整的类型定义
+interface UserParams {
+  id: string;
+}
+
+interface UserQuery {
+  include?: string;
+}
+
+interface UserResponseBody {
+  id: string;
+  name: string;
+  email: string;
+}
+
+app.get<UserParams, UserResponseBody, any, UserQuery>(
+  '/users/:id',
+  (req, res) => {
+    const { id } = req.params;      // string
+    const { include } = req.query;  // string | undefined
+    res.json({ id, name: '', email: '' });
+  }
+);
+
+// 参数说明：Params, ResponseBody, RequestBody, Query</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 类型安全中间件</h2>
+
+      <div class="code-block">
+// src/types/middleware.ts
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+
+// 异步处理包装器
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+): RequestHandler => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+// 带验证的中间件
+import { Schema, ValidationOptions } from 'joi';
+
+export const validateBody = <T>(
+  schema: Schema,
+  options?: ValidationOptions
+): RequestHandler => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body, options);
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    req.body = value as T;
+    next();
+  };
+};
+
+// 使用
+interface CreateUserInput {
+  name: string;
+  email: string;
+}
+
+const createUserSchema = Joi.object({
+  name: Joi.string().required(),
+  email: Joi.string().email().required()
+});
+
+app.post('/users',
+  validateBody<CreateUserInput>(createUserSchema),
+  asyncHandler(async (req, res) => {
+    // req.body 类型为 CreateUserInput
+    const user = await createUser(req.body);
+    res.status(201).json(user);
+  })
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 declare global namespace Express 扩展类型</li>
+            <li>扩展文件需要 export {} 使其成为模块</li>
+            <li>使用泛型可以精确指定路由的类型</li>
+            <li>类型安全中间件提高代码健壮性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="36-2-类型定义安装.html">← 上一节：类型定义安装</a>
+      <a href="36-4-路由类型安全.html">下一节：路由类型安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

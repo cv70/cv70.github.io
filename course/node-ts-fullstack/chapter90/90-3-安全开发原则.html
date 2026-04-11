@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>90.3 安全开发原则 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="90-1-Web安全概述.html">第九十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>90.3 安全开发原则</h1>
+      <p class="subtitle">安全编码最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握安全开发核心原则</li>
+        <li>理解纵深防御策略</li>
+        <li>学会安全编码实践</li>
+        <li>了解安全配置要点</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 核心安全原则</h2>
+      <div class="code-block">
+# 1. 最小权限原则 (Principle of Least Privilege)
+只授予完成任务所需的最小权限
+
+// 错误示例 - 数据库用户拥有过多权限
+GRANT ALL PRIVILEGES ON *.* TO 'webapp'@'localhost';
+
+// 正确示例 - 只授予必要权限
+GRANT SELECT, INSERT, UPDATE ON mydb.users TO 'webapp'@'localhost';
+
+# 2. 纵深防御 (Defense in Depth)
+多层安全措施，一层失效后有其他层保护
+
+前端验证 → 后端验证 → 数据库验证
+输入过滤 → 参数化查询 → 权限控制
+
+# 3. 永远不要信任用户输入
+所有输入都是潜在威胁，必须验证和过滤
+
+// 验证输入
+function validateInput(input: string): boolean {
+  const allowedPattern = /^[a-zA-Z0-9_-]+$/;
+  return allowedPattern.test(input);
+}
+
+# 4. 安全默认 (Secure by Default)
+默认配置应该是安全的，安全不需要额外配置
+
+# 5. 失败安全 (Fail Securely)
+失败时也应该保持安全，不暴露敏感信息
+
+// 错误示例
+catch (error) {
+  res.status(500).json({ error: error.message, stack: error.stack });
+}
+
+// 正确示例
+catch (error) {
+  logger.error('Database error:', error);
+  res.status(500).json({ error: 'Internal server error' });
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">安全意识</div>
+          <p>安全开发不仅仅是技术问题，更是一种意识。在编码的每一刻都要考虑潜在的安全风险。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 输入验证原则</h2>
+      <div class="code-block">
+# 输入验证策略
+
+## 1. 白名单验证（推荐）
+只允许已知安全的输入
+
+import { z } from 'zod';
+
+// 使用 Zod 定义输入模式
+const userSchema = z.object({
+  username: z.string()
+    .min(3).max(20)
+    .regex(/^[a-zA-Z0-9_]+$/),
+  email: z.string().email(),
+  age: z.number().int().min(0).max(150),
+  role: z.enum(['user', 'admin']),  // 白名单
+});
+
+// 验证输入
+function validateUser(input: unknown) {
+  return userSchema.safeParse(input);
+}
+
+## 2. 黑名单验证（不推荐）
+过滤已知的危险字符，容易遗漏
+
+// 不推荐 - 黑名单容易绕过
+function sanitize(input: string) {
+  return input.replace(/[<>]/g, '');
+}
+
+## 3. 类型验证
+确保输入是预期的数据类型
+
+function processId(id: unknown) {
+  if (typeof id !== 'number' || !Number.isInteger(id)) {
+    throw new Error('Invalid ID');
+  }
+  return id;
+}
+
+## 4. 长度限制
+限制输入长度防止缓冲区溢出和 DoS
+
+const MAX_INPUT_LENGTH = 1000;
+
+function validateLength(input: string): boolean {
+  return input.length <= MAX_INPUT_LENGTH;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 输出编码原则</h2>
+      <div class="code-block">
+# 根据上下文进行输出编码
+
+## HTML 上下文
+import escapeHtml from 'escape-html';
+
+function renderUserInput(input: string): string {
+  return escapeHtml(input);
+}
+// &lt;script&gt; → &lt;script&gt;
+
+## JavaScript 上下文
+function encodeForJs(input: string): string {
+  return JSON.stringify(input);
+}
+
+## URL 上下文
+const encodedUrl = encodeURIComponent(userInput);
+
+## CSS 上下文（尽量避免动态 CSS）
+// 如必须，使用严格的白名单
+const allowedColors = ['red', 'blue', 'green'];
+function getSafeColor(input: string): string {
+  return allowedColors.includes(input) ? input : 'black';
+}
+
+## SQL 上下文 - 使用参数化查询
+// 错误
+const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// 正确
+const query = 'SELECT * FROM users WHERE id = ?';
+db.query(query, [userId]);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 认证授权原则</h2>
+      <div class="code-block">
+# 密码安全
+// 使用强哈希算法
+import bcrypt from 'bcrypt';
+
+const SALT_ROUNDS = 12;
+
+async function hashPassword(password: string): Promise&lt;string&gt; {
+  return bcrypt.hash(password, SALT_ROUNDS);
+}
+
+async function verifyPassword(
+  password: string,
+  hash: string
+): Promise&lt;boolean&gt; {
+  return bcrypt.compare(password, hash);
+}
+
+# 会话安全
+// Session 配置
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,     // 防止 XSS 读取
+    secure: true,       // 仅 HTTPS
+    sameSite: 'strict', // 防止 CSRF
+    maxAge: 3600000,    // 1小时过期
+  },
+}));
+
+# 权限检查
+// 每个请求都要验证权限
+function checkPermission(req, res, next) {
+  const { user } = req;
+  const resourceId = req.params.id;
+
+  if (!user || !user.canAccess(resourceId)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}
+
+# 敏感操作二次验证
+// 修改密码、转账等操作要求重新认证
+async function sensitiveAction(req, res) {
+  const { password } = req.body;
+
+  if (!await verifyPassword(password, req.user.passwordHash)) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
+  // 执行敏感操作
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 最小权限原则：只授予必要权限</li>
+            <li>• 永远不要信任用户输入</li>
+            <li>• 白名单验证优于黑名单验证</li>
+            <li>• 根据上下文进行输出编码</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="90-2-常见攻击类型.html">← 上一节：常见攻击类型</a>
+      <a href="90-4-HTTPS配置.html">下一节：HTTPS 配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

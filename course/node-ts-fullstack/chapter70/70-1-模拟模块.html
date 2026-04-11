@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>70.1 模拟模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="../chapter69/69-6-Mock函数.html">上一节</a></li>
+      <li><a href="70-2-快照测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>70.1 模拟模块</h1>
+      <p class="subtitle">第十部分：测试篇 - 学习 Jest 的模块模拟技术</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 模块 Mock 简介</h2>
+      <p>在测试中，我们需要模拟外部依赖模块，如数据库、API 客户端、第三方库等。Jest 提供了强大的模块模拟功能。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">为什么 Mock 模块？</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>隔离测试单元，不依赖外部系统</li>
+            <li>控制外部依赖的行为</li>
+            <li>加速测试执行</li>
+            <li>避免测试对真实数据的影响</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> jest.mock 基础</h2>
+
+      <div class="code-block">// 源文件：src/services/userService.ts
+import { apiClient } from './apiClient';
+
+export class UserService {
+  async getUser(id: string) {
+    return apiClient.get(`/users/${id}`);
+  }
+
+  async createUser(data: any) {
+    return apiClient.post('/users', data);
+  }
+}</div>
+
+      <div class="code-block">// 测试文件：userService.test.ts
+import { UserService } from './userService';
+import { apiClient } from './apiClient';
+
+// 自动 Mock 整个模块
+jest.mock('./apiClient');
+
+describe('UserService', () => {
+  let service: UserService;
+
+  beforeEach(() => {
+    service = new UserService();
+    jest.clearAllMocks();
+  });
+
+  test('should call apiClient.get', async () => {
+    // Mock 返回值
+    (apiClient.get as jest.Mock).mockResolvedValue({ id: '1', name: 'John' });
+
+    const result = await service.getUser('1');
+
+    expect(result).toEqual({ id: '1', name: 'John' });
+    expect(apiClient.get).toHaveBeenCalledWith('/users/1');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 自定义 Mock 实现</h2>
+
+      <div class="code-block">// 方式一：在 jest.mock 回调中定义
+jest.mock('./apiClient', () => ({
+  apiClient: {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn()
+  }
+}));
+
+// 方式二：工厂函数
+jest.mock('./apiClient', () => {
+  return {
+    apiClient: {
+      get: jest.fn().mockResolvedValue({ data: 'mocked' }),
+      post: jest.fn().mockResolvedValue({ id: '1' })
+    }
+  };
+});
+
+// 方式三：保留部分原始实现
+jest.mock('./apiClient', () => {
+  const original = jest.requireActual('./apiClient');
+  return {
+    ...original,
+    apiClient: {
+      ...original.apiClient,
+      get: jest.fn() // 只 mock get 方法
+    }
+  };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> __mocks__ 目录</h2>
+
+      <div class="code-block">项目结构：
+src/
+  services/
+    apiClient.ts        # 原始模块
+    userService.ts
+__mocks__/
+  services/
+    apiClient.ts        # Mock 实现
+
+# 当 jest.mock('./services/apiClient') 时
+# Jest 会自动使用 __mocks__/services/apiClient.ts</div>
+
+      <div class="code-block">// __mocks__/services/apiClient.ts
+export const apiClient = {
+  get: jest.fn().mockResolvedValue({ data: 'mocked data' }),
+  post: jest.fn().mockResolvedValue({ id: 'mocked-id' }),
+  put: jest.fn().mockResolvedValue({ success: true }),
+  delete: jest.fn().mockResolvedValue({ success: true })
+};</div>
+
+      <div class="code-block">// 测试文件中使用
+import { apiClient } from '../src/services/apiClient';
+
+// Mock 会自动应用
+jest.mock('../src/services/apiClient');
+
+describe('Tests', () => {
+  beforeEach(() => {
+    // 重置 Mock
+    jest.clearAllMocks();
+  });
+
+  test('uses mocked apiClient', async () => {
+    const result = await apiClient.get('/test');
+    expect(result).toEqual({ data: 'mocked data' });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> Mock Node.js 核心模块</h2>
+
+      <div class="code-block">// Mock fs 模块
+jest.mock('fs', () => ({
+  readFileSync: jest.fn().mockReturnValue('mocked file content'),
+  writeFileSync: jest.fn(),
+  existsSync: jest.fn().mockReturnValue(true)
+}));
+
+// 使用
+import fs from 'fs';
+
+test('read file', () => {
+  const content = fs.readFileSync('/path/to/file', 'utf-8');
+  expect(content).toBe('mocked file content');
+});</div>
+
+      <div class="code-block">// Mock axios
+import axios from 'axios';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked&lt;typeof axios&gt;;
+
+test('fetch data', async () => {
+  mockedAxios.get.mockResolvedValue({ data: { users: [] } });
+
+  const result = await axios.get('/api/users');
+  expect(result.data).toEqual({ users: [] });
+});</div>
+
+      <div class="code-block">// Mock 环境变量
+describe('Environment Variables', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = { ...originalEnv, NODE_ENV: 'test' };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('uses test environment', () => {
+    expect(process.env.NODE_ENV).toBe('test');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> Mock 类</h2>
+
+      <div class="code-block">// 源代码：UserRepository 类
+export class UserRepository {
+  async findById(id: string) {
+    // 数据库查询
+  }
+
+  async create(data: any) {
+    // 数据库插入
+  }
+}
+
+// 测试中 Mock 整个类
+import { UserRepository } from './UserRepository';
+
+jest.mock('./UserRepository');
+
+describe('UserService', () => {
+  let mockRepository: jest.Mocked&lt;UserRepository&gt;;
+
+  beforeEach(() => {
+    mockRepository = new UserRepository() as jest.Mocked&lt;UserRepository&gt;;
+  });
+
+  test('should use mocked repository', async () => {
+    mockRepository.findById.mockResolvedValue({ id: '1', name: 'John' });
+
+    const result = await mockRepository.findById('1');
+    expect(result).toEqual({ id: '1', name: 'John' });
+  });
+});</div>
+
+      <div class="code-block">// 手动 Mock 类
+jest.mock('./UserRepository', () => {
+  return {
+    UserRepository: jest.fn().mockImplementation(() => ({
+      findById: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn()
+    }))
+  };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> jest.doMock</h2>
+
+      <div class="code-block">// jest.doMock 用于动态 Mock
+// 在测试内部根据条件 Mock
+
+describe('Dynamic Mocking', () => {
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
+  test('mocks conditionally', () => {
+    jest.doMock('./config', () => ({
+      API_URL: 'http://test-api.com'
+    }));
+
+    // 需要重新导入才能使用 Mock
+    const { getConfig } = require('./config');
+    expect(getConfig().API_URL).toBe('http://test-api.com');
+  });
+
+  test('different mock for this test', () => {
+    jest.doMock('./config', () => ({
+      API_URL: 'http://another-api.com'
+    }));
+
+    const { getConfig } = require('./config');
+    expect(getConfig().API_URL).toBe('http://another-api.com');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> Mock 完整示例</h2>
+
+      <div class="code-block">// src/services/payment.service.ts
+import { PaymentGateway } from '../gateways/payment.gateway';
+import { OrderRepository } from '../repositories/order.repository';
+
+export class PaymentService {
+  constructor(
+    private gateway: PaymentGateway,
+    private orderRepo: OrderRepository
+  ) {}
+
+  async processPayment(orderId: string, amount: number) {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    const result = await this.gateway.charge(amount);
+
+    if (result.success) {
+      await this.orderRepo.update(orderId, { status: 'paid' });
+    }
+
+    return result;
+  }
+}</div>
+
+      <div class="code-block">// tests/services/payment.service.test.ts
+import { PaymentService } from '../../src/services/payment.service';
+import { PaymentGateway } from '../../src/gateways/payment.gateway';
+import { OrderRepository } from '../../src/repositories/order.repository';
+
+// Mock 依赖
+jest.mock('../../src/gateways/payment.gateway');
+jest.mock('../../src/repositories/order.repository');
+
+describe('PaymentService', () => {
+  let service: PaymentService;
+  let mockGateway: jest.Mocked&lt;PaymentGateway&gt;;
+  let mockOrderRepo: jest.Mocked&lt;OrderRepository&gt;;
+
+  beforeEach(() => {
+    // 创建 Mock 实例
+    mockGateway = new PaymentGateway() as jest.Mocked&lt;PaymentGateway&gt;;
+    mockOrderRepo = new OrderRepository() as jest.Mocked&lt;OrderRepository&gt;;
+
+    // 创建服务实例
+    service = new PaymentService(mockGateway, mockOrderRepo);
+
+    jest.clearAllMocks();
+  });
+
+  describe('processPayment', () => {
+    it('should process payment successfully', async () => {
+      // Arrange
+      mockOrderRepo.findById.mockResolvedValue({
+        id: 'order-1',
+        status: 'pending',
+        amount: 100
+      });
+      mockGateway.charge.mockResolvedValue({ success: true, transactionId: 'txn-1' });
+      mockOrderRepo.update.mockResolvedValue({ id: 'order-1', status: 'paid' });
+
+      // Act
+      const result = await service.processPayment('order-1', 100);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockGateway.charge).toHaveBeenCalledWith(100);
+      expect(mockOrderRepo.update).toHaveBeenCalledWith('order-1', { status: 'paid' });
+    });
+
+    it('should throw error when order not found', async () => {
+      mockOrderRepo.findById.mockResolvedValue(null);
+
+      await expect(service.processPayment('invalid-id', 100))
+        .rejects.toThrow('Order not found');
+
+      expect(mockGateway.charge).not.toHaveBeenCalled();
+    });
+
+    it('should not update order when payment fails', async () => {
+      mockOrderRepo.findById.mockResolvedValue({ id: 'order-1', status: 'pending' });
+      mockGateway.charge.mockResolvedValue({ success: false, error: 'Insufficient funds' });
+
+      const result = await service.processPayment('order-1', 100);
+
+      expect(result.success).toBe(false);
+      expect(mockOrderRepo.update).not.toHaveBeenCalled();
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>jest.mock() 用于模拟整个模块</li>
+            <li>__mocks__ 目录存放共享的 Mock 实现</li>
+            <li>使用 jest.requireActual() 保留部分原始实现</li>
+            <li>Mock 类需要 Mock 其所有方法</li>
+            <li>jest.doMock 用于动态、条件性的 Mock</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter69/69-6-Mock函数.html">← 上一节：Mock 函数</a>
+      <a href="70-2-快照测试.html">下一节：快照测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

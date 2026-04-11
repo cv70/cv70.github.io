@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>51.4 会话管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="51-1-认证与授权.html">第五十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>51.4 会话管理</h1>
+      <p class="subtitle">安全地管理用户会话状态</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解会话管理的概念</li>
+        <li>掌握会话生命周期</li>
+        <li>学会防止会话劫持</li>
+        <li>了解多设备会话管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 会话生命周期</h2>
+      <div class="code-block">
+// 会话状态管理
+interface Session {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  lastAccessedAt: Date;
+  expiresAt: Date;
+  ipAddress: string;
+  userAgent: string;
+  deviceId?: string;
+  isActive: boolean;
+}
+
+// 会话配置
+interface SessionConfig {
+  accessTokenTTL: number;      // 访问令牌有效期（秒）
+  refreshTokenTTL: number;     // 刷新令牌有效期（秒）
+  maxSessions: number;         // 最大并发会话数
+  idleTimeout: number;         // 空闲超时时间
+}
+
+const defaultConfig: SessionConfig = {
+  accessTokenTTL: 15 * 60,      // 15分钟
+  refreshTokenTTL: 7 * 24 * 60 * 60, // 7天
+  maxSessions: 5,               // 最多5个设备
+  idleTimeout: 30 * 60          // 30分钟空闲
+};
+
+// 创建会话
+async function createSession(
+  userId: string,
+  req: Request
+): Promise&lt;{ accessToken: string; refreshToken: string; sessionId: string }&gt; {
+  // 检查现有会话数量
+  const existingSessions = await Session.find({
+    userId,
+    isActive: true
+  });
+
+  // 如果超过限制，删除最旧的会话
+  if (existingSessions.length >= defaultConfig.maxSessions) {
+    const toRemove = existingSessions
+      .sort((a, b) => a.lastAccessedAt.getTime() - b.lastAccessedAt.getTime())
+      .slice(0, existingSessions.length - defaultConfig.maxSessions + 1);
+
+    await Session.updateMany(
+      { _id: { $in: toRemove.map(s => s._id) } },
+      { isActive: false }
+    );
+  }
+
+  // 创建新会话
+  const sessionId = generateSessionId();
+  const now = new Date();
+
+  await Session.create({
+    id: sessionId,
+    userId,
+    createdAt: now,
+    lastAccessedAt: now,
+    expiresAt: new Date(now.getTime() + defaultConfig.refreshTokenTTL * 1000),
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'],
+    deviceId: req.headers['x-device-id'],
+    isActive: true
+  });
+
+  // 生成令牌
+  const accessToken = generateAccessToken(userId, sessionId);
+  const refreshToken = generateRefreshToken(userId, sessionId);
+
+  return { accessToken, refreshToken, sessionId };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 令牌刷新机制</h2>
+      <div class="code-block">
+// Token刷新流程
+interface TokenPayload {
+  userId: string;
+  sessionId: string;
+  type: 'access' | 'refresh';
+  iat: number;
+  exp: number;
+}
+
+// 刷新访问令牌
+async function refreshAccessToken(
+  refreshToken: string,
+  req: Request
+): Promise&lt;{ accessToken: string; refreshToken: string } | null&gt; {
+  // 1. 验证刷新令牌
+  let payload: TokenPayload;
+
+  try {
+    payload = jwt.verify(
+      refreshToken,
+      process.env.REFRESH_TOKEN_SECRET!
+    ) as TokenPayload;
+  } catch {
+    return null;
+  }
+
+  // 2. 检查会话是否存在且有效
+  const session = await Session.findOne({
+    id: payload.sessionId,
+    userId: payload.userId,
+    isActive: true
+  });
+
+  if (!session) {
+    return null;
+  }
+
+  // 3. 检查IP变化（可选，用于检测异常）
+  if (session.ipAddress !== req.ip) {
+    console.warn(`IP changed for session ${session.id}: ${session.ipAddress} -> ${req.ip}`);
+    // 可以选择要求重新登录或发送警告
+  }
+
+  // 4. 更新最后访问时间
+  await Session.findByIdAndUpdate(session._id, {
+    lastAccessedAt: new Date()
+  });
+
+  // 5. 生成新的访问令牌
+  const newAccessToken = generateAccessToken(payload.userId, payload.sessionId);
+
+  // 6. 可选：旋转刷新令牌（更安全）
+  const newRefreshToken = generateRefreshToken(payload.userId, payload.sessionId);
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken
+  };
+}
+
+// API路由
+app.post('/auth/refresh', async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: '缺少刷新令牌' });
+  }
+
+  const tokens = await refreshAccessToken(refreshToken, req);
+
+  if (!tokens) {
+    return res.status(401).json({ error: '无效的刷新令牌' });
+  }
+
+  res.json({
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 防止会话劫持</h2>
+      <div class="code-block">
+// 会话安全措施
+
+// 1. Cookie安全配置
+app.use(session({
+  secret: process.env.SESSION_SECRET!,
+  cookie: {
+    secure: true,        // 仅HTTPS传输
+    httpOnly: true,      // 防止XSS访问
+    sameSite: 'strict',  // 防止CSRF
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+// 2. 会话绑定检查
+async function validateSessionBinding(
+  session: Session,
+  req: Request
+): Promise&lt;{ valid: boolean; reason?: string }&gt; {
+  // 检查IP地址（可选，可能影响移动用户）
+  if (process.env.CHECK_IP_BINDING === 'true') {
+    if (session.ipAddress !== req.ip) {
+      return { valid: false, reason: 'IP地址变化' };
+    }
+  }
+
+  // 检查User-Agent
+  const currentUserAgent = req.headers['user-agent'];
+  if (session.userAgent !== currentUserAgent) {
+    // User-Agent变化，可能是可疑活动
+    await logSuspiciousActivity(session.userId, 'User-Agent changed', {
+      old: session.userAgent,
+      new: currentUserAgent
+    });
+  }
+
+  // 检查会话是否过期
+  if (session.expiresAt < new Date()) {
+    return { valid: false, reason: '会话已过期' };
+  }
+
+  // 检查空闲超时
+  const idleTime = Date.now() - session.lastAccessedAt.getTime();
+  if (idleTime > defaultConfig.idleTimeout * 1000) {
+    return { valid: false, reason: '会话超时' };
+  }
+
+  return { valid: true };
+}
+
+// 3. 异常检测中间件
+function sessionSecurityMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.session?.id) {
+    return next();
+  }
+
+  validateSessionBinding(req.session, req)
+    .then(result => {
+      if (!result.valid) {
+        // 销毁会话
+        req.session.destroy(() => {});
+        return res.status(401).json({
+          error: '会话已失效',
+          reason: result.reason
+        });
+      }
+      next();
+    })
+    .catch(next);
+}
+
+// 4. CSRF保护
+import csrf from 'csurf';
+
+const csrfProtection = csrf({ cookie: true });
+
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
+app.post('/api/*', csrfProtection, (req, res, next) => {
+  next();
+});
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">CSRF保护</div>
+          <p>对于基于Cookie的会话，必须实施CSRF保护。可以使用csurf中间件或SameSite cookie属性。对于JWT存储在localStorage的情况，不存在CSRF风险。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 多设备会话管理</h2>
+      <div class="code-block">
+// 用户设备管理
+interface Device {
+  id: string;
+  userId: string;
+  deviceName: string;
+  deviceType: 'mobile' | 'tablet' | 'desktop' | 'unknown';
+  browser: string;
+  os: string;
+  ipAddress: string;
+  lastActive: Date;
+  isCurrentDevice: boolean;
+}
+
+// 获取用户所有活跃会话
+async function getUserSessions(userId: string): Promise&lt;Device[]&gt; {
+  const sessions = await Session.find({
+    userId,
+    isActive: true
+  }).sort({ lastAccessedAt: -1 });
+
+  return sessions.map(session => ({
+    id: session.id,
+    userId: session.userId,
+    deviceName: parseDeviceName(session.userAgent),
+    deviceType: detectDeviceType(session.userAgent),
+    browser: parseBrowser(session.userAgent),
+    os: parseOS(session.userAgent),
+    ipAddress: session.ipAddress,
+    lastActive: session.lastAccessedAt,
+    isCurrentDevice: false // 由调用方设置
+  }));
+}
+
+// 撤销特定会话
+async function revokeSession(
+  userId: string,
+  sessionId: string
+): Promise&lt;boolean&gt; {
+  const result = await Session.findOneAndUpdate(
+    { id: sessionId, userId, isActive: true },
+    { isActive: false, revokedAt: new Date() }
+  );
+
+  return !!result;
+}
+
+// 撤销所有其他会话
+async function revokeOtherSessions(
+  userId: string,
+  currentSessionId: string
+): Promise&lt;number&gt; {
+  const result = await Session.updateMany(
+    { userId, id: { $ne: currentSessionId }, isActive: true },
+    { isActive: false, revokedAt: new Date() }
+  );
+
+  return result.modifiedCount;
+}
+
+// API路由
+app.get('/api/sessions', authMiddleware, async (req, res) => {
+  const sessions = await getUserSessions(req.user.userId);
+
+  // 标记当前设备
+  sessions.forEach(s => {
+    s.isCurrentDevice = s.id === req.user.sessionId;
+  });
+
+  res.json({ sessions });
+});
+
+app.delete('/api/sessions/:sessionId', authMiddleware, async (req, res) => {
+  const success = await revokeSession(req.user.userId, req.params.sessionId);
+
+  if (!success) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+
+  res.json({ message: '会话已撤销' });
+});
+
+app.delete('/api/sessions', authMiddleware, async (req, res) => {
+  const count = await revokeOtherSessions(req.user.userId, req.user.sessionId);
+  res.json({ message: `已撤销 ${count} 个其他会话` });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 会话管理包括创建、刷新、验证和销毁</li>
+            <li>• 访问令牌短期有效，刷新令牌长期有效</li>
+            <li>• 实施IP绑定和User-Agent检查防止劫持</li>
+            <li>• 限制最大并发会话数</li>
+            <li>• 提供会话列表管理功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="51-3-密码存储安全.html">← 上一节：密码存储安全</a>
+      <a href="../chapter52/52-1-Session原理.html">下一章：Session原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

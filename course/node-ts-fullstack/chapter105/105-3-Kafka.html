@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>105.3 Kafka - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="105-1-消息队列概述.html">第105章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>105.3 Kafka</h1>
+      <p class="subtitle">高吞吐量的分布式消息系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Kafka核心概念</li>
+        <li>掌握生产者和消费者API</li>
+        <li>了解分区和副本机制</li>
+        <li>学会消费者组的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Kafka核心概念</h2>
+      <div class="code-block">
+// Kafka 核心组件
+
+const concepts = {
+  Broker: 'Kafka服务节点，负责存储和转发消息',
+  Topic: '消息主题，消息的第一级分类',
+  Partition: '分区，消息的第二级分类，实现并行处理',
+  Offset: '偏移量，消息在分区中的唯一标识',
+  Producer: '生产者，发送消息的应用',
+  Consumer: '消费者，接收消息的应用',
+  ConsumerGroup: '消费者组，实现消息的负载均衡和广播',
+  Replica: '副本，数据冗余保证高可用'
+};
+
+// Kafka vs RabbitMQ
+const comparison = {
+  Kafka: {
+    定位: '分布式流处理平台',
+    吞吐量: '极高，百万级/秒',
+    消息模型: '发布订阅 + 消费者组',
+    消息存储: '持久化，支持回溯',
+    适用场景: '大数据、日志收集、流处理'
+  },
+  RabbitMQ: {
+    定位: '传统消息队列',
+    吞吐量: '较高，万级/秒',
+    消息模型: '队列 + 交换机',
+    消息存储: '消费后删除',
+    适用场景: '业务消息、任务队列、RPC'
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Kafka特点</div>
+          <p>高吞吐、低延迟、可水平扩展、持久化存储、支持回溯消费。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 生产者与消费者</h2>
+      <div class="code-block">
+import { Kafka, Producer, Consumer } from 'kafkajs';
+
+// 创建Kafka客户端
+const kafka = new Kafka({
+  clientId: 'my-app',
+  brokers: ['localhost:9092']
+});
+
+// ==================== 生产者 ====================
+async function produceMessages() {
+  const producer = kafka.producer();
+
+  await producer.connect();
+
+  // 发送单条消息
+  await producer.send({
+    topic: 'orders',
+    messages: [
+      {
+        key: 'order-123',        // 消息键，决定分区
+        value: JSON.stringify({  // 消息值
+          orderId: '123',
+          amount: 100,
+          userId: 'user-1'
+        }),
+        headers: {               // 消息头
+          'content-type': 'application/json',
+          'source': 'order-service'
+        },
+        timestamp: Date.now().toString()
+      }
+    ]
+  });
+
+  // 发送到指定分区
+  await producer.send({
+    topic: 'orders',
+    messages: [
+      {
+        partition: 0,
+        key: 'order-456',
+        value: JSON.stringify({ orderId: '456' })
+      }
+    ]
+  });
+
+  await producer.disconnect();
+}
+
+// ==================== 消费者 ====================
+async function consumeMessages() {
+  const consumer = kafka.consumer({
+    groupId: 'order-processing-group'  // 消费者组
+  });
+
+  await consumer.connect();
+
+  // 订阅主题
+  await consumer.subscribe({
+    topic: 'orders',
+    fromBeginning: true  // 从最早的消息开始消费
+  });
+
+  // 消费消息
+  await consumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      console.log({
+        topic,
+        partition,
+        offset: message.offset,
+        key: message.key?.toString(),
+        value: message.value?.toString()
+      });
+
+      // 处理消息
+      const order = JSON.parse(message.value!.toString());
+      await processOrder(order);
+    }
+  });
+}
+
+// 批量消费
+async function batchConsume() {
+  const consumer = kafka.consumer({ groupId: 'batch-group' });
+
+  await consumer.connect();
+  await consumer.subscribe({ topic: 'orders' });
+
+  await consumer.run({
+    eachBatchAutoResolve: false,  // 手动提交
+    eachBatch: async ({ batch, resolveOffset, heartbeat }) => {
+      for (const message of batch.messages) {
+        await processMessage(message);
+        resolveOffset(message.offset);  // 提交偏移量
+      }
+
+      await heartbeat();  // 保持活跃
+    }
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 分区与消费者组</h2>
+      <div class="code-block">
+// 分区策略
+
+// 1. 默认分区器：根据key的hash值分配分区
+const producer = kafka.producer({
+  createPartitioner: Partitioners.DefaultPartitioner
+});
+
+// 2. 轮询分区器：轮询分配消息到各分区
+const roundRobinProducer = kafka.producer({
+  createPartitioner: Partitioners.RoundRobinPartitioner
+});
+
+// 自定义分区器
+const customPartitioner = () => {
+  return ({ topic, partitionMetadata, message }) => {
+    // 根据业务逻辑选择分区
+    const key = message.key?.toString();
+    if (key?.startsWith('vip-')) {
+      return 0;  // VIP订单到分区0
+    }
+    return Math.floor(Math.random() * partitionMetadata.length);
+  };
+};
+
+// 消费者组协调
+/*
+消费者组特性：
+1. 同一个消费者组内，一个分区只能被一个消费者消费
+2. 不同消费者组可以独立消费同一个主题
+3. 消费者数量超过分区数时，多余的消费者空闲
+4. 消费者故障时，自动进行重平衡
+
+示例：
+主题 orders 有 3 个分区 [P0, P1, P2]
+
+消费者组 order-processors:
+- Consumer A -> P0, P1
+- Consumer B -> P2
+
+消费者组 order-notifications:
+- Consumer C -> P0, P1, P2
+*/
+
+// 手动提交偏移量
+async function manualCommit() {
+  const consumer = kafka.consumer({
+    groupId: 'manual-commit-group',
+    sessionTimeout: 30000,
+    rebalanceTimeout: 60000
+  });
+
+  await consumer.run({
+    autoCommit: false,  // 禁用自动提交
+    eachMessage: async ({ message }) => {
+      await processMessage(message);
+      // 手动提交当前偏移量
+      await consumer.commitOffsets([
+        { topic: 'orders', partition: 0, offset: message.offset }
+      ]);
+    }
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Kafka适合高吞吐、大数据场景</li>
+            <li>• 分区实现并行处理和扩展</li>
+            <li>• 消费者组实现负载均衡和广播</li>
+            <li>• 消息持久化支持回溯消费</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="105-2-RabbitMQ.html">← 上一节：RabbitMQ</a>
+      <a href="105-4-Redis消息.html">下一节：Redis 消息 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.2 文件读写 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-同步与异步操作.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.2 文件读写</h1>
+      <p class="subtitle">掌握文件读写操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 readFile 和 writeFile</li>
+        <li>学会追加写入文件</li>
+        <li>了解文件读写选项</li>
+        <li>掌握大文件读写方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 读取文件</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 异步读取（回调）
+fs.readFile('file.txt', 'utf8', (err, data) => {
+  if (err) {
+    console.error('读取失败:', err);
+    return;
+  }
+  console.log('文件内容:', data);
+});
+
+// 2. 同步读取
+try {
+  const data = fs.readFileSync('file.txt', 'utf8');
+  console.log('文件内容:', data);
+} catch (err) {
+  console.error('读取失败:', err);
+}
+
+// 3. Promise 方式
+fsPromises.readFile('file.txt', 'utf8')
+  .then(data => console.log(data))
+  .catch(err => console.error(err));
+
+// 4. async/await 方式
+async function readFile() {
+  try {
+    const data = await fsPromises.readFile('file.txt', 'utf8');
+    console.log(data);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// 读取为 Buffer
+const buffer = fs.readFileSync('image.png');
+console.log(buffer);  // <Buffer ...>
+
+// 指定编码读取
+fs.readFile('file.txt', { encoding: 'utf8' }, callback);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 写入文件</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 异步写入（覆盖）
+fs.writeFile('output.txt', 'Hello World', 'utf8', (err) => {
+  if (err) {
+    console.error('写入失败:', err);
+    return;
+  }
+  console.log('写入成功');
+});
+
+// 2. 同步写入
+try {
+  fs.writeFileSync('output.txt', 'Hello World', 'utf8');
+  console.log('写入成功');
+} catch (err) {
+  console.error('写入失败:', err);
+}
+
+// 3. Promise 方式
+await fsPromises.writeFile('output.txt', 'Hello World', 'utf8');
+
+// 4. 写入选项
+fs.writeFile('output.txt', 'Hello', {
+  encoding: 'utf8',
+  mode: 0o644,           // 文件权限
+  flag: 'w'              // 写入模式
+});
+
+// flag 选项：
+// 'w'   - 写入，不存在则创建，存在则覆盖
+// 'wx'  - 写入，不存在则创建，存在则失败
+// 'a'   - 追加，不存在则创建
+// 'ax'  - 追加，不存在则创建，存在则失败
+
+// 写入 Buffer
+const buffer = Buffer.from('Hello World');
+fs.writeFileSync('binary.bin', buffer);
+
+// 写入 JSON
+const data = { name: 'Alice', age: 25 };
+fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 追加内容</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 使用 appendFile
+fs.appendFile('log.txt', '新的一行\n', (err) => {
+  if (err) throw err;
+  console.log('追加成功');
+});
+
+// 2. 同步追加
+fs.appendFileSync('log.txt', '新的一行\n');
+
+// 3. Promise 方式
+await fsPromises.appendFile('log.txt', '新的一行\n');
+
+// 4. 使用 writeFile 的 'a' flag
+fs.writeFile('log.txt', '新的一行\n', { flag: 'a' }, callback);
+
+// 日志记录示例
+function log(message) {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}\n`;
+  fs.appendFileSync('app.log', logMessage);
+}
+
+log('应用启动');
+log('用户登录');
+log('请求处理完成');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 文件是否存在与删除</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 检查文件是否存在（推荐 access）
+try {
+  fs.accessSync('file.txt', fs.constants.F_OK);
+  console.log('文件存在');
+} catch (err) {
+  console.log('文件不存在');
+}
+
+// 异步检查
+fs.access('file.txt', fs.constants.F_OK, (err) => {
+  console.log(err ? '文件不存在' : '文件存在');
+});
+
+// Promise 版本
+try {
+  await fsPromises.access('file.txt');
+  console.log('文件存在');
+} catch {
+  console.log('文件不存在');
+}
+
+// 删除文件
+fs.unlink('file.txt', (err) => {
+  if (err) throw err;
+  console.log('文件已删除');
+});
+
+// 同步删除
+fs.unlinkSync('file.txt');
+
+// Promise 删除
+await fsPromises.unlink('file.txt');
+
+// existsSync（不推荐但简单）
+if (fs.existsSync('file.txt')) {
+  console.log('文件存在');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• readFile/writeFile 是常用文件读写方法</li>
+            <li>• appendFile 用于追加内容到文件末尾</li>
+            <li>• 推荐使用 fs.promises 配合 async/await</li>
+            <li>• 大文件应使用流式读写</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-1-同步与异步操作.html">← 上一节：同步与异步操作</a>
+      <a href="15-3-目录操作.html">下一节：目录操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

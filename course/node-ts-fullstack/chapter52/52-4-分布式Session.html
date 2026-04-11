@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.4 分布式 Session - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="52-1-Session原理.html">第五十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>52.4 分布式 Session</h1>
+      <p class="subtitle">多服务器环境下的 Session 管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解分布式 Session 的挑战</li>
+        <li>掌握 Session 共享方案</li>
+        <li>学会粘性会话配置</li>
+        <li>了解高可用 Session 架构</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">❓</span> 分布式 Session 问题</h2>
+      <div class="code-block">
+/*
+问题场景：
+
+用户 → 负载均衡 → 服务器A（登录，Session在A）
+用户 → 负载均衡 → 服务器B（请求失败，Session不在B）
+
++-----------------+        +------------------+
+|   负载均衡器     |        |    问题：        |
+|   (Nginx/ALB)   |        |    Session分散   |
++--------+--------+        |    在不同服务器   |
+         |                 +------------------+
+    +----+----+
+    |         |
+    v         v
++-------+  +-------+
+| Server|  | Server|
+|   A   |  |   B   |
+|Session|  |       |
+|  数据  |  |       |
++-------+  +-------+
+
+解决方案：
+1. Session 共享：使用外部存储（Redis）
+2. 粘性会话：同一用户始终路由到同一服务器
+3. Session 复制：服务器间同步 Session
+4. JWT：无状态认证，无需存储 Session
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔴</span> Redis 集群方案</h2>
+      <div class="code-block">
+// Redis 集群配置
+import { createCluster } from 'redis';
+import RedisStore from 'connect-redis';
+
+// Redis Cluster 配置
+const redisCluster = createCluster({
+  rootNodes: [
+    { url: 'redis://redis-1:6379' },
+    { url: 'redis://redis-2:6379' },
+    { url: 'redis-redis-3:6379' }
+  ],
+  defaults: {
+    password: process.env.REDIS_PASSWORD
+  }
+});
+
+redisCluster.connect().catch(console.error);
+
+// Session 存储配置
+app.use(session({
+  store: new RedisStore({
+    client: redisCluster,
+    prefix: 'sess:'
+  }),
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false
+}));
+
+// Redis Sentinel 配置（高可用）
+import { Redis } from 'ioredis';
+
+const redisSentinel = new Redis({
+  sentinels: [
+    { host: 'sentinel-1', port: 26379 },
+    { host: 'sentinel-2', port: 26379 },
+    { host: 'sentinel-3', port: 26379 }
+  ],
+  name: 'mymaster',
+  password: process.env.REDIS_PASSWORD
+});
+
+app.use(session({
+  store: new RedisStore({
+    client: redisSentinel
+  }),
+  secret: process.env.SESSION_SECRET!
+}));
+
+// 多 Redis 实例（读写分离）
+const masterRedis = new Redis(process.env.REDIS_MASTER_URL!);
+const replicaRedis = new Redis(process.env.REDIS_REPLICA_URL!);
+
+// 自定义 Store 支持读写分离
+class ReadWriteRedisStore extends RedisStore {
+  private readClient: Redis;
+  private writeClient: Redis;
+
+  constructor(options: { readClient: Redis; writeClient: Redis }) {
+    super({ client: options.writeClient });
+    this.readClient = options.readClient;
+    this.writeClient = options.writeClient;
+  }
+
+  async get(sid: string) {
+    // 从副本读取
+    const data = await this.readClient.get(`sess:${sid}`);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async set(sid: string, session: any) {
+    // 写入主节点
+    await this.writeClient.set(
+      `sess:${sid}`,
+      JSON.stringify(session),
+      'EX',
+      this.getTTL(session)
+    );
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 粘性会话配置</h2>
+      <div class="code-block">
+// Nginx 粘性会话配置
+/*
+upstream backend {
+    ip_hash;  # 基于IP的粘性会话
+    server backend1:3000;
+    server backend2:3000;
+    server backend3:3000;
+}
+
+# 或者使用 sticky 模块
+upstream backend {
+    sticky cookie srv_id expires=1h domain=.example.com path=/;
+    server backend1:3000;
+    server backend2:3000;
+}
+
+server {
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+*/
+
+// 应用层粘性会话
+import express from 'express';
+import crypto from 'crypto';
+
+const app = express();
+
+// 服务器标识
+const SERVER_ID = crypto.randomUUID();
+
+// 检查请求是否属于本服务器
+function checkStickySession(req: Request, res: Response, next: NextFunction) {
+  const serverCookie = req.cookies['_server_id'];
+
+  if (serverCookie && serverCookie !== SERVER_ID) {
+    // 请求应该路由到其他服务器
+    // 返回特殊响应让负载均衡器重新路由
+    return res.status(503).json({
+      error: 'Wrong server',
+      redirect: true
+    });
+  }
+
+  // 设置服务器标识
+  if (!serverCookie) {
+    res.cookie('_server_id', SERVER_ID, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 3600000
+    });
+  }
+
+  next();
+}
+
+app.use(checkStickySession);
+
+// 问题：服务器宕机时用户会被强制登出
+// 解决：使用外部 Session 存储
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">粘性会话缺点</div>
+          <p>粘性会话实现简单，但存在缺点：服务器宕机时用户Session丢失、负载可能不均衡。推荐使用共享存储方案。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Session 复制方案</h2>
+      <div class="code-block">
+// Session 复制（使用消息队列）
+import { EventEmitter } from 'events';
+import Redis from 'ioredis';
+
+class SessionReplicator {
+  private publisher: Redis;
+  private subscriber: Redis;
+  private localSessions: Map&lt;string, any&gt; = new Map();
+
+  constructor() {
+    this.publisher = new Redis(process.env.REDIS_URL!);
+    this.subscriber = new Redis(process.env.REDIS_URL!);
+
+    this.subscribe();
+  }
+
+  private subscribe() {
+    // 订阅 Session 更新
+    this.subscriber.subscribe('session:update', 'session:delete');
+
+    this.subscriber.on('message', (channel, message) => {
+      const data = JSON.parse(message);
+
+      switch (channel) {
+        case 'session:update':
+          this.localSessions.set(data.sid, data.session);
+          break;
+        case 'session:delete':
+          this.localSessions.delete(data.sid);
+          break;
+      }
+    });
+  }
+
+  // 更新本地 Session 并广播
+  async set(sid: string, session: any) {
+    this.localSessions.set(sid, session);
+
+    await this.publisher.publish(
+      'session:update',
+      JSON.stringify({ sid, session })
+    );
+  }
+
+  // 删除 Session 并广播
+  async destroy(sid: string) {
+    this.localSessions.delete(sid);
+
+    await this.publisher.publish(
+      'session:delete',
+      JSON.stringify({ sid })
+    );
+  }
+
+  // 获取 Session（优先本地）
+  get(sid: string) {
+    return this.localSessions.get(sid);
+  }
+}
+
+// 使用混合方案：本地缓存 + Redis
+class HybridSessionStore extends Store {
+  private localCache: Map&lt;string, { data: any; expiry: number }&gt; = new Map();
+  private redis: Redis;
+  private cacheTTL = 60000; // 本地缓存1分钟
+
+  constructor(redisClient: Redis) {
+    super();
+    this.redis = redisClient;
+    this.startCleanup();
+  }
+
+  async get(sid: string) {
+    // 先查本地缓存
+    const cached = this.localCache.get(sid);
+    if (cached && cached.expiry > Date.now()) {
+      return cached.data;
+    }
+
+    // 从 Redis 获取
+    const data = await this.redis.get(`sess:${sid}`);
+    if (data) {
+      const session = JSON.parse(data);
+      this.localCache.set(sid, {
+        data: session,
+        expiry: Date.now() + this.cacheTTL
+      });
+      return session;
+    }
+
+    return null;
+  }
+
+  async set(sid: string, session: any) {
+    // 更新本地缓存
+    this.localCache.set(sid, {
+      data: session,
+      expiry: Date.now() + this.cacheTTL
+    });
+
+    // 写入 Redis
+    await this.redis.set(
+      `sess:${sid}`,
+      JSON.stringify(session),
+      'EX',
+      86400
+    );
+  }
+
+  // 定期清理本地缓存
+  private startCleanup() {
+    setInterval(() => {
+      const now = Date.now();
+      for (const [sid, cached] of this.localCache.entries()) {
+        if (cached.expiry < now) {
+          this.localCache.delete(sid);
+        }
+      }
+    }, this.cacheTTL);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 高可用架构</h2>
+      <div class="code-block">
+/*
++------------------+     +------------------+
+|   负载均衡器      |     |   健康检查       |
+|   (Nginx/ALB)    |----→|   /health        |
++--------+---------+     +------------------+
+         |
+    +----+----+--------------------+
+    |         |                    |
+    v         v                    v
++-------+  +-------+           +-------+
+| Node  |  | Node  |           | Node  |
+| App 1 |  | App 2 |           | App 3 |
++---+---+  +---+---+           +---+---+
+    |          |                   |
+    +----------+-------------------+
+               |
+         +-----v-----+
+         |   Redis   |
+         |  Cluster  |
+         | (主从复制) |
+         +-----------+
+
+Redis Cluster 高可用：
+- 数据分片：多个主节点分担数据
+- 主从复制：每个主节点有副本
+- 自动故障转移：主节点故障时副本升级
+*/
+
+// 健康检查端点
+app.get('/health', async (req, res) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: await checkDatabase(),
+      redis: await checkRedis(),
+      memory: process.memoryUsage()
+    }
+  };
+
+  const allHealthy = Object.values(health.checks)
+    .every(c => c === 'ok' || c.status === 'ok');
+
+  res.status(allHealthy ? 200 : 503).json(health);
+});
+
+// 优雅关闭
+async function gracefulShutdown() {
+  console.log('开始优雅关闭...');
+
+  // 停止接受新连接
+  server.close(() => {
+    console.log('HTTP 服务器已关闭');
+  });
+
+  // 等待现有请求完成
+  await new Promise(resolve => setTimeout(resolve, 10000));
+
+  // 关闭数据库连接
+  await database.close();
+  await redisClient.quit();
+
+  process.exit(0);
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 分布式环境需要共享Session存储</li>
+            <li>• Redis Cluster提供高可用方案</li>
+            <li>• 粘性会话简单但有单点故障风险</li>
+            <li>• 混合缓存提高读取性能</li>
+            <li>• 健康检查和优雅关闭保障稳定性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="52-3-Session存储.html">← 上一节：Session存储</a>
+      <a href="../chapter53/53-1-JWT原理.html">下一章：JWT原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

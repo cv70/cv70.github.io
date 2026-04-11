@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>93.5 最小权限原则 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="93-1-SQL注入原理.html">第九十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>93.5 最小权限原则</h1>
+      <p class="subtitle">数据库安全配置</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解最小权限原则的重要性</li>
+        <li>掌握数据库用户权限配置</li>
+        <li>学会分离应用权限</li>
+        <li>了解权限审计方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 最小权限原则</h2>
+      <div class="code-block">
+# 定义
+只授予完成任务所需的最小权限
+
+# 为什么重要
+
+## 限制攻击影响
+即使发生 SQL 注入
+攻击者也只能执行有限操作
+
+## 防止权限滥用
+减少人为错误的风险
+防止恶意内部操作
+
+## 合规要求
+符合安全合规标准
+便于审计追踪
+
+# 数据库权限层级
+
+┌─────────────────────────────────────────────────────┐
+│                    权限层级                          │
+├─────────────────┬───────────────────────────────────┤
+│  全局权限        │  ALL PRIVILEGES, SUPER           │
+│  数据库权限      │  CREATE, DROP, ALTER            │
+│  表权限          │  SELECT, INSERT, UPDATE, DELETE  │
+│  列权限          │  SELECT (column), UPDATE (column)│
+└─────────────────┴───────────────────────────────────┘
+
+# 常见过度权限问题
+
+❌ 使用 root 账号运行应用
+❌ 授予 ALL PRIVILEGES
+❌ 允许 DROP TABLE
+❌ 允许 CREATE USER
+❌ 允许访问所有数据库
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> MySQL 权限配置</h2>
+      <div class="code-block">
+# 创建专用数据库用户
+
+-- 创建用户
+CREATE USER 'webapp'@'localhost' IDENTIFIED BY 'strong_password';
+
+-- 只授予必要的权限
+GRANT SELECT, INSERT, UPDATE, DELETE ON mydb.* TO 'webapp'@'localhost';
+
+-- 刷新权限
+FLUSH PRIVILEGES;
+
+# 按表授权
+
+-- 只授权需要的表
+GRANT SELECT, INSERT, UPDATE ON mydb.users TO 'webapp'@'localhost';
+GRANT SELECT, INSERT ON mydb.posts TO 'webapp'@'localhost';
+GRANT SELECT ON mydb.config TO 'webapp'@'localhost';
+
+# 只读用户（报表/分析）
+
+CREATE USER 'readonly'@'localhost' IDENTIFIED BY 'strong_password';
+GRANT SELECT ON mydb.* TO 'readonly'@'localhost';
+
+# 管理用户（独立于应用）
+
+CREATE USER 'admin'@'localhost' IDENTIFIED BY 'strong_password';
+GRANT CREATE, DROP, ALTER, INDEX ON mydb.* TO 'admin'@'localhost';
+
+# 查看权限
+SHOW GRANTS FOR 'webapp'@'localhost';
+
+# 撤销权限
+REVOKE DELETE ON mydb.users FROM 'webapp'@'localhost';
+
+# 删除用户
+DROP USER 'webapp'@'localhost';
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">权限分离</div>
+          <p>为不同用途创建不同的数据库用户：应用用户（CRUD）、只读用户（报表）、管理用户（DDL）。每个用户只有必要的权限。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> PostgreSQL 权限配置</h2>
+      <div class="code-block">
+# 创建用户和数据库
+
+-- 创建数据库
+CREATE DATABASE myapp;
+
+-- 创建用户
+CREATE USER webapp WITH PASSWORD 'strong_password';
+
+-- 授予连接权限
+GRANT CONNECT ON DATABASE myapp TO webapp;
+
+-- 授予 schema 使用权限
+GRANT USAGE ON SCHEMA public TO webapp;
+
+-- 授予表操作权限
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO webapp;
+
+-- 授予序列使用权限（用于自增 ID）
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO webapp;
+
+# 默认权限设置（新建表自动授权）
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO webapp;
+
+# 只读用户
+
+CREATE USER readonly WITH PASSWORD 'strong_password';
+GRANT CONNECT ON DATABASE myapp TO readonly;
+GRANT USAGE ON SCHEMA public TO readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+
+# 行级安全策略（高级）
+
+-- 启用行级安全
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+
+-- 创建策略：用户只能看到自己的帖子
+CREATE POLICY user_posts ON posts
+  USING (user_id = current_user_id());
+
+# 查看权限
+\du webapp
+\dp
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 应用层权限分离</h2>
+      <div class="code-block">
+# 多用户策略
+
+## 1. 读写用户
+用于一般业务操作
+权限：SELECT, INSERT, UPDATE, DELETE
+
+## 2. 只读用户
+用于报表、数据分析
+权限：SELECT
+
+## 3. 管理用户
+用于 schema 变更、迁移
+权限：CREATE, DROP, ALTER, INDEX
+
+# 连接配置示例
+
+// 配置多个数据库连接
+const configs = {
+  // 默认读写连接
+  default: {
+    host: 'localhost',
+    user: 'webapp',
+    password: process.env.DB_PASSWORD,
+    database: 'myapp',
+  },
+
+  // 只读连接（用于报表）
+  readonly: {
+    host: 'localhost',
+    user: 'readonly',
+    password: process.env.DB_READONLY_PASSWORD,
+    database: 'myapp',
+  },
+};
+
+// 使用只读连接查询报表
+async function getReport() {
+  const client = await pool.readonly.connect();
+  // ...
+}
+
+# 敏感操作分离
+
+// 用户删除 - 使用管理连接
+async function deleteUser(userId: string) {
+  // 使用有 DELETE 权限的连接
+  await adminDb.query('DELETE FROM users WHERE id = $1', [userId]);
+}
+
+// 一般查询 - 使用默认连接
+async function getUsers() {
+  return db.query('SELECT * FROM users');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 权限审计</h2>
+      <div class="code-block">
+# 定期审计权限
+
+## MySQL
+-- 查看所有用户
+SELECT User, Host FROM mysql.user;
+
+-- 查看特定用户权限
+SHOW GRANTS FOR 'webapp'@'localhost';
+
+-- 查看所有授权
+SELECT * FROM mysql.tables_priv;
+SELECT * FROM mysql.columns_priv;
+
+## PostgreSQL
+-- 查看所有用户
+\du
+
+-- 查看表权限
+\dp
+
+-- 查看 schema 权限
+\dn+
+
+# 权限审计清单
+
+□ 是否使用 root/admin 账号运行应用？
+□ 是否授予了不必要的权限？
+□ 是否有默认密码？
+□ 是否定期更换密码？
+□ 是否记录了权限变更日志？
+□ 是否审计了用户活动？
+
+# 安全建议
+
+1. 禁止应用使用 root/superuser
+2. 定期审计权限
+3. 记录所有 DDL 操作
+4. 使用强密码
+5. 限制连接来源 IP
+6. 启用 SSL 连接
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 只授予完成任务所需的最小权限</li>
+            <li>• 为不同用途创建不同的数据库用户</li>
+            <li>• 应用账号禁止使用 root/superuser</li>
+            <li>• 定期审计权限配置</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="93-4-输入验证.html">← 上一节：输入验证</a>
+      <a href="../chapter94/94-1-文件上传安全.html">下一章：文件上传安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

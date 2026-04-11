@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>108.3 Nginx 网关 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="108-1-网关概念.html">第108章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>108.3 Nginx 网关</h1>
+      <p class="subtitle">高性能反向代理与负载均衡</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Nginx作为网关的优势</li>
+        <li>掌握反向代理配置</li>
+        <li>学会负载均衡配置</li>
+        <li>了解Nginx高级功能</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Nginx作为网关</h2>
+      <div class="code-block">
+// Nginx是最广泛使用的反向代理服务器
+
+const features = {
+  reverseProxy: '反向代理，转发请求到后端服务',
+  loadBalancing: '负载均衡，多种算法支持',
+  sslTermination: 'SSL终止，统一处理HTTPS',
+  caching: '静态资源缓存，提升性能',
+  compression: 'Gzip压缩，减少传输量',
+  rateLimiting: '请求限流，保护后端'
+};
+
+// Nginx优势
+const advantages = [
+  '极高的性能和稳定性',
+  '低内存占用',
+  '支持高并发连接',
+  '配置简单灵活',
+  '丰富的第三方模块'
+];
+
+// 基本架构
+const architecture = `
+Client → Nginx (80/443) → Backend Services
+              ↓
+         Load Balancer
+              ↓
+    ┌─────────┼─────────┐
+    ↓         ↓         ↓
+Service1  Service2  Service3
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Nginx适用场景</div>
+          <p>静态资源服务、反向代理、负载均衡、API网关基础层。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 反向代理配置</h2>
+      <div class="code-block">
+# nginx.conf
+
+# 定义上游服务（负载均衡）
+upstream user_service {
+    least_conn;  # 最少连接算法
+    server 192.168.1.100:3001 weight=3;
+    server 192.168.1.101:3001 weight=2;
+    server 192.168.1.102:3001 backup;  # 备用服务器
+}
+
+upstream order_service {
+    ip_hash;  # IP哈希，会话保持
+    server 192.168.1.103:3002;
+    server 192.168.1.104:3002;
+}
+
+upstream product_service {
+    server 192.168.1.105:3003;
+    server 192.168.1.106:3003;
+}
+
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # 日志配置
+    access_log /var/log/nginx/api.access.log;
+    error_log /var/log/nginx/api.error.log;
+
+    # 用户服务路由
+    location /api/users {
+        proxy_pass http://user_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 超时配置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # 订单服务路由
+    location /api/orders {
+        proxy_pass http://order_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # 商品服务路由
+    location /api/products {
+        proxy_pass http://product_service;
+        proxy_set_header Host $host;
+    }
+
+    # 健康检查端点
+    location /health {
+        return 200 'OK';
+        add_header Content-Type text/plain;
+    }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 高级配置</h2>
+      <div class="code-block">
+# 限流配置
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
+
+server {
+    listen 80;
+
+    # 限流
+    location /api/ {
+        limit_req zone=api_limit burst=20 nodelay;
+        limit_conn conn_limit 10;
+
+        # 限流返回状态码
+        limit_req_status 429;
+        limit_conn_status 429;
+
+        proxy_pass http://backend;
+    }
+}
+
+# SSL配置
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate /etc/ssl/certs/server.crt;
+    ssl_certificate_key /etc/ssl/private/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 强制HTTPS重定向
+    # 另一个server块
+    # server {
+    #     listen 80;
+    #     return 301 https://$host$request_uri;
+    # }
+}
+
+# 缓存配置
+proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=api_cache:10m
+                 max_size=100m inactive=60m use_temp_path=off;
+
+server {
+    location /api/products {
+        proxy_pass http://product_service;
+
+        # 缓存配置
+        proxy_cache api_cache;
+        proxy_cache_valid 200 5m;
+        proxy_cache_key $request_uri;
+        add_header X-Cache-Status $upstream_cache_status;
+    }
+}
+
+# 熔断配置（使用第三方模块或Lua）
+# OpenResty示例
+location /api/ {
+    access_by_lua_block {
+        local circuit_breaker = require "circuit_breaker"
+        if not circuit_breaker:is_available("backend") then
+            ngx.exit(503)
+        end
+    }
+
+    proxy_pass http://backend;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Nginx是高性能的反向代理服务器</li>
+            <li>• upstream定义后端服务组</li>
+            <li>• 支持多种负载均衡算法</li>
+            <li>• 可配置限流、缓存、SSL等</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="108-2-Kong网关.html">← 上一节：Kong 网关</a>
+      <a href="108-4-网关安全.html">下一节：网关安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

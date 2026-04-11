@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.4 随机数生成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="20-1-哈希算法.html">第二十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>20.4 随机数生成</h1>
+      <p class="subtitle">生成安全的随机数</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解伪随机与真随机</li>
+        <li>掌握 crypto.randomBytes</li>
+        <li>学会生成随机字符串</li>
+        <li>了解随机数应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 随机字节</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成随机字节（异步）
+crypto.randomBytes(16, (err, buffer) => {
+  if (err) throw err;
+  console.log('随机字节:', buffer);
+  console.log('十六进制:', buffer.toString('hex'));
+  console.log('Base64:', buffer.toString('base64'));
+});
+
+// 同步版本
+const buffer = crypto.randomBytes(32);
+console.log('32 字节:', buffer.toString('hex'));
+
+// 生成随机整数
+function randomInt(min, max) {
+  const range = max - min;
+  const bytesNeeded = Math.ceil(Math.log2(range) / 8);
+  const maxValid = Math.pow(256, bytesNeeded);
+  const limit = maxValid - (maxValid % range);
+
+  while (true) {
+    const bytes = crypto.randomBytes(bytesNeeded);
+    let value = 0;
+    for (let i = 0; i < bytesNeeded; i++) {
+      value = (value << 8) | bytes[i];
+    }
+    if (value < limit) {
+      return min + (value % range);
+    }
+  }
+}
+
+console.log('随机整数:', randomInt(1, 100));
+
+// Node.js 14.10+ 内置方法
+const randomNum = crypto.randomInt(1, 100);
+console.log('随机整数:', randomNum);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 随机字符串</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 生成随机十六进制字符串
+function randomHex(length) {
+  return crypto.randomBytes(Math.ceil(length / 2))
+    .toString('hex')
+    .slice(0, length);
+}
+
+console.log('随机 Hex:', randomHex(16));
+
+// 生成随机 Base64 字符串
+function randomBase64(length) {
+  const bytes = crypto.randomBytes(Math.ceil(length * 3 / 4));
+  return bytes.toString('base64').slice(0, length);
+}
+
+console.log('随机 Base64:', randomBase64(16));
+
+// 生成指定字符集的随机字符串
+function randomString(length, charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') {
+  const bytes = crypto.randomBytes(length);
+  let result = '';
+
+  for (let i = 0; i < length; i++) {
+    result += charset[bytes[i] % charset.length];
+  }
+
+  return result;
+}
+
+console.log('随机字母数字:', randomString(16));
+console.log('随机数字:', randomString(6, '0123456789'));
+console.log('随机字母:', randomString(8, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
+
+// 生成 URL 安全的随机字符串
+function randomUrlSafe(length) {
+  return crypto.randomBytes(length)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+    .slice(0, length);
+}
+
+console.log('URL 安全:', randomUrlSafe(22));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 常见应用</h2>
+      <div class="code-block">
+const crypto = require('crypto');
+
+// 1. 生成 Token
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+console.log('Token:', generateToken());
+
+// 2. 生成 API Key
+function generateApiKey() {
+  return 'sk_' + crypto.randomBytes(24).toString('hex');
+}
+
+console.log('API Key:', generateApiKey());
+
+// 3. 生成验证码
+function generateCode(length = 6) {
+  const bytes = crypto.randomBytes(length);
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += bytes[i] % 10;
+  }
+  return code;
+}
+
+console.log('验证码:', generateCode());
+
+// 4. 生成 UUID（简化版）
+function generateUUID() {
+  const bytes = crypto.randomBytes(16);
+
+  // 设置版本 4
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  // 设置变体
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+console.log('UUID:', generateUUID());
+
+// 使用内置 UUID（Node.js 14.17+）
+const { randomUUID } = require('crypto');
+console.log('内置 UUID:', randomUUID());
+
+// 5. 生成密码
+function generatePassword(length = 12) {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+  return randomString(length, charset);
+}
+
+console.log('密码:', generatePassword());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Math.random vs crypto</h2>
+      <div class="code-block">
+// Math.random 是伪随机，可预测
+// 不应用于安全相关场景
+
+// ❌ 不安全的方式
+function insecureToken() {
+  return Math.random().toString(36).substr(2);
+}
+
+// ✅ 安全的方式
+function secureToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// randomFill 随机填充缓冲区
+const buffer = Buffer.alloc(10);
+crypto.randomFill(buffer, (err, buf) => {
+  if (err) throw err;
+  console.log('填充后:', buf);
+});
+
+// 同步版本
+crypto.randomFillSync(buffer);
+console.log('同步填充:', buffer);
+
+// 部分填充
+const bigBuffer = Buffer.alloc(100);
+crypto.randomFillSync(bigBuffer, 10, 20);  // 只填充 10-30 字节
+
+// randomUUID (Node.js 14.17+)
+console.log('UUID v4:', crypto.randomUUID());
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全警告</div>
+          <p>Math.random 是伪随机数生成器，不应用于密码、Token 等安全场景。始终使用 crypto.randomBytes。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• crypto.randomBytes 生成加密安全的随机数</li>
+            <li>• 不要使用 Math.random 用于安全场景</li>
+            <li>• randomUUID 快速生成 UUID</li>
+            <li>• 根据需求选择合适的字符集</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="20-3-非对称加密.html">← 上一节：非对称加密</a>
+      <a href="20-5-数字签名.html">下一节：数字签名 →</a>
+    </div>
+  </div>
+</body>
+</html>

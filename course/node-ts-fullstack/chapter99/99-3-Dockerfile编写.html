@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>99.3 Dockerfile 编写 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="99-1-容器化概念.html">第99章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>99.3 Dockerfile 编写</h1>
+      <p class="subtitle">掌握 Dockerfile 指令与最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Dockerfile 的作用与结构</li>
+        <li>掌握常用 Dockerfile 指令</li>
+        <li>学会编写生产级 Dockerfile</li>
+        <li>了解多阶段构建优化技巧</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="Dockerfile" class="card-image">
+      <h3 class="card-title">什么是 Dockerfile</h3>
+      <p class="card-text">
+        <strong>Dockerfile</strong> 是一个文本文件，包含了一系列指令，用于自动化构建 Docker 镜像。
+        每条指令都会在镜像中创建一个新的层，最终组成完整的镜像。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 基础 Dockerfile 示例</h2>
+      <div class="code-block">
+<span class="comment"># 基础镜像</span>
+FROM node:20-alpine
+
+<span class="comment"># 设置工作目录</span>
+WORKDIR /app
+
+<span class="comment"># 复制 package.json 和 lock 文件</span>
+COPY package*.json ./
+
+<span class="comment"># 安装依赖</span>
+RUN npm ci --only=production
+
+<span class="comment"># 复制源代码</span>
+COPY . .
+
+<span class="comment"># 暴露端口</span>
+EXPOSE 3000
+
+<span class="comment"># 启动命令</span>
+CMD ["node", "src/index.js"]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 常用指令详解</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指令</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>FROM</code></td>
+            <td>指定基础镜像</td>
+            <td>FROM node:20-alpine</td>
+          </tr>
+          <tr>
+            <td><code>WORKDIR</code></td>
+            <td>设置工作目录</td>
+            <td>WORKDIR /app</td>
+          </tr>
+          <tr>
+            <td><code>COPY</code></td>
+            <td>复制文件到镜像</td>
+            <td>COPY . .</td>
+          </tr>
+          <tr>
+            <td><code>ADD</code></td>
+            <td>添加文件（支持URL和解压）</td>
+            <td>ADD app.tar.gz /app</td>
+          </tr>
+          <tr>
+            <td><code>RUN</code></td>
+            <td>执行命令</td>
+            <td>RUN npm install</td>
+          </tr>
+          <tr>
+            <td><code>CMD</code></td>
+            <td>容器启动命令</td>
+            <td>CMD ["node", "app.js"]</td>
+          </tr>
+          <tr>
+            <td><code>ENTRYPOINT</code></td>
+            <td>容器入口点</td>
+            <td>ENTRYPOINT ["node"]</td>
+          </tr>
+          <tr>
+            <td><code>ENV</code></td>
+            <td>设置环境变量</td>
+            <td>ENV NODE_ENV=production</td>
+          </tr>
+          <tr>
+            <td><code>EXPOSE</code></td>
+            <td>声明暴露端口</td>
+            <td>EXPOSE 3000</td>
+          </tr>
+          <tr>
+            <td><code>ARG</code></td>
+            <td>构建参数</td>
+            <td>ARG VERSION=1.0</td>
+          </tr>
+          <tr>
+            <td><code>LABEL</code></td>
+            <td>添加元数据</td>
+            <td>LABEL version="1.0"</td>
+          </tr>
+          <tr>
+            <td><code>HEALTHCHECK</code></td>
+            <td>健康检查</td>
+            <td>HEALTHCHECK CMD curl -f localhost:3000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 多阶段构建</h2>
+      <p>多阶段构建可以显著减小最终镜像大小，将构建环境和运行环境分离。</p>
+      <div class="code-block">
+<span class="comment"># 第一阶段：构建</span>
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+<span class="comment"># 第二阶段：运行</span>
+FROM node:20-alpine
+
+WORKDIR /app
+
+<span class="comment"># 只复制需要的文件</span>
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+EXPOSE 3000
+CMD ["node", "dist/index.js"]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> TypeScript 项目 Dockerfile</h2>
+      <div class="code-block">
+<span class="comment"># 构建阶段</span>
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+<span class="comment"># 复制依赖文件</span>
+COPY package*.json ./
+COPY tsconfig.json ./
+
+<span class="comment"># 安装所有依赖（包括 devDependencies）</span>
+RUN npm ci
+
+<span class="comment"># 复制源代码</span>
+COPY src ./src
+
+<span class="comment"># 编译 TypeScript</span>
+RUN npm run build
+
+<span class="comment"># 生产阶段</span>
+FROM node:20-alpine
+
+WORKDIR /app
+
+<span class="comment"># 设置环境变量</span>
+ENV NODE_ENV=production
+
+<span class="comment"># 复制编译产物和生产依赖</span>
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+
+<span class="comment"># 只安装生产依赖</span>
+RUN npm ci --only=production
+
+<span class="comment"># 创建非 root 用户</span>
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+<span class="comment"># 切换用户</span>
+USER nodejs
+
+EXPOSE 3000
+
+<span class="comment"># 健康检查</span>
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+CMD ["node", "dist/index.js"]
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Dockerfile 最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用官方基础镜像，优先选择 Alpine 版本</li>
+          <li>合理利用构建缓存，将不常变化的指令放在前面</li>
+          <li>使用 .dockerignore 排除不需要的文件</li>
+          <li>避免在镜像中存储敏感信息</li>
+          <li>使用非 root 用户运行容器</li>
+          <li>合并 RUN 指令减少镜像层数</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚫</span> .dockerignore 文件</h2>
+      <p>排除不需要复制到镜像中的文件，减小镜像体积。</p>
+      <div class="code-block">
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+.env
+.env.*
+*.md
+.vscode
+.idea
+coverage
+.DS_Store
+*.log
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 构建镜像命令</h2>
+      <div class="code-block">
+<span class="comment"># 基本构建</span>
+docker build -t myapp:latest .
+
+<span class="comment"># 指定 Dockerfile 路径</span>
+docker build -t myapp:latest -f Dockerfile.prod .
+
+<span class="comment"># 使用构建参数</span>
+docker build --build-arg NODE_ENV=production -t myapp:latest .
+
+<span class="comment"># 多平台构建</span>
+docker buildx build --platform linux/amd64,linux/arm64 -t myapp:latest .
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Dockerfile 是构建镜像的脚本文件</li>
+            <li>• 常用指令：FROM, WORKDIR, COPY, RUN, CMD, EXPOSE</li>
+            <li>• 多阶段构建可以显著减小镜像体积</li>
+            <li>• 使用 .dockerignore 排除不需要的文件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="99-2-Docker安装.html">← 上一节</a>
+      <a href="99-4-Docker-Compose.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>51.3 密码存储安全 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="51-1-认证与授权.html">第五十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>51.3 密码存储安全</h1>
+      <p class="subtitle">保护用户密码的最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解密码哈希的原理</li>
+        <li>掌握 bcrypt 库的使用</li>
+        <li>了解加盐技术的作用</li>
+        <li>学会防止常见密码攻击</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚫</span> 错误的密码存储方式</h2>
+      <div class="code-block">
+// ❌ 绝对不要这样做！
+
+// 1. 明文存储
+const users = [
+  { username: 'alice', password: '123456' },  // 危险！
+  { username: 'bob', password: 'password' }   // 危险！
+];
+
+// 2. 简单加密（可逆）
+const encrypted = encrypt(password, key);  // 不安全，密钥泄露后全部暴露
+
+// 3. 简单哈希（MD5、SHA1）
+import { createHash } from 'crypto';
+
+const hash = createHash('md5').update(password).digest('hex');
+// 问题：彩虹表攻击可以快速破解
+
+// 4. 固定盐值哈希
+const salt = 'fixed_salt_value';
+const hash = createHash('sha256')
+  .update(password + salt)
+  .digest('hex');
+// 问题：相同的密码产生相同的哈希，仍然可以被批量破解
+
+/*
+为什么这些方式不安全？
+
+1. 明文存储：数据库泄露 = 所有用户密码泄露
+2. 加密：密钥管理困难，一旦泄露等同明文
+3. 简单哈希：彩虹表可以快速反查
+4. 固定盐值：仍可构建专用彩虹表
+
+正确做法：使用慢哈希算法 + 随机盐值
+*/
+      </div>
+
+      <div class="tip-box danger">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全警告</div>
+          <p>永远不要存储明文密码！即使数据库只有内部访问权限，也要假设数据可能泄露。使用安全的哈希算法是保护用户的第一道防线。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> bcrypt 安全哈希</h2>
+      <div class="code-block">
+import bcrypt from 'bcrypt';
+
+// 配置
+const SALT_ROUNDS = 12;  // 工作因子，越大越安全但越慢
+
+// 哈希密码
+async function hashPassword(password: string): Promise&lt;string&gt; {
+  const salt = await bcrypt.genSalt(SALT_ROUNDS);
+  const hash = await bcrypt.hash(password, salt);
+  return hash;
+  // 或者简化为：return bcrypt.hash(password, SALT_ROUNDS);
+}
+
+// 验证密码
+async function verifyPassword(
+  password: string,
+  hash: string
+): Promise&lt;boolean&gt; {
+  return bcrypt.compare(password, hash);
+}
+
+// 完整的用户注册示例
+async function registerUser(
+  username: string,
+  email: string,
+  password: string
+): Promise&lt;User&gt; {
+  // 1. 验证密码强度
+  if (!isPasswordStrong(password)) {
+    throw new Error('密码强度不足');
+  }
+
+  // 2. 检查用户是否已存在
+  const existingUser = await User.findOne({
+    $or: [{ username }, { email }]
+  });
+
+  if (existingUser) {
+    throw new Error('用户名或邮箱已被注册');
+  }
+
+  // 3. 哈希密码
+  const passwordHash = await hashPassword(password);
+
+  // 4. 创建用户
+  const user = await User.create({
+    username,
+    email,
+    passwordHash,
+    createdAt: new Date()
+  });
+
+  return user;
+}
+
+// 密码强度检查
+function isPasswordStrong(password: string): boolean {
+  const minLength = 8;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|&lt;&gt;]/.test(password);
+
+  return (
+    password.length >= minLength &&
+    hasUpperCase &&
+    hasLowerCase &&
+    hasNumbers &&
+    hasSpecialChar
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧂</span> 盐值与工作因子</h2>
+      <div class="code-block">
+// bcrypt 哈希格式解析
+// $2b$12$N9qo8uLOickgx2ZMRZoMy.Mrq7q3XJYzXKZ2YzXKZ2YzXKZ2YzXKZ2a
+
+/*
+$2b$     - bcrypt版本标识
+$12$     - 工作因子（cost factor）= 2^12 次迭代
+$N9qo... - 22字符的盐值（Base64编码）
+剩余部分 - 31字符的哈希值（Base64编码）
+*/
+
+// 工作因子选择
+const COST_FACTORS = {
+  DEVELOPMENT: 4,   // 开发环境，快速
+  TESTING: 4,       // 测试环境
+  PRODUCTION: 12,   // 生产环境，推荐值
+  HIGH_SECURITY: 14 // 高安全要求
+};
+
+// 计算哈希时间（参考值）
+async function benchmarkHash(rounds: number): Promise&lt;number&gt; {
+  const start = Date.now();
+  await bcrypt.hash('test-password', rounds);
+  return Date.now() - start;
+}
+
+// 输出示例：
+// rounds=10: ~100ms
+// rounds=12: ~400ms
+// rounds=14: ~1600ms
+
+// 动态调整工作因子
+async function getOptimalRounds(): Promise&lt;number&gt; {
+  const targetTime = 300; // 目标哈希时间（毫秒）
+
+  for (let rounds = 10; rounds <= 14; rounds++) {
+    const time = await benchmarkHash(rounds);
+    if (time >= targetTime) {
+      return rounds;
+    }
+  }
+
+  return 12; // 默认值
+}
+
+// 密码迁移升级（重新哈希）
+async function checkAndRehash(
+  user: User,
+  password: string
+): Promise&lt;void&gt; {
+  const currentHash = user.passwordHash;
+
+  // 获取当前哈希的工作因子
+  const currentRounds = bcrypt.getRounds(currentHash);
+  const targetRounds = parseInt(process.env.BCRYPT_ROUNDS || '12');
+
+  // 如果工作因子需要升级，重新哈希
+  if (currentRounds < targetRounds) {
+    const newHash = await bcrypt.hash(password, targetRounds);
+    await User.findByIdAndUpdate(user.id, { passwordHash: newHash });
+    console.log(`用户 ${user.username} 密码已升级哈希`);
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">工作因子选择</div>
+          <p>工作因子每增加1，哈希时间翻倍。选择原则：哈希时间在200-500ms之间，既能防止暴力破解，又不会明显影响用户体验。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 防止密码攻击</h2>
+      <div class="code-block">
+import rateLimit from 'express-rate-limit';
+
+// 1. 登录限流
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15分钟
+  max: 5,                    // 最多5次尝试
+  message: { error: '登录尝试次数过多，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.post('/login', loginLimiter, async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await User.findOne({ username });
+
+  // 即使用户不存在，也进行哈希计算（防止时序攻击）
+  const hashToCompare = user?.passwordHash || '$2b$12$dummyhashtopreventtiming';
+
+  const isValid = await bcrypt.compare(password, hashToCompare);
+
+  if (!user || !isValid) {
+    // 记录失败登录
+    await LoginAttempt.create({
+      ip: req.ip,
+      username,
+      success: false,
+      timestamp: new Date()
+    });
+
+    return res.status(401).json({ error: '用户名或密码错误' });
+  }
+
+  // 检查账户锁定
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    return res.status(423).json({ error: '账户已锁定' });
+  }
+
+  // 登录成功，重置失败计数
+  await User.findByIdAndUpdate(user.id, {
+    lastLogin: new Date(),
+    failedLoginAttempts: 0
+  });
+
+  // 生成Token...
+  res.json({ message: '登录成功', token: generateToken(user) });
+});
+
+// 2. 密码泄露检测
+import haveIBeenPwned from 'hibp';
+
+async function checkPasswordBreach(password: string): Promise&lt;boolean&gt; {
+  try {
+    const result = await haveIBeenPwned.breach(password);
+    return result > 0;  // 如果在泄露数据库中找到
+  } catch (error) {
+    console.error('检查密码泄露失败:', error);
+    return false;
+  }
+}
+
+// 注册时检查
+app.post('/register', async (req, res) => {
+  const { password } = req.body;
+
+  const isBreached = await checkPasswordBreach(password);
+
+  if (isBreached) {
+    return res.status(400).json({
+      error: '该密码已在数据泄露中出现，请选择其他密码'
+    });
+  }
+
+  // 继续注册流程...
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 永远不要存储明文密码</li>
+            <li>• 使用bcrypt进行密码哈希</li>
+            <li>• 工作因子选择12-14，平衡安全与性能</li>
+            <li>• 实施登录限流防止暴力破解</li>
+            <li>• 检查密码是否在泄露数据库中</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="51-2-常见认证方式.html">← 上一节：常见认证方式</a>
+      <a href="51-4-会话管理.html">下一节：会话管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

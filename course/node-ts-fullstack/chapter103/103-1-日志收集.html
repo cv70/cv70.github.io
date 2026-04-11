@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>103.1 日志收集 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="103-1-日志收集.html">第103章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>103.1 日志收集</h1>
+      <p class="subtitle">构建完整的日志收集与管理体系</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解日志的重要性与分类</li>
+        <li>掌握 Node.js 日志最佳实践</li>
+        <li>学会使用主流日志框架</li>
+        <li>了解日志收集架构设计</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="Log Collection" class="card-image">
+      <h3 class="card-title">为什么需要日志</h3>
+      <p class="card-text">
+        日志是应用运行的"黑匣子"，记录了系统的行为和状态。
+        完善的日志系统可以帮助快速定位问题、分析性能、审计安全、优化业务。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 日志级别与分类</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>级别</th>
+            <th>说明</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>FATAL</strong></td>
+            <td>致命错误</td>
+            <td>系统崩溃、数据丢失</td>
+          </tr>
+          <tr>
+            <td><strong>ERROR</strong></td>
+            <td>错误</td>
+            <td>请求失败、异常抛出</td>
+          </tr>
+          <tr>
+            <td><strong>WARN</strong></td>
+            <td>警告</td>
+            <td>潜在问题、降级处理</td>
+          </tr>
+          <tr>
+            <td><strong>INFO</strong></td>
+            <td>信息</td>
+            <td>业务流程、重要事件</td>
+          </tr>
+          <tr>
+            <td><strong>DEBUG</strong></td>
+            <td>调试</td>
+            <td>调试信息、详细流程</td>
+          </tr>
+          <tr>
+            <td><strong>TRACE</strong></td>
+            <td>追踪</td>
+            <td>方法调用、变量跟踪</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> Winston 日志框架</h2>
+      <div class="code-block">
+<span class="comment">// src/utils/logger.ts</span>
+import winston from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
+
+const { combine, timestamp, printf, colorize, json } = winston.format;
+
+<span class="comment">// 自定义日志格式</span>
+const customFormat = printf(({ level, message, timestamp, ...metadata }) => {
+  const meta = Object.keys(metadata).length ? JSON.stringify(metadata) : '';
+  return `${timestamp} [${level}]: ${message} ${meta}`;
+});
+
+<span class="comment">// 创建 logger 实例</span>
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: combine(
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    json()
+  ),
+  defaultMeta: { service: 'myapp' },
+  transports: [
+    <span class="comment">// 控制台输出</span>
+    new winston.transports.Console({
+      format: combine(colorize(), customFormat)
+    }),
+
+    <span class="comment">// 错误日志文件</span>
+    new DailyRotateFile({
+      filename: 'logs/error-%DATE%.log',
+      datePattern: 'YYYY-MM-DD',
+      level: 'error',
+      maxSize: '20m',
+      maxFiles: '14d'
+    }),
+
+    <span class="comment">// 所有日志文件</span>
+    new DailyRotateFile({
+      filename: 'logs/combined-%DATE%.log',
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '30d'
+    })
+  ]
+});
+
+<span class="comment">// 生产环境添加异常处理</span>
+if (process.env.NODE_ENV === 'production') {
+  logger.exceptions.handle(
+    new winston.transports.File({ filename: 'logs/exceptions.log' })
+  );
+  logger.rejections.handle(
+    new winston.transports.File({ filename: 'logs/rejections.log' })
+  );
+}
+
+export default logger;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 日志中间件</h2>
+      <div class="code-block">
+<span class="comment">// src/middleware/requestLogger.ts</span>
+import { Request, Response, NextFunction } from 'express';
+import logger from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
+
+<span class="comment">// 请求上下文扩展</span>
+declare global {
+  namespace Express {
+    interface Request {
+      requestId: string;
+      startTime: number;
+    }
+  }
+}
+
+export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+  req.requestId = req.headers['x-request-id'] as string || uuidv4();
+  req.startTime = Date.now();
+
+  <span class="comment">// 记录请求</span>
+  logger.info('Incoming request', {
+    requestId: req.requestId,
+    method: req.method,
+    url: req.url,
+    ip: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+
+  <span class="comment">// 记录响应</span>
+  const originalEnd = res.end;
+  res.end = function (chunk?: any, encoding?: any) {
+    const responseTime = Date.now() - req.startTime;
+
+    logger.info('Outgoing response', {
+      requestId: req.requestId,
+      statusCode: res.statusCode,
+      responseTime: `${responseTime}ms`
+    });
+
+    return originalEnd.call(this, chunk, encoding);
+  } as any;
+
+  next();
+};
+
+<span class="comment">// 使用中间件</span>
+app.use(requestLogger);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 结构化日志实践</h2>
+      <div class="code-block">
+<span class="comment">// 业务日志记录</span>
+import logger from '../utils/logger';
+
+class UserService {
+  async createUser(data: CreateUserDto) {
+    const startTime = Date.now();
+
+    try {
+      logger.info('Creating user', {
+        action: 'createUser',
+        email: data.email
+      });
+
+      const user = await this.userRepository.create(data);
+
+      logger.info('User created successfully', {
+        action: 'createUser',
+        userId: user.id,
+        duration: Date.now() - startTime
+      });
+
+      return user;
+    } catch (error) {
+      logger.error('Failed to create user', {
+        action: 'createUser',
+        email: data.email,
+        error: error.message,
+        stack: error.stack,
+        duration: Date.now() - startTime
+      });
+      throw error;
+    }
+  }
+}
+
+<span class="comment">// 日志输出示例</span>
+{
+  "level": "info",
+  "timestamp": "2024-01-15 10:30:00",
+  "service": "myapp",
+  "action": "createUser",
+  "userId": "abc123",
+  "duration": 45,
+  "message": "User created successfully"
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 日志收集架构</h2>
+      <div class="code-block">
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   应用层    │────▶│   收集层    │────▶│   存储层    │
+│             │     │             │     │             │
+│ Node.js App │     │ Filebeat    │     │ Elasticsearch│
+│ Winston     │     │ Fluentd     │     │ SLS/CloudWatch│
+│ Pino        │     │ Logstash    │     │ Loki        │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                               │
+                                               ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   告警层    │◀────│   分析层    │◀────│   展示层    │
+│             │     │             │     │             │
+│ AlertManager│     │ Log Analysis│     │ Kibana      │
+│ PagerDuty   │     │ ML Anomaly  │     │ Grafana     │
+│ Webhook     │     │             │     │ CloudWatch  │
+└─────────────┘     └─────────────┘     └─────────────┘
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">日志最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用结构化日志格式 (JSON)</li>
+          <li>包含请求 ID 便于追踪</li>
+          <li>记录关键业务指标和性能数据</li>
+          <li>敏感信息脱敏处理</li>
+          <li>合理设置日志级别和保留周期</li>
+          <li>使用日志轮转避免文件过大</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 日志分为 FATAL/ERROR/WARN/INFO/DEBUG/TRACE 六个级别</li>
+            <li>• Winston 是 Node.js 最流行的日志框架</li>
+            <li>• 使用结构化日志 (JSON) 便于分析处理</li>
+            <li>• 记录请求 ID 实现请求链路追踪</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter102/102-5-阿里云函数计算.html">← 上一章</a>
+      <a href="103-2-ELK-Stack.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

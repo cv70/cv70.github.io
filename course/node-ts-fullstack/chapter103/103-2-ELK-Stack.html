@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>103.2 ELK Stack - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="103-1-日志收集.html">第103章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>103.2 ELK Stack</h1>
+      <p class="subtitle">使用 ELK Stack 构建企业级日志平台</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 ELK Stack 的组件与架构</li>
+        <li>掌握 Elasticsearch 数据存储</li>
+        <li>学会使用 Logstash 收集日志</li>
+        <li>掌握 Kibana 可视化分析</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="ELK Stack" class="card-image">
+      <h3 class="card-title">什么是 ELK Stack</h3>
+      <p class="card-text">
+        <strong>ELK Stack</strong> 是三个开源项目的首字母缩写：Elasticsearch、Logstash 和 Kibana。
+        它是业界最流行的日志分析平台，用于收集、存储、分析和可视化日志数据。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> ELK 架构组成</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+          <h3 class="card-title">Elasticsearch</h3>
+          <p class="card-text">分布式搜索引擎，负责日志存储和检索</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">Logstash</h3>
+          <p class="card-text">数据处理管道，负责日志收集和转换</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">Kibana</h3>
+          <p class="card-text">可视化平台，负责日志展示和分析</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 数据流转架构</h2>
+      <div class="code-block">
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   应用日志   │────▶│  Filebeat   │────▶│  Logstash   │
+│             │     │  (采集)      │     │  (处理)      │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                               │
+                          ┌─────────────┐      │
+                          │   Kibana    │      ▼
+                          │   (展示)    │◀────┬─────────────┐
+                          └─────────────┘     │ Elasticsearch│
+                                              │   (存储)     │
+                                              └─────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐳</span> Docker Compose 部署</h2>
+      <div class="code-block">
+<span class="comment"># docker-compose.yml</span>
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - elk
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: logstash
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./logstash/config:/usr/share/logstash/config
+    ports:
+      - "5044:5044"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - logstash
+    networks:
+      - elk
+
+volumes:
+  es_data:
+
+networks:
+  elk:
+    driver: bridge
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> Logstash 配置</h2>
+      <div class="code-block">
+<span class="comment"># logstash/pipeline/logstash.conf</span>
+input {
+  beats {
+    port => 5044
+  }
+}
+
+filter {
+  <span class="comment"># 解析 JSON 日志</span>
+  if [message] =~ /^\{/ {
+    json {
+      source => "message"
+      target => "parsed"
+    }
+  }
+
+  <span class="comment"># 提取时间戳</span>
+  date {
+    match => ["timestamp", "YYYY-MM-DD HH:mm:ss", "ISO8601"]
+    target => "@timestamp"
+  }
+
+  <span class="comment"># 添加字段</span>
+  mutate {
+    add_field => {
+      "log_type" => "application"
+      "environment" => "${ENV:production}"
+    }
+    remove_field => ["message"] if [parsed]
+  }
+
+  <span class="comment"># 错误日志处理</span>
+  if [level] == "ERROR" or [level] == "FATAL" {
+    mutate {
+      add_tags => ["error", "alert"]
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "myapp-logs-%{+YYYY.MM.dd}"
+  }
+
+  <span class="comment"># 错误日志同时输出到文件</span>
+  if "error" in [tags] {
+    file {
+      path => "/var/log/logstash/errors-%{+YYYY-MM-dd}.log"
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> Filebeat 配置</h2>
+      <div class="code-block">
+<span class="comment"># filebeat/filebeat.yml</span>
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/myapp/*.log
+    json.keys_under_root: true
+    json.add_error_key: true
+    fields:
+      app: myapp
+      env: production
+
+  - type: container
+    enabled: true
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: info
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Kibana 常用查询</h2>
+      <div class="code-block">
+<span class="comment"># KQL (Kibana Query Language) 查询示例</span>
+
+<span class="comment"># 查询错误日志</span>
+level: "ERROR" OR level: "FATAL"
+
+<span class="comment"># 查询特定用户的请求</span>
+userId: "abc123"
+
+<span class="comment"># 查询慢请求</span>
+responseTime > 1000
+
+<span class="comment"># 组合查询</span>
+level: "ERROR" AND service: "user-service"
+
+<span class="comment"># 模糊匹配</span>
+message: *timeout*
+
+<span class="comment"># 时间范围</span>
+@timestamp >= "2024-01-01" AND @timestamp < "2024-01-02"
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">ELK Stack 最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用 ILM (索引生命周期管理) 自动清理旧数据</li>
+          <li>配置合理的分片数量，避免过度分片</li>
+          <li>使用 Filebeat 代替 Logstash 直接收集</li>
+          <li>为常用查询字段创建索引模板</li>
+          <li>监控系统资源，Elasticsearch 内存占用较大</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ELK = Elasticsearch + Logstash + Kibana</li>
+            <li>• Elasticsearch 负责存储和检索</li>
+            <li>• Logstash 负责数据收集和处理</li>
+            <li>• Kibana 提供可视化分析界面</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="103-1-日志收集.html">← 上一节</a>
+      <a href="103-3-应用监控.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

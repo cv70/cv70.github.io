@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.2 express-session - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="52-1-Session原理.html">第五十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>52.2 express-session</h1>
+      <p class="subtitle">Express 中的 Session 中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 express-session 的安装与配置</li>
+        <li>理解各个配置选项的作用</li>
+        <li>学会使用 Session 存储和读取数据</li>
+        <li>了解 TypeScript 类型扩展</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装与基础配置</h2>
+      <div class="code-block">
+// 安装依赖
+// npm install express-session
+// npm install @types/express-session -D
+
+import express from 'express';
+import session from 'express-session';
+
+const app = express();
+
+// 基础配置
+app.use(session({
+  secret: process.env.SESSION_SECRET!,  // 必需：签名密钥
+  resave: false,                         // 不强制重新保存
+  saveUninitialized: false,              // 不保存未修改的 Session
+  cookie: {
+    secure: false,                       // 开发环境设为 false
+    httpOnly: true,                      // 防止 XSS
+    maxAge: 1000 * 60 * 60 * 24         // 24小时
+  }
+}));
+
+// TypeScript 类型扩展
+declare module 'express-session' {
+  interface SessionData {
+    userId?: string;
+    userRole?: string;
+    username?: string;
+    lastLogin?: Date;
+    cart?: CartItem[];
+  }
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+  price: number;
+}
+
+// 扩展 Request 类型
+declare module 'express' {
+  interface Request {
+    session: session.Session & Partial&lt;session.SessionData&gt;;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置选项详解</h2>
+      <div class="code-block">
+// 完整配置选项
+const sessionOptions: session.SessionOptions = {
+  // 必需：Session 签名密钥
+  // 可以是字符串或字符串数组（用于密钥轮换）
+  secret: process.env.SESSION_SECRET!,
+
+  // 是否在每次请求时重新保存 Session
+  // 建议 false，减少不必要的存储操作
+  resave: false,
+
+  // 是否保存未初始化的 Session
+  // 建议 false，符合 GDPR 要求（不存储未使用的 Cookie）
+  saveUninitialized: false,
+
+  // Session 名称（Cookie 名称）
+  // 不要使用默认的 'connect.sid'
+  name: 'app.session.id',
+
+  // 是否使用滚动过期
+  // true: 每次请求重置过期时间
+  rolling: true,
+
+  // 是否信任反向代理
+  proxy: true,
+
+  // 临时 Session（不设置 Cookie）
+  // 用于 API 场景，通过其他方式传递 Session ID
+  unset: 'destroy' as const,  // 或 'keep'
+
+  // Cookie 配置
+  cookie: {
+    // 是否仅 HTTPS
+    secure: process.env.NODE_ENV === 'production',
+
+    // 是否仅 HTTP（防止 JavaScript 访问）
+    httpOnly: true,
+
+    // 有效期（毫秒）
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7天
+
+    // 路径
+    path: '/',
+
+    // 域名
+    domain: undefined,
+
+    // SameSite 策略
+    sameSite: 'lax' as const,  // 'strict' | 'lax' | 'none'
+  },
+
+  // Session ID 生成函数
+  genid: (req) => {
+    return crypto.randomUUID();
+  },
+
+  // Session 存储（默认内存存储）
+  // store: new RedisStore({ ... })
+};
+
+app.use(session(sessionOptions));
+
+// 环境差异化配置
+const config = {
+  development: {
+    secret: 'dev-secret-key',
+    cookie: { secure: false }
+  },
+  production: {
+    secret: process.env.SESSION_SECRET!,
+    cookie: { secure: true, sameSite: 'strict' as const }
+  }
+};
+
+const env = process.env.NODE_ENV || 'development';
+app.use(session(config[env]));
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">saveUninitialized</div>
+          <p>设为false可以避免为未登录用户创建空的Session，节省存储空间，也符合GDPR关于Cookie同意的要求。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> Session 数据操作</h2>
+      <div class="code-block">
+// 登录：存储用户信息
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await authenticateUser(username, password);
+
+  if (!user) {
+    return res.status(401).json({ error: '认证失败' });
+  }
+
+  // 重新生成 Session（防止固定攻击）
+  req.session.regenerate((err) => {
+    if (err) {
+      return res.status(500).json({ error: '会话创建失败' });
+    }
+
+    // 存储 Session 数据
+    req.session.userId = user.id;
+    req.session.username = user.username;
+    req.session.userRole = user.role;
+    req.session.lastLogin = new Date();
+
+    res.json({
+      message: '登录成功',
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
+    });
+  });
+});
+
+// 获取当前用户信息
+app.get('/me', (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: '未登录' });
+  }
+
+  res.json({
+    userId: req.session.userId,
+    username: req.session.username,
+    role: req.session.userRole
+  });
+});
+
+// 更新 Session 数据
+app.put('/session', (req, res) => {
+  const { theme, language } = req.body;
+
+  if (theme) req.session.theme = theme;
+  if (language) req.session.language = language;
+
+  // 手动保存（通常不需要，中间件会自动保存）
+  req.session.save((err) => {
+    if (err) {
+      return res.status(500).json({ error: '保存失败' });
+    }
+    res.json({ message: '设置已更新' });
+  });
+});
+
+// 登出：销毁 Session
+app.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: '登出失败' });
+    }
+
+    // 清除 Cookie
+    res.clearCookie('app.session.id');
+
+    res.json({ message: '登出成功' });
+  });
+});
+
+// 购物车示例：复杂 Session 数据
+app.post('/cart/add', (req, res) => {
+  const { productId, quantity, price } = req.body;
+
+  // 初始化购物车
+  if (!req.session.cart) {
+    req.session.cart = [];
+  }
+
+  // 检查商品是否已在购物车
+  const existingItem = req.session.cart.find(
+    item => item.productId === productId
+  );
+
+  if (existingItem) {
+    existingItem.quantity += quantity;
+  } else {
+    req.session.cart.push({ productId, quantity, price });
+  }
+
+  res.json({
+    message: '已添加到购物车',
+    cart: req.session.cart,
+    total: req.session.cart.reduce((sum, item) =>
+      sum + item.quantity * item.price, 0
+    )
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证中间件</h2>
+      <div class="code-block">
+// Session 认证中间件
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({
+      error: '请先登录',
+      code: 'UNAUTHORIZED'
+    });
+  }
+
+  next();
+}
+
+// 角色检查中间件
+function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userRole) {
+      return res.status(401).json({ error: '未认证' });
+    }
+
+    if (!roles.includes(req.session.userRole)) {
+      return res.status(403).json({
+        error: '权限不足',
+        required: roles,
+        current: req.session.userRole
+      });
+    }
+
+    next();
+  };
+}
+
+// 使用中间件保护路由
+app.get('/admin/dashboard',
+  requireAuth,
+  requireRole('admin'),
+  (req, res) => {
+    res.json({ message: '管理员面板' });
+  }
+);
+
+app.get('/profile', requireAuth, async (req, res) => {
+  const user = await User.findById(req.session.userId);
+  res.json(user);
+});
+
+// 可选认证中间件（登录用户有额外信息）
+function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  // 不强制要求登录，但设置用户信息
+  if (req.session.userId) {
+    res.locals.isAuthenticated = true;
+    res.locals.userId = req.session.userId;
+  } else {
+    res.locals.isAuthenticated = false;
+  }
+  next();
+}
+
+app.get('/public/content', optionalAuth, (req, res) => {
+  res.json({
+    content: '公开内容',
+    personalized: res.locals.isAuthenticated ?
+      '已登录用户可以看到这个' : null
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• secret是必需配置，应使用环境变量</li>
+            <li>• resave和saveUninitialized建议设为false</li>
+            <li>• 登录时调用regenerate重新生成Session ID</li>
+            <li>• 登出时调用destroy销毁Session</li>
+            <li>• 使用TypeScript扩展SessionData类型</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="52-1-Session原理.html">← 上一节：Session原理</a>
+      <a href="52-3-Session存储.html">下一节：Session存储 →</a>
+    </div>
+  </div>
+</body>
+</html>

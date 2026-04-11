@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>55.2 权限中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="55-1-RBAC模型.html">第五十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>55.2 权限中间件</h1>
+      <p class="subtitle">实现权限验证中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握权限中间件的设计</li>
+        <li>学会权限检查的实现</li>
+        <li>理解装饰器模式应用</li>
+        <li>学会权限缓存优化</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基础权限中间件</h2>
+      <div class="code-block">
+// src/middleware/permission.middleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { RBACService } from '../services/rbac.service';
+
+/**
+ * 检查用户是否有指定权限
+ */
+export function requirePermission(permission: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: '请先登录',
+          code: 'UNAUTHORIZED',
+        });
+      }
+
+      const userId = (req.user as any)._id || (req.user as any).userId;
+      const hasPermission = await RBACService.hasPermission(userId, permission);
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          success: false,
+          message: '权限不足',
+          code: 'FORBIDDEN',
+          required: permission,
+        });
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * 检查用户是否有指定角色
+ */
+export function requireRole(roleName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: '请先登录' });
+      }
+
+      const userId = (req.user as any)._id || (req.user as any).userId;
+      const hasRole = await RBACService.hasRole(userId, roleName);
+
+      if (!hasRole) {
+        return res.status(403).json({
+          message: '角色权限不足',
+          required: roleName,
+        });
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * 检查用户是否有任意一个权限
+ */
+export function requireAnyPermission(...permissions: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: '请先登录' });
+      }
+
+      const userId = (req.user as any)._id || (req.user as any).userId;
+
+      for (const permission of permissions) {
+        const has = await RBACService.hasPermission(userId, permission);
+        if (has) return next();
+      }
+
+      return res.status(403).json({
+        message: '权限不足',
+        required: permissions,
+        condition: 'ANY',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * 检查用户是否有所有权限
+ */
+export function requireAllPermissions(...permissions: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: '请先登录' });
+      }
+
+      const userId = (req.user as any)._id || (req.user as any).userId;
+
+      for (const permission of permissions) {
+        const has = await RBACService.hasPermission(userId, permission);
+        if (!has) {
+          return res.status(403).json({
+            message: '权限不足',
+            missing: permission,
+          });
+        }
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛣️</span> 路由中使用中间件</h2>
+      <div class="code-block">
+// src/routes/user.routes.ts
+import express from 'express';
+import { authenticate } from '../middleware/auth.middleware';
+import { requirePermission, requireRole } from '../middleware/permission.middleware';
+
+const router = express.Router();
+
+// 所有路由需要认证
+router.use(authenticate);
+
+// 获取用户列表 - 需要 user:read 权限
+router.get('/',
+  requirePermission('user:read'),
+  UserController.list
+);
+
+// 创建用户 - 需要 user:create 权限
+router.post('/',
+  requirePermission('user:create'),
+  UserController.create
+);
+
+// 更新用户 - 需要 user:update 权限
+router.put('/:id',
+  requirePermission('user:update'),
+  UserController.update
+);
+
+// 删除用户 - 需要 user:delete 权限
+router.delete('/:id',
+  requirePermission('user:delete'),
+  UserController.delete
+);
+
+// 管理员面板 - 只允许 admin 角色
+router.get('/admin/dashboard',
+  requireRole('admin'),
+  AdminController.dashboard
+);
+
+// 编辑文章 - 需要 article:create 或 article:update
+router.post('/articles',
+  requireAnyPermission('article:create', 'article:update'),
+  ArticleController.create
+);
+
+// 发布文章 - 需要 article:publish 和 article:update
+router.put('/articles/:id/publish',
+  requireAllPermissions('article:publish', 'article:update'),
+  ArticleController.publish
+);
+
+export default router;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">中间件链</div>
+          <p>权限中间件应放在认证中间件之后，确保req.user已存在。多个权限检查可以组合使用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 权限缓存优化</h2>
+      <div class="code-block">
+// src/services/rbac-cache.service.ts
+import Redis from 'ioredis';
+import { RBACService } from './rbac.service';
+import { Types } from 'mongoose';
+
+const redis = new Redis(process.env.REDIS_URL);
+
+export class RBACCacheService {
+  private static CACHE_PREFIX = 'rbac:permissions:';
+  private static CACHE_TTL = 300; // 5分钟
+
+  /**
+   * 获取用户权限（带缓存）
+   */
+  static async getUserPermissions(userId: Types.ObjectId): Promise<string[]> {
+    const cacheKey = `${this.CACHE_PREFIX}${userId}`;
+
+    // 尝试从缓存获取
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    // 从数据库获取
+    const permissions = await RBACService.getUserPermissions(userId);
+
+    // 存入缓存
+    await redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(permissions));
+
+    return permissions;
+  }
+
+  /**
+   * 检查权限（带缓存）
+   */
+  static async hasPermission(userId: Types.ObjectId, permission: string): Promise<boolean> {
+    const permissions = await this.getUserPermissions(userId);
+    const [resource, action] = permission.split(':');
+
+    return (
+      permissions.includes(permission) ||
+      permissions.includes(`${resource}:*`) ||
+      permissions.includes('*:*')
+    );
+  }
+
+  /**
+   * 清除用户权限缓存
+   */
+  static async clearUserCache(userId: Types.ObjectId): Promise<void> {
+    await redis.del(`${this.CACHE_PREFIX}${userId}`);
+  }
+}
+
+// 角色或权限变更时清除缓存
+async function onRoleUpdated(roleId: Types.ObjectId): Promise<void> {
+  const users = await User.find({ roles: roleId });
+  for (const user of users) {
+    await RBACCacheService.clearUserCache(user._id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• requirePermission 检查单一权限</li>
+            <li>• requireAnyPermission 检查任意权限</li>
+            <li>• requireAllPermissions 检查所有权限</li>
+            <li>• 使用 Redis 缓存提升性能</li>
+            <li>• 权限变更时清除相关缓存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="55-1-RBAC模型.html">← 上一节：RBAC 模型</a>
+      <a href="55-3-资源权限.html">下一节：资源权限 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>80.5 拦截器 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>80.5 拦截器</h1>
+      <p class="subtitle">请求和响应的中间件处理</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>Axios 拦截器允许你在请求发送之前或响应到达 then/catch 之前对它们进行处理。这是实现全局请求处理、错误处理、日志记录、认证注入等功能的强大工具。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解拦截器的工作原理和执行顺序</li>
+        <li>掌握请求拦截器和响应拦截器的使用</li>
+        <li>学会实现常见的拦截器应用场景</li>
+        <li>了解拦截器的管理和移除</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 拦截器基础</h2>
+
+      <h3>请求拦截器</h3>
+      <p>请求拦截器在请求发送之前执行，可以修改请求配置或添加通用处理。</p>
+      <div class="code-block"><span class="keyword">import</span> axios <span class="keyword">from</span> <span class="string">'axios'</span>;
+
+<span class="keyword">const</span> api = axios.create();
+
+<span class="comment">// 添加请求拦截器</span>
+api.interceptors.request.use(
+  <span class="function">config</span> => {
+    <span class="comment">// 在发送请求之前做些什么</span>
+    console.log(<span class="string">'Request:'</span>, config.url);
+
+    <span class="comment">// 添加 Token</span>
+    <span class="keyword">const</span> token = localStorage.getItem(<span class="string">'token'</span>);
+    <span class="keyword">if</span> (token) {
+      config.headers.Authorization = <span class="string">`Bearer ${token}`</span>;
+    }
+
+    <span class="keyword">return</span> config;
+  },
+  <span class="function">error</span> => {
+    <span class="comment">// 对请求错误做些什么</span>
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+
+      <h3>响应拦截器</h3>
+      <p>响应拦截器在响应到达 then/catch 之前执行，可以统一处理响应数据或错误。</p>
+      <div class="code-block"><span class="comment">// 添加响应拦截器</span>
+api.interceptors.response.use(
+  <span class="function">response</span> => {
+    <span class="comment">// 对响应数据做点什么</span>
+    console.log(<span class="string">'Response:'</span>, response.status);
+
+    <span class="comment">// 提取数据</span>
+    <span class="keyword">return</span> response.data;
+  },
+  <span class="function">error</span> => {
+    <span class="comment">// 对响应错误做点什么</span>
+    <span class="keyword">if</span> (error.response?.status === <span class="number">401</span>) {
+      <span class="comment">// Token 过期，跳转登录</span>
+      window.location.href = <span class="string">'/login'</span>;
+    }
+
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 拦截器执行顺序</h2>
+      <p>多个拦截器按照添加顺序执行，但请求拦截器和响应拦截器的执行顺序相反：</p>
+      <div class="code-block"><span class="comment">// 请求拦截器：先添加的先执行</span>
+api.interceptors.request.use(<span class="function">config</span> => {
+  console.log(<span class="string">'请求拦截器 1'</span>);
+  <span class="keyword">return</span> config;
+});
+
+api.interceptors.request.use(<span class="function">config</span> => {
+  console.log(<span class="string">'请求拦截器 2'</span>);
+  <span class="keyword">return</span> config;
+});
+
+<span class="comment">// 响应拦截器：先添加的后执行</span>
+api.interceptors.response.use(<span class="function">response</span> => {
+  console.log(<span class="string">'响应拦截器 1'</span>);
+  <span class="keyword">return</span> response;
+});
+
+api.interceptors.response.use(<span class="function">response</span> => {
+  console.log(<span class="string">'响应拦截器 2'</span>);
+  <span class="keyword">return</span> response;
+});
+
+<span class="comment">// 执行顺序：</span>
+<span class="comment">// 请求拦截器 1 -> 请求拦截器 2 -> 发送请求 -> 响应拦截器 2 -> 响应拦截器 1</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Token 认证拦截器</h2>
+      <div class="code-block"><span class="keyword">import</span> axios <span class="keyword">from</span> <span class="string">'axios'</span>;
+
+<span class="keyword">const</span> api = axios.create({
+  baseURL: <span class="string">'/api'</span>
+});
+
+<span class="comment">// 请求拦截器：自动添加 Token</span>
+api.interceptors.request.use(
+  <span class="function">config</span> => {
+    <span class="keyword">const</span> token = localStorage.getItem(<span class="string">'access_token'</span>);
+    <span class="keyword">if</span> (token) {
+      config.headers.Authorization = <span class="string">`Bearer ${token}`</span>;
+    }
+    <span class="keyword">return</span> config;
+  },
+  <span class="function">error</span> => Promise.reject(error)
+);
+
+<span class="comment">// 响应拦截器：处理 Token 过期</span>
+api.interceptors.response.use(
+  <span class="function">response</span> => response,
+  <span class="keyword">async</span> <span class="function">error</span> => {
+    <span class="keyword">const</span> originalRequest = error.config;
+
+    <span class="comment">// Token 过期，尝试刷新</span>
+    <span class="keyword">if</span> (error.response?.status === <span class="number">401</span> &amp;&amp; !originalRequest._retry) {
+      originalRequest._retry = <span class="keyword">true</span>;
+
+      <span class="keyword">try</span> {
+        <span class="keyword">const</span> refreshToken = localStorage.getItem(<span class="string">'refresh_token'</span>);
+        <span class="keyword">const</span> response = <span class="keyword">await</span> axios.post(<span class="string">'/auth/refresh'</span>, {
+          refreshToken
+        });
+
+        <span class="keyword">const</span> { accessToken } = response.data;
+        localStorage.setItem(<span class="string">'access_token'</span>, accessToken);
+
+        <span class="comment">// 重试原请求</span>
+        originalRequest.headers.Authorization = <span class="string">`Bearer ${accessToken}`</span>;
+        <span class="keyword">return</span> api(originalRequest);
+      } <span class="keyword">catch</span> (refreshError) {
+        <span class="comment">// 刷新失败，跳转登录</span>
+        localStorage.removeItem(<span class="string">'access_token'</span>);
+        localStorage.removeItem(<span class="string">'refresh_token'</span>);
+        window.location.href = <span class="string">'/login'</span>;
+        <span class="keyword">return</span> Promise.reject(refreshError);
+      }
+    }
+
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 日志和性能监控</h2>
+      <div class="code-block"><span class="keyword">const</span> api = axios.create();
+
+<span class="comment">// 请求日志拦截器</span>
+api.interceptors.request.use(
+  <span class="function">config</span> => {
+    <span class="comment">// 记录请求开始时间</span>
+    config.metadata = { startTime: Date.now() };
+
+    console.log(<span class="string">'[Request]'</span>, {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      params: config.params,
+      data: config.data
+    });
+
+    <span class="keyword">return</span> config;
+  },
+  <span class="function">error</span> => {
+    console.error(<span class="string">'[Request Error]'</span>, error);
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);
+
+<span class="comment">// 响应日志拦截器</span>
+api.interceptors.response.use(
+  <span class="function">response</span> => {
+    <span class="keyword">const</span> duration = Date.now() - response.config.metadata.startTime;
+
+    console.log(<span class="string">'[Response]'</span>, {
+      url: response.config.url,
+      status: response.status,
+      duration: <span class="string">`${duration}ms`</span>,
+      data: response.data
+    });
+
+    <span class="comment">// 性能监控：慢请求告警</span>
+    <span class="keyword">if</span> (duration > <span class="number">3000</span>) {
+      console.warn(<span class="string">`[Slow Request] ${response.config.url} took ${duration}ms`</span>);
+    }
+
+    <span class="keyword">return</span> response;
+  },
+  <span class="function">error</span> => {
+    <span class="keyword">const</span> duration = Date.now() - error.config?.metadata?.startTime;
+
+    console.error(<span class="string">'[Response Error]'</span>, {
+      url: error.config?.url,
+      status: error.response?.status,
+      duration: <span class="string">`${duration}ms`</span>,
+      message: error.message
+    });
+
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);
+
+<span class="comment">// 扩展 AxiosRequestConfig 类型</span>
+declare module <span class="string">'axios'</span> {
+  <span class="keyword">interface</span> AxiosRequestConfig {
+    metadata?: { startTime: <span class="keyword">number</span> };
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 加载状态管理</h2>
+      <div class="code-block"><span class="keyword">import</span> axios <span class="keyword">from</span> <span class="string">'axios'</span>;
+
+<span class="comment">// 简单的加载计数器</span>
+<span class="keyword">let</span> loadingCount = <span class="number">0</span>;
+<span class="keyword">let</span> loadingCallback: (loading: <span class="keyword">boolean</span>) => <span class="keyword">void</span>;
+
+<span class="keyword">export function</span> <span class="function">setLoadingCallback</span>(callback: (loading: <span class="keyword">boolean</span>) => <span class="keyword">void</span>) {
+  loadingCallback = callback;
+}
+
+<span class="keyword">const</span> api = axios.create();
+
+api.interceptors.request.use(
+  <span class="function">config</span> => {
+    loadingCount++;
+    loadingCallback?.(<span class="keyword">true</span>);
+    <span class="keyword">return</span> config;
+  },
+  <span class="function">error</span> => {
+    loadingCount--;
+    <span class="keyword">if</span> (loadingCount === <span class="number">0</span>) {
+      loadingCallback?.(<span class="keyword">false</span>);
+    }
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  <span class="function">response</span> => {
+    loadingCount--;
+    <span class="keyword">if</span> (loadingCount === <span class="number">0</span>) {
+      loadingCallback?.(<span class="keyword">false</span>);
+    }
+    <span class="keyword">return</span> response;
+  },
+  <span class="function">error</span> => {
+    loadingCount--;
+    <span class="keyword">if</span> (loadingCount === <span class="number">0</span>) {
+      loadingCallback?.(<span class="keyword">false</span>);
+    }
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚫</span> 错误处理拦截器</h2>
+      <div class="code-block"><span class="keyword">import</span> { ElMessage } <span class="keyword">from</span> <span class="string">'element-plus'</span>; <span class="comment">// 或其他 UI 库</span>
+
+<span class="keyword">const</span> api = axios.create();
+
+<span class="comment">// 统一错误处理</span>
+api.interceptors.response.use(
+  <span class="function">response</span> => response,
+  <span class="function">error</span> => {
+    <span class="keyword">let</span> message = <span class="string">'请求失败'</span>;
+
+    <span class="keyword">if</span> (error.response) {
+      <span class="comment">// 服务器返回错误</span>
+      <span class="keyword">const</span> { status, data } = error.response;
+
+      <span class="keyword">switch</span> (status) {
+        <span class="keyword">case</span> <span class="number">400</span>:
+          message = data.message || <span class="string">'请求参数错误'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">401</span>:
+          message = <span class="string">'登录已过期，请重新登录'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">403</span>:
+          message = <span class="string">'没有权限访问'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">404</span>:
+          message = <span class="string">'请求的资源不存在'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">500</span>:
+          message = <span class="string">'服务器错误，请稍后重试'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">default</span>:
+          message = <span class="string">`请求失败 (${status})`</span>;
+      }
+    } <span class="keyword">else if</span> (error.request) {
+      <span class="comment">// 请求发出但无响应</span>
+      message = <span class="string">'网络连接失败，请检查网络'</span>;
+    } <span class="keyword">else</span> {
+      <span class="comment">// 请求配置错误</span>
+      message = error.message;
+    }
+
+    <span class="comment">// 显示错误提示</span>
+    ElMessage.error(message);
+
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> 移除拦截器</h2>
+      <div class="code-block"><span class="comment">// 添加拦截器时保存引用</span>
+<span class="keyword">const</span> requestInterceptor = api.interceptors.request.use(
+  <span class="function">config</span> => config
+);
+
+<span class="keyword">const</span> responseInterceptor = api.interceptors.response.use(
+  <span class="function">response</span> => response
+);
+
+<span class="comment">// 移除拦截器</span>
+api.interceptors.request.eject(requestInterceptor);
+api.interceptors.response.eject(responseInterceptor);
+
+<span class="comment">// 清除所有拦截器</span>
+api.interceptors.request.clear();
+api.interceptors.response.clear();</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>拦截器是 Axios 的核心功能之一</li>
+        <li>请求拦截器可添加通用配置如 Token、日志</li>
+        <li>响应拦截器可统一处理响应数据和错误</li>
+        <li>多个拦截器按顺序执行，响应拦截器顺序相反</li>
+        <li>使用 eject 方法可以移除已添加的拦截器</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="80-4-响应处理.html">← 上一节：响应处理</a>
+      <a href="80-6-请求封装.html">下一节：请求封装 →</a>
+    </div>
+  </div>
+</body>
+</html>

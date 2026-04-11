@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>116.2 领域建模 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="116-1-DDD概念.html">第116章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>116.2 领域建模</h1>
+      <p class="subtitle">构建业务领域的概念模型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解领域建模的过程</li>
+        <li>掌握实体与值对象的区别</li>
+        <li>学会识别领域概念</li>
+        <li>了解建模最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 实体与值对象</h2>
+      <div class="code-block">
+// 实体（Entity）：有唯一标识，状态可变
+
+// 用户实体 - 由ID唯一标识
+class User {
+  private constructor(
+    private readonly id: UserId,        // 唯一标识
+    private name: string,                // 可变属性
+    private email: string,
+    private status: UserStatus
+  ) {}
+
+  // 通过ID判断相等性
+  equals(other: User): boolean {
+    return this.id.equals(other.id);
+  }
+
+  // 业务方法改变状态
+  changeName(newName: string): void {
+    if (!newName || newName.trim().length < 2) {
+      throw new Error('Name must be at least 2 characters');
+    }
+    this.name = newName;
+  }
+
+  activate(): void {
+    if (this.status === UserStatus.ACTIVE) {
+      throw new Error('User is already active');
+    }
+    this.status = UserStatus.ACTIVE;
+  }
+}
+
+// 值对象（Value Object）：无唯一标识，不可变，通过属性值判断相等
+
+// 地址值对象
+class Address {
+  constructor(
+    readonly province: string,
+    readonly city: string,
+    readonly district: string,
+    readonly detail: string
+  ) {
+    // 验证
+    if (!province || !city) {
+      throw new Error('Province and city are required');
+    }
+  }
+
+  // 通过属性值判断相等
+  equals(other: Address): boolean {
+    return this.province === other.province &&
+           this.city === other.city &&
+           this.district === other.district &&
+           this.detail === other.detail;
+  }
+
+  // 返回新实例而非修改
+  withDetail(newDetail: string): Address {
+    return new Address(this.province, this.city, this.district, newDetail);
+  }
+
+  // 值对象应该是不可变的
+  // 所有修改操作都返回新实例
+}
+
+// 金额值对象
+class Money {
+  private constructor(
+    readonly amount: number,
+    readonly currency: string
+  ) {
+    if (amount < 0) {
+      throw new Error('Amount cannot be negative');
+    }
+  }
+
+  static create(amount: number, currency: string = 'CNY'): Money {
+    return new Money(amount, currency);
+  }
+
+  add(other: Money): Money {
+    if (this.currency !== other.currency) {
+      throw new Error('Cannot add money with different currencies');
+    }
+    return new Money(this.amount + other.amount, this.currency);
+  }
+
+  multiply(factor: number): Money {
+    return new Money(this.amount * factor, this.currency);
+  }
+
+  equals(other: Money): boolean {
+    return this.amount === other.amount && this.currency === other.currency;
+  }
+}
+
+// 实体 vs 值对象的选择
+const choice = {
+  实体: '需要追踪生命周期，关心"是谁"',
+  值对象: '只关心"是什么"，描述、度量、数量'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">值对象优势</div>
+          <p>不可变、线程安全、易于测试、可自由替换、无副作用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 领域建模实践</h2>
+      <div class="code-block">
+// 订单领域建模示例
+
+// 订单ID值对象
+class OrderId {
+  private constructor(readonly value: string) {
+    if (!value || value.length === 0) {
+      throw new Error('Order ID cannot be empty');
+    }
+  }
+
+  static generate(): OrderId {
+    return new OrderId(`ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  }
+
+  static from(value: string): OrderId {
+    return new OrderId(value);
+  }
+
+  equals(other: OrderId): boolean {
+    return this.value === other.value;
+  }
+}
+
+// 订单项实体
+class OrderItem {
+  constructor(
+    readonly productId: string,
+    readonly productName: string,
+    readonly unitPrice: Money,
+    private quantity: number
+  ) {
+    if (quantity <= 0) {
+      throw new Error('Quantity must be positive');
+    }
+  }
+
+  get Quantity(): number { return this.quantity; }
+
+  getTotalPrice(): Money {
+    return this.unitPrice.multiply(this.quantity);
+  }
+
+  increaseQuantity(amount: number): void {
+    if (amount <= 0) {
+      throw new Error('Amount must be positive');
+    }
+    this.quantity += amount;
+  }
+}
+
+// 订单状态枚举
+enum OrderStatus {
+  PENDING = 'pending',
+  PAID = 'paid',
+  SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled'
+}
+
+// 订单实体（聚合根）
+class Order {
+  private constructor(
+    readonly id: OrderId,
+    readonly userId: string,
+    private items: OrderItem[],
+    private status: OrderStatus,
+    private shippingAddress: Address,
+    readonly createdAt: Date
+  ) {}
+
+  // 工厂方法
+  static create(userId: string, shippingAddress: Address): Order {
+    return new Order(
+      OrderId.generate(),
+      userId,
+      [],
+      OrderStatus.PENDING,
+      shippingAddress,
+      new Date()
+    );
+  }
+
+  // 业务方法
+  addItem(item: OrderItem): void {
+    if (this.status !== OrderStatus.PENDING) {
+      throw new Error('Cannot add items to non-pending order');
+    }
+
+    const existingItem = this.items.find(i => i.productId === item.productId);
+    if (existingItem) {
+      existingItem.increaseQuantity(item.Quantity);
+    } else {
+      this.items.push(item);
+    }
+  }
+
+  removeItem(productId: string): void {
+    if (this.status !== OrderStatus.PENDING) {
+      throw new Error('Cannot remove items from non-pending order');
+    }
+    this.items = this.items.filter(i => i.productId !== productId);
+  }
+
+  pay(): void {
+    if (this.status !== OrderStatus.PENDING) {
+      throw new Error('Order is not pending');
+    }
+    if (this.items.length === 0) {
+      throw new Error('Cannot pay for empty order');
+    }
+    this.status = OrderStatus.PAID;
+  }
+
+  cancel(): void {
+    if (this.status === OrderStatus.SHIPPED || this.status === OrderStatus.DELIVERED) {
+      throw new Error('Cannot cancel shipped or delivered order');
+    }
+    this.status = OrderStatus.CANCELLED;
+  }
+
+  getTotalAmount(): Money {
+    return this.items.reduce(
+      (total, item) => total.add(item.getTotalPrice()),
+      Money.create(0)
+    );
+  }
+
+  get Items(): ReadonlyArray&lt;OrderItem&gt; {
+    return this.items;
+  }
+
+  get Status(): OrderStatus {
+    return this.status;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 实体有唯一标识，状态可变</li>
+            <li>• 值对象无标识，不可变，通过值判断相等</li>
+            <li>• 业务逻辑封装在领域对象中</li>
+            <li>• 工厂方法保证对象创建的有效性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="116-1-DDD概念.html">← 上一节：DDD 概念</a>
+      <a href="116-3-聚合与实体.html">下一节：聚合与实体 →</a>
+    </div>
+  </div>
+</body>
+</html>

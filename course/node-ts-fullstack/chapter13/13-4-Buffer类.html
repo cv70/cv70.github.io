@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.4 Buffer 类 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="13-1-global对象.html">第十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>13.4 Buffer 类</h1>
+      <p class="subtitle">二进制数据处理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Buffer 的概念和作用</li>
+        <li>掌握创建和操作 Buffer</li>
+        <li>学会 Buffer 与字符串转换</li>
+        <li>了解 Buffer 编码方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Buffer 简介</h2>
+      <div class="code-block">
+// Buffer 是 Node.js 处理二进制数据的类
+// 类似于整数数组，但对应 V8 堆外内存
+
+// Buffer 大小固定，创建后不能改变
+// 每个元素是一个字节（0-255）
+
+// 创建 Buffer 的方式
+// 1. 分配指定大小
+const buf1 = Buffer.alloc(10);  // 10 字节，填充 0
+const buf2 = Buffer.allocUnsafe(10);  // 10 字节，不初始化
+
+// 2. 从字符串创建
+const buf3 = Buffer.from('Hello World');
+const buf4 = Buffer.from('Hello World', 'utf8');
+
+// 3. 从数组创建
+const buf5 = Buffer.from([72, 101, 108, 108, 111]);  // 'Hello'
+
+// 4. 从另一个 Buffer 创建
+const buf6 = Buffer.from(buf3);
+
+console.log(buf1);  // <Buffer 00 00 00 00 00 00 00 00 00 00>
+console.log(buf3);  // <Buffer 48 65 6c 6c 6f 20 57 6f 72 6c 64>
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">alloc vs allocUnsafe</div>
+          <p>allocUnsafe 性能更好但不初始化内存，可能包含敏感数据，安全场景使用 alloc。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 读写操作</h2>
+      <div class="code-block">
+// 创建 Buffer
+const buf = Buffer.alloc(16);
+
+// 写入数据
+buf.write('Hello', 'utf8');  // 返回写入的字节数
+// 从指定位置写入
+buf.write('World', 5, 'utf8');
+
+// 读取
+console.log(buf.toString('utf8'));  // 'HelloWorld'
+
+// 按索引读写单个字节
+buf[0] = 0x48;  // 'H'
+console.log(buf[0]);  // 72
+
+// 写入不同类型数值
+const buf2 = Buffer.alloc(16);
+buf2.writeInt8(0, 0);        // 写入 8 位整数
+buf2.writeInt16BE(1000, 1);  // 写入 16 位整数（大端）
+buf2.writeInt32LE(100000, 3);// 写入 32 位整数（小端）
+buf2.writeFloatBE(3.14, 7);  // 写入浮点数
+buf2.writeDoubleLE(2.718, 11);// 写入双精度
+
+// 读取不同类型数值
+console.log(buf2.readInt8(0));
+console.log(buf2.readInt16BE(1));
+console.log(buf2.readInt32LE(3));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Buffer 与字符串转换</h2>
+      <div class="code-block">
+// Buffer -> 字符串
+const buf = Buffer.from('Hello World');
+
+console.log(buf.toString());           // 'Hello World'
+console.log(buf.toString('utf8'));     // 'Hello World'
+console.log(buf.toString('hex'));      // '48656c6c6f20576f726c64'
+console.log(buf.toString('base64'));   // 'SGVsbG8gV29ybGQ='
+
+// 字符串 -> Buffer
+const buf2 = Buffer.from('Hello', 'utf8');
+const buf3 = Buffer.from('SGVsbG8gV29ybGQ=', 'base64');
+const buf4 = Buffer.from('48656c6c6f', 'hex');
+
+// JSON 格式
+console.log(buf.toJSON());
+// { type: 'Buffer', data: [72, 101, 108, 108, 111, ...] }
+
+// 支持的编码
+// utf8, ascii, utf16le, ucs2, base64, base64url, hex, binary, latin1
+
+// 编码转换
+const text = '你好世界';
+const encoded = Buffer.from(text).toString('base64');
+console.log(encoded);  // '5L2g5aW95LiW55WM'
+
+const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+console.log(decoded);  // '你好世界'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Buffer 操作</h2>
+      <div class="code-block">
+// 拼接 Buffer
+const buf1 = Buffer.from('Hello ');
+const buf2 = Buffer.from('World');
+const buf3 = Buffer.concat([buf1, buf2]);
+console.log(buf3.toString());  // 'Hello World'
+
+// 指定总长度
+const buf4 = Buffer.concat([buf1, buf2], 20);
+
+// 比较 Buffer
+const a = Buffer.from('abc');
+const b = Buffer.from('abc');
+const c = Buffer.from('abd');
+
+console.log(a.equals(b));      // true
+console.log(a.compare(c));     // -1 (a < c)
+console.log(Buffer.compare(a, b)); // 0
+
+// 切片（共享内存）
+const buf = Buffer.from('Hello World');
+const slice = buf.slice(0, 5);
+console.log(slice.toString()); // 'Hello'
+
+slice[0] = 0x68;  // 修改切片会影响原 Buffer
+console.log(buf.toString());   // 'hello World'
+
+// 复制
+const buf5 = Buffer.from('Hello World');
+const copy = Buffer.alloc(5);
+buf5.copy(copy, 0, 0, 5);
+console.log(copy.toString());  // 'Hello'
+
+// 查找
+const buf = Buffer.from('Hello World');
+console.log(buf.indexOf('World'));     // 6
+console.log(buf.indexOf('o'));         // 4
+console.log(buf.lastIndexOf('o'));     // 7
+console.log(buf.includes('World'));    // true
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📏</span> Buffer 属性</h2>
+      <div class="code-block">
+const buf = Buffer.from('Hello World');
+
+console.log(buf.length);        // 11 字节
+console.log(buf.byteLength);    // 11 字节
+
+// 检查是否是 Buffer
+console.log(Buffer.isBuffer(buf));  // true
+
+// 检查编码是否支持
+console.log(Buffer.isEncoding('utf8'));   // true
+console.log(Buffer.isEncoding('gbk'));    // false
+
+// 计算字符串字节长度
+console.log(Buffer.byteLength('Hello'));      // 5
+console.log(Buffer.byteLength('你好'));        // 6 (UTF-8 每个汉字 3 字节)
+console.log(Buffer.byteLength('你好', 'utf16le')); // 4
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Buffer 用于处理二进制数据</li>
+            <li>• Buffer.from() 从字符串或数组创建</li>
+            <li>• toString() 转换为字符串，支持多种编码</li>
+            <li>• concat() 拼接，slice() 切片，copy() 复制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="13-3-console对象.html">← 上一节：console 对象</a>
+      <a href="13-5-定时器函数.html">下一节：定时器函数 →</a>
+    </div>
+  </div>
+</body>
+</html>

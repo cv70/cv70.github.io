@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.2 事件监听与触发 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="16-1-EventEmitter基础.html">第十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>16.2 事件监听与触发</h1>
+      <p class="subtitle">深入理解事件监听器的工作方式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握多种监听器注册方式</li>
+        <li>理解监听器的执行顺序</li>
+        <li>学会传递事件参数</li>
+        <li>掌握 this 绑定问题</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 注册监听器的方式</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// 1. on() - 标准监听器
+emitter.on('event', (data) => {
+  console.log('on:', data);
+});
+
+// 2. addListener() - on 的别名
+emitter.addListener('event', (data) => {
+  console.log('addListener:', data);
+});
+
+// 3. once() - 只执行一次
+emitter.once('login', (user) => {
+  console.log('用户首次登录:', user);
+});
+
+emitter.emit('login', 'Alice');  // 输出
+emitter.emit('login', 'Bob');    // 不输出
+
+// 4. prependListener() - 添加到开头
+emitter.on('order', () => console.log('第二个'));
+emitter.prependListener('order', () => console.log('第一个'));
+
+emitter.emit('order');
+// 输出: 第一个, 第二个
+
+// 5. prependOnceListener() - 添加到开头且执行一次
+emitter.prependOnceListener('test', () => console.log('只执行一次'));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 触发事件</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+emitter.on('message', (...args) => {
+  console.log('收到参数:', args);
+});
+
+// emit 返回布尔值
+// 如果事件有监听器返回 true，否则返回 false
+const hasListeners = emitter.emit('message', 'Hello', 'World', 123);
+console.log('有监听器:', hasListeners);  // true
+
+const noListeners = emitter.emit('noevent');
+console.log('有监听器:', noListeners);  // false
+
+// 传递多个参数
+emitter.on('data', (a, b, c) => {
+  console.log(a, b, c);
+});
+
+emitter.emit('data', 1, 2, 3);
+
+// 传递对象
+emitter.on('user', (user) => {
+  console.log(`用户: ${user.name}, 年龄: ${user.age}`);
+});
+
+emitter.emit('user', { name: 'Alice', age: 25 });
+
+// 传递数组
+emitter.on('list', (items) => {
+  items.forEach(item => console.log(item));
+});
+
+emitter.emit('list', ['a', 'b', 'c']);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> this 绑定问题</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 箭头函数 - this 指向外层作用域
+const emitter = new EventEmitter();
+
+emitter.on('arrow', () => {
+  console.log('箭头函数 this:', this);  // 空对象或外层 this
+});
+
+// 普通函数 - this 指向 EventEmitter 实例
+emitter.on('normal', function() {
+  console.log('普通函数 this:', this);
+  // this 是 emitter 实例
+});
+
+emitter.emit('arrow');
+emitter.emit('normal');
+
+// 在类中使用
+class Counter extends EventEmitter {
+  constructor() {
+    super();
+    this.count = 0;
+  }
+
+  // 箭头函数绑定 this
+  start = () => {
+    setInterval(() => {
+      this.count++;
+      this.emit('tick', this.count);
+    }, 1000);
+  }
+}
+
+const counter = new Counter();
+counter.on('tick', (count) => {
+  console.log(`计数: ${count}`);
+});
+counter.start();
+
+// 使用 bind 绑定 this
+class Logger extends EventEmitter {
+  log(message) {
+    console.log(message);
+    this.emit('logged', message);
+  }
+}
+
+const logger = new Logger();
+const boundLog = logger.log.bind(logger);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">this 绑定建议</div>
+          <p>在事件监听器中使用箭头函数绑定外层 this，或使用 bind() 显式绑定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 异步事件处理</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// 同步执行监听器
+emitter.on('sync', () => {
+  console.log('同步监听器 1');
+});
+emitter.on('sync', () => {
+  console.log('同步监听器 2');
+});
+emitter.emit('sync');
+console.log('触发后');
+
+// 输出顺序:
+// 同步监听器 1
+// 同步监听器 2
+// 触发后
+
+// 异步执行监听器
+emitter.on('async', async () => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  console.log('异步监听器 1');
+});
+emitter.on('async', async () => {
+  await new Promise(resolve => setTimeout(resolve, 50));
+  console.log('异步监听器 2');
+});
+
+// 注意：emit 不会等待异步监听器完成
+emitter.emit('async');
+console.log('触发后');
+
+// 输出顺序:
+// 触发后
+// 异步监听器 2 (50ms 后)
+// 异步监听器 1 (100ms 后)
+
+// 等待所有监听器完成
+async function emitAsync(event, ...args) {
+  const listeners = emitter.listeners(event);
+  await Promise.all(listeners.map(fn => fn(...args)));
+}
+
+// 使用 setImmediate 延迟执行
+emitter.on('deferred', () => {
+  setImmediate(() => {
+    console.log('延迟执行');
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• on/addListener 添加监听器，once 只执行一次</li>
+            <li>• emit 触发事件，返回是否有监听器</li>
+            <li>• 注意 this 绑定问题，使用箭头函数或 bind</li>
+            <li>• 监听器默认同步执行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="16-1-EventEmitter基础.html">← 上一节：EventEmitter 基础</a>
+      <a href="16-3-一次性事件.html">下一节：一次性事件 →</a>
+    </div>
+  </div>
+</body>
+</html>

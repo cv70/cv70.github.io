@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.3 分页查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="25-1-querybuilder.html">第二十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>25.3 分页查询</h1>
+      <p class="subtitle">实现高效的分页数据获取</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解分页查询的概念</li>
+        <li>掌握 OFFSET 分页实现</li>
+        <li>学会游标分页优化</li>
+        <li>了解分页元数据处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 分页方式对比</h2>
+      <div class="code-block">
+分页方式：
+
+1. OFFSET 分页（传统分页）
+   ├── 原理：跳过 N 条记录，取 M 条
+   ├── 优点：可跳转任意页
+   ├── 缺点：深度分页性能差
+   └── 适合：页数少、后台管理
+
+2. 游标分页（Cursor 分页）
+   ├── 原理：从上次最后一条开始取
+   ├── 优点：性能稳定，适合大数据
+   ├── 缺点：不能跳页
+   └── 适合：无限滚动、社交 Feed
+
+性能对比：
+├── OFFSET 10000 LIMIT 10：需扫描 10010 条
+└── WHERE id > 10000 LIMIT 10：直接定位，扫描 10 条
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> OFFSET 分页实现</h2>
+      <div class="code-block">
+// 方式一：使用 FindOptions
+const page = 1;
+const limit = 10;
+
+const [users, total] = await userRepository.findAndCount({
+  where: { status: 'active' },
+  skip: (page - 1) * limit,  // 跳过的记录数
+  take: limit,               // 每页记录数
+  order: { createdAt: 'DESC' },
+});
+
+// 返回格式
+{
+  data: users,
+  meta: {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    hasNext: page < Math.ceil(total / limit),
+    hasPrev: page > 1,
+  }
+}
+
+// 方式二：使用 QueryBuilder
+const page = 1;
+const limit = 10;
+
+const [users, total] = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .orderBy('user.createdAt', 'DESC')
+  .skip((page - 1) * limit)
+  .take(limit)
+  .getManyAndCount();
+
+// 封装分页函数
+interface PaginationResult<T> {
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
+
+async function paginate<T>(
+  repository: Repository<T>,
+  page: number = 1,
+  limit: number = 10,
+  options?: FindManyOptions<T>
+): Promise<PaginationResult<T>> {
+  const [data, total] = await repository.findAndCount({
+    ...options,
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    },
+  };
+}
+
+// 使用
+const result = await paginate(userRepository, 1, 10, {
+  where: { status: 'active' },
+  order: { createdAt: 'DESC' },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 游标分页实现</h2>
+      <div class="code-block">
+// 游标分页 - 基于主键
+interface CursorPaginationResult<T> {
+  data: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+async function cursorPaginate<T>(
+  repository: Repository<T>,
+  cursor: string | null = null,
+  limit: number = 10,
+  options?: FindManyOptions<T>
+): Promise<CursorPaginationResult<T>> {
+  const qb = repository.createQueryBuilder('entity');
+
+  // 应用游标条件
+  if (cursor) {
+    qb.where('entity.id > :cursor', { cursor: parseInt(cursor) });
+  }
+
+  // 多取一条判断是否有更多
+  const data = await qb
+    .orderBy('entity.id', 'ASC')
+    .take(limit + 1)
+    .getMany();
+
+  const hasMore = data.length > limit;
+  const items = hasMore ? data.slice(0, -1) : data;
+
+  return {
+    data: items,
+    nextCursor: hasMore ? String(items[items.length - 1].id) : null,
+    hasMore,
+  };
+}
+
+// 游标分页 - 基于时间戳（更适合排序）
+async function cursorPaginateByTime(
+  repository: Repository<User>,
+  cursor: { id: number; createdAt: Date } | null = null,
+  limit: number = 10
+): Promise<CursorPaginationResult<User>> {
+  const qb = repository.createQueryBuilder('user');
+
+  if (cursor) {
+    qb.where(
+      '(user.createdAt < :createdAt OR (user.createdAt = :createdAt AND user.id < :id))',
+      { createdAt: cursor.createdAt, id: cursor.id }
+    );
+  }
+
+  const data = await qb
+    .orderBy('user.createdAt', 'DESC')
+    .addOrderBy('user.id', 'DESC')
+    .take(limit + 1)
+    .getMany();
+
+  const hasMore = data.length > limit;
+  const items = hasMore ? data.slice(0, -1) : data;
+
+  const lastItem = items[items.length - 1];
+  const nextCursor = hasMore
+    ? Buffer.from(JSON.stringify({ id: lastItem.id, createdAt: lastItem.createdAt })).toString('base64')
+    : null;
+
+  return {
+    data: items,
+    nextCursor,
+    hasMore,
+  };
+}
+
+// 使用
+const result = await cursorPaginateByTime(userRepository, null, 10);
+
+// 下一页
+const nextPage = await cursorPaginateByTime(
+  userRepository,
+  JSON.parse(Buffer.from(result.nextCursor, 'base64').toString()),
+  10
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">游标分页要点</div>
+          <p>游标需要包含排序字段的值和主键，确保分页顺序稳定。使用 Base64 编码游标可以对客户端隐藏实现细节。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 分页优化技巧</h2>
+      <div class="code-block">
+// 1. 使用覆盖索引优化 COUNT
+// 避免 COUNT(*) 扫描全表
+const count = await userRepository
+  .createQueryBuilder('user')
+  .select('COUNT(user.id)', 'count')
+  .where('user.status = :status', { status: 'active' })
+  .cache(60000)  // 缓存计数结果
+  .getRawOne();
+
+// 2. 延迟关联优化深度分页
+// 原始查询（慢）
+SELECT * FROM users ORDER BY id LIMIT 100000, 10;
+
+// 优化查询（快）
+SELECT u.* FROM users u
+INNER JOIN (
+  SELECT id FROM users ORDER BY id LIMIT 100000, 10
+) AS tmp ON u.id = tmp.id;
+
+// TypeORM 实现
+const ids = await userRepository
+  .createQueryBuilder('user')
+  .select('user.id')
+  .orderBy('user.id', 'ASC')
+  .skip(100000)
+  .take(10)
+  .getRawMany();
+
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.id IN (:...ids)', {
+    ids: ids.map(row => row.user_id)
+  })
+  .getMany();
+
+// 3. 无限滚动预加载
+const [users, total] = await userRepository.findAndCount({
+  take: limit + 1,  // 多取一条判断是否有更多
+});
+
+const hasMore = users.length > limit;
+const data = hasMore ? users.slice(0, -1) : users;
+
+// 4. 分页缓存
+const cacheKey = `users:page:${page}:${limit}`;
+let result = await cacheManager.get(cacheKey);
+
+if (!result) {
+  result = await paginate(userRepository, page, limit);
+  await cacheManager.set(cacheKey, result, 60000);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• OFFSET 分页简单但深度分页性能差</li>
+            <li>• 游标分页性能稳定，适合大数据</li>
+            <li>• 使用 getManyAndCount 获取数据和总数</li>
+            <li>• 延迟关联优化深度分页查询</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="25-2-条件查询.html">← 上一节：条件查询</a>
+      <a href="25-4-关联查询.html">下一节：关联查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

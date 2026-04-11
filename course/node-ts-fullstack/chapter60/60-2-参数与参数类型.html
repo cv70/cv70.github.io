@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60.2 参数与参数类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="60-1-类型系统.html">第60章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>60.2 参数与参数类型</h1>
+      <p class="subtitle">GraphQL 参数定义与使用</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 参数概述</h2>
+      <p>GraphQL 参数用于向字段传递数据。参数可以出现在 Query、Mutation、字段等位置，支持多种类型和默认值。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">参数的作用</div>
+          <ul>
+            <li>过滤查询结果</li>
+            <li>分页控制</li>
+            <li>排序和搜索</li>
+            <li>Mutation 的输入数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 基本参数</h2>
+
+      <div class="code-block">
+<span class="comment">// 字段参数</span>
+<span class="keyword">type</span> Query {
+  <span class="comment">// 简单参数</span>
+  user(id: ID!): User
+
+  <span class="comment">// 多个参数</span>
+  users(limit: Int, offset: Int): [User!]!
+
+  <span class="comment">// 参数默认值</span>
+  posts(limit: Int = <span class="number">10</span>, sort: SortOrder = DESC): [Post!]!
+
+  <span class="comment">// 必填参数</span>
+  search(query: String!): [SearchResult!]!
+
+  <span class="comment">// 可选参数</span>
+  userByEmail(email: String): User
+}
+      </div>
+
+      <h3>参数类型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ID</code></td>
+            <td>唯一标识符</td>
+            <td>id: ID!</td>
+          </tr>
+          <tr>
+            <td><code>String</code></td>
+            <td>字符串</td>
+            <td>name: String</td>
+          </tr>
+          <tr>
+            <td><code>Int</code></td>
+            <td>整数</td>
+            <td>limit: Int = 10</td>
+          </tr>
+          <tr>
+            <td><code>Float</code></td>
+            <td>浮点数</td>
+            <td>price: Float</td>
+          </tr>
+          <tr>
+            <td><code>Boolean</code></td>
+            <td>布尔值</td>
+            <td>active: Boolean</td>
+          </tr>
+          <tr>
+            <td><code>Enum</code></td>
+            <td>枚举</td>
+            <td>status: PostStatus</td>
+          </tr>
+          <tr>
+            <td><code>Input</code></td>
+            <td>输入对象</td>
+            <td>input: CreateUserInput!</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 默认值</h2>
+
+      <div class="code-block">
+<span class="keyword">type</span> Query {
+  <span class="comment">// 基本类型默认值</span>
+  users(limit: Int = <span class="number">10</span>): [User!]!
+  posts(page: Int = <span class="number">1</span>, pageSize: Int = <span class="number">20</span>): PostConnection!
+
+  <span class="comment">// 枚举默认值</span>
+  users(sort: SortOrder = DESC): [User!]!
+  posts(status: PostStatus = PUBLISHED): [Post!]!
+
+  <span class="comment">// 列表默认值</span>
+  users(ids: [ID!] = []): [User!]!
+
+  <span class="comment">// 输入对象默认值（需要特殊处理）</span>
+  search(filter: SearchFilter = {}): [SearchResult!]!
+}
+
+<span class="comment">// 查询时使用默认值</span>
+query {
+  users {    <span class="comment">// limit 默认为 10</span>
+    name
+  }
+}
+
+<span class="comment">// 覆盖默认值</span>
+query {
+  users(limit: <span class="number">50</span>) {
+    name
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 输入对象参数</h2>
+
+      <div class="code-block">
+<span class="comment">// 定义输入对象</span>
+<span class="keyword">input</span> UserFilter {
+  name: String
+  email: String
+  role: UserRole
+  isActive: Boolean
+  createdAtRange: DateRangeInput
+}
+
+<span class="keyword">input</span> DateRangeInput {
+  start: DateTime
+  end: DateTime
+}
+
+<span class="keyword">input</span> PaginationInput {
+  page: Int = <span class="number">1</span>
+  pageSize: Int = <span class="number">10</span>
+}
+
+<span class="keyword">input</span> SortInput {
+  field: String!
+  order: SortOrder = ASC
+}
+
+<span class="comment">// 组合使用</span>
+<span class="keyword">type</span> Query {
+  users(
+    filter: UserFilter
+    pagination: PaginationInput
+    sort: SortInput
+  ): UserConnection!
+}
+
+<span class="comment">// 查询示例</span>
+query GetUsers {
+  users(
+    filter: {
+      role: ADMIN
+      isActive: <span class="keyword">true</span>
+      createdAtRange: {
+        start: <span class="string">"2024-01-01T00:00:00Z"</span>
+        end: <span class="string">"2024-12-31T23:59:59Z"</span>
+      }
+    }
+    pagination: { page: <span class="number">2</span>, pageSize: <span class="number">20</span> }
+    sort: { field: <span class="string">"createdAt"</span>, order: DESC }
+  ) {
+    data {
+      id
+      name
+      email
+    }
+    total
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 字段参数</h2>
+
+      <div class="code-block">
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+
+  <span class="comment">// 带参数的字段</span>
+  posts(limit: Int = <span class="number">10</span>, status: PostStatus): [Post!]!
+  comments(first: Int = <span class="number">5</span>): [Comment!]!
+  followers(limit: Int, offset: Int): [User!]!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  comments(limit: Int = <span class="number">20</span>, sort: SortOrder = DESC): [Comment!]!
+}
+
+<span class="comment">// 查询示例</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    name
+    posts(limit: <span class="number">5</span>, status: PUBLISHED) {
+      title
+      comments(limit: <span class="number">3</span>) {
+        content
+      }
+    }
+  }
+}
+
+<span class="comment">// Resolver 实现</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    posts: <span class="keyword">async</span> (user, { limit, status }, context) => {
+      <span class="keyword">return</span> context.dataSources.postApi.getByUserId(user.id, {
+        limit,
+        status,
+      });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 分页参数模式</h2>
+
+      <h3>Offset 分页</h3>
+      <div class="code-block">
+<span class="keyword">input</span> OffsetPaginationInput {
+  offset: Int = <span class="number">0</span>
+  limit: Int = <span class="number">10</span>
+}
+
+<span class="keyword">type</span> Query {
+  users(pagination: OffsetPaginationInput): UserConnection!
+}
+
+<span class="comment">// 查询</span>
+query {
+  users(pagination: { offset: <span class="number">20</span>, limit: <span class="number">10</span> }) {
+    data { id name }
+    total
+  }
+}
+      </div>
+
+      <h3>Cursor 分页（Relay 规范）</h3>
+      <div class="code-block">
+<span class="keyword">input</span> CursorPaginationInput {
+  first: Int      <span class="comment">// 从开始获取 N 条</span>
+  after: String   <span class="comment">// 从该 cursor 之后开始</span>
+  last: Int       <span class="comment">// 从末尾获取 N 条</span>
+  before: String  <span class="comment">// 从该 cursor 之前开始</span>
+}
+
+<span class="keyword">type</span> UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+<span class="keyword">type</span> UserEdge {
+  node: User!
+  cursor: String!
+}
+
+<span class="keyword">type</span> PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+<span class="comment">// 查询</span>
+query {
+  users(first: <span class="number">10</span>, after: <span class="string">"base64-cursor"</span>) {
+    edges {
+      cursor
+      node { id name }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    totalCount
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 搜索与过滤参数</h2>
+
+      <div class="code-block">
+<span class="keyword">input</span> SearchInput {
+  query: String!
+  fields: [String!]
+  fuzzy: Boolean = <span class="keyword">true</span>
+}
+
+<span class="keyword">input</span> FilterInput {
+  <span class="comment">// 等于</span>
+  eq: String
+  <span class="comment">// 不等于</span>
+  ne: String
+  <span class="comment">// 包含</span>
+  in: [String!]
+  <span class="comment">// 不包含</span>
+  nin: [String!]
+  <span class="comment">// 大于</span>
+  gt: Float
+  <span class="comment">// 大于等于</span>
+  gte: Float
+  <span class="comment">// 小于</span>
+  lt: Float
+  <span class="comment">// 小于等于</span>
+  lte: Float
+  <span class="comment">// 包含（字符串）</span>
+  contains: String
+  <span class="comment">// 开头</span>
+  startsWith: String
+  <span class="comment">// 结尾</span>
+  endsWith: String
+}
+
+<span class="keyword">input</span> UserFilterInput {
+  name: StringFilterInput
+  email: StringFilterInput
+  age: NumberFilterInput
+  role: [UserRole!]
+  createdAt: DateRangeInput
+}
+
+<span class="keyword">type</span> Query {
+  search(input: SearchInput!): [SearchResult!]!
+  users(filter: UserFilterInput): [User!]!
+}
+
+<span class="comment">// 查询示例</span>
+query {
+  users(filter: {
+    name: { contains: <span class="string">"张"</span> }
+    age: { gte: <span class="number">18</span>, lte: <span class="number">60</span> }
+    role: [ADMIN, MODERATOR]
+  }) {
+    id
+    name
+    age
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> TypeScript 类型安全</h2>
+
+      <div class="code-block">
+<span class="comment">// 从 Schema 生成 TypeScript 类型</span>
+<span class="keyword">interface</span> UserFilter {
+  name?: <span class="keyword">string</span>;
+  email?: <span class="keyword">string</span>;
+  role?: UserRole[];
+  isActive?: <span class="keyword">boolean</span>;
+}
+
+<span class="keyword">interface</span> GetUsersVariables {
+  filter?: UserFilter;
+  pagination?: PaginationInput;
+  sort?: SortInput;
+}
+
+<span class="comment">// 使用类型安全的查询</span>
+<span class="keyword">const</span> GET_USERS = gql<span class="string">`
+  query GetUsers($filter: UserFilter, $pagination: PaginationInput) {
+    users(filter: $filter, pagination: $pagination) {
+      data { id name email }
+      total
+    }
+  }
+`</span>;
+
+<span class="keyword">function</span> <span class="function">useUsers</span>(variables: GetUsersVariables) {
+  <span class="keyword">return</span> useQuery(GET_USERS, { variables });
+}
+
+<span class="comment">// 调用时有完整类型提示</span>
+useUsers({
+  filter: {
+    role: [UserRole.ADMIN],
+    isActive: <span class="keyword">true</span>,
+  },
+  pagination: {
+    page: <span class="number">1</span>,
+    pageSize: <span class="number">10</span>,
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>参数用于向字段传递数据</li>
+        <li>支持基本类型、枚举、输入对象</li>
+        <li>默认值简化常见查询场景</li>
+        <li>输入对象组织复杂参数结构</li>
+        <li>字段参数实现关联数据过滤</li>
+        <li>分页参数支持 Offset 和 Cursor 模式</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="60-1-类型系统.html">← 上一节：类型系统</a>
+      <a href="60-3-枚举与接口.html">下一节：枚举与接口 →</a>
+    </div>
+  </div>
+</body>
+</html>

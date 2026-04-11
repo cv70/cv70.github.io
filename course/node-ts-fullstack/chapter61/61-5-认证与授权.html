@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>61.5 认证与授权 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="61-1-Resolver编写.html">第61章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>61.5 认证与授权</h1>
+      <p class="subtitle">GraphQL 认证授权实现</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 认证 vs 授权</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">认证（Authentication）</h3>
+          <p class="card-text">验证用户身份，确认"你是谁"</p>
+          <ul class="feature-list">
+            <li>用户名密码登录</li>
+            <li>Token 验证</li>
+            <li>OAuth 第三方登录</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">授权（Authorization）</h3>
+          <p class="card-text">验证用户权限，确认"你能做什么"</p>
+          <ul class="feature-list">
+            <li>角色权限控制</li>
+            <li>资源访问控制</li>
+            <li>操作权限检查</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Context 认证</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { verify } <span class="keyword">from</span> <span class="string">'jsonwebtoken'</span>;
+
+<span class="keyword">interface</span> UserPayload {
+  id: <span class="keyword">number</span>;
+  email: <span class="keyword">string</span>;
+  role: <span class="string">'USER'</span> | <span class="string">'ADMIN'</span>;
+}
+
+<span class="keyword">interface</span> Context {
+  user: UserPayload | <span class="keyword">null</span>;
+  prisma: PrismaClient;
+}
+
+<span class="comment">// 解析 Token</span>
+<span class="keyword">function</span> <span class="function">parseToken</span>(authHeader: <span class="keyword">string</span> | undefined): UserPayload | <span class="keyword">null</span> {
+  <span class="keyword">if</span> (!authHeader?.startsWith(<span class="string">'Bearer '</span>)) {
+    <span class="keyword">return null</span>;
+  }
+
+  <span class="keyword">const</span> token = authHeader.slice(<span class="number">7</span>);
+
+  <span class="keyword">try</span> {
+    <span class="keyword">return</span> verify(token, process.env.JWT_SECRET!) <span class="keyword">as</span> UserPayload;
+  } <span class="keyword">catch</span> {
+    <span class="keyword">return null</span>;
+  }
+}
+
+<span class="comment">// Apollo Server 配置</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer<Context>({ typeDefs, resolvers });
+
+<span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> ({ req }) => ({
+    user: parseToken(req.headers.authorization),
+    prisma,
+  }),
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> Resolver 级别认证</h2>
+
+      <div class="code-block">
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    <span class="comment">// 公开接口</span>
+    publicPosts: <span class="keyword">async</span> (_, __, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { published: <span class="keyword">true</span> },
+      });
+    },
+
+    <span class="comment">// 需要登录</span>
+    myPosts: <span class="keyword">async</span> (_, __, context) => {
+      <span class="keyword">if</span> (!context.user) {
+        <span class="keyword">throw new</span> AuthenticationError(<span class="string">'请先登录'</span>);
+      }
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { authorId: context.user.id },
+      });
+    },
+
+    <span class="comment">// 需要管理员权限</span>
+    allUsers: <span class="keyword">async</span> (_, __, context) => {
+      <span class="keyword">if</span> (!context.user || context.user.role !== <span class="string">'ADMIN'</span>) {
+        <span class="keyword">throw new</span> ForbiddenError(<span class="string">'需要管理员权限'</span>);
+      }
+      <span class="keyword">return</span> context.prisma.user.findMany();
+    },
+  },
+
+  Mutation: {
+    <span class="comment">// 创建文章 - 需要登录</span>
+    createPost: <span class="keyword">async</span> (_, { title, content }, context) => {
+      <span class="keyword">if</span> (!context.user) {
+        <span class="keyword">throw new</span> AuthenticationError(<span class="string">'请先登录'</span>);
+      }
+
+      <span class="keyword">return</span> context.prisma.post.create({
+        data: {
+          title,
+          content,
+          authorId: context.user.id,
+        },
+      });
+    },
+
+    <span class="comment">// 删除用户 - 需要管理员权限</span>
+    deleteUser: <span class="keyword">async</span> (_, { id }, context) => {
+      <span class="keyword">if</span> (!context.user || context.user.role !== <span class="string">'ADMIN'</span>) {
+        <span class="keyword">throw new</span> ForbiddenError(<span class="string">'需要管理员权限'</span>);
+      }
+
+      <span class="keyword">await</span> context.prisma.user.delete({ where: { id: parseInt(id) } });
+      <span class="keyword">return true</span>;
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 自定义认证指令</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">directive</span> @auth(requires: Role = USER) <span class="keyword">on</span> FIELD_DEFINITION | OBJECT
+
+<span class="keyword">enum</span> Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+<span class="keyword">type</span> Query {
+  publicData: String!
+  userData: User! @auth
+  adminData: AdminData! @auth(requires: ADMIN)
+}
+
+<span class="keyword">type</span> Mutation {
+  deleteUser(id: ID!): Boolean! @auth(requires: ADMIN)
+}
+
+<span class="comment">// 指令实现</span>
+<span class="keyword">import</span> { SchemaDirectiveVisitor, AuthenticationError, ForbiddenError } <span class="keyword">from</span> <span class="string">'apollo-server'</span>;
+<span class="keyword">import</span> { GraphQLField, defaultFieldResolver } <span class="keyword">from</span> <span class="string">'graphql'</span>;
+
+<span class="keyword">class</span> <span class="function">AuthDirective</span> <span class="keyword">extends</span> SchemaDirectiveVisitor {
+  visitFieldDefinition(field: GraphQLField<<span class="keyword">any</span>, <span class="keyword">any</span>>) {
+    <span class="keyword">const</span> { resolve = defaultFieldResolver } = field;
+    <span class="keyword">const</span> { requires } = <span class="keyword">this</span>.args;
+
+    field.resolve = <span class="keyword">async function</span> (root, args, context, info) {
+      <span class="comment">// 检查是否登录</span>
+      <span class="keyword">if</span> (!context.user) {
+        <span class="keyword">throw new</span> AuthenticationError(<span class="string">'请先登录'</span>);
+      }
+
+      <span class="comment">// 检查权限</span>
+      <span class="keyword">const</span> roles = [<span class="string">'USER'</span>, <span class="string">'ADMIN'</span>, <span class="string">'SUPER_ADMIN'</span>];
+      <span class="keyword">const</span> userLevel = roles.indexOf(context.user.role);
+      <span class="keyword">const</span> requiredLevel = roles.indexOf(requires);
+
+      <span class="keyword">if</span> (userLevel < requiredLevel) {
+        <span class="keyword">throw new</span> ForbiddenError(<span class="string">`需要 </span>${requires}<span class="string"> 权限`</span>);
+      }
+
+      <span class="keyword">return</span> resolve.call(<span class="keyword">this</span>, root, args, context, info);
+    };
+  }
+
+  visitObject(type: <span class="keyword">any</span>) {
+    <span class="keyword">const</span> fields = type.getFields();
+    <span class="keyword">for</span> (<span class="keyword">const</span> field <span class="keyword">of</span> Object.values(fields)) {
+      <span class="keyword">this</span>.visitFieldDefinition(field <span class="keyword">as</span> GraphQLField<<span class="keyword">any</span>, <span class="keyword">any</span>>);
+    }
+  }
+}
+
+<span class="comment">// Apollo Server 配置</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+  schemaDirectives: {
+    auth: AuthDirective,
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 资源级权限控制</h2>
+
+      <div class="code-block">
+<span class="keyword">const</span> resolvers = {
+  Mutation: {
+    <span class="comment">// 更新文章 - 只能更新自己的文章</span>
+    updatePost: <span class="keyword">async</span> (_, { id, input }, context) => {
+      <span class="keyword">if</span> (!context.user) {
+        <span class="keyword">throw new</span> AuthenticationError(<span class="string">'请先登录'</span>);
+      }
+
+      <span class="keyword">const</span> post = <span class="keyword">await</span> context.prisma.post.findUnique({
+        where: { id: parseInt(id) },
+      });
+
+      <span class="keyword">if</span> (!post) {
+        <span class="keyword">throw new</span> UserInputError(<span class="string">'文章不存在'</span>);
+      }
+
+      <span class="comment">// 检查是否是作者或管理员</span>
+      <span class="keyword">if</span> (post.authorId !== context.user.id && context.user.role !== <span class="string">'ADMIN'</span>) {
+        <span class="keyword">throw new</span> ForbiddenError(<span class="string">'无权修改此文章'</span>);
+      }
+
+      <span class="keyword">return</span> context.prisma.post.update({
+        where: { id: parseInt(id) },
+        data: input,
+      });
+    },
+
+    <span class="comment">// 删除文章 - 作者或管理员可删除</span>
+    deletePost: <span class="keyword">async</span> (_, { id }, context) => {
+      <span class="keyword">if</span> (!context.user) {
+        <span class="keyword">throw new</span> AuthenticationError(<span class="string">'请先登录'</span>);
+      }
+
+      <span class="keyword">const</span> post = <span class="keyword">await</span> context.prisma.post.findUnique({
+        where: { id: parseInt(id) },
+        select: { authorId: <span class="keyword">true</span> },
+      });
+
+      <span class="keyword">if</span> (!post) {
+        <span class="keyword">throw new</span> UserInputError(<span class="string">'文章不存在'</span>);
+      }
+
+      <span class="keyword">if</span> (post.authorId !== context.user.id && context.user.role !== <span class="string">'ADMIN'</span>) {
+        <span class="keyword">throw new</span> ForbiddenError(<span class="string">'无权删除此文章'</span>);
+      }
+
+      <span class="keyword">await</span> context.prisma.post.delete({ where: { id: parseInt(id) } });
+      <span class="keyword">return true</span>;
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>认证验证用户身份，授权验证用户权限</li>
+        <li>在 Context 中解析和存储用户信息</li>
+        <li>Resolver 级别进行权限检查</li>
+        <li>自定义指令简化认证代码</li>
+        <li>资源级权限控制确保数据安全</li>
+        <li>区分公开接口和需要认证的接口</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="61-4-N+1问题与DataLoader.html">← 上一节：N+1 问题与 DataLoader</a>
+      <a href="../chapter62/62-1-GraphQL模块配置.html">下一章：GraphQL 模块配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

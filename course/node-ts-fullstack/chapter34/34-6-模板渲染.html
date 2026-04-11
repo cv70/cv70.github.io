@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.6 模板渲染 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter34.html">第34章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>34.6 模板渲染</h1>
+      <p class="subtitle">掌握 Express 模板渲染的基本用法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会配置 Express 模板引擎</li>
+        <li>掌握 res.render() 的使用</li>
+        <li>理解模板变量的传递</li>
+        <li>了解不同模板引擎的基本语法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置模板引擎</h2>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 设置模板目录
+app.set('views', './views');
+
+// 设置模板引擎
+app.set('view engine', 'ejs');
+
+// 或使用其他引擎
+// app.set('view engine', 'pug');
+// app.set('view engine', 'hbs');
+
+// 安装模板引擎
+// npm install ejs
+// npm install pug
+// npm install hbs (Handlebars)</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> res.render() 方法</h2>
+
+      <div class="code-block">
+// 基本渲染
+app.get('/', (req, res) => {
+  res.render('index');  // 渲染 views/index.ejs
+});
+
+// 传递变量
+app.get('/user/:id', (req, res) => {
+  res.render('user', {
+    title: 'User Profile',
+    user: { id: req.params.id, name: 'Alice' }
+  });
+});
+
+// 渲染并回调
+app.get('/page', (req, res) => {
+  res.render('page', { title: 'Page' }, (err, html) => {
+    if (err) {
+      return res.status(500).send('Render error');
+    }
+    res.send(html);
+  });
+});
+
+// 指定不同引擎
+app.get('/custom', (req, res) => {
+  res.render('template.pug', { title: 'Custom' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> EJS 示例</h2>
+
+      <h3>Express 配置</h3>
+      <div class="code-block">
+app.set('view engine', 'ejs');
+
+app.get('/users', async (req, res) => {
+  const users = await User.findAll();
+  res.render('users/index', {
+    title: 'Users List',
+    users
+  });
+});</div>
+
+      <h3>EJS 模板 (views/users/index.ejs)</h3>
+      <div class="code-block">
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;&lt;%= title %&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;&lt;%= title %&gt;&lt;/h1&gt;
+
+  &lt;ul&gt;
+    &lt;% users.forEach(user => { %&gt;
+      &lt;li&gt;
+        &lt;a href="/users/&lt;%= user.id %&gt;"&gt;
+          &lt;%= user.name %&gt;
+        &lt;/a&gt;
+      &lt;/li&gt;
+    &lt;% }); %&gt;
+  &lt;/ul&gt;
+
+  &lt;% if (users.length === 0) { %&gt;
+    &lt;p&gt;No users found&lt;/p&gt;
+  &lt;% } %&gt;
+&lt;/body&gt;
+&lt;/html&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 模板变量传递方式</h2>
+
+      <div class="code-block">
+// 1. 直接传递
+res.render('page', { title: 'Page', data: {} });
+
+// 2. 使用 app.locals 全局变量
+app.locals.siteName = 'My Site';
+// 所有模板都可访问 siteName
+
+// 3. 使用 res.locals 请求级变量
+app.use((req, res, next) => {
+  res.locals.user = req.user;
+  res.locals.currentPath = req.path;
+  next();
+});
+// 当前请求的模板可访问 user 和 currentPath
+
+// 4. 组合使用
+app.get('/dashboard', (req, res) => {
+  res.render('dashboard', {
+    title: 'Dashboard',
+    stats: getStats()
+  });
+  // 模板可访问: siteName, user, currentPath, title, stats
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 模板布局</h2>
+
+      <div class="code-block">
+// 使用 express-ejs-layouts
+const expressLayouts = require('express-ejs-layouts');
+
+app.use(expressLayouts);
+app.set('layout', 'layouts/main');
+
+// views/layouts/main.ejs
+/*
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= title %></title>
+</head>
+<body>
+  <header>
+    <%- include('partials/header') %>
+  </header>
+  <main>
+    <%- body %>
+  </main>
+  <footer>
+    <%- include('partials/footer') %>
+  </footer>
+</body>
+</html>
+*/
+
+// 视图自动渲染在 body 位置
+app.get('/', (req, res) => {
+  res.render('home', { title: 'Home' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 app.set() 配置模板目录和引擎</li>
+            <li>res.render() 渲染模板并传递变量</li>
+            <li>app.locals 设置全局变量，res.locals 设置请求级变量</li>
+            <li>EJS 使用 &lt;%= %&gt; 输出，&lt;% %&gt; 执行代码</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="34-5-重定向.html">← 上一节：重定向</a>
+      <a href="../chapter35/35-1-模板引擎概述.html">下一章：模板引擎 →</a>
+    </div>
+  </div>
+</body>
+</html>

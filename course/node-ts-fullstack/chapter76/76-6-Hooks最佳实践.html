@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.6 Hooks 最佳实践 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="76-1-useState.html">第七十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>76.6 Hooks 最佳实践</h1>
+      <p class="subtitle">正确使用 React Hooks</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Hooks 使用规则</li>
+        <li>避免常见的 Hooks 错误</li>
+        <li>学会性能优化技巧</li>
+        <li>掌握 Hooks 调试方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Hooks 使用规则</h2>
+      <div class="code-block">
+// 规则 1：只在顶层调用 Hooks
+// 错误示例
+function BadComponent({ isLoggedIn }) {
+  if (isLoggedIn) {
+    const [user, setUser] = useState(null);  // 错误！
+  }
+}
+
+// 正确示例
+function GoodComponent({ isLoggedIn }) {
+  const [user, setUser] = useState(null);
+
+  if (isLoggedIn) {
+    // 使用 user
+  }
+}
+
+// 规则 2：只在 React 函数中调用 Hooks
+// 错误示例
+function badHelper() {
+  const [value, setValue] = useState(0);  // 错误！
+}
+
+// 正确示例
+function GoodComponent() {
+  const [value, setValue] = useState(0);  // 正确
+}
+
+// 自定义 Hook 中可以调用其他 Hooks
+function useCustomHook() {
+  const [value, setValue] = useState(0);  // 正确
+  return [value, setValue];
+}
+
+// 规则 3：使用 ESLint 插件
+// 安装：npm install eslint-plugin-react-hooks --save-dev
+// .eslintrc.json
+{
+  "plugins": ["react-hooks"],
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 性能优化</h2>
+      <div class="code-block">
+// useMemo：缓存计算结果
+import { useMemo } from 'react';
+
+function ExpensiveComponent({ items, filter }) {
+  // 每次渲染都重新计算
+  // const filtered = items.filter(item => item.includes(filter));
+
+  // 只在依赖变化时重新计算
+  const filtered = useMemo(() =&gt; {
+    console.log('Filtering...');
+    return items.filter(item =&gt; item.includes(filter));
+  }, [items, filter]);
+
+  return &lt;ul&gt;{filtered.map(item =&gt; &lt;li key={item}&gt;{item}&lt;/li&gt;)}&lt;/ul&gt;;
+}
+
+// useCallback：缓存函数引用
+import { useCallback } from 'react';
+
+function ParentComponent() {
+  const [count, setCount] = useState(0);
+
+  // 每次渲染都创建新函数
+  // const handleClick = () => console.log('clicked');
+
+  // 缓存函数引用
+  const handleClick = useCallback(() =&gt; {
+    console.log('clicked');
+  }, []);
+
+  return &lt;ChildComponent onClick={handleClick} /&gt;;
+}
+
+// 配合 React.memo
+const ChildComponent = React.memo(function ChildComponent({ onClick }) {
+  console.log('Child rendered');
+  return &lt;button onClick={onClick}&gt;Click&lt;/button&gt;;
+});
+
+// 使用场景
+// 1. 传递给使用 React.memo 的子组件
+// 2. 作为其他 Hook 的依赖
+// 3. 计算开销大的操作
+
+// 不要过度优化
+// 简单计算不需要 useMemo
+function SimpleComponent({ a, b }) {
+  const sum = a + b;  // 简单计算，不需要 useMemo
+  return &lt;div&gt;{sum}&lt;/div&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 依赖管理</h2>
+      <div class="code-block">
+// 正确声明依赖
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+
+  useEffect(() =&gt; {
+    fetchUser(userId).then(setUser);
+  }, [userId]);  // 正确
+
+  return &lt;div&gt;{user?.name}&lt;/div&gt;;
+}
+
+// 避免遗漏依赖
+function SearchResults({ query, pageSize }) {
+  const [results, setResults] = useState([]);
+
+  useEffect(() =&gt; {
+    search(query, pageSize).then(setResults);
+  }, [query]);  // 错误：缺少 pageSize
+
+  // 正确
+  useEffect(() =&gt; {
+    search(query, pageSize).then(setResults);
+  }, [query, pageSize]);
+}
+
+// 使用函数式更新避免依赖
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() =&gt; {
+    const timer = setInterval(() =&gt; {
+      setCount(c =&gt; c + 1);  // 函数式更新
+    }, 1000);
+    return () =&gt; clearInterval(timer);
+  }, []);  // 不需要 count 依赖
+}
+
+// 使用 useRef 存储可变值
+function useLatest&lt;T&gt;(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+function Component({ onChange }) {
+  const latestOnChange = useLatest(onChange);
+
+  useEffect(() =&gt; {
+    const handler = () =&gt; latestOnChange.current();
+    window.addEventListener('resize', handler);
+    return () =&gt; window.removeEventListener('resize', handler);
+  }, []);  // 不需要 onChange 依赖
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Hooks 只能在顶层和 React 函数中调用</li>
+            <li>• 使用 ESLint 插件检查 Hooks 规则</li>
+            <li>• useMemo 和 useCallback 用于性能优化</li>
+            <li>• 正确声明依赖数组，避免遗漏</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-5-自定义Hook.html">← 上一节：自定义 Hook</a>
+      <a href="../chapter77/77-1-ReactRouter基础.html">下一章：React Router 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.2 类型定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-项目配置.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.2 类型定义</h1>
+      <p class="subtitle">为 Koa 应用添加类型支持</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Koa Context 类型定义</li>
+        <li>学会扩展 Context 类型</li>
+        <li>理解自定义类型声明</li>
+        <li>学会定义请求和响应类型</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Koa 基本类型</h2>
+      <div class="code-block">
+import Koa, { Context, Next, Middleware } from 'koa';
+import Router from '@koa/router';
+
+// Context 类型
+app.use(async (ctx: Context, next: Next) => {
+  // ctx.request - Koa Request
+  // ctx.response - Koa Response
+  // ctx.state - 状态对象
+  // ctx.app - Koa 实例
+
+  await next();
+});
+
+// Middleware 类型
+const loggerMiddleware: Middleware = async (ctx, next) => {
+  console.log(`${ctx.method} ${ctx.url}`);
+  await next();
+};
+
+app.use(loggerMiddleware);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 扩展 Context 类型</h2>
+      <div class="code-block">
+// src/types/index.ts
+import 'koa';
+
+// 扩展 Context 的 state 属性
+declare module 'koa' {
+  interface Context {
+    // 自定义属性
+    userId?: string;
+  }
+
+  interface Request {
+    // 扩展请求
+    body?: any;
+  }
+}
+
+// 扩展 state
+declare module 'koa' {
+  interface DefaultState {
+    user?: {
+      id: string;
+      username: string;
+      role: string;
+    };
+  }
+}
+      </div>
+
+      <div class="code-block">
+// 使用扩展后的类型
+app.use(async (ctx: Context, next: Next) => {
+  // 可以访问扩展的属性
+  ctx.state.user = {
+    id: '1',
+    username: 'admin',
+    role: 'admin'
+  };
+
+  ctx.userId = '1';
+
+  await next();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👤</span> 用户类型定义</h2>
+      <div class="code-block">
+// src/types/user.ts
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'user' | 'guest';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateUserDTO {
+  username: string;
+  email: string;
+  password: string;
+  role?: 'admin' | 'user';
+}
+
+export interface UpdateUserDTO {
+  username?: string;
+  email?: string;
+  password?: string;
+}
+
+export interface UserResponse {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> API 响应类型</h2>
+      <div class="code-block">
+// src/types/response.ts
+
+// 通用 API 响应
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// 分页响应
+export interface PaginatedResponse<T> {
+  success: true;
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// 错误响应
+export interface ErrorResponse {
+  success: false;
+  error: string;
+  code: string;
+  details?: any;
+}
+      </div>
+
+      <div class="code-block">
+// 使用
+import { ApiResponse, UserResponse } from '@/types';
+
+router.get('/users/:id', async (ctx: Context) => {
+  const user = await UserService.findById(ctx.params.id);
+
+  const response: ApiResponse<UserResponse> = {
+    success: true,
+    data: user
+  };
+
+  ctx.body = response;
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 请求体类型</h2>
+      <div class="code-block">
+// src/types/request.ts
+import { RouterContext } from '@koa/router';
+
+// 登录请求
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+// 注册请求
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+// 获取请求体的辅助类型
+export type RequestBody<T> = T extends infer U ? U : never;
+
+// 使用
+router.post('/login', async (ctx: RouterContext) => {
+  const { username, password } = ctx.request.body as LoginRequest;
+
+  // 类型安全的访问
+  const user = await AuthService.login(username, password);
+
+  ctx.body = { success: true, data: user };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 查询参数类型</h2>
+      <div class="code-block">
+// src/types/query.ts
+
+// 分页查询
+export interface PaginationQuery {
+  page?: string;
+  limit?: string;
+  sort?: 'asc' | 'desc';
+  sortBy?: string;
+}
+
+// 用户查询
+export interface UserQuery extends PaginationQuery {
+  username?: string;
+  email?: string;
+  role?: string;
+  status?: 'active' | 'inactive';
+}
+
+// 解析查询参数
+function parsePagination(query: PaginationQuery) {
+  return {
+    page: parseInt(query.page || '1', 10),
+    limit: parseInt(query.limit || '10', 10),
+    sort: query.sort || 'desc',
+    sortBy: query.sortBy || 'createdAt'
+  };
+}
+
+// 使用
+router.get('/users', async (ctx: RouterContext) => {
+  const query = ctx.query as UserQuery;
+  const { page, limit, sort, sortBy } = parsePagination(query);
+
+  const result = await UserService.findAll({ page, limit, sort, sortBy });
+
+  ctx.body = result;
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 路由参数类型</h2>
+      <div class="code-block">
+// src/types/params.ts
+
+// 用户路由参数
+export interface UserParams {
+  id: string;
+}
+
+// 文章路由参数
+export interface PostParams {
+  postId: string;
+  commentId?: string;
+}
+
+// 使用
+import { RouterContext } from '@koa/router';
+
+router.get('/users/:id', async (ctx: RouterContext<UserParams>) => {
+  const { id } = ctx.params;  // 类型安全的访问
+
+  const user = await UserService.findById(id);
+  ctx.body = { success: true, data: user };
+});
+
+router.get('/posts/:postId/comments/:commentId',
+  async (ctx: RouterContext<PostParams>) => {
+    const { postId, commentId } = ctx.params;
+
+    // ...
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 泛型控制器类型</h2>
+      <div class="code-block">
+// src/types/controller.ts
+import { RouterContext, Next } from '@koa/router';
+
+// 控制器处理器类型
+export type ControllerHandler<
+  Params = any,
+  Query = any,
+  Body = any,
+  Response = any
+> = (
+  ctx: RouterContext<Params, any, Query> & {
+    request: { body: Body };
+  },
+  next: Next
+) => Promise<Response | void>;
+
+// 基础控制器类
+export abstract class BaseController {
+  protected success<T>(ctx: RouterContext, data: T, message?: string) {
+    ctx.body = {
+      success: true,
+      data,
+      message
+    };
+  }
+
+  protected error(ctx: RouterContext, error: string, status = 400) {
+    ctx.status = status;
+    ctx.body = {
+      success: false,
+      error
+    };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整类型示例</h2>
+      <div class="code-block">
+// src/controllers/userController.ts
+import { RouterContext } from '@koa/router';
+import { BaseController } from '@/types/controller';
+import { User, CreateUserDTO, UpdateUserDTO } from '@/types/user';
+import { ApiResponse, PaginatedResponse } from '@/types/response';
+
+class UserController extends BaseController {
+  // 获取用户列表
+  async index(ctx: RouterContext) {
+    const { page = 1, limit = 10 } = ctx.query;
+
+    const result = await UserService.findAll({
+      page: Number(page),
+      limit: Number(limit)
+    });
+
+    const response: PaginatedResponse<User> = {
+      success: true,
+      ...result
+    };
+
+    ctx.body = response;
+  }
+
+  // 创建用户
+  async create(ctx: RouterContext<any, any, any, CreateUserDTO>) {
+    const data = ctx.request.body;
+
+    const user = await UserService.create(data);
+    this.success(ctx, user, 'User created');
+  }
+
+  // 更新用户
+  async update(ctx: RouterContext<{ id: string }, any, any, UpdateUserDTO>) {
+    const { id } = ctx.params;
+    const data = ctx.request.body;
+
+    const user = await UserService.update(id, data);
+    this.success(ctx, user);
+  }
+}
+
+export default new UserController();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 Context、Next、Middleware 类型</li>
+            <li>• 通过 declare module 扩展 Koa 类型</li>
+            <li>• 定义 DTO（数据传输对象）类型</li>
+            <li>• 使用泛型定义通用响应和控制器类型</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-1-项目配置.html">← 上一节：项目配置</a>
+      <a href="40-3-中间件类型.html">下一节：中间件类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.4 键重映射 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="9-1-映射类型基础.html">第九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>9.4 键重映射</h1>
+      <p class="subtitle">使用 as 子句重命名键</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 as 子句的作用</li>
+        <li>掌握键名转换技巧</li>
+        <li>学会过滤特定键</li>
+        <li>了解实际应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> as 子句基础</h2>
+      <div class="code-block">
+// 键重映射使用 as 子句改变键名
+// 语法：[K in keyof T as NewKey]: T[K]
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+// 添加前缀
+type Prefixed<T, P extends string> = {
+  [K in keyof T as `${P}${Capitalize<string & K>}`]: T[K];
+};
+
+type PrefixedUser = Prefixed<User, 'user'>;
+// { userId: number; userName: string; userEmail: string; }
+
+// 添加后缀
+type Suffixed<T, S extends string> = {
+  [K in keyof T as `${string & K}${S}`]: T[K];
+};
+
+type SuffixedUser = Suffixed<User, 'Field'>;
+// { idField: number; nameField: string; emailField: string; }
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">as 子句</div>
+          <p>as 子句允许在映射类型中重新定义键名。结合模板字面量类型可以实现强大的键名转换。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 过滤键</h2>
+      <div class="code-block">
+// 当 as 子句返回 never 时，该键会被过滤掉
+type OnlyStrings<T> = {
+  [K in keyof T as T[K] extends string ? K : never]: T[K];
+};
+
+interface Mixed {
+  id: number;
+  name: string;
+  email: string;
+  active: boolean;
+}
+
+type StringProps = OnlyStrings<Mixed>;
+// { name: string; email: string; }
+
+// 排除特定键
+type OmitByType<T, U> = {
+  [K in keyof T as T[K] extends U ? never : K]: T[K];
+};
+
+type WithoutNumbers = OmitByType<Mixed, number>;
+// { name: string; email: string; active: boolean; }
+
+// 只保留特定键
+type PickByType<T, U> = {
+  [K in keyof T as T[K] extends U ? K : never]: T[K];
+};
+
+type OnlyNumbers = PickByType<Mixed, number>;
+// { id: number; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> Getter/Setter 生成</h2>
+      <div class="code-block">
+// 生成 getter 方法
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+// 生成 setter 方法
+type Setters<T> = {
+  [K in keyof T as `set${Capitalize<string & K>}`]: (value: T[K]) => void;
+};
+
+interface State {
+  count: number;
+  name: string;
+  loading: boolean;
+}
+
+type StateGetters = Getters<State>;
+// { getCount: () => number; getName: () => string; getLoading: () => boolean; }
+
+type StateSetters = Setters<State>;
+// { setCount: (value: number) => void; setName: (value: string) => void; ... }
+
+// 组合 getter 和 setter
+type WithAccessors<T> = T & Getters<T> & Setters<T>;
+
+type FullState = WithAccessors<State>;
+// 包含所有属性和 getter/setter 方法
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实用示例</h2>
+      <div class="code-block">
+// 将下划线命名转为驼峰
+type CamelCase<S extends string> =
+  S extends `${infer P}_${infer Q}`
+    ? `${P}${Capitalize<CamelCase<Q>>}`
+    : S;
+
+type CamelCaseKeys<T> = {
+  [K in keyof T as CamelCase<string & K>]: T[K];
+};
+
+interface SnakeCase {
+  user_id: number;
+  user_name: string;
+  created_at: Date;
+}
+
+type CamelCaseUser = CamelCaseKeys<SnakeCase>;
+// { userId: number; userName: string; createdAt: Date; }
+
+// 提取事件处理器类型
+type EventHandler<T> = {
+  [K in keyof T as `on${Capitalize<string & K>}`]: (event: T[K]) => void;
+};
+
+interface Events {
+  click: { x: number; y: number };
+  focus: { target: HTMLElement };
+  blur: { target: HTMLElement };
+}
+
+type EventHandlers = EventHandler<Events>;
+// { onClick: (event: { x: number; y: number }) => void; ... }
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>键重映射是 TypeScript 4.1+ 的特性。确保使用支持此特性的 TypeScript 版本。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• as 子句用于重命名键</li>
+            <li>• 返回 never 可以过滤键</li>
+            <li>• 结合模板字面量实现复杂转换</li>
+            <li>• 常用于生成 getter/setter</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="9-3-映射类型修饰符.html">← 上一节：映射类型修饰符</a>
+      <a href="9-5-模板字面量类型.html">下一节：模板字面量类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

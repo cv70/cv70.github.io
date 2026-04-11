@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.4 路由模块化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter31.html">第31章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>31.4 路由模块化</h1>
+      <p class="subtitle">学习如何组织和模块化 Express 路由</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解路由模块化的必要性</li>
+        <li>掌握 express.Router 的使用方法</li>
+        <li>学会组织大型项目的路由结构</li>
+        <li>理解路由挂载和前缀的概念</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 为什么需要路由模块化</h2>
+      <p>当应用规模增大时，将所有路由放在一个文件中会导致代码难以维护。路由模块化有以下好处：</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">✅ 代码组织</h3>
+          <p class="card-text">按功能模块分离路由，代码结构清晰</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">✅ 团队协作</h3>
+          <p class="card-text">不同开发者可以独立开发不同模块</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">✅ 可维护性</h3>
+          <p class="card-text">修改某个模块不影响其他模块</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">✅ 可复用性</h3>
+          <p class="card-text">路由模块可以在不同项目中复用</p>
+        </div>
+      </div>
+
+      <h3>问题示例：未模块化的路由</h3>
+      <div class="code-block">
+// ❌ 所有路由在一个文件中 - app.js
+app.get('/', homeController.index);
+app.get('/about', homeController.about);
+app.get('/users', userController.list);
+app.get('/users/:id', userController.detail);
+app.post('/users', userController.create);
+app.put('/users/:id', userController.update);
+app.delete('/users/:id', userController.delete);
+app.get('/posts', postController.list);
+app.get('/posts/:id', postController.detail);
+// ... 数百行路由定义</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> express.Router 基础</h2>
+      <p><code>express.Router()</code> 创建一个可挂载的路由模块：</p>
+
+      <div class="code-block">
+// routes/users.js
+const express = require('express');
+const router = express.Router();
+
+// 定义用户相关路由
+router.get('/', (req, res) => {
+  res.send('Users List');
+});
+
+router.get('/:id', (req, res) => {
+  res.send(`User ${req.params.id}`);
+});
+
+router.post('/', (req, res) => {
+  res.send('Create User');
+});
+
+module.exports = router;
+
+// app.js
+const express = require('express');
+const app = express();
+const usersRouter = require('./routes/users');
+
+// 挂载路由，添加前缀 /users
+app.use('/users', usersRouter);</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">路由前缀</div>
+          <p><code>app.use('/users', usersRouter)</code> 会自动为 router 中的所有路由添加 /users 前缀。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 项目目录结构</h2>
+      <p>推荐的路由组织结构：</p>
+
+      <div class="code-block">
+project/
+├── app.js                 # 应用入口
+├── routes/
+│   ├── index.js           # 路由汇总
+│   ├── home.js            # 首页路由
+│   ├── users.js           # 用户路由
+│   ├── posts.js           # 文章路由
+│   ├── comments.js        # 评论路由
+│   ├── auth.js            # 认证路由
+│   └── api/
+│       ├── index.js       # API 路由汇总
+│       ├── v1/
+│       │   ├── index.js   # v1 版本路由
+│       │   ├── users.js   # v1 用户 API
+│       │   └── posts.js   # v1 文章 API
+│       └── v2/
+│           └── index.js   # v2 版本路由
+└── controllers/           # 控制器（路由处理逻辑）
+    ├── userController.js
+    └── postController.js</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 模块化路由实现</h2>
+
+      <h3>1. 创建路由模块</h3>
+      <div class="code-block">
+// routes/users.js
+const express = require('express');
+const router = express.Router();
+const userController = require('../controllers/userController');
+const authMiddleware = require('../middleware/auth');
+
+// 应用中间件（只影响此路由模块）
+router.use(authMiddleware.requireAuth);
+
+// 用户列表
+router.get('/', userController.list);
+
+// 用户详情
+router.get('/:id', userController.detail);
+
+// 创建用户
+router.post('/', userController.create);
+
+// 更新用户
+router.put('/:id', userController.update);
+
+// 删除用户
+router.delete('/:id', userController.delete);
+
+module.exports = router;</div>
+
+      <h3>2. 路由汇总</h3>
+      <div class="code-block">
+// routes/index.js
+const express = require('express');
+const router = express.Router();
+
+// 引入各模块路由
+const homeRouter = require('./home');
+const usersRouter = require('./users');
+const postsRouter = require('./posts');
+const authRouter = require('./auth');
+const apiRouter = require('./api');
+
+// 挂载路由
+router.use('/', homeRouter);
+router.use('/users', usersRouter);
+router.use('/posts', postsRouter);
+router.use('/auth', authRouter);
+router.use('/api', apiRouter);
+
+module.exports = router;</div>
+
+      <h3>3. 主应用配置</h3>
+      <div class="code-block">
+// app.js
+const express = require('express');
+const app = express();
+
+// 引入路由
+const routes = require('./routes');
+
+// 全局中间件
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 挂载路由
+app.use('/', routes);
+
+// 错误处理
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+module.exports = app;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 嵌套路由</h2>
+      <p>路由可以嵌套，形成层级结构：</p>
+
+      <div class="code-block">
+// routes/api/index.js
+const express = require('express');
+const router = express.Router();
+
+const v1Router = require('./v1');
+const v2Router = require('./v2');
+
+// API 通用中间件
+router.use((req, res, next) => {
+  console.log('API Request:', req.method, req.path);
+  next();
+});
+
+// 挂载版本路由
+router.use('/v1', v1Router);
+router.use('/v2', v2Router);
+
+module.exports = router;
+
+// routes/api/v1/index.js
+const express = require('express');
+const router = express.Router();
+
+const usersRouter = require('./users');
+const postsRouter = require('./posts');
+
+router.use('/users', usersRouter);
+router.use('/posts', postsRouter);
+
+module.exports = router;
+
+// 最终路由路径：
+// /api/v1/users
+// /api/v1/posts
+// /api/v2/...</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 资源路由模式</h2>
+      <p>对于 RESTful 资源，可以创建通用的资源路由生成器：</p>
+
+      <div class="code-block">
+// utils/resourceRouter.js
+const express = require('express');
+
+/**
+ * 创建资源路由
+ * @param {Object} controller - 控制器对象
+ * @param {Object} options - 配置选项
+ */
+function createResourceRouter(controller, options = {}) {
+  const router = express.Router();
+  const {
+    middleware = [],
+    only = ['index', 'show', 'create', 'update', 'destroy'],
+    except = []
+  } = options;
+
+  // 过滤要创建的路由
+  const actions = only.filter(action => !except.includes(action));
+
+  // 应用通用中间件
+  middleware.forEach(mw => router.use(mw));
+
+  // 定义路由
+  if (actions.includes('index')) {
+    router.get('/', controller.index);
+  }
+  if (actions.includes('show')) {
+    router.get('/:id', controller.show);
+  }
+  if (actions.includes('create')) {
+    router.post('/', controller.create);
+  }
+  if (actions.includes('update')) {
+    router.put('/:id', controller.update);
+    router.patch('/:id', controller.update);
+  }
+  if (actions.includes('destroy')) {
+    router.delete('/:id', controller.destroy);
+  }
+
+  return router;
+}
+
+module.exports = createResourceRouter;</div>
+
+      <h3>使用资源路由生成器</h3>
+      <div class="code-block">
+// routes/users.js
+const createResourceRouter = require('../utils/resourceRouter');
+const userController = require('../controllers/userController');
+const authMiddleware = require('../middleware/auth');
+
+module.exports = createResourceRouter(userController, {
+  middleware: [authMiddleware.requireAuth],
+  except: ['create'] // 注册不需要认证
+});
+
+// routes/posts.js
+module.exports = createResourceRouter(postController, {
+  middleware: [authMiddleware.requireAuth],
+  only: ['index', 'show', 'create', 'update']
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 路由自动加载</h2>
+      <p>对于大型项目，可以自动加载路由模块：</p>
+
+      <div class="code-block">
+// utils/loadRoutes.js
+const fs = require('fs');
+const path = require('path');
+
+function loadRoutes(app, routesDir) {
+  // 读取路由目录
+  const files = fs.readdirSync(routesDir);
+
+  files.forEach(file => {
+    const filePath = path.join(routesDir, file);
+    const stat = fs.statSync(filePath);
+
+    if (stat.isDirectory()) {
+      // 递归加载子目录
+      loadRoutes(app, filePath);
+    } else if (file.endsWith('.js') && file !== 'index.js') {
+      // 加载路由模块
+      const route = require(filePath);
+      const routeName = file.replace('.js', '');
+      const routePath = routeName === 'home' ? '/' : `/${routeName}`;
+
+      app.use(routePath, route);
+      console.log(`Route loaded: ${routePath}`);
+    }
+  });
+}
+
+module.exports = loadRoutes;
+
+// app.js
+const loadRoutes = require('./utils/loadRoutes');
+
+loadRoutes(app, path.join(__dirname, 'routes'));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整示例项目</h2>
+      <div class="code-block">
+// controllers/userController.js
+const User = require('../models/User');
+
+exports.list = async (req, res) => {
+  const users = await User.find();
+  res.json(users);
+};
+
+exports.show = async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'Not found' });
+  res.json(user);
+};
+
+exports.create = async (req, res) => {
+  const user = await User.create(req.body);
+  res.status(201).json(user);
+};
+
+exports.update = async (req, res) => {
+  const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(user);
+};
+
+exports.destroy = async (req, res) => {
+  await User.findByIdAndDelete(req.params.id);
+  res.status(204).send();
+};
+
+// routes/users.js
+const express = require('express');
+const router = express.Router();
+const userController = require('../controllers/userController');
+
+router.route('/')
+  .get(userController.list)
+  .post(userController.create);
+
+router.route('/:id')
+  .get(userController.show)
+  .put(userController.update)
+  .delete(userController.destroy);
+
+module.exports = router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 express.Router() 创建可模块化的路由</li>
+            <li>app.use() 挂载路由并添加路径前缀</li>
+            <li>按功能模块划分路由文件，提高可维护性</li>
+            <li>支持嵌套路由，实现 API 版本控制等</li>
+            <li>可以使用资源路由模式简化 CRUD 路由定义</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>重构一个现有的 Express 项目，将路由模块化</li>
+        <li>创建一个支持 API 版本控制的路由结构（v1, v2）</li>
+        <li>实现一个资源路由生成器，自动创建 CRUD 路由</li>
+        <li>创建一个自动加载路由目录的功能</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="31-3-路由参数.html">← 上一节：路由参数</a>
+      <a href="31-5-Router类使用.html">下一节：Router 类使用 →</a>
+    </div>
+  </div>
+</body>
+</html>

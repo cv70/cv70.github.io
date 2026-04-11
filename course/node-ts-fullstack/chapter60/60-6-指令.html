@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60.6 指令 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="60-1-类型系统.html">第60章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>60.6 指令</h1>
+      <p class="subtitle">GraphQL 指令系统详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 指令概述</h2>
+      <p>指令（Directive）是 GraphQL 中用于影响查询执行行为的特殊语法。指令可以附加在字段、片段或操作上，实现条件包含、格式化等功能。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">指令的作用</div>
+          <ul>
+            <li>条件性地包含或排除字段</li>
+            <li>修改字段行为</li>
+            <li>添加元数据</li>
+            <li>实现自定义功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内置指令</h2>
+
+      <h3>@include(if: Boolean!)</h3>
+      <p>条件为 true 时包含字段。</p>
+
+      <div class="code-block">
+<span class="comment">// 语法</span>
+field @include(if: $condition)
+
+<span class="comment">// 示例</span>
+query GetUser($id: ID!, $withPosts: Boolean!) {
+  user(id: $id) {
+    id
+    name
+    email
+    posts @include(if: $withPosts) {
+      id
+      title
+    }
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"id"</span>: <span class="string">"123"</span>,
+  <span class="string">"withPosts"</span>: <span class="keyword">true</span>   <span class="comment">// posts 字段会被包含</span>
+}
+
+<span class="comment">// 当 withPosts 为 false 时</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"user"</span>: {
+      <span class="string">"id"</span>: <span class="string">"123"</span>,
+      <span class="string">"name"</span>: <span class="string">"张三"</span>,
+      <span class="string">"email"</span>: <span class="string">"zhang@example.com"</span>
+      <span class="comment">// posts 字段不存在</span>
+    }
+  }
+}
+      </div>
+
+      <h3>@skip(if: Boolean!)</h3>
+      <p>条件为 true 时跳过字段。</p>
+
+      <div class="code-block">
+<span class="comment">// 语法</span>
+field @skip(if: $condition)
+
+<span class="comment">// 示例</span>
+query GetUsers($hideInactive: Boolean!) {
+  users {
+    id
+    name
+    email
+    isActive
+    lastLogin @skip(if: $hideInactive)
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"hideInactive"</span>: <span class="keyword">true</span>   <span class="comment">// lastLogin 字段会被跳过</span>
+}
+
+<span class="comment">// @include 和 @skip 可以组合使用</span>
+query GetUser($showPosts: Boolean!, $hideComments: Boolean!) {
+  user(id: <span class="string">"123"</span>) {
+    name
+    posts @include(if: $showPosts) {
+      title
+      comments @skip(if: $hideComments) {
+        content
+      }
+    }
+  }
+}
+      </div>
+
+      <h3>@deprecated(reason: String)</h3>
+      <p>标记字段已废弃。</p>
+
+      <div class="code-block">
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  <span class="comment">// 废弃字段</span>
+  fullName: String @deprecated(reason: <span class="string">"使用 name 字段替代"</span>)
+  <span class="comment">// 新字段</span>
+  firstName: String
+  lastName: String
+}
+
+<span class="comment">// 查询时仍可使用，但会显示警告</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    name
+    fullName  <span class="comment">// 会收到废弃警告</span>
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 自定义指令</h2>
+
+      <h3>定义指令</h3>
+      <div class="code-block">
+<span class="comment">// Schema 中定义指令</span>
+<span class="keyword">directive</span> @auth(requires: Role = USER) <span class="keyword">on</span> FIELD_DEFINITION
+
+<span class="keyword">directive</span> @upper <span class="keyword">on</span> FIELD_DEFINITION
+
+<span class="keyword">directive</span> @date(format: String = <span class="string">"yyyy-MM-dd"</span>) <span class="keyword">on</span> FIELD_DEFINITION
+
+<span class="keyword">directive</span> @cache(ttl: Int!) <span class="keyword">on</span> QUERY
+
+<span class="comment">// 指令位置</span>
+<span class="keyword">directive</span> @example <span class="keyword">on</span>
+  | QUERY          <span class="comment">// 查询操作</span>
+  | MUTATION       <span class="comment">// 变更操作</span>
+  | SUBSCRIPTION   <span class="comment">// 订阅操作</span>
+  | FIELD          <span class="comment">// 字段</span>
+  | FRAGMENT_DEFINITION    <span class="comment">// 片段定义</span>
+  | FRAGMENT_SPREAD        <span class="comment">// 片段引用</span>
+  | INLINE_FRAGMENT        <span class="comment">// 内联片段</span>
+  | VARIABLE_DEFINITION    <span class="comment">// 变量定义</span>
+  | SCHEMA         <span class="comment">// Schema</span>
+  | SCALAR         <span class="comment">// 标量</span>
+  | OBJECT         <span class="comment">// 对象类型</span>
+  | FIELD_DEFINITION       <span class="comment">// 字段定义</span>
+  | ARGUMENT_DEFINITION    <span class="comment">// 参数定义</span>
+  | INTERFACE      <span class="comment">// 接口</span>
+  | UNION          <span class="comment">// 联合类型</span>
+  | ENUM           <span class="comment">// 枚举</span>
+  | ENUM_VALUE     <span class="comment">// 枚举值</span>
+  | INPUT_OBJECT   <span class="comment">// 输入类型</span>
+  | INPUT_FIELD_DEFINITION <span class="comment">// 输入字段定义</span>
+      </div>
+
+      <h3>实现自定义指令</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { SchemaDirectiveVisitor } <span class="keyword">from</span> <span class="string">'graphql-tools'</span>;
+<span class="keyword">import</span> { GraphQLField, GraphQLString, defaultFieldResolver } <span class="keyword">from</span> <span class="string">'graphql'</span>;
+
+<span class="comment">// 大写指令</span>
+<span class="keyword">class</span> <span class="function">UpperDirective</span> <span class="keyword">extends</span> SchemaDirectiveVisitor {
+  visitFieldDefinition(field: GraphQLField<<span class="keyword">any</span>, <span class="keyword">any</span>>) {
+    <span class="keyword">const</span> { resolve = defaultFieldResolver } = field;
+
+    field.resolve = <span class="keyword">async function</span> (...args) {
+      <span class="keyword">const</span> result = <span class="keyword">await</span> resolve.apply(<span class="keyword">this</span>, args);
+      <span class="keyword">if</span> (<span class="keyword">typeof</span> result === <span class="string">'string'</span>) {
+        <span class="keyword">return</span> result.toUpperCase();
+      }
+      <span class="keyword">return</span> result;
+    };
+  }
+}
+
+<span class="comment">// 日期格式化指令</span>
+<span class="keyword">class</span> <span class="function">DateDirective</span> <span class="keyword">extends</span> SchemaDirectiveVisitor {
+  visitFieldDefinition(field: GraphQLField<<span class="keyword">any</span>, <span class="keyword">any</span>>) {
+    <span class="keyword">const</span> { resolve = defaultFieldResolver } = field;
+    <span class="keyword">const</span> { format } = <span class="keyword">this</span>.args;
+
+    field.resolve = <span class="keyword">async function</span> (...args) {
+      <span class="keyword">const</span> result = <span class="keyword">await</span> resolve.apply(<span class="keyword">this</span>, args);
+      <span class="keyword">if</span> (result <span class="keyword">instanceof</span> Date) {
+        <span class="keyword">return</span> formatDate(result, format);
+      }
+      <span class="keyword">return</span> result;
+    };
+  }
+}
+
+<span class="comment">// 认证指令</span>
+<span class="keyword">class</span> <span class="function">AuthDirective</span> <span class="keyword">extends</span> SchemaDirectiveVisitor {
+  visitFieldDefinition(field: GraphQLField<<span class="keyword">any</span>, <span class="keyword">any</span>>) {
+    <span class="keyword">const</span> { resolve = defaultFieldResolver } = field;
+    <span class="keyword">const</span> { requires } = <span class="keyword">this</span>.args;
+
+    field.resolve = <span class="keyword">async function</span> (root, args, context, info) {
+      <span class="keyword">if</span> (!context.user || !hasRole(context.user, requires)) {
+        <span class="keyword">throw new</span> Error(<span class="string">'未授权访问'</span>);
+      }
+      <span class="keyword">return</span> resolve.call(<span class="keyword">this</span>, root, args, context, info);
+    };
+  }
+}
+
+<span class="comment">// Schema 中使用</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String! @upper
+  createdAt: DateTime! @date(format: <span class="string">"yyyy年MM月dd日"</span>)
+}
+
+<span class="keyword">type</span> Query {
+  adminData: AdminData! @auth(requires: ADMIN)
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证指令示例</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">directive</span> @auth(requires: Role = USER) <span class="keyword">on</span> FIELD_DEFINITION | OBJECT
+
+<span class="keyword">enum</span> Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+<span class="keyword">type</span> Query {
+  <span class="comment">// 公开接口</span>
+  publicData: String!
+
+  <span class="comment">// 需要登录</span>
+  userData: User! @auth
+
+  <span class="comment">// 需要管理员权限</span>
+  adminData: AdminData! @auth(requires: ADMIN)
+}
+
+<span class="keyword">type</span> Mutation {
+  <span class="comment">// 需要超级管理员</span>
+  deleteUser(id: ID!): Boolean! @auth(requires: SUPER_ADMIN)
+}
+
+<span class="comment">// 整个类型需要认证</span>
+<span class="keyword">type</span> AdminPanel @auth(requires: ADMIN) {
+  users: [User!]!
+  statistics: Statistics!
+}
+
+<span class="comment">// Apollo Server 实现</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer({
+  typeDefs,
+  resolvers,
+  schemaDirectives: {
+    auth: AuthDirective,
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 缓存指令</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">directive</span> @cache(ttl: Int!) <span class="keyword">on</span> QUERY | FIELD
+
+<span class="keyword">type</span> Query {
+  <span class="comment">// 缓存 60 秒</span>
+  popularPosts: [Post!]! @cache(ttl: <span class="number">60</span>)
+
+  <span class="comment">// 缓存 5 分钟</span>
+  categories: [Category!]! @cache(ttl: <span class="number">300</span>)
+}
+
+<span class="comment">// 客户端使用</span>
+query GetPopularPosts @cache(ttl: <span class="number">120</span>) {
+  popularPosts {
+    title
+    author { name }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 常用指令库</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>指令</th>
+            <th>功能</th>
+            <th>来源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>@auth</td>
+            <td>认证授权</td>
+            <td>graphql-auth-directives</td>
+          </tr>
+          <tr>
+            <td>@cache</td>
+            <td>缓存控制</td>
+            <td>apollo-cache-control</td>
+          </tr>
+          <tr>
+            <td>@rest</td>
+            <td>REST 数据源</td>
+            <td>graphql-rest-binding</td>
+          </tr>
+          <tr>
+            <td>@validate</td>
+            <td>输入验证</td>
+            <td>graphql-constraints</td>
+          </tr>
+          <tr>
+            <td>@rateLimit</td>
+            <td>速率限制</td>
+            <td>graphql-rate-limit</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>@include 和 @skip 是最常用的内置指令</li>
+        <li>@deprecated 用于标记废弃字段</li>
+        <li>自定义指令可以扩展 GraphQL 功能</li>
+        <li>指令可用于认证、缓存、格式化等</li>
+        <li>指令可以应用在多种位置</li>
+        <li>合理使用指令提高代码复用性</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="60-5-输入类型.html">← 上一节：输入类型</a>
+      <a href="../chapter61/61-1-Resolver编写.html">下一章：Resolver 编写 →</a>
+    </div>
+  </div>
+</body>
+</html>

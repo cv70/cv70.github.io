@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>57.5 API 版本管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="57-1-REST架构风格.html">第57章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>57.5 API 版本管理</h1>
+      <p class="subtitle">管理 API 演进，保持向后兼容性</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 为什么需要版本管理</h2>
+      <p>API 作为公共接口，需要随着业务发展不断演进。版本管理确保在不影响现有客户端的情况下，安全地引入新功能和改进。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">版本管理的目标</div>
+          <ul>
+            <li>保持向后兼容性，不破坏现有客户端</li>
+            <li>支持多个版本并行运行</li>
+            <li>清晰的生命周期管理</li>
+            <li>便于 API 的演进和废弃</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔢</span> 版本号规范</h2>
+
+      <h3>语义化版本号（SemVer）</h3>
+      <p>语义化版本号格式：MAJOR.MINOR.PATCH</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>部分</th>
+            <th>说明</th>
+            <th>API 变更</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-error">MAJOR</span></td>
+            <td>主版本号</td>
+            <td>不兼容的 API 变更</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-warning">MINOR</span></td>
+            <td>次版本号</td>
+            <td>向后兼容的功能新增</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-success">PATCH</span></td>
+            <td>修订号</td>
+            <td>向后兼容的问题修复</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+<span class="comment">// 版本号示例</span>
+v1.0.0  <span class="comment">// 初始版本</span>
+v1.1.0  <span class="comment">// 新增功能，向后兼容</span>
+v1.1.1  <span class="comment">// Bug 修复</span>
+v2.0.0  <span class="comment">// 破坏性变更，新主版本</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 版本管理策略</h2>
+
+      <h3>1. URL 路径版本控制</h3>
+      <p>最常用的方式，版本号直接嵌入 URL 路径中。</p>
+
+      <div class="code-block">
+<span class="comment">// API URL 示例</span>
+GET /api/v1/users
+GET /api/v2/users
+GET /api/v2/users/123
+
+<span class="comment">// 优点：清晰直观，易于缓存</span>
+<span class="comment">// 缺点：URL 变化，需要更新客户端</span>
+      </div>
+
+      <h3>2. 查询参数版本控制</h3>
+      <p>通过查询参数指定版本。</p>
+
+      <div class="code-block">
+<span class="comment">// 查询参数示例</span>
+GET /api/users?version=1
+GET /api/users?version=2
+GET /api/users?v=2
+
+<span class="comment">// 优点：灵活，URL 不变</span>
+<span class="comment">// 缺点：容易被忽略，缓存复杂</span>
+      </div>
+
+      <h3>3. 请求头版本控制</h3>
+      <p>通过自定义请求头指定版本。</p>
+
+      <div class="code-block">
+<span class="comment">// 自定义请求头</span>
+GET /api/users
+Accept-Version: 2
+
+<span class="comment">// 或使用 Accept 头</span>
+GET /api/users
+Accept: application/vnd.myapi.v2+json
+
+<span class="comment">// 优点：URL 简洁，RESTful 风格</span>
+<span class="comment">// 缺点：需要客户端配置请求头</span>
+      </div>
+
+      <h3>4. 主机名版本控制</h3>
+      <p>不同版本使用不同的子域名或主机名。</p>
+
+      <div class="code-block">
+<span class="comment">// 主机名版本控制</span>
+GET https://v1.api.example.com/users
+GET https://v2.api.example.com/users
+
+<span class="comment">// 优点：完全隔离，便于独立部署</span>
+<span class="comment">// 缺点：DNS 配置复杂</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 版本策略对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>优点</th>
+            <th>缺点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>URL 路径</td>
+            <td>直观、易缓存、易测试</td>
+            <td>URL 变化</td>
+            <td>公开 API、推荐使用</td>
+          </tr>
+          <tr>
+            <td>查询参数</td>
+            <td>灵活、URL 不变</td>
+            <td>易忽略、缓存复杂</td>
+            <td>简单场景</td>
+          </tr>
+          <tr>
+            <td>请求头</td>
+            <td>URL 简洁、RESTful</td>
+            <td>需配置头、调试不便</td>
+            <td>内部 API</td>
+          </tr>
+          <tr>
+            <td>主机名</td>
+            <td>完全隔离</td>
+            <td>配置复杂</td>
+            <td>大规模系统</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> NestJS 版本控制实现</h2>
+
+      <div class="code-block">
+<span class="comment">// main.ts - 启用版本控制</span>
+<span class="keyword">import</span> { NestFactory } <span class="keyword">from</span> <span class="string">'@nestjs/core'</span>;
+<span class="keyword">import</span> { VersioningType } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> { AppModule } <span class="keyword">from</span> <span class="string">'./app.module'</span>;
+
+<span class="keyword">async function</span> <span class="function">bootstrap</span>() {
+  <span class="keyword">const</span> app = <span class="keyword">await</span> NestFactory.create(AppModule);
+
+  <span class="comment">// 启用 URI 版本控制</span>
+  app.enableVersioning({
+    type: VersioningType.URI,
+  });
+
+  <span class="keyword">await</span> app.listen(<span class="number">3000</span>);
+}
+bootstrap();
+
+<span class="comment">// users.controller.v1.ts</span>
+<span class="keyword">import</span> { Controller, Get, Version } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+
+@Controller({
+  path: <span class="string">'users'</span>,
+  version: <span class="string">'1'</span>,
+})
+<span class="keyword">export class</span> <span class="function">UsersControllerV1</span> {
+  @Get()
+  <span class="function">findAll</span>() {
+    <span class="keyword">return</span> { version: <span class="number">1</span>, message: <span class="string">'用户列表 V1'</span> };
+  }
+
+  @Get(<span class="string">':id'</span>)
+  @Version(<span class="string">'2'</span>)  <span class="comment">// 单个路由使用不同版本</span>
+  <span class="function">findOne</span>() {
+    <span class="keyword">return</span> { version: <span class="number">2</span>, message: <span class="string">'用户详情 V2'</span> };
+  }
+}
+
+<span class="comment">// users.controller.v2.ts</span>
+@Controller({
+  path: <span class="string">'users'</span>,
+  version: <span class="string">'2'</span>,
+})
+<span class="keyword">export class</span> <span class="function">UsersControllerV2</span> {
+  @Get()
+  <span class="function">findAll</span>() {
+    <span class="keyword">return</span> {
+      version: <span class="number">2</span>,
+      data: [
+        { id: <span class="number">1</span>, name: <span class="string">'张三'</span>, role: <span class="string">'admin'</span> }
+      ],
+      meta: { total: <span class="number">100</span> }
+    };
+  }
+}
+      </div>
+
+      <h3>Header 版本控制</h3>
+      <div class="code-block">
+<span class="comment">// main.ts - Header 版本控制</span>
+app.enableVersioning({
+  type: VersioningType.HEADER,
+  header: <span class="string">'X-API-Version'</span>,
+});
+
+<span class="comment">// 请求示例</span>
+GET /users HTTP/1.1
+X-API-Version: 2
+      </div>
+
+      <h3>Media Type 版本控制</h3>
+      <div class="code-block">
+<span class="comment">// main.ts - Media Type 版本控制</span>
+app.enableVersioning({
+  type: VersioningType.MEDIA_TYPE,
+  key: <span class="string">'v'</span>,
+});
+
+<span class="comment">// 请求示例</span>
+GET /users HTTP/1.1
+Accept: application/vnd.myapi.v2+json
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 版本生命周期管理</h2>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-date">阶段 1</div>
+          <div class="timeline-content">
+            <h4>发布（Release）</h4>
+            <p>新版本发布，标记为 Current。同时维护旧版本。</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">阶段 2</div>
+          <div class="timeline-content">
+            <h4>维护（Maintenance）</h4>
+            <p>旧版本进入维护模式，只修复关键 Bug 和安全问题。</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">阶段 3</div>
+          <div class="timeline-content">
+            <h4>弃用（Deprecated）</h4>
+            <p>发布弃用公告，设置过期日期。响应头添加 Deprecation 警告。</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">阶段 4</div>
+          <div class="timeline-content">
+            <h4>下线（Sunset）</h4>
+            <p>旧版本停止服务，返回 410 Gone 或重定向到新版本。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-block">
+<span class="comment">// 弃用响应头示例</span>
+HTTP/1.1 200 OK
+Deprecation: true
+Sunset: Sat, 31 Dec 2024 23:59:59 GMT
+Link: </api/v2/users>; rel="successor-version"
+
+{
+  <span class="string">"data"</span>: [...],
+  <span class="string">"warning"</span>: <span class="string">"此 API 版本已弃用，请迁移到 v2"</span>
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 版本迁移最佳实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">兼容性变更（不需要升级主版本）</h3>
+          <ul class="feature-list">
+            <li>新增可选字段</li>
+            <li>新增 API 端点</li>
+            <li>新增可选参数</li>
+            <li>Bug 修复</li>
+            <li>性能优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">破坏性变更（需要升级主版本）</h3>
+          <ul class="feature-list">
+            <li>删除字段或端点</li>
+            <li>重命名字段</li>
+            <li>修改数据类型</li>
+            <li>修改必需参数</li>
+            <li>修改认证方式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">版本管理建议</div>
+        <ul>
+          <li>不要过早发布新版本，尽量通过非破坏性变更解决问题</li>
+          <li>提供详细的迁移文档和变更日志</li>
+          <li>给予足够的迁移时间（通常 6-12 个月）</li>
+          <li>监控旧版本使用情况，通知活跃用户</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>API 版本管理确保 API 平稳演进</li>
+        <li>语义化版本号清晰表达变更类型</li>
+        <li>URL 路径版本控制是最常用的方式</li>
+        <li>NestJS 内置支持多种版本控制策略</li>
+        <li>建立完善的版本生命周期管理流程</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="57-4-状态码选择.html">← 上一节：状态码选择</a>
+      <a href="57-6-RESTful最佳实践.html">下一节：RESTful 最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60.1 类型系统 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="60-1-类型系统.html">第60章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>60.1 类型系统</h1>
+      <p class="subtitle">GraphQL 强类型系统的深入理解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 类型系统概述</h2>
+      <p>GraphQL 类型系统是 Schema 的核心，定义了 API 的数据结构。它提供了类型安全、自动验证和文档生成能力。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">类型系统的作用</div>
+          <ul>
+            <li>定义 API 数据结构</li>
+            <li>提供编译时和运行时验证</li>
+            <li>自动生成 API 文档</li>
+            <li>支持开发工具（IDE 自动补全）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 标量类型</h2>
+
+      <h3>内置标量类型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>示例值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Int</code></td>
+            <td>有符号 32 位整数</td>
+            <td>1, -5, 100</td>
+          </tr>
+          <tr>
+            <td><code>Float</code></td>
+            <td>有符号双精度浮点数</td>
+            <td>3.14, -0.5</td>
+          </tr>
+          <tr>
+            <td><code>String</code></td>
+            <td>UTF-8 字符序列</td>
+            <td>"Hello", "张三"</td>
+          </tr>
+          <tr>
+            <td><code>Boolean</code></td>
+            <td>布尔值</td>
+            <td>true, false</td>
+          </tr>
+          <tr>
+            <td><code>ID</code></td>
+            <td>唯一标识符</td>
+            <td>"123", "abc-def"</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>自定义标量类型</h3>
+      <div class="code-block">
+<span class="comment">// Schema 定义</span>
+<span class="keyword">scalar</span> DateTime
+<span class="keyword">scalar</span> Email
+<span class="keyword">scalar</span> URL
+<span class="keyword">scalar</span> JSON
+
+<span class="comment">// 使用自定义标量</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  email: Email!
+  avatar: URL
+  createdAt: DateTime!
+  metadata: JSON
+}
+
+<span class="comment">// Resolver 实现</span>
+<span class="keyword">const</span> resolvers = {
+  DateTime: {
+    <span class="comment">// 序列化：发送给客户端</span>
+    serialize: (value: Date) => value.toISOString(),
+    <span class="comment">// 解析字面量</span>
+    parseLiteral: (ast: <span class="keyword">any</span>) => <span class="keyword">new</span> Date(ast.value),
+    <span class="comment">// 解析变量值</span>
+    parseValue: (value: <span class="keyword">string</span>) => <span class="keyword">new</span> Date(value),
+  },
+  Email: {
+    serialize: (value: <span class="keyword">string</span>) => value,
+    parseValue: (value: <span class="keyword">string</span>) => {
+      <span class="keyword">if</span> (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        <span class="keyword">throw new</span> Error(<span class="string">'Invalid email format'</span>);
+      }
+      <span class="keyword">return</span> value;
+    },
+    parseLiteral: (ast: <span class="keyword">any</span>) => {
+      <span class="keyword">if</span> (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ast.value)) {
+        <span class="keyword">throw new</span> Error(<span class="string">'Invalid email format'</span>);
+      }
+      <span class="keyword">return</span> ast.value;
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 对象类型</h2>
+
+      <div class="code-block">
+<span class="comment">// 定义对象类型</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  age: Int           <span class="comment">// 可为 null</span>
+  isActive: Boolean!
+  posts: [Post!]!
+  createdAt: DateTime!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!
+  comments(limit: Int = <span class="number">10</span>): [Comment!]!
+}
+
+<span class="comment">// 字段参数</span>
+<span class="keyword">type</span> Query {
+  user(id: ID!): User
+  users(limit: Int = <span class="number">10</span>, offset: Int = <span class="number">0</span>): [User!]!
+  search(query: String!, type: SearchType): [SearchResult!]!
+}
+      </div>
+
+      <h3>非空修饰符</h3>
+      <div class="code-block">
+<span class="keyword">type</span> Example {
+  <span class="comment">// 可为 null</span>
+  name: String
+
+  <span class="comment">// 非空（必填）</span>
+  name: String!
+
+  <span class="comment">// 列表变体</span>
+  list1: [String]       <span class="comment">// 列表可为 null，元素可为 null</span>
+  list2: [String!]      <span class="comment">// 列表可为 null，元素非空</span>
+  list3: [String]!      <span class="comment">// 列表非空，元素可为 null</span>
+  list4: [String!]!     <span class="comment">// 列表非空，元素非空（推荐）</span>
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔢</span> 枚举类型</h2>
+
+      <div class="code-block">
+<span class="comment">// 定义枚举</span>
+<span class="keyword">enum</span> UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+<span class="keyword">enum</span> PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+<span class="keyword">enum</span> SortOrder {
+  ASC
+  DESC
+}
+
+<span class="comment">// 使用枚举</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  role: UserRole!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  status: PostStatus!
+}
+
+<span class="keyword">input</span> PostFilter {
+  status: PostStatus
+  orderBy: SortOrder = DESC
+}
+
+<span class="comment">// 查询示例</span>
+query {
+  posts(filter: { status: PUBLISHED, orderBy: DESC }) {
+    title
+  }
+}
+
+<span class="comment">// TypeScript 映射</span>
+<span class="keyword">enum</span> UserRole {
+  USER = <span class="string">'USER'</span>,
+  ADMIN = <span class="string">'ADMIN'</span>,
+  MODERATOR = <span class="string">'MODERATOR'</span>,
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 列表类型</h2>
+
+      <div class="code-block">
+<span class="comment">// 简单列表</span>
+<span class="keyword">type</span> User {
+  tags: [String!]!      <span class="comment">// 字符串列表</span>
+  scores: [Int!]!       <span class="comment">// 整数列表</span>
+  posts: [Post!]!       <span class="comment">// 对象列表</span>
+}
+
+<span class="comment">// 嵌套列表</span>
+<span class="keyword">type</span> Matrix {
+  data: [[Int!]!]!      <span class="comment">// 二维数组</span>
+}
+
+<span class="comment">// Resolver 示例</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    tags: (user) => user.tags || [],
+    posts: <span class="keyword">async</span> (user, _args, context) => {
+      <span class="keyword">return</span> context.dataSources.postApi.getByUserId(user.id);
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 接口类型</h2>
+
+      <p>接口定义了一组共享字段，其他类型可以实现这些接口。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义接口</span>
+<span class="keyword">interface</span> Node {
+  id: ID!
+  createdAt: DateTime!
+}
+
+<span class="keyword">interface</span> Media {
+  id: ID!
+  url: String!
+  type: MediaType!
+}
+
+<span class="comment">// 实现接口</span>
+<span class="keyword">type</span> User <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  name: String!
+  email: String!
+}
+
+<span class="keyword">type</span> Post <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  title: String!
+  content: String
+}
+
+<span class="comment">// 实现多个接口</span>
+<span class="keyword">type</span> Image <span class="keyword">implements</span> Node & Media {
+  id: ID!
+  createdAt: DateTime!
+  url: String!
+  type: MediaType!
+  width: Int!
+  height: Int!
+}
+
+<span class="comment">// 查询返回接口类型</span>
+<span class="keyword">type</span> Query {
+  node(id: ID!): Node     <span class="comment">// 返回任何实现 Node 的类型</span>
+  timeline: [Node!]!      <span class="comment">// 混合类型列表</span>
+}
+
+<span class="comment">// 使用内联片段查询</span>
+query {
+  node(id: <span class="string">"123"</span>) {
+    id
+    createdAt
+    ... <span class="keyword">on</span> User {
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      title
+      content
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 联合类型</h2>
+
+      <p>联合类型表示可以是多种类型之一，但不需要共享字段。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义联合类型</span>
+<span class="keyword">union</span> SearchResult = User | Post | Comment
+
+<span class="keyword">union</span> MediaContent = Image | Video | Audio
+
+<span class="comment">// 使用联合类型</span>
+<span class="keyword">type</span> Query {
+  search(query: String!): [SearchResult!]!
+  getMedia(id: ID!): MediaContent
+}
+
+<span class="comment">// 查询联合类型</span>
+query Search {
+  search(query: <span class="string">"test"</span>) {
+    ... <span class="keyword">on</span> User {
+      id
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      id
+      title
+    }
+    ... <span class="keyword">on</span> Comment {
+      id
+      content
+    }
+  }
+}
+
+<span class="comment">// Resolver 返回联合类型</span>
+<span class="keyword">const</span> resolvers = {
+  SearchResult: {
+    __resolveType(obj: <span class="keyword">any</span>) {
+      <span class="keyword">if</span> (obj.name && obj.email) <span class="keyword">return</span> <span class="string">'User'</span>;
+      <span class="keyword">if</span> (obj.title) <span class="keyword">return</span> <span class="string">'Post'</span>;
+      <span class="keyword">if</span> (obj.content && !obj.title) <span class="keyword">return</span> <span class="string">'Comment'</span>;
+      <span class="keyword">return null</span>;
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 输入类型</h2>
+
+      <p>Input 类型用于传递复杂参数，特别是 Mutation 的输入。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义输入类型</span>
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+  role: UserRole = USER
+  profile: ProfileInput
+}
+
+<span class="keyword">input</span> ProfileInput {
+  bio: String
+  website: String
+  avatar: String
+}
+
+<span class="keyword">input</span> UpdateUserInput {
+  name: String
+  email: String
+  profile: ProfileInput
+}
+
+<span class="keyword">input</span> UserFilter {
+  role: UserRole
+  isActive: Boolean
+  search: String
+  createdAt: DateRangeInput
+}
+
+<span class="keyword">input</span> DateRangeInput {
+  start: DateTime!
+  end: DateTime!
+}
+
+<span class="comment">// 使用输入类型</span>
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User
+}
+
+<span class="keyword">type</span> Query {
+  users(filter: UserFilter, limit: Int = <span class="number">10</span>): [User!]!
+}
+
+<span class="comment">// Mutation 调用</span>
+mutation {
+  createUser(input: {
+    name: <span class="string">"张三"</span>
+    email: <span class="string">"zhangsan@example.com"</span>
+    password: <span class="string">"Password123!"</span>
+    profile: {
+      bio: <span class="string">"前端开发者"</span>
+      website: <span class="string">"https://zhangsan.dev"</span>
+    }
+  }) {
+    id
+    name
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 类型对比</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>用途</th>
+            <th>可包含字段</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>type</code></td>
+            <td>定义输出对象</td>
+            <td>可以是对象、标量、列表</td>
+          </tr>
+          <tr>
+            <td><code>input</code></td>
+            <td>定义输入参数</td>
+            <td>只能是标量、枚举、其他 input</td>
+          </tr>
+          <tr>
+            <td><code>interface</code></td>
+            <td>定义共享字段</td>
+            <td>输出字段</td>
+          </tr>
+          <tr>
+            <td><code>union</code></td>
+            <td>定义多选一类型</td>
+            <td>只能是对象类型</td>
+          </tr>
+          <tr>
+            <td><code>enum</code></td>
+            <td>定义枚举值</td>
+            <td>字符串值</td>
+          </tr>
+          <tr>
+            <td><code>scalar</code></td>
+            <td>定义标量类型</td>
+            <td>单个值</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>标量类型是最基本的数据类型</li>
+        <li>对象类型定义复杂的数据结构</li>
+        <li>枚举类型定义有限的选项集合</li>
+        <li>接口定义共享字段的抽象类型</li>
+        <li>联合类型表示多种类型之一</li>
+        <li>Input 类型专门用于输入参数</li>
+        <li>非空修饰符确保字段必填</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter59/59-6-Apollo-Server基础.html">← 上一节：Apollo Server 基础</a>
+      <a href="60-2-参数与参数类型.html">下一节：参数与参数类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

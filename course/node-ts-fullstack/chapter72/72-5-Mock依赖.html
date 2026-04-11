@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>72.5 Mock 依赖 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="72-4-E2E测试.html">上一节</a></li>
+      <li><a href="../chapter73/73-1-测试命名规范.html">下一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>72.5 Mock 依赖</h1>
+      <p class="subtitle">第十部分：测试篇 - NestJS 测试中的依赖 Mock 技巧</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> Mock 策略</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">单元测试</h3>
+          <p class="card-text">Mock 所有外部依赖，只测试被测单元的逻辑。</p>
+          <ul class="feature-list">
+            <li>Mock 数据库访问</li>
+            <li>Mock 外部服务</li>
+            <li>Mock 其他服务</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">集成测试</h3>
+          <p class="card-text">Mock 部分依赖，测试组件间的交互。</p>
+          <ul class="feature-list">
+            <li>使用内存数据库</li>
+            <li>Mock 外部 API</li>
+            <li>Mock 消息队列</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> Mock TypeORM</h2>
+
+      <div class="code-block">import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './user.entity';
+import { UsersService } from './users.service';
+
+describe('UsersService with Mock Repository', () => {
+  let service: UsersService;
+  let repository: jest.Mocked&lt;Repository&lt;User&gt;&gt;;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(() => ({
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              getMany: jest.fn(),
+              getOne: jest.fn()
+            }))
+          }
+        }
+      ]
+    }).compile();
+
+    service = module.get(UsersService);
+    repository = module.get(getRepositoryToken(User));
+  });
+
+  it('should find all users', async () => {
+    const mockUsers = [{ id: '1', name: 'John' }];
+    repository.find.mockResolvedValue(mockUsers as any);
+
+    const result = await service.findAll();
+
+    expect(result).toEqual(mockUsers);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Mock 自定义 Provider</h2>
+
+      <div class="code-block">describe('Mocking Custom Providers', () => {
+  it('should mock useValue provider', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: 'DATABASE_CONNECTION',
+          useValue: {
+            query: jest.fn().mockResolvedValue([{ id: 1 }]),
+            execute: jest.fn().mockResolvedValue({ affected: 1 })
+          }
+        }
+      ]
+    }).compile();
+
+    const connection = module.get('DATABASE_CONNECTION');
+    expect(connection.query).toBeDefined();
+  });
+
+  it('should mock useFactory provider', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        {
+          provide: 'CONFIG',
+          useFactory: () => ({
+            get: jest.fn((key: string) => {
+              if (key === 'DB_HOST') return 'localhost';
+              return null;
+            })
+          })
+        }
+      ]
+    }).compile();
+
+    const config = module.get('CONFIG');
+    expect(config.get('DB_HOST')).toBe('localhost');
+  });
+
+  it('should mock useClass provider', async () => {
+    class MockEmailService {
+      send = jest.fn().mockResolvedValue({ success: true });
+    }
+
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: EmailService,
+          useClass: MockEmailService
+        }
+      ]
+    }).compile();
+
+    const emailService = module.get(EmailService);
+    await emailService.send({ to: 'test@test.com' });
+
+    expect(emailService.send).toHaveBeenCalled();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> Mock 外部服务</h2>
+
+      <div class="code-block">import { HttpService } from '@nestjs/axios';
+import { of, throwError } from 'rxjs';
+import { AxiosResponse } from 'axios';
+
+describe('Mocking HttpService', () => {
+  let service: ExternalApiService;
+  let httpService: jest.Mocked&lt;HttpService&gt;;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        ExternalApiService,
+        {
+          provide: HttpService,
+          useValue: {
+            get: jest.fn(),
+            post: jest.fn(),
+            put: jest.fn(),
+            delete: jest.fn()
+          }
+        }
+      ]
+    }).compile();
+
+    service = module.get(ExternalApiService);
+    httpService = module.get(HttpService);
+  });
+
+  it('should fetch data from external API', async () => {
+    const mockResponse: AxiosResponse = {
+      data: { id: 1, name: 'Test' },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {} as any
+    };
+
+    httpService.get.mockReturnValue(of(mockResponse));
+
+    const result = await service.fetchData();
+
+    expect(result).toEqual({ id: 1, name: 'Test' });
+  });
+
+  it('should handle API error', async () => {
+    httpService.get.mockReturnValue(
+      throwError(() => new Error('Network Error'))
+    );
+
+    await expect(service.fetchData()).rejects.toThrow('Network Error');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> Mock ConfigService</h2>
+
+      <div class="code-block">describe('Mocking ConfigService', () => {
+  let service: MyService;
+  let configService: jest.Mocked&lt;ConfigService&gt;;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        MyService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              const config = {
+                'DATABASE_URL': 'sqlite::memory:',
+                'JWT_SECRET': 'test-secret',
+                'PORT': 3000,
+                'NODE_ENV': 'test'
+              };
+              return config[key];
+            }),
+            getOrThrow: jest.fn((key: string) => {
+              const value = {
+                'JWT_SECRET': 'test-secret'
+              }[key];
+              if (!value) throw new Error(`${key} not found`);
+              return value;
+            })
+          }
+        }
+      ]
+    }).compile();
+
+    service = module.get(MyService);
+    configService = module.get(ConfigService);
+  });
+
+  it('should get config values', () => {
+    expect(configService.get('DATABASE_URL')).toBe('sqlite::memory:');
+    expect(configService.get('PORT')).toBe(3000);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 全局 Mock 工具</h2>
+
+      <div class="code-block">// test/utils/mock-creator.ts
+import { Repository } from 'typeorm';
+
+export function createMockRepository&lt;T&gt;(): jest.Mocked&lt;Repository&lt;T&gt;&gt; {
+  return {
+    metadata: {} as any,
+    target: {} as any,
+    manager: {} as any,
+    query: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findOneBy: jest.fn(),
+    findByIds: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    clear: jest.fn(),
+    increment: jest.fn(),
+    decrement: jest.fn(),
+    insert: jest.fn(),
+    remove: jest.fn(),
+    softDelete: jest.fn(),
+    restore: jest.fn(),
+    createQueryBuilder: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      join: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      innerJoinAndSelect: jest.fn().mockReturnThis(),
+      getQuery: jest.fn(),
+      getParameters: jest.fn(),
+      getMany: jest.fn(),
+      getOne: jest.fn(),
+      getRawMany: jest.fn(),
+      getRawOne: jest.fn(),
+      execute: jest.fn()
+    }))
+  } as any;
+}
+
+// 使用
+const mockUserRepo = createMockRepository&lt;User&gt;();</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> overrideProvider 技巧</h2>
+
+      <div class="code-block">describe('Override Provider', () => {
+  it('should override provider in imported module', async () => {
+    const module = await Test.createTestingModule({
+      imports: [AppModule]
+    })
+    .overrideProvider(UsersService)
+    .useValue({
+      findAll: jest.fn().mockResolvedValue([{ id: 'mock' }]),
+      findById: jest.fn().mockResolvedValue({ id: 'mock' })
+    })
+    .overrideProvider(getRepositoryToken(User))
+    .useValue(createMockRepository&lt;User&gt;())
+    .overrideGuard(AuthGuard)
+    .useValue({ canActivate: () => true })
+    .overrideInterceptor(LoggingInterceptor)
+    .useValue({
+      intercept: (context, next) => next.handle()
+    })
+    .compile();
+
+    const service = module.get(UsersService);
+    const result = await service.findAll();
+
+    expect(result).toEqual([{ id: 'mock' }]);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 getRepositoryToken 获取 Repository 的注入 token</li>
+            <li>useValue/useClass/useFactory 提供不同的 Mock 方式</li>
+            <li>overrideProvider 可以覆盖导入模块中的依赖</li>
+            <li>创建 Mock 工具函数减少重复代码</li>
+            <li>Mock HttpService 需要使用 RxJS 的 Observable</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="72-4-E2E测试.html">← 上一节：E2E 测试</a>
+      <a href="../chapter73/73-1-测试命名规范.html">下一章：测试最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

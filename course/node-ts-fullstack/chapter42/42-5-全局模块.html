@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.5 全局模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="42-1-模块概念.html">第四十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>42.5 全局模块</h1>
+      <p class="subtitle">创建随处可用的共享服务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解全局模块的概念</li>
+        <li>掌握全局模块的创建方式</li>
+        <li>了解全局模块的使用场景</li>
+        <li>理解全局模块的注意事项</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是全局模块？</h2>
+      <p>全局模块使用 @Global() 装饰器声明，其导出的服务可以在整个应用中直接注入，无需在 imports 中显式导入该模块。</p>
+
+      <div class="code-block">
+// common/common.module.ts
+import { Module, Global } from '@nestjs/common';
+import { LoggerService } from './logger.service';
+import { ConfigService } from './config.service';
+
+@Global()  // 声明为全局模块
+@Module({
+  providers: [LoggerService, ConfigService],
+  exports: [LoggerService, ConfigService],
+})
+export class CommonModule {}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">全局模块特点</div>
+          <p>全局模块只需要在根模块中导入一次，其导出的服务就可以在任何模块中直接注入使用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 创建和使用全局模块</h2>
+      <div class="code-block">
+// 1. 创建全局模块
+// src/common/common.module.ts
+@Global()
+@Module({
+  providers: [LoggerService, ConfigService, CacheService],
+  exports: [LoggerService, ConfigService, CacheService],
+})
+export class CommonModule {}
+
+// 2. 在根模块中导入
+// src/app.module.ts
+@Module({
+  imports: [CommonModule],  // 只需导入一次
+  // ...
+})
+export class AppModule {}
+
+// 3. 在任意模块中直接注入使用
+// src/users/users.service.ts
+@Injectable()
+export class UsersService {
+  constructor(
+    private logger: LoggerService,   // 直接注入，无需导入 CommonModule
+    private config: ConfigService,
+    private cache: CacheService,
+  ) {}
+
+  findAll() {
+    this.logger.log('Finding all users');
+    const ttl = this.config.get('CACHE_TTL');
+    // ...
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 动态全局模块</h2>
+      <div class="code-block">
+// config.module.ts
+@Global()
+@Module({})
+export class ConfigModule {
+  static forRoot(options: ConfigModuleOptions = {}): DynamicModule {
+    return {
+      module: ConfigModule,
+      global: true,  // 动态模块也可以设为全局
+      providers: [
+        {
+          provide: 'CONFIG_OPTIONS',
+          useValue: options,
+        },
+        ConfigService,
+      ],
+      exports: [ConfigService],
+    };
+  }
+}
+
+// 使用
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 使用场景与注意事项</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>适合全局模块</th>
+            <th>不适合全局模块</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>日志服务</td>
+            <td>业务服务</td>
+          </tr>
+          <tr>
+            <td>配置服务</td>
+            <td>特定领域服务</td>
+          </tr>
+          <tr>
+            <td>缓存服务</td>
+            <td>数据访问服务</td>
+          </tr>
+          <tr>
+            <td>工具服务</td>
+            <td>有状态的特定服务</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">谨慎使用</div>
+          <p>过度使用全局模块会导致依赖关系不清晰，增加代码理解和维护的难度。建议只将真正需要全局使用的通用服务设为全局模块。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @Global() 装饰器声明全局模块</li>
+            <li>• 全局模块只需导入一次，服务随处可用</li>
+            <li>• 适合日志、配置、缓存等通用服务</li>
+            <li>• 避免滥用，保持依赖关系清晰</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="42-4-动态模块.html">← 上一节：动态模块</a>
+      <a href="../chapter43/43-1-控制器基础.html">下一章：控制器基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

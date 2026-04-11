@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>103.3 应用监控 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="103-1-日志收集.html">第103章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>103.3 应用监控</h1>
+      <p class="subtitle">构建全方位的应用监控系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解应用监控的核心指标</li>
+        <li>学会使用 Prometheus 收集指标</li>
+        <li>掌握 Grafana 可视化配置</li>
+        <li>了解 APM 工具的使用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="Application Monitoring" class="card-image">
+      <h3 class="card-title">应用监控概述</h3>
+      <p class="card-text">
+        应用监控是保障系统稳定性的关键。通过收集和分析应用运行指标，
+        可以及时发现问题、优化性能、保障服务质量。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 核心监控指标</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">系统指标</h3>
+          <ul class="feature-list">
+            <li>CPU 使用率</li>
+            <li>内存使用量</li>
+            <li>磁盘 I/O</li>
+            <li>网络流量</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">应用指标</h3>
+          <ul class="feature-list">
+            <li>请求量 (QPS)</li>
+            <li>响应时间</li>
+            <li>错误率</li>
+            <li>并发连接数</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">业务指标</h3>
+          <ul class="feature-list">
+            <li>用户活跃数</li>
+            <li>订单量</li>
+            <li>转化率</li>
+            <li>收入趋势</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> Prometheus + Grafana</h2>
+      <h3>Prometheus 指标暴露</h3>
+      <div class="code-block">
+<span class="comment">// src/utils/metrics.ts</span>
+import client from 'prom-client';
+
+<span class="comment">// 创建 Registry</span>
+const register = new client.Registry();
+
+<span class="comment">// 默认指标（CPU、内存等）</span>
+client.collectDefaultMetrics({ register });
+
+<span class="comment">// 自定义指标</span>
+export const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'path', 'status'],
+  registers: [register]
+});
+
+export const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'path', 'status'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10],
+  registers: [register]
+});
+
+export const activeConnections = new client.Gauge({
+  name: 'active_connections',
+  help: 'Number of active connections',
+  registers: [register]
+});
+
+export { register };
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 监控中间件</h2>
+      <div class="code-block">
+<span class="comment">// src/middleware/metrics.ts</span>
+import { Request, Response, NextFunction } from 'express';
+import { httpRequestsTotal, httpRequestDuration, activeConnections } from '../utils/metrics';
+
+export const metricsMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  activeConnections.inc();
+
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const path = req.route ? req.route.path : req.path;
+
+    httpRequestsTotal.inc({
+      method: req.method,
+      path: path,
+      status: res.statusCode.toString()
+    });
+
+    httpRequestDuration.observe(
+      {
+        method: req.method,
+        path: path,
+        status: res.statusCode.toString()
+      },
+      duration
+    );
+
+    activeConnections.dec();
+  });
+
+  next();
+};
+
+<span class="comment">// 暴露指标端点</span>
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐳</span> Prometheus 配置</h2>
+      <div class="code-block">
+<span class="comment"># prometheus.yml</span>
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'nodejs-app'
+    static_configs:
+      - targets: ['app:3000']
+    metrics_path: '/metrics'
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 告警规则配置</h2>
+      <div class="code-block">
+<span class="comment"># rules/alerts.yml</span>
+groups:
+  - name: nodejs_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} requests/s"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}MB"
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Grafana Dashboard</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">常用面板</h3>
+          <ul class="feature-list">
+            <li>请求量趋势图</li>
+            <li>响应时间分布</li>
+            <li>错误率图表</li>
+            <li>系统资源使用</li>
+            <li>Top 10 慢接口</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">PromQL 查询示例</h3>
+          <div class="code-block">
+<span class="comment"># 请求速率</span>
+rate(http_requests_total[5m])
+
+<span class="comment"># 95 分位延迟</span>
+histogram_quantile(0.95,
+  rate(http_request_duration_seconds_bucket[5m])
+)
+
+<span class="comment"># 错误率</span>
+rate(http_requests_total{status=~"5.."}[5m])
+/ rate(http_requests_total[5m])
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> APM 工具</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">开源方案</h3>
+          <ul class="feature-list">
+            <li>Jaeger - 分布式追踪</li>
+            <li>Zipkin - 追踪系统</li>
+            <li>SigNoz - 全栈可观测性</li>
+            <li>SkyWalking - APM 平台</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">商业方案</h3>
+          <ul class="feature-list">
+            <li>Datadog - 全栈监控</li>
+            <li>New Relic - APM</li>
+            <li>Sentry - 错误追踪</li>
+            <li>阿里云 ARMS</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">监控最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用 RED 方法：Rate、Errors、Duration</li>
+          <li>设置合理的告警阈值避免噪音</li>
+          <li>区分不同严重级别的告警</li>
+          <li>监控数据保留策略平衡成本和需求</li>
+          <li>定期复盘告警有效性</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 监控指标分为系统、应用、业务三个层次</li>
+            <li>• Prometheus 用于指标收集和存储</li>
+            <li>• Grafana 用于可视化展示</li>
+            <li>• 配置合理的告警规则及时发现问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="103-2-ELK-Stack.html">← 上一节</a>
+      <a href="103-4-性能监控.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

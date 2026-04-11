@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.5 索引与性能 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-Schema定义.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.5 索引与性能</h1>
+      <p class="subtitle">优化 MongoDB 查询性能</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 MongoDB 索引类型</li>
+        <li>掌握 Mongoose 索引定义方式</li>
+        <li>学会分析查询性能</li>
+        <li>了解索引优化最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 索引类型</h2>
+      <div class="code-block">
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  age: Number,
+  location: {
+    type: { type: String },
+    coordinates: [Number]
+  },
+  tags: [String]
+});
+
+// 1. 单字段索引
+userSchema.index({ name: 1 });  // 1 升序，-1 降序
+
+// 2. 唯一索引（字段值不能重复）
+userSchema.index({ email: 1 }, { unique: true });
+
+// 3. 复合索引（多字段）
+userSchema.index({ name: 1, age: -1 });
+
+// 4. 文本索引（全文搜索）
+userSchema.index({ name: 'text', email: 'text' });
+
+// 5. 地理空间索引
+userSchema.index({ location: '2dsphere' });
+
+// 6. 多键索引（数组字段自动创建）
+userSchema.index({ tags: 1 });
+
+// 7. TTL 索引（自动过期删除）
+userSchema.index({ createdAt: 1 }, { expireAfterSeconds: 3600 });
+
+// 8. 部分索引（条件索引）
+userSchema.index({ age: 1 }, {
+  partialFilterExpression: { age: { $gte: 18 } }
+});
+
+// 9. 稀疏索引（只为有值的文档创建索引）
+userSchema.index({ nickname: 1 }, { sparse: true });
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Schema 级别索引配置</h2>
+      <div class="code-block">
+const productSchema = new mongoose.Schema({
+  sku: { type: String, index: true },           // 字段级别索引
+  name: { type: String, index: true },
+  category: { type: String, index: true }
+}, {
+  // 自动创建索引（开发环境建议 true，生产环境建议 false）
+  autoIndex: true,
+
+  // 索引构建选项
+  autoCreate: true
+});
+
+// Schema 定义后添加索引
+productSchema.index({ sku: 1, name: 1 }, {
+  unique: true,
+  name: 'sku_name_unique',  // 自定义索引名
+  background: true          // 后台创建，不阻塞操作
+});
+
+// 删除索引
+productSchema.clearIndex('sku_1');
+
+// 确保索引创建
+await Product.ensureIndexes();
+
+// 在 Model 上管理索引
+await Product.createIndexes();
+await Product.dropIndexes();
+await Product.getIndexes();
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">生产环境建议</div>
+          <p>生产环境建议设置 autoIndex: false，在部署脚本中手动创建索引，避免启动时阻塞。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 分析查询性能</h2>
+      <div class="code-block">
+// 使用 explain() 分析查询
+const result = await User.find({ name: 'Alice' }).explain('executionStats');
+
+console.log(result.executionStats);
+// {
+//   executionTimeMillis: 5,       // 执行时间（毫秒）
+//   totalDocsExamined: 1000,      // 扫描的文档数
+//   nReturned: 1,                 // 返回的文档数
+//   indexUsed: 'name_1',          // 使用的索引
+//   ...
+// }
+
+// 查看执行计划
+const plan = await User.find({ age: { $gt: 20 } })
+  .sort({ name: 1 })
+  .explain('queryPlanner');
+
+console.log(plan.queryPlanner.winningPlan);
+// 查看是否使用了索引扫描（IXSCAN）还是全表扫描（COLLSCAN）
+
+// 使用 hint 强制使用特定索引
+const users = await User.find({ name: 'Alice', age: 25 })
+  .hint({ name: 1 });  // 强制使用 name 索引
+
+// 禁用索引（用于测试）
+const users = await User.find({ name: 'Alice' })
+  .hint({ $natural: 1 });
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 性能优化最佳实践</h2>
+      <div class="code-block">
+// 1. 使用投影减少返回字段
+const users = await User.find({}, 'name email -_id');
+
+// 2. 使用 lean() 跳过 Mongoose 文档化（只返回纯对象）
+const users = await User.find().lean();
+// 性能提升约 2-3 倍
+
+// 3. 批量操作代替循环
+// 错误方式
+for (const user of users) {
+  await User.updateOne({ _id: user._id }, { $set: { status: 'active' } });
+}
+
+// 正确方式
+await User.updateMany(
+  { _id: { $in: users.map(u => u._id) } },
+  { $set: { status: 'active' } }
+);
+
+// 4. 使用批量写入
+const bulkOps = users.map(user => ({
+  updateOne: {
+    filter: { _id: user._id },
+    update: { $set: { lastLogin: new Date() } }
+  }
+}));
+await User.bulkWrite(bulkOps);
+
+// 5. 分页优化（使用 _id 代替 skip）
+// 传统分页（skip 性能差）
+const page1 = await User.find().skip(0).limit(10);
+const page2 = await User.find().skip(10).limit(10);
+
+// 游标分页（性能更好）
+const firstPage = await User.find()
+  .sort({ _id: 1 })
+  .limit(10);
+const lastId = firstPage[firstPage.length - 1]._id;
+
+const secondPage = await User.find({ _id: { $gt: lastId } })
+  .sort({ _id: 1 })
+  .limit(10);
+
+// 6. 使用 select false 延迟加载大字段
+const postSchema = new mongoose.Schema({
+  title: String,
+  content: { type: String, select: false }  // 默认不查询
+});
+const posts = await Post.find();  // 不包含 content
+const postsWithContent = await Post.find().select('+content');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 索引可大幅提升查询性能</li>
+            <li>• 使用 explain() 分析查询计划</li>
+            <li>• lean() 可跳过文档化提升性能</li>
+            <li>• 复合索引需考虑字段顺序</li>
+            <li>• 游标分页优于 skip 分页</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-4-虚拟字段.html">← 上一节：虚拟字段</a>
+      <a href="../chapter29/29-1-Redis简介.html">下一章：Redis 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

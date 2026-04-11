@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.4 测试 Express 应用 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="71-3-断言响应.html">上一节</a></li>
+      <li><a href="71-5-测试数据库操作.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>71.4 测试 Express 应用</h1>
+      <p class="subtitle">第十部分：测试篇 - 全面测试 Express 应用</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 项目结构</h2>
+
+      <div class="code-block">src/
+├── app.ts              # Express 应用配置
+├── server.ts           # 服务器启动入口
+├── routes/
+│   ├── index.ts        # 路由汇总
+│   ├── users.ts        # 用户路由
+│   └── auth.ts         # 认证路由
+├── controllers/
+│   └── userController.ts
+├── middleware/
+│   ├── auth.ts
+│   └── errorHandler.ts
+└── models/
+    └── User.ts
+tests/
+├── integration/
+│   ├── users.test.ts
+│   └── auth.test.ts
+├── helpers/
+│   ├── database.ts
+│   └── auth.ts
+└── setup/
+    └── jest-setup.ts</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 应用配置</h2>
+
+      <div class="code-block">// src/app.ts
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { json } from 'body-parser';
+import userRouter from './routes/users';
+import authRouter from './routes/auth';
+import errorHandler from './middleware/errorHandler';
+
+const app = express();
+
+// 中间件
+app.use(cors());
+app.use(helmet());
+app.use(json());
+
+// 路由
+app.use('/api/users', userRouter);
+app.use('/api/auth', authRouter);
+
+// 健康检查
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 错误处理
+app.use(errorHandler);
+
+export default app;</div>
+
+      <div class="code-block">// src/server.ts - 仅用于启动，不导出
+import app from './app';
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">分离 app 和 server</div>
+          <p>将 Express 应用配置与服务器启动分离，这样测试时可以只导入 app，而不需要监听端口。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 测试路由</h2>
+
+      <div class="code-block">// tests/integration/users.test.ts
+import request from 'supertest';
+import app from '../../src/app';
+import { setupDatabase, cleanupDatabase, getAuthToken } from '../helpers';
+
+describe('User Routes', () => {
+  beforeAll(async () => {
+    await setupDatabase();
+  });
+
+  afterAll(async () => {
+    await cleanupDatabase();
+  });
+
+  describe('GET /api/users', () => {
+    test('returns all users', async () => {
+      const response = await request(app)
+        .get('/api/users')
+        .expect('Content-Type', /json/)
+        .expect(200);
+
+      expect(response.body.data).toBeInstanceOf(Array);
+    });
+
+    test('supports pagination', async () => {
+      const response = await request(app)
+        .get('/api/users')
+        .query({ page: 1, limit: 10 })
+        .expect(200);
+
+      expect(response.body.pagination).toBeDefined();
+    });
+  });
+
+  describe('GET /api/users/:id', () => {
+    test('returns user by id', async () => {
+      const response = await request(app)
+        .get('/api/users/1')
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        id: expect.any(Number),
+        name: expect.any(String)
+      });
+    });
+
+    test('returns 404 for non-existent user', async () => {
+      await request(app)
+        .get('/api/users/99999')
+        .expect(404);
+    });
+  });
+
+  describe('POST /api/users', () => {
+    test('creates a new user', async () => {
+      const response = await request(app)
+        .post('/api/users')
+        .send({
+          name: 'John Doe',
+          email: 'john@example.com',
+          password: 'password123'
+        })
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        name: 'John Doe',
+        email: 'john@example.com'
+      });
+    });
+
+    test('validates required fields', async () => {
+      const response = await request(app)
+        .post('/api/users')
+        .send({})
+        .expect(400);
+
+      expect(response.body.errors).toBeDefined();
+    });
+
+    test('rejects duplicate email', async () => {
+      await request(app)
+        .post('/api/users')
+        .send({ email: 'existing@example.com', name: 'User 1' })
+        .expect(201);
+
+      await request(app)
+        .post('/api/users')
+        .send({ email: 'existing@example.com', name: 'User 2' })
+        .expect(409);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 测试认证路由</h2>
+
+      <div class="code-block">// tests/integration/auth.test.ts
+import request from 'supertest';
+import app from '../../src/app';
+import { createTestUser } from '../helpers';
+
+describe('Auth Routes', () => {
+  describe('POST /api/auth/register', () => {
+    test('registers a new user', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'newuser@example.com',
+          password: 'Password123!',
+          name: 'New User'
+        })
+        .expect(201);
+
+      expect(response.body).toHaveProperty('token');
+      expect(response.body.user).toMatchObject({
+        email: 'newuser@example.com',
+        name: 'New User'
+      });
+    });
+
+    test('validates password strength', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'weak@example.com',
+          password: 'weak',
+          name: 'Weak User'
+        })
+        .expect(400);
+
+      expect(response.body.message).toContain('password');
+    });
+  });
+
+  describe('POST /api/auth/login', () => {
+    beforeEach(async () => {
+      await createTestUser({
+        email: 'test@example.com',
+        password: 'Password123!',
+        name: 'Test User'
+      });
+    });
+
+    test('logs in with correct credentials', async () => {
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'Password123!'
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('token');
+    });
+
+    test('rejects wrong password', async () => {
+      await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'wrongpassword'
+        })
+        .expect(401);
+    });
+
+    test('rejects non-existent user', async () => {
+      await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'nonexistent@example.com',
+          password: 'anypassword'
+        })
+        .expect(401);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 测试中间件</h2>
+
+      <div class="code-block">// tests/middleware/auth.test.ts
+import request from 'supertest';
+import express from 'express';
+import authMiddleware from '../../src/middleware/auth';
+
+// 创建最小化的测试应用
+const createTestApp = () => {
+  const app = express();
+  app.use(express.json());
+
+  // 受保护的路由
+  app.get('/protected', authMiddleware, (req, res) => {
+    res.json({ user: (req as any).user });
+  });
+
+  return app;
+};
+
+describe('Auth Middleware', () => {
+  let app: express.Application;
+
+  beforeEach(() => {
+    app = createTestApp();
+  });
+
+  test('allows valid token', async () => {
+    const token = generateTestToken({ userId: '123' });
+
+    await request(app)
+      .get('/protected')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  test('rejects missing token', async () => {
+    await request(app)
+      .get('/protected')
+      .expect(401);
+  });
+
+  test('rejects invalid token', async () => {
+    await request(app)
+      .get('/protected')
+      .set('Authorization', 'Bearer invalid-token')
+      .expect(401);
+  });
+
+  test('rejects expired token', async () => {
+    const expiredToken = generateExpiredToken();
+
+    await request(app)
+      .get('/protected')
+      .set('Authorization', `Bearer ${expiredToken}`)
+      .expect(401);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试错误处理</h2>
+
+      <div class="code-block">// tests/integration/errors.test.ts
+import request from 'supertest';
+import app from '../../src/app';
+
+describe('Error Handling', () => {
+  test('handles 404 Not Found', async () => {
+    const response = await request(app)
+      .get('/nonexistent-route')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      error: true,
+      message: expect.any(String)
+    });
+  });
+
+  test('handles validation errors', async () => {
+    const response = await request(app)
+      .post('/api/users')
+      .send({ email: 'invalid-email' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      error: true,
+      message: 'Validation Error',
+      errors: expect.any(Array)
+    });
+  });
+
+  test('handles server errors gracefully', async () => {
+    // Mock 一个会抛出错误的路由
+    const errorApp = createErrorTestApp();
+
+    const response = await request(errorApp)
+      .get('/error')
+      .expect(500);
+
+    expect(response.body).toMatchObject({
+      error: true,
+      message: 'Internal Server Error'
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 测试辅助函数</h2>
+
+      <div class="code-block">// tests/helpers/auth.ts
+import request from 'supertest';
+import app from '../../src/app';
+
+export async function getAuthToken(
+  email: string = 'test@example.com',
+  password: string = 'password123'
+): Promise&lt;string&gt; {
+  const response = await request(app)
+    .post('/api/auth/login')
+    .send({ email, password });
+
+  return response.body.token;
+}
+
+export async function createTestUser(userData: any = {}) {
+  const defaultData = {
+    name: 'Test User',
+    email: `test${Date.now()}@example.com`,
+    password: 'Password123!'
+  };
+
+  const response = await request(app)
+    .post('/api/auth/register')
+    .send({ ...defaultData, ...userData });
+
+  return response.body;
+}
+
+export function authenticatedRequest(method: string, path: string) {
+  return async (token: string) => {
+    return request(app)
+      [method](path)
+      .set('Authorization', `Bearer ${token}`);
+  };
+}</div>
+
+      <div class="code-block">// tests/helpers/database.ts
+import { Connection, createConnection } from 'typeorm';
+import { User } from '../../src/models/User';
+
+let connection: Connection;
+
+export async function setupDatabase(): Promise&lt;Connection&gt; {
+  connection = await createConnection({
+    type: 'sqlite',
+    database: ':memory:',
+    entities: [User],
+    synchronize: true
+  });
+
+  return connection;
+}
+
+export async function cleanupDatabase(): Promise&lt;void&gt; {
+  if (connection) {
+    await connection.dropDatabase();
+    await connection.close();
+  }
+}
+
+export async function seedUsers(count: number = 3): Promise&lt;User[]&gt; {
+  const users = [];
+  for (let i = 0; i &lt; count; i++) {
+    const user = connection.manager.create(User, {
+      name: `User ${i + 1}`,
+      email: `user${i + 1}@example.com`
+    });
+    users.push(await connection.manager.save(user));
+  }
+  return users;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>分离 app 和 server，便于测试</li>
+            <li>使用辅助函数减少重复代码</li>
+            <li>测试成功和失败两种情况</li>
+            <li>测试中间件和错误处理</li>
+            <li>使用内存数据库进行集成测试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="71-3-断言响应.html">← 上一节：断言响应</a>
+      <a href="71-5-测试数据库操作.html">下一节：测试数据库操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

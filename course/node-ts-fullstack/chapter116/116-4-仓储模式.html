@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>116.4 仓储模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="116-1-DDD概念.html">第116章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>116.4 仓储模式</h1>
+      <p class="subtitle">领域对象的持久化抽象</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解仓储模式的作用</li>
+        <li>掌握仓储接口设计</li>
+        <li>学会仓储的实现方式</li>
+        <li>了解仓储与领域服务的关系</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 仓储概念</h2>
+      <div class="code-block">
+// 仓储（Repository）：管理领域对象的持久化
+
+// 仓储原则
+const repositoryPrinciples = {
+  每个聚合一个仓储: '只为聚合根定义仓储',
+  集合比喻: '仓储像内存中的集合',
+  隐藏持久化: '领域层不关心存储细节',
+  查询封装: '复杂查询封装在仓储中'
+};
+
+// 仓储 vs DAO
+const comparison = {
+  仓储: {
+    关注: '领域对象',
+    抽象: '集合操作',
+    设计: '领域驱动'
+  },
+  DAO: {
+    关注: '数据表',
+    抽象: 'CRUD操作',
+    设计: '数据驱动'
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">仓储定位</div>
+          <p>仓储属于基础设施层，但在领域层定义接口（依赖倒置）。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 仓储实现</h2>
+      <div class="code-block">
+// 1. 领域层：定义仓储接口
+
+// domain/repositories/order.repository.ts
+interface OrderRepository {
+  // 保存聚合
+  save(order: Order): Promise&lt;void&gt;;
+
+  // 根据ID查找
+  findById(id: OrderId): Promise&lt;Order | null&gt;;
+
+  // 根据ID查找（不存在则抛异常）
+  findByIdOrFail(id: OrderId): Promise&lt;Order&gt;;
+
+  // 删除
+  delete(id: OrderId): Promise&lt;void&gt;;
+
+  // 复杂查询
+  findByUserId(userId: string, options?: QueryOptions): Promise&lt;Order[]&gt;;
+  findPendingOrders(): Promise&lt;Order[]&gt;;
+
+  // 分页查询
+  findPaged(query: OrderQuery, page: number, size: number): Promise&lt;PagedResult&lt;Order&gt;&gt;;
+}
+
+interface QueryOptions {
+  limit?: number;
+  offset?: number;
+  orderBy?: string;
+  orderDirection?: 'ASC' | 'DESC';
+}
+
+interface PagedResult&lt;T&gt; {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+// 2. 基础设施层：实现仓储
+
+// infrastructure/persistence/typeorm/order.repository.impl.ts
+@Injectable()
+class OrderRepositoryImpl implements OrderRepository {
+  constructor(
+    @InjectRepository(OrderEntity)
+    private ormRepo: Repository&lt;OrderEntity&gt;,
+    private orderMapper: OrderMapper
+  ) {}
+
+  async save(order: Order): Promise&lt;void&gt; {
+    const entity = this.orderMapper.toEntity(order);
+    await this.ormRepo.save(entity);
+  }
+
+  async findById(id: OrderId): Promise&lt;Order | null&gt; {
+    const entity = await this.ormRepo.findOne({
+      where: { id: id.value },
+      relations: ['items']
+    });
+
+    return entity ? this.orderMapper.toDomain(entity) : null;
+  }
+
+  async findByIdOrFail(id: OrderId): Promise&lt;Order&gt; {
+    const order = await this.findById(id);
+    if (!order) {
+      throw new OrderNotFoundError(id.value);
+    }
+    return order;
+  }
+
+  async delete(id: OrderId): Promise&lt;void&gt; {
+    await this.ormRepo.delete({ id: id.value });
+  }
+
+  async findByUserId(userId: string, options?: QueryOptions): Promise&lt;Order[]&gt; {
+    const query = this.ormRepo.createQueryBuilder('order')
+      .where('order.userId = :userId', { userId })
+      .leftJoinAndSelect('order.items', 'items');
+
+    if (options?.orderBy) {
+      query.orderBy(`order.${options.orderBy}`, options.orderDirection || 'DESC');
+    }
+
+    if (options?.limit) {
+      query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query.offset(options.offset);
+    }
+
+    const entities = await query.getMany();
+    return entities.map(e => this.orderMapper.toDomain(e));
+  }
+
+  async findPaged(query: OrderQuery, page: number, size: number): Promise&lt;PagedResult&lt;Order&gt;&gt; {
+    const qb = this.ormRepo.createQueryBuilder('order')
+      .leftJoinAndSelect('order.items', 'items');
+
+    if (query.userId) {
+      qb.andWhere('order.userId = :userId', { userId: query.userId });
+    }
+
+    if (query.status) {
+      qb.andWhere('order.status = :status', { status: query.status });
+    }
+
+    const [entities, total] = await qb
+      .skip((page - 1) * size)
+      .take(size)
+      .getManyAndCount();
+
+    return {
+      items: entities.map(e => this.orderMapper.toDomain(e)),
+      total,
+      page,
+      pageSize: size,
+      totalPages: Math.ceil(total / size)
+    };
+  }
+}
+
+// 3. 映射器：领域对象与持久化对象转换
+
+// infrastructure/persistence/mappers/order.mapper.ts
+@Injectable()
+class OrderMapper {
+  toDomain(entity: OrderEntity): Order {
+    return Order.reconstitute(
+      OrderId.from(entity.id),
+      entity.items.map(item => new OrderItem(
+        item.productId,
+        item.productName,
+        Money.create(item.unitPrice, entity.currency),
+        item.quantity
+      )),
+      entity.status as OrderStatus,
+      new Address(
+        entity.shippingProvince,
+        entity.shippingCity,
+        entity.shippingDistrict,
+        entity.shippingDetail
+      ),
+      entity.createdAt
+    );
+  }
+
+  toEntity(order: Order): OrderEntity {
+    const entity = new OrderEntity();
+    entity.id = order.id.value;
+    entity.status = order.status;
+    entity.shippingProvince = order.shippingAddress.province;
+    entity.shippingCity = order.shippingAddress.city;
+    entity.shippingDistrict = order.shippingAddress.district;
+    entity.shippingDetail = order.shippingAddress.detail;
+    entity.createdAt = order.createdAt;
+    entity.items = order.items.map(item => ({
+      orderId: order.id.value,
+      productId: item.productId,
+      productName: item.productName,
+      unitPrice: item.unitPrice.amount,
+      quantity: item.Quantity
+    }));
+
+    return entity;
+  }
+}
+
+// 4. 应用层使用仓储
+
+// application/services/order.service.ts
+@Injectable()
+class OrderApplicationService {
+  constructor(
+    private orderRepo: OrderRepository,
+    private eventPublisher: DomainEventPublisher
+  ) {}
+
+  async createOrder(command: CreateOrderCommand): Promise&lt;string&gt; {
+    const orderId = OrderId.generate();
+    const address = new Address(
+      command.province,
+      command.city,
+      command.district,
+      command.detail
+    );
+
+    const order = Order.create(orderId, command.userId, address);
+
+    for (const item of command.items) {
+      order.addItem(new OrderItem(
+        item.productId,
+        item.productName,
+        Money.create(item.price),
+        item.quantity
+      ));
+    }
+
+    await this.orderRepo.save(order);
+
+    // 发布领域事件
+    await this.eventPublisher.publishAll(order.domainEvents);
+    order.clearDomainEvents();
+
+    return orderId.value;
+  }
+
+  async payOrder(orderId: string): Promise&lt;void&gt; {
+    const order = await this.orderRepo.findByIdOrFail(OrderId.from(orderId));
+
+    order.pay();
+
+    await this.orderRepo.save(order);
+    await this.eventPublisher.publishAll(order.domainEvents);
+    order.clearDomainEvents();
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 仓储封装持久化逻辑</li>
+            <li>• 只为聚合根定义仓储</li>
+            <li>• 接口在领域层，实现在基础设施层</li>
+            <li>• 映射器处理领域对象与持久化对象转换</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="116-3-聚合与实体.html">← 上一节：聚合与实体</a>
+      <a href="../chapter117/117-1-Express源码.html">下一章：Express 源码 →</a>
+    </div>
+  </div>
+</body>
+</html>

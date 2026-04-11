@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>37.4 请求与响应 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="37-1-Koa简介.html">第三十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>37.4 请求与响应</h1>
+      <p class="subtitle">深入理解 Koa 的请求响应处理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握获取各种请求参数的方法</li>
+        <li>学会处理不同类型的请求体</li>
+        <li>理解响应的设置和发送方式</li>
+        <li>了解请求头和响应头的操作</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 获取 URL 参数</h2>
+      <div class="code-block">
+// GET /users?page=2&limit=10&sort=name
+
+app.use(async ctx => {
+  // 获取完整 URL
+  console.log(ctx.url);        // /users?page=2&limit=10&sort=name
+
+  // 获取路径
+  console.log(ctx.path);       // /users
+
+  // 获取查询参数对象
+  console.log(ctx.query);      // { page: '2', limit: '10', sort: 'name' }
+
+  // 获取查询字符串
+  console.log(ctx.querystring); // page=2&limit=10&sort=name
+
+  ctx.body = ctx.query;
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">参数类型</div>
+          <p>ctx.query 返回的是对象，所有值都是字符串类型，需要手动转换数字。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📮</span> 获取路由参数</h2>
+      <p>使用 koa-router 获取动态路由参数。</p>
+      <div class="code-block">
+const Router = require('koa-router');
+const router = new Router();
+
+// 动态路由参数
+router.get('/users/:id', async ctx => {
+  const { id } = ctx.params;
+  ctx.body = { userId: id };
+});
+
+// 多个参数
+router.get('/posts/:postId/comments/:commentId', async ctx => {
+  const { postId, commentId } = ctx.params;
+  ctx.body = { postId, commentId };
+});
+
+app.use(router.routes());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 获取请求体</h2>
+      <p>Koa 默认不解析请求体，需要使用中间件。</p>
+      <div class="code-block">
+// 安装 koa-bodyparser
+npm install koa-bodyparser
+      </div>
+
+      <div class="code-block">
+const bodyParser = require('koa-bodyparser');
+
+// 注册中间件
+app.use(bodyParser());
+
+app.use(async ctx => {
+  // 获取 JSON 或表单数据
+  const body = ctx.request.body;
+  ctx.body = { received: body };
+});
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">JSON 请求</h3>
+          <div class="code-block">
+POST /api/users
+Content-Type: application/json
+
+{
+  "name": "John",
+  "email": "john@example.com"
+}
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">表单请求</h3>
+          <div class="code-block">
+POST /api/users
+Content-Type: application/x-www-form-urlencoded
+
+name=John&email=john@example.com
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 获取请求头</h2>
+      <div class="code-block">
+app.use(async ctx => {
+  // 获取所有请求头
+  console.log(ctx.headers);
+
+  // 获取单个请求头
+  const contentType = ctx.get('Content-Type');
+  const authorization = ctx.get('Authorization');
+  const userAgent = ctx.get('User-Agent');
+
+  // 简写方式
+  console.log(ctx.header['content-type']);
+
+  ctx.body = {
+    contentType,
+    authorization,
+    userAgent
+  };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 设置响应</h2>
+      <div class="code-block">
+app.use(async ctx => {
+  // 设置状态码
+  ctx.status = 201;
+
+  // 设置响应头
+  ctx.set('X-Custom-Header', 'value');
+  ctx.set({
+    'X-Request-Id': '12345',
+    'X-Response-Time': '10ms'
+  });
+
+  // 设置 Content-Type
+  ctx.type = 'application/json';
+  // 或者
+  ctx.type = 'json';
+
+  // 设置响应体 - 不同类型
+  // 字符串
+  ctx.body = 'Hello World';
+
+  // 对象 (自动转 JSON)
+  ctx.body = { message: 'Success', data: [] };
+
+  // Buffer
+  ctx.body = Buffer.from('Hello');
+
+  // Stream
+  ctx.body = fs.createReadStream('file.pdf');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 重定向响应</h2>
+      <div class="code-block">
+app.use(async ctx => {
+  // 临时重定向 (302)
+  ctx.redirect('/login');
+
+  // 永久重定向 (301)
+  ctx.redirect('/new-url');
+
+  // 返回上一页
+  ctx.redirect('back');
+
+  // 自定义重定向状态码
+  ctx.status = 301;
+  ctx.redirect('/new-location');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 文件下载响应</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+app.use(async ctx => {
+  // 设置为下载文件
+  ctx.attachment('report.pdf');
+
+  // 或者直接发送文件流
+  ctx.body = fs.createReadStream('./files/report.pdf');
+});
+
+// 封装下载函数
+async function downloadFile(ctx, filepath, filename) {
+  ctx.attachment(filename);
+  ctx.body = fs.createReadStream(filepath);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整示例</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const Router = require('koa-router');
+const bodyParser = require('koa-bodyparser');
+
+const app = new Koa();
+const router = new Router();
+
+app.use(bodyParser());
+
+// GET 请求 - 查询列表
+router.get('/api/users', async ctx => {
+  const { page = 1, limit = 10 } = ctx.query;
+
+  ctx.set('X-Total-Count', '100');
+  ctx.body = {
+    success: true,
+    data: [],
+    pagination: { page: +page, limit: +limit }
+  };
+});
+
+// GET 请求 - 获取单个
+router.get('/api/users/:id', async ctx => {
+  const { id } = ctx.params;
+
+  ctx.body = {
+    success: true,
+    data: { id, name: 'User ' + id }
+  };
+});
+
+// POST 请求 - 创建
+router.post('/api/users', async ctx => {
+  const user = ctx.request.body;
+
+  ctx.status = 201;
+  ctx.body = {
+    success: true,
+    data: { id: Date.now(), ...user }
+  };
+});
+
+app.use(router.routes());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 ctx.query 获取查询参数</li>
+            <li>• 使用 ctx.params 获取路由参数</li>
+            <li>• 使用 koa-bodyparser 解析请求体</li>
+            <li>• 使用 ctx.body 设置响应内容</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="37-3-Context对象.html">← 上一节：Context 对象</a>
+      <a href="37-5-路由基础.html">下一节：路由基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

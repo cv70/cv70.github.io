@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.3 目录操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-同步与异步操作.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.3 目录操作</h1>
+      <p class="subtitle">创建、读取和管理目录</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握目录创建和删除</li>
+        <li>学会读取目录内容</li>
+        <li>了解递归创建目录</li>
+        <li>掌握文件信息获取</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 创建目录</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 创建单个目录
+fs.mkdir('newdir', (err) => {
+  if (err) throw err;
+  console.log('目录创建成功');
+});
+
+// 同步创建
+fs.mkdirSync('newdir');
+
+// 2. 递归创建多级目录
+fs.mkdir('a/b/c/d', { recursive: true }, (err) => {
+  if (err) throw err;
+  console.log('多级目录创建成功');
+});
+
+// 同步递归创建
+fs.mkdirSync('a/b/c/d', { recursive: true });
+
+// Promise 版本
+await fsPromises.mkdir('a/b/c/d', { recursive: true });
+
+// 3. 设置目录权限
+fs.mkdir('secretdir', { mode: 0o700 }, callback);
+
+// 检查目录是否存在再创建
+if (!fs.existsSync('mydir')) {
+  fs.mkdirSync('mydir');
+}
+
+// 使用 { recursive: true } 更简洁
+// 如果目录存在不会报错
+fs.mkdirSync('mydir', { recursive: true });
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 读取目录</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 异步读取目录
+fs.readdir('./', (err, files) => {
+  if (err) throw err;
+  console.log('目录内容:', files);  // ['file1.txt', 'file2.js', ...]
+});
+
+// 2. 同步读取
+const files = fs.readdirSync('./');
+console.log(files);
+
+// 3. Promise 版本
+const files = await fsPromises.readdir('./');
+
+// 4. 获取详细信息
+fs.readdir('./', { withFileTypes: true }, (err, entries) => {
+  if (err) throw err;
+  entries.forEach(entry => {
+    console.log(`${entry.name} - ${entry.isFile() ? '文件' : '目录'}`);
+  });
+});
+
+// 5. 过滤特定类型文件
+const jsFiles = fs.readdirSync('./src')
+  .filter(file => file.endsWith('.js'));
+
+console.log('JS 文件:', jsFiles);
+
+// 6. 递归读取所有文件
+async function getAllFiles(dir) {
+  const files = [];
+  const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const subFiles = await getAllFiles(fullPath);
+      files.push(...subFiles);
+    } else {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+const allFiles = await getAllFiles('./src');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 删除目录</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 删除空目录
+fs.rmdir('emptydir', (err) => {
+  if (err) throw err;
+  console.log('目录已删除');
+});
+
+// 同步删除
+fs.rmdirSync('emptydir');
+
+// Promise 版本
+await fsPromises.rmdir('emptydir');
+
+// 2. 删除非空目录（Node.js 14.14+）
+fs.rm('nonemptydir', { recursive: true }, (err) => {
+  if (err) throw err;
+  console.log('目录已删除');
+});
+
+// 同步删除非空目录
+fs.rmSync('nonemptydir', { recursive: true });
+
+// 3. 强制删除（忽略不存在）
+fs.rmSync('maynotexist', { recursive: true, force: true });
+
+// 4. 递归删除旧版本兼容方法
+function deleteFolderRecursive(path) {
+  if (fs.existsSync(path)) {
+    fs.readdirSync(path).forEach(file => {
+      const curPath = path + '/' + file;
+      if (fs.lstatSync(curPath).isDirectory()) {
+        deleteFolderRecursive(curPath);
+      } else {
+        fs.unlinkSync(curPath);
+      }
+    });
+    fs.rmdirSync(path);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 获取文件信息</h2>
+      <div class="code-block">
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+
+// 1. 获取文件状态
+fs.stat('file.txt', (err, stats) => {
+  if (err) throw err;
+
+  console.log('是否文件:', stats.isFile());
+  console.log('是否目录:', stats.isDirectory());
+  console.log('文件大小:', stats.size, '字节');
+  console.log('创建时间:', stats.birthtime);
+  console.log('修改时间:', stats.mtime);
+  console.log('访问时间:', stats.atime);
+  console.log('权限:', stats.mode.toString(8));
+});
+
+// 同步方式
+const stats = fs.statSync('file.txt');
+console.log('文件大小:', stats.size);
+
+// Promise 版本
+const stats = await fsPromises.stat('file.txt');
+
+// 2. 检查文件类型
+function getFileType(path) {
+  const stats = fs.statSync(path);
+  if (stats.isFile()) return 'file';
+  if (stats.isDirectory()) return 'directory';
+  if (stats.isSymbolicLink()) return 'symlink';
+  return 'unknown';
+}
+
+// 3. 获取文件详细信息
+async function getFileInfo(filepath) {
+  const stats = await fsPromises.stat(filepath);
+  return {
+    path: filepath,
+    name: path.basename(filepath),
+    size: stats.size,
+    created: stats.birthtime,
+    modified: stats.mtime,
+    isFile: stats.isFile(),
+    isDirectory: stats.isDirectory()
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• mkdir 创建目录，recursive: true 递归创建</li>
+            <li>• readdir 读取目录内容</li>
+            <li>• rm 删除目录，recursive: true 删除非空目录</li>
+            <li>• stat 获取文件详细信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-2-文件读写.html">← 上一节：文件读写</a>
+      <a href="15-4-文件监听.html">下一节：文件监听 →</a>
+    </div>
+  </div>
+</body>
+</html>

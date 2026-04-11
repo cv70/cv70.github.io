@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.2 useEffect - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="76-1-useState.html">第七十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>76.2 useEffect</h1>
+      <p class="subtitle">处理副作用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解副作用的概念</li>
+        <li>掌握 useEffect 的基本用法</li>
+        <li>学会使用依赖数组</li>
+        <li>了解清理函数的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 副作用与 useEffect</h2>
+      <div class="code-block">
+// 副作用（Side Effects）：组件渲染之外的操作
+// - 数据获取（API 调用）
+// - 订阅事件
+// - 定时器
+// - 手动修改 DOM
+
+import { useEffect, useState } from 'react';
+
+// 基本用法：每次渲染后执行
+function Component() {
+  useEffect(() =&gt; {
+    console.log('Component rendered');
+  });
+
+  return &lt;div&gt;Component&lt;/div&gt;;
+}
+
+// 空依赖数组：只在挂载时执行一次
+function Component() {
+  useEffect(() =&gt; {
+    console.log('Component mounted');
+  }, []);  // 空数组
+
+  return &lt;div&gt;Component&lt;/div&gt;;
+}
+
+// 依赖数组：依赖变化时执行
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+
+  useEffect(() =&gt; {
+    fetch(`/api/users/${userId}`)
+      .then(res =&gt; res.json())
+      .then(data =&gt; setUser(data));
+  }, [userId]);  // userId 变化时重新执行
+
+  return &lt;div&gt;{user?.name}&lt;/div&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 清理函数</h2>
+      <div class="code-block">
+// 返回清理函数
+function Timer() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() =&gt; {
+    const interval = setInterval(() =&gt; {
+      setSeconds(prev =&gt; prev + 1);
+    }, 1000);
+
+    // 清理函数：组件卸载时执行
+    return () =&gt; {
+      clearInterval(interval);
+      console.log('Timer cleaned up');
+    };
+  }, []);
+
+  return &lt;div&gt;Seconds: {seconds}&lt;/div&gt;;
+}
+
+// 事件监听清理
+function WindowResize() {
+  const [size, setSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() =&gt; {
+    const handleResize = () =&gt; {
+      setSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () =&gt; {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  return (
+    &lt;div&gt;
+      Window size: {size.width} x {size.height}
+    &lt;/div&gt;
+  );
+}
+
+// 订阅清理
+function ChatRoom({ roomId }) {
+  useEffect(() =&gt; {
+    const connection = connectToRoom(roomId);
+
+    connection.on('message', (msg) =&gt; {
+      console.log('Message:', msg);
+    });
+
+    return () =&gt; {
+      connection.disconnect();
+    };
+  }, [roomId]);
+
+  return &lt;div&gt;Room: {roomId}&lt;/div&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 常见模式</h2>
+      <div class="code-block">
+// 数据获取模式
+function UserList() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() =&gt; {
+    let cancelled = false;
+
+    async function fetchUsers() {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/users');
+        const data = await response.json();
+
+        if (!cancelled) {
+          setUsers(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchUsers();
+
+    return () =&gt; {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) return &lt;div&gt;Loading...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error}&lt;/div&gt;;
+
+  return (
+    &lt;ul&gt;
+      {users.map(user =&gt; &lt;li key={user.id}&gt;{user.name}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+
+// 使用 AbortController
+function SearchResults({ query }) {
+  const [results, setResults] = useState([]);
+
+  useEffect(() =&gt; {
+    const controller = new AbortController();
+
+    fetch(`/api/search?q=${query}`, {
+      signal: controller.signal,
+    })
+      .then(res =&gt; res.json())
+      .then(data =&gt; setResults(data))
+      .catch(err =&gt; {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        }
+      });
+
+    return () =&gt; controller.abort();
+  }, [query]);
+
+  return (
+    &lt;ul&gt;
+      {results.map(item =&gt; &lt;li key={item.id}&gt;{item.title}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• useEffect 用于处理副作用</li>
+            <li>• 依赖数组控制执行时机</li>
+            <li>• 返回函数用于清理资源</li>
+            <li>• 异步操作需要处理取消逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-1-useState.html">← 上一节：useState</a>
+      <a href="76-3-useContext.html">下一节：useContext →</a>
+    </div>
+  </div>
+</body>
+</html>

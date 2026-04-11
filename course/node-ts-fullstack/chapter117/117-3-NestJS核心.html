@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>117.3 NestJS 核心 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="117-1-Express源码.html">第117章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>117.3 NestJS 核心</h1>
+      <p class="subtitle">企业级 Node.js 框架的核心原理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 NestJS 的整体架构</li>
+        <li>掌握依赖注入的实现原理</li>
+        <li>了解装饰器元数据系统</li>
+        <li>学会模块化组织方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> NestJS 架构概览</h2>
+      <div class="code-block">
+// NestJS 核心模块
+/*
+@nestjs/core/
+├── injector/           # 依赖注入
+│   ├── container.ts
+│   ├── injector.ts
+│   └── instance-wrapper.ts
+├── router/             # 路由系统
+│   ├── router-module.ts
+│   └── route-constants.ts
+├── nest-application.ts # 应用实例
+├── nest-factory.ts     # 工厂函数
+└── metadata/           # 元数据扫描
+*/
+
+// NestJS 核心概念
+const coreConcepts = {
+  Module: '模块，组织相关组件',
+  Controller: '控制器，处理HTTP请求',
+  Provider: '提供者，可注入的服务',
+  Injectable: '可注入装饰器',
+  DependencyInjection: '依赖注入容器',
+  Metadata: '反射元数据'
+};
+
+// 三大核心特性
+const features = {
+  模块化: '@Module 组织应用结构',
+  依赖注入: '@Injectable 自动注入依赖',
+  装饰器: '元编程，声明式配置'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">NestJS 特点</div>
+          <p>基于 TypeScript，借鉴 Angular 设计，支持 Express/Fastify 适配器。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 核心原理实现</h2>
+      <div class="code-block">
+// 1. 简化版 NestJS 核心实现
+
+// ===== 装饰器系统 =====
+
+// 模块装饰器
+export function Module(metadata: ModuleMetadata): ClassDecorator {
+  return (target: any) => {
+    Reflect.defineMetadata('module:metadata', metadata, target);
+  };
+}
+
+// 控制器装饰器
+export function Controller(prefix: string = ''): ClassDecorator {
+  return (target: any) => {
+    Reflect.defineMetadata('controller:prefix', prefix, target);
+  };
+}
+
+// 可注入装饰器
+export function Injectable(): ClassDecorator {
+  return (target: any) => {
+    Reflect.defineMetadata('injectable', true, target);
+  };
+}
+
+// HTTP 方法装饰器工厂
+function createMethodDecorator(method: string) {
+  return (path: string = ''): MethodDecorator => {
+    return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+      const routes = Reflect.getMetadata('routes', target.constructor) || [];
+      routes.push({
+        method,
+        path,
+        handlerName: propertyKey
+      });
+      Reflect.defineMetadata('routes', routes, target.constructor);
+    };
+  };
+}
+
+export const Get = createMethodDecorator('GET');
+export const Post = createMethodDecorator('POST');
+export const Put = createMethodDecorator('PUT');
+export const Delete = createMethodDecorator('DELETE');
+
+// 参数装饰器
+export function Body(): ParameterDecorator {
+  return (target: any, propertyKey: string, parameterIndex: number) => {
+    const params = Reflect.getMetadata('params', target.constructor, propertyKey) || [];
+    params[parameterIndex] = { type: 'body' };
+    Reflect.defineMetadata('params', params, target.constructor, propertyKey);
+  };
+}
+
+export function Param(name?: string): ParameterDecorator {
+  return (target: any, propertyKey: string, parameterIndex: number) => {
+    const params = Reflect.getMetadata('params', target.constructor, propertyKey) || [];
+    params[parameterIndex] = { type: 'param', name };
+    Reflect.defineMetadata('params', params, target.constructor, propertyKey);
+  };
+}
+
+// ===== 依赖注入容器 =====
+
+class Container {
+  private instances = new Map&lt;any, any&gt;();
+  private providers = new Map&lt;string, any&gt;();
+
+  addProvider(token: string, provider: any) {
+    this.providers.set(token, provider);
+  }
+
+  get(token: string): any {
+    if (this.instances.has(token)) {
+      return this.instances.get(token);
+    }
+
+    const provider = this.providers.get(token);
+    if (!provider) {
+      throw new Error(`Provider ${token} not found`);
+    }
+
+    const instance = this.resolve(provider);
+    this.instances.set(token, instance);
+    return instance;
+  }
+
+  resolve(target: any): any {
+    // 获取构造函数参数类型
+    const paramTypes = Reflect.getMetadata('design:paramtypes', target) || [];
+
+    // 解析依赖
+    const dependencies = paramTypes.map((param: any, index: number) => {
+      const injectToken = Reflect.getMetadata('inject', target, `${index}`);
+      if (injectToken) {
+        return this.get(injectToken);
+      }
+      return this.get(param.name);
+    });
+
+    return new target(...dependencies);
+  }
+}
+
+// ===== 模块扫描与注册 =====
+
+class ModuleLoader {
+  constructor(private container: Container) {}
+
+  load(module: any) {
+    const metadata = Reflect.getMetadata('module:metadata', module);
+
+    if (metadata.providers) {
+      metadata.providers.forEach((provider: any) => {
+        const token = provider.name;
+        this.container.addProvider(token, provider);
+      });
+    }
+
+    if (metadata.controllers) {
+      metadata.controllers.forEach((controller: any) => {
+        // 控制器也通过容器创建
+        const token = controller.name;
+        this.container.addProvider(token, controller);
+      });
+    }
+
+    if (metadata.imports) {
+      metadata.imports.forEach((importedModule: any) => {
+        this.load(importedModule);
+      });
+    }
+  }
+}
+
+// ===== 路由注册 =====
+
+class RouterExplorer {
+  constructor(private container: Container) {}
+
+  explore(module: any): RouteInfo[] {
+    const routes: RouteInfo[] = [];
+    const metadata = Reflect.getMetadata('module:metadata', module);
+
+    if (metadata.controllers) {
+      metadata.controllers.forEach((controller: any) => {
+        const prefix = Reflect.getMetadata('controller:prefix', controller) || '';
+        const controllerRoutes = Reflect.getMetadata('routes', controller) || [];
+
+        controllerRoutes.forEach((route: any) => {
+          routes.push({
+            method: route.method,
+            path: prefix + route.path,
+            controller: controller.name,
+            handler: route.handlerName
+          });
+        });
+      });
+    }
+
+    return routes;
+  }
+}
+
+// ===== 应用工厂 =====
+
+class NestFactory {
+  static create(module: any): NestApplication {
+    const container = new Container();
+    const moduleLoader = new ModuleLoader(container);
+    const routerExplorer = new RouterExplorer(container);
+
+    // 加载模块
+    moduleLoader.load(module);
+
+    // 探索路由
+    const routes = routerExplorer.explore(module);
+
+    return new NestApplication(container, routes);
+  }
+}
+
+class NestApplication {
+  private app: Express;
+
+  constructor(
+    private container: Container,
+    private routes: RouteInfo[]
+  ) {
+    this.app = express();
+    this.setupRoutes();
+  }
+
+  private setupRoutes() {
+    this.routes.forEach(route => {
+      const handler = async (req: Request, res: Response, next: NextFunction) => {
+        const controller = this.container.get(route.controller);
+        const params = Reflect.getMetadata('params', controller.constructor, route.handler) || [];
+
+        // 解析参数
+        const args = params.map((param: any, index: number) => {
+          switch (param.type) {
+            case 'body':
+              return req.body;
+            case 'param':
+              return param.name ? req.params[param.name] : req.params;
+            case 'query':
+              return param.name ? req.query[param.name] : req.query;
+            default:
+              return undefined;
+          }
+        });
+
+        try {
+          const result = await controller[route.handler](...args);
+          res.json(result);
+        } catch (error) {
+          next(error);
+        }
+      };
+
+      this.app[route.method.toLowerCase()](route.path, handler);
+    });
+  }
+
+  listen(port: number) {
+    this.app.listen(port, () => {
+      console.log(`Application is running on: http://localhost:${port}`);
+    });
+  }
+}
+
+// ===== 使用示例 =====
+
+@Module({})
+@Injectable()
+class UsersService {
+  private users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' }
+  ];
+
+  findAll() {
+    return this.users;
+  }
+
+  findOne(id: number) {
+    return this.users.find(u => u.id === id);
+  }
+}
+
+@Controller('users')
+class UsersController {
+  constructor(private usersService: UsersService) {}
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(parseInt(id));
+  }
+}
+
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService]
+})
+class AppModule {}
+
+// 启动应用
+const app = NestFactory.create(AppModule);
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• NestJS 使用装饰器定义元数据</li>
+            <li>• 依赖注入容器管理实例生命周期</li>
+            <li>• 模块系统组织应用结构</li>
+            <li>• 反射 API 实现元数据读取</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="117-2-Koa源码.html">← 上一节：Koa 源码</a>
+      <a href="117-4-学习方法.html">下一节：学习方法 →</a>
+    </div>
+  </div>
+</body>
+</html>

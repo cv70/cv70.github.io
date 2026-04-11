@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.4 迁移管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="26-1-prisma简介.html">第二十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>26.4 迁移管理</h1>
+      <p class="subtitle">版本控制数据库结构变更</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解数据库迁移的概念</li>
+        <li>掌握 Prisma Migrate 命令</li>
+        <li>学会迁移工作流程</li>
+        <li>了解生产环境部署</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 迁移概述</h2>
+      <p>数据库迁移是管理数据库结构变更的方式。通过迁移文件记录每次变更，可以在不同环境（开发、测试、生产）中保持数据库结构一致。</p>
+
+      <div class="code-block">
+Prisma 迁移工作流：
+
+1. 修改 schema.prisma
+   ├── 添加新模型
+   ├── 修改字段
+   ├── 添加索引
+   └── 定义关系
+
+2. 生成迁移文件
+   npx prisma migrate dev --name description
+
+3. 应用迁移
+   ├── 创建 SQL 迁移文件
+   ├── 执行 SQL 变更
+   └── 更新 _prisma_migrations 表
+
+4. 同步 Prisma Client
+   自动运行 prisma generate
+
+迁移文件结构：
+prisma/
+├── schema.prisma
+└── migrations/
+    ├── 20240101000000_init/
+    │   └── migration.sql
+    ├── 20240102000000_add_user_status/
+    │   └── migration.sql
+    └── migration_lock.toml
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 开发环境迁移</h2>
+      <div class="code-block">
+# 创建并应用迁移
+npx prisma migrate dev --name init
+
+# 输出示例
+The following migration(s) have been created and applied:
+migrations/
+  └─ 20240115120000_init/
+    └─ migration.sql
+
+Your database is now in sync with your Prisma schema.
+
+# 修改 schema 后创建新迁移
+npx prisma migrate dev --name add_user_status
+
+# 跳过数据库同步（仅生成迁移文件）
+npx prisma migrate dev --create-only --name add_index
+
+# 清空数据库并重新应用所有迁移
+npx prisma migrate dev reset
+
+# 查看迁移状态
+npx prisma migrate status
+
+# 输出示例
+Status: Database schema is up to date!
+Following migration(s) have been applied:
+
+Name                   Applied at
+init                   2024-01-15 12:00:00
+add_user_status        2024-01-15 13:00:00
+
+# 快速原型开发（不创建迁移文件）
+npx prisma db push
+
+# 适用场景：
+# - 原型开发阶段
+# - 需要快速验证 Schema 变更
+# - 不需要版本控制的变更
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">migrate dev vs db push</div>
+          <p>migrate dev 创建迁移文件，适合正式开发；db push 直接同步 Schema，适合快速原型。生产环境必须使用 migrate deploy。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 迁移文件示例</h2>
+      <div class="code-block">
+-- 20240115120000_init/migration.sql
+-- CreateTable
+CREATE TABLE `users` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `email` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `users_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 20240115130000_add_user_status/migration.sql
+-- AlterTable
+ALTER TABLE `users` ADD COLUMN `status` VARCHAR(191) NOT NULL DEFAULT 'active';
+
+-- CreateIndex
+CREATE INDEX `users_status_idx` ON `users`(`status`);
+
+-- 20240115140000_add_posts/migration.sql
+-- CreateTable
+CREATE TABLE `posts` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `title` VARCHAR(191) NOT NULL,
+    `content` TEXT NULL,
+    `published` BOOLEAN NOT NULL DEFAULT false,
+    `authorId` INTEGER NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `posts_authorId_idx`(`authorId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `posts` ADD CONSTRAINT `posts_authorId_fkey` FOREIGN KEY (`authorId`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 生产环境部署</h2>
+      <div class="code-block">
+# 生产环境应用迁移
+npx prisma migrate deploy
+
+# 特点：
+# - 不会创建新迁移
+# - 只应用未执行的迁移
+# - 不会重置数据库
+# - 适合 CI/CD 流程
+
+# CI/CD 集成示例（GitHub Actions）
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Deploy application
+        run: npm run deploy
+
+# 部署脚本示例
+{
+  "scripts": {
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "prestart": "npm run db:migrate && npm run db:generate",
+    "start": "node dist/main.js"
+  }
+}
+
+# 手动编辑迁移（需要自定义 SQL 时）
+# 1. 创建空迁移
+npx prisma migrate dev --create-only --name custom_migration
+
+# 2. 编辑生成的 migration.sql 文件
+
+# 3. 应用迁移
+npx prisma migrate dev
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 迁移回滚</h2>
+      <div class="code-block">
+# Prisma 不支持自动回滚，需要手动处理
+
+# 方案一：创建回滚迁移
+npx prisma migrate dev --create-only --name rollback_xxx
+
+# 编辑 migration.sql 编写回滚 SQL
+-- DropForeignKey
+ALTER TABLE `posts` DROP FOREIGN KEY `posts_authorId_fkey`;
+
+-- DropTable
+DROP TABLE `posts`;
+
+# 方案二：重置数据库（仅开发环境）
+npx prisma migrate reset
+# 警告：会删除所有数据！
+
+# 方案三：手动修改数据库
+# 1. 连接数据库执行回滚 SQL
+# 2. 更新 _prisma_migrations 表
+DELETE FROM _prisma_migrations WHERE migration_name = 'xxx';
+
+# 最佳实践：
+# - 每个迁移保持小而专注
+# - 在测试环境验证迁移
+# - 备份数据库后再执行
+# - 使用事务包裹迁移 SQL
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 迁移用于版本控制数据库结构变更</li>
+            <li>• migrate dev 用于开发环境</li>
+            <li>• migrate deploy 用于生产环境</li>
+            <li>• db push 适合快速原型开发</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="26-3-prisma-client.html">← 上一节：Prisma Client</a>
+      <a href="../chapter27/27-1-mongodb简介.html">下一章：MongoDB 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

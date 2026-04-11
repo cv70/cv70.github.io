@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>79.3 Hooks 类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="79-1-组件类型定义.html">第七十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>79.3 Hooks 类型</h1>
+      <p class="subtitle">React Hooks 的 TypeScript 支持</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 useState 类型定义</li>
+        <li>理解 useRef 的类型</li>
+        <li>学会自定义 Hook 类型</li>
+        <li>了解其他 Hooks 类型</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> useState 类型</h2>
+      <div class="code-block">
+import { useState } from 'react';
+
+// 类型推断
+const [count, setCount] = useState(0);  // number
+const [name, setName] = useState('');   // string
+const [isActive, setIsActive] = useState(false);  // boolean
+
+// 显式类型
+const [user, setUser] = useState&lt;User | null&gt;(null);
+const [items, setItems] = useState&lt;string[]&gt;([]);
+const [map, setMap] = useState&lt;Map&lt;string, number&gt;&gt;(new Map());
+
+// 联合类型
+const [status, setStatus] = useState&lt;'idle' | 'loading' | 'success' | 'error'&gt;('idle');
+
+// 对象类型
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+const [user, setUser] = useState&lt;User&gt;({
+  id: '',
+  name: '',
+  email: '',
+});
+
+// 惰性初始化类型
+const [data, setData] = useState&lt;Data&gt;(() =&gt; {
+  // 类型推断为 Data
+  return computeExpensiveInitialValue();
+});
+
+// 更新函数类型
+const updateUser = (updates: Partial&lt;User&gt;) =&gt; {
+  setUser(prev =&gt; ({ ...prev, ...updates }));
+};
+
+// 错误示例
+const [value, setValue] = useState&lt;string | null&gt;('initial');
+// setValue(123);  // 错误：number 不能赋值给 string | null
+setValue(null);   // 正确
+setValue('new');  // 正确
+
+interface User {
+  id: string;
+  name: string;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> useRef 类型</h2>
+      <div class="code-block">
+import { useRef, RefObject, MutableRefObject } from 'react';
+
+// DOM 元素引用
+const inputRef = useRef&lt;HTMLInputElement&gt;(null);
+const divRef = useRef&lt;HTMLDivElement&gt;(null);
+const videoRef = useRef&lt;HTMLVideoElement&gt;(null);
+
+function Form() {
+  const inputRef = useRef&lt;HTMLInputElement&gt;(null);
+
+  const focusInput = () =&gt; {
+    // 需要检查 null
+    inputRef.current?.focus();
+  };
+
+  return (
+    &lt;&gt;
+      &lt;input ref={inputRef} type="text" /&gt;
+      &lt;button onClick={focusInput}&gt;Focus&lt;/button&gt;
+    &lt;/&gt;
+  );
+}
+
+// 可变值引用
+const countRef = useRef&lt;number&gt;(0);
+const timerRef = useRef&lt;NodeJS.Timeout | null&gt;(null);
+const previousValueRef = useRef&lt;string | undefined&gt;();
+
+function Timer() {
+  const timerRef = useRef&lt;NodeJS.Timeout | null&gt;(null);
+
+  useEffect(() =&gt; {
+    timerRef.current = setInterval(() =&gt; {
+      console.log('tick');
+    }, 1000);
+
+    return () =&gt; {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  return &lt;div&gt;Timer running&lt;/div&gt;;
+}
+
+// 区分 RefObject 和 MutableRefObject
+// RefObject&lt;T&gt;：{ readonly current: T | null }，用于 DOM 引用
+// MutableRefObject&lt;T&gt;：{ current: T }，用于可变值
+
+// forwardRef 类型
+import { forwardRef } from 'react';
+
+interface InputProps {
+  label?: string;
+}
+
+const Input = forwardRef&lt;HTMLInputElement, InputProps&gt;(
+  ({ label, ...props }, ref) =&gt; {
+    return (
+      &lt;div&gt;
+        {label && &lt;label&gt;{label}&lt;/label&gt;}
+        &lt;input ref={ref} {...props} /&gt;
+      &lt;/div&gt;
+    );
+  }
+);
+
+// 使用
+function Form() {
+  const inputRef = useRef&lt;HTMLInputElement&gt;(null);
+
+  return &lt;Input ref={inputRef} label="Username" /&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 自定义 Hook 类型</h2>
+      <div class="code-block">
+// 自定义 Hook 类型定义
+interface UseFormReturn&lt;T&gt; {
+  values: T;
+  handleChange: (e: ChangeEvent&lt;HTMLInputElement&gt;) =&gt; void;
+  reset: () =&gt; void;
+  setValues: (values: T | ((prev: T) =&gt; T)) =&gt; void;
+}
+
+function useForm&lt;T extends Record&lt;string, unknown&gt;&gt;(
+  initialValues: T
+): UseFormReturn&lt;T&gt; {
+  const [values, setValues] = useState&lt;T&gt;(initialValues);
+
+  const handleChange = (e: ChangeEvent&lt;HTMLInputElement&gt;) =&gt; {
+    const { name, value, type, checked } = e.target;
+    setValues(prev =&gt; ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const reset = () =&gt; setValues(initialValues);
+
+  return { values, handleChange, reset, setValues };
+}
+
+// 使用
+interface FormData {
+  username: string;
+  email: string;
+  subscribe: boolean;
+}
+
+function MyForm() {
+  const { values, handleChange, reset } = useForm&lt;FormData&gt;({
+    username: '',
+    email: '',
+    subscribe: false,
+  });
+
+  // values 类型推断为 FormData
+  return (
+    &lt;form&gt;
+      &lt;input
+        name="username"
+        value={values.username}
+        onChange={handleChange}
+      /&gt;
+    &lt;/form&gt;
+  );
+}
+
+// 返回元组类型（类似 useState）
+function useToggle(initial = false): [boolean, () =&gt; void] {
+  const [value, setValue] = useState(initial);
+  const toggle = () =&gt; setValue(v =&gt; !v);
+  return [value, toggle];
+}
+
+// 使用
+const [isOpen, toggleOpen] = useToggle();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• useState 支持类型推断和显式类型</li>
+            <li>• useRef 用于 DOM 引用时可能为 null</li>
+            <li>• 自定义 Hook 应明确定义返回类型</li>
+            <li>• 使用泛型增加 Hook 的灵活性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="79-2-Props类型.html">← 上一节：Props 类型</a>
+      <a href="79-4-事件类型.html">下一节：事件类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

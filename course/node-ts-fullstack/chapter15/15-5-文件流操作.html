@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.5 文件流操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-同步与异步操作.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.5 文件流操作</h1>
+      <p class="subtitle">高效处理大文件的流式读写</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解流的概念和优势</li>
+        <li>掌握 createReadStream 和 createWriteStream</li>
+        <li>学会使用管道 pipe</li>
+        <li>了解流的错误处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 为什么使用流</h2>
+      <div class="code-block">
+// 传统方式读取大文件的问题
+// 1. 全部加载到内存
+// 2. 内存占用大
+// 3. 等待时间长
+
+// 不好的方式
+const fs = require('fs');
+const data = fs.readFileSync('large-file.mp4');  // 占用大量内存
+fs.writeFileSync('copy.mp4', data);
+
+// 使用流的方式
+// 1. 分块读取
+// 2. 内存占用小
+// 3. 可以边读边处理
+
+// 好的方式
+const readStream = fs.createReadStream('large-file.mp4');
+const writeStream = fs.createWriteStream('copy.mp4');
+readStream.pipe(writeStream);
+
+// 内存对比
+// 传统方式: 文件大小 1GB = 内存占用 1GB+
+// 流方式: 固定块大小，内存占用约 64KB（默认 highWaterMark）
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">流的优势</div>
+          <p>流式处理将大文件分成小块处理，显著降低内存使用，适合处理大文件或实时数据。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 可读流</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 创建可读流
+const readStream = fs.createReadStream('file.txt', {
+  encoding: 'utf8',      // 编码
+  highWaterMark: 64 * 1024,  // 缓冲区大小（默认 64KB）
+  start: 0,              // 开始位置
+  end: 1000              // 结束位置
+});
+
+// 事件监听
+readStream.on('open', () => {
+  console.log('文件打开');
+});
+
+readStream.on('data', (chunk) => {
+  console.log('读取到数据:', chunk.length, '字节');
+  // 处理数据块
+});
+
+readStream.on('end', () => {
+  console.log('读取完成');
+});
+
+readStream.on('close', () => {
+  console.log('文件关闭');
+});
+
+readStream.on('error', (err) => {
+  console.error('读取错误:', err);
+});
+
+// 暂停和恢复
+readStream.pause();
+setTimeout(() => {
+  readStream.resume();
+}, 1000);
+
+// 手动读取
+readStream.on('readable', () => {
+  let chunk;
+  while (null !== (chunk = readStream.read())) {
+    console.log('读取:', chunk.length);
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 可写流</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 创建可写流
+const writeStream = fs.createWriteStream('output.txt', {
+  encoding: 'utf8',
+  highWaterMark: 16 * 1024
+});
+
+// 写入数据
+writeStream.write('第一行\n');
+writeStream.write('第二行\n');
+writeStream.write('第三行\n');
+
+// 结束写入
+writeStream.end('最后一行\n');
+
+// 事件监听
+writeStream.on('finish', () => {
+  console.log('写入完成');
+});
+
+writeStream.on('error', (err) => {
+  console.error('写入错误:', err);
+});
+
+// 检查是否可以继续写入
+const canContinue = writeStream.write('大量数据');
+if (!canContinue) {
+  // 缓冲区已满，等待 drain 事件
+  writeStream.once('drain', () => {
+    console.log('缓冲区已清空，可以继续写入');
+  });
+}
+
+// 追加写入
+const appendStream = fs.createWriteStream('log.txt', { flags: 'a' });
+appendStream.write(new Date().toISOString() + '\n');
+appendStream.end();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 管道操作</h2>
+      <div class="code-block">
+const fs = require('fs');
+const zlib = require('zlib');
+const crypto = require('crypto');
+
+// 基本管道：复制文件
+const readStream = fs.createReadStream('source.txt');
+const writeStream = fs.createWriteStream('dest.txt');
+
+readStream.pipe(writeStream);
+
+// 链式管道：压缩文件
+fs.createReadStream('source.txt')
+  .pipe(zlib.createGzip())
+  .pipe(fs.createWriteStream('source.txt.gz'));
+
+// 解压文件
+fs.createReadStream('source.txt.gz')
+  .pipe(zlib.createGunzip())
+  .pipe(fs.createWriteStream('source-copy.txt'));
+
+// 加密后压缩
+fs.createReadStream('secret.txt')
+  .pipe(crypto.createCipher('aes192', 'password'))
+  .pipe(zlib.createGzip())
+  .pipe(fs.createWriteStream('secret.txt.gz'));
+
+// HTTP 响应流
+const http = require('http');
+http.createServer((req, res) => {
+  const stream = fs.createReadStream('video.mp4');
+  res.writeHead(200, { 'Content-Type': 'video/mp4' });
+  stream.pipe(res);
+}).listen(3000);
+
+// 管道错误处理
+const pipeline = require('stream').pipeline;
+
+pipeline(
+  fs.createReadStream('source.txt'),
+  zlib.createGzip(),
+  fs.createWriteStream('dest.txt.gz'),
+  (err) => {
+    if (err) {
+      console.error('管道失败:', err);
+    } else {
+      console.log('管道成功');
+    }
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 实际应用示例</h2>
+      <div class="code-block">
+const fs = require('fs');
+const readline = require('readline');
+
+// 逐行读取大文件
+async function processLineByLine() {
+  const fileStream = fs.createReadStream('large-file.txt');
+
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity
+  });
+
+  for await (const line of rl) {
+    // 处理每一行
+    console.log(`行: ${line}`);
+  }
+}
+
+// 复制目录
+function copyDirectory(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+
+    if (entry.isDirectory()) {
+      copyDirectory(srcPath, destPath);
+    } else {
+      fs.createReadStream(srcPath).pipe(fs.createWriteStream(destPath));
+    }
+  }
+}
+
+// 进度显示
+function copyWithProgress(src, dest) {
+  const stats = fs.statSync(src);
+  const totalSize = stats.size;
+  let copied = 0;
+
+  const readStream = fs.createReadStream(src);
+  const writeStream = fs.createWriteStream(dest);
+
+  readStream.on('data', (chunk) => {
+    copied += chunk.length;
+    const percent = ((copied / totalSize) * 100).toFixed(2);
+    process.stdout.write(`\r复制进度: ${percent}%`);
+  });
+
+  readStream.pipe(writeStream);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 流分块处理数据，适合大文件</li>
+            <li>• createReadStream 创建可读流</li>
+            <li>• createWriteStream 创建可写流</li>
+            <li>• pipe() 连接可读流和可写流</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-4-文件监听.html">← 上一节：文件监听</a>
+      <a href="../chapter16/16-1-EventEmitter基础.html">下一章：EventEmitter 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

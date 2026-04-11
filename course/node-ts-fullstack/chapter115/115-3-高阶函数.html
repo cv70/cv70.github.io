@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>115.3 高阶函数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="115-1-函数式概念.html">第115章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>115.3 高阶函数</h1>
+      <p class="subtitle">函数作为一等公民的应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解高阶函数的定义</li>
+        <li>掌握常用高阶函数</li>
+        <li>学会自定义高阶函数</li>
+        <li>了解高阶函数的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 高阶函数定义</h2>
+      <div class="code-block">
+// 高阶函数：接受函数作为参数或返回函数的函数
+
+// 函数作为参数
+function executeWithLog<T>(fn: () => T, message: string): T {
+  console.log(`Before: ${message}`);
+  const result = fn();
+  console.log(`After: ${message}`);
+  return result;
+}
+
+// 函数作为返回值
+function createMultiplier(factor: number): (n: number) => number {
+  return (n: number) => n * factor;
+}
+
+const double = createMultiplier(2);
+double(5);  // 10
+
+// 内置高阶函数
+
+const numbers = [1, 2, 3, 4, 5];
+
+// map: 映射
+const doubled = numbers.map(n => n * 2);
+// [2, 4, 6, 8, 10]
+
+// filter: 过滤
+const evens = numbers.filter(n => n % 2 === 0);
+// [2, 4]
+
+// reduce: 归约
+const sum = numbers.reduce((acc, n) => acc + n, 0);
+// 15
+
+// find: 查找
+const found = numbers.find(n => n > 3);
+// 4
+
+// some: 存在判断
+const hasEven = numbers.some(n => n % 2 === 0);
+// true
+
+// every: 全部判断
+const allPositive = numbers.every(n => n > 0);
+// true
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">高阶函数优势</div>
+          <p>抽象通用模式、代码复用、声明式编程。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 自定义高阶函数</h2>
+      <div class="code-block">
+// once: 确保函数只执行一次
+function once<T extends (...args: any[]) => any>(fn: T): T {
+  let called = false;
+  let result: any;
+
+  return ((...args: any[]) => {
+    if (!called) {
+      called = true;
+      result = fn(...args);
+    }
+    return result;
+  }) as T;
+}
+
+const init = once(() => console.log('Initialized'));
+init();  // Initialized
+init();  // 无输出
+
+// debounce: 防抖
+function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timer: NodeJS.Timeout;
+
+  return (...args: Parameters<T>) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+const debouncedSearch = debounce((query: string) => {
+  console.log('Searching:', query);
+}, 300);
+
+// throttle: 节流
+function throttle<T extends (...args: any[]) => any>(
+  fn: T,
+  interval: number
+): (...args: Parameters<T>) => void {
+  let lastTime = 0;
+
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+    if (now - lastTime >= interval) {
+      lastTime = now;
+      fn(...args);
+    }
+  };
+}
+
+// pipe: 管道组合
+function pipe<T>(...fns: Array<(arg: T) => T>): (arg: T) => T {
+  return (arg: T) => fns.reduce((acc, fn) => fn(acc), arg);
+}
+
+const processString = pipe(
+  (s: string) => s.trim(),
+  (s: string) => s.toLowerCase(),
+  (s: string) => s.replace(/\s+/g, '-')
+);
+
+processString('  Hello World  ');  // 'hello-world'
+
+// pick: 对象属性选择
+function pick<T extends object, K extends keyof T>(
+  obj: T,
+  keys: K[]
+): Pick<T, K> {
+  const result = {} as Pick<T, K>;
+  keys.forEach(key => {
+    if (key in obj) {
+      result[key] = obj[key];
+    }
+  });
+  return result;
+}
+
+const user = { id: 1, name: 'Alice', email: 'alice@example.com', password: 'secret' };
+const publicUser = pick(user, ['id', 'name', 'email']);
+// { id: 1, name: 'Alice', email: 'alice@example.com' }
+
+// groupBy: 分组
+function groupBy<T>(arr: T[], keyFn: (item: T) => string): Record<string, T[]> {
+  return arr.reduce((acc, item) => {
+    const key = keyFn(item);
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(item);
+    return acc;
+  }, {} as Record<string, T[]>);
+}
+
+const people = [
+  { name: 'Alice', age: 25 },
+  { name: 'Bob', age: 30 },
+  { name: 'Charlie', age: 25 }
+];
+
+const grouped = groupBy(people, p => String(p.age));
+// { '25': [{ name: 'Alice', age: 25 }, { name: 'Charlie', age: 25 }], '30': [{ name: 'Bob', age: 30 }] }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 高阶函数接受或返回函数</li>
+            <li>• map/filter/reduce是最常用的高阶函数</li>
+            <li>• 高阶函数抽象通用模式</li>
+            <li>• 可创建自定义高阶函数复用逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="115-2-纯函数.html">← 上一节：纯函数</a>
+      <a href="115-4-柯里化.html">下一节：柯里化 →</a>
+    </div>
+  </div>
+</body>
+</html>

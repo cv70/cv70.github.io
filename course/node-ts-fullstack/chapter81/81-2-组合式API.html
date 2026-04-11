@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>81.2 组合式 API - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>81.2 组合式 API</h1>
+      <p class="subtitle">Vue 3 的核心编程范式</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>组合式 API（Composition API）是 Vue 3 最重要的新特性之一。它提供了一种更灵活的方式来组织和复用组件逻辑，解决了选项式 API 在大型组件中代码组织困难的问题。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解组合式 API 的设计理念</li>
+        <li>掌握 setup 函数和 script setup 语法</li>
+        <li>学会使用 ref 和 reactive 创建响应式数据</li>
+        <li>掌握 computed、watch 等响应式 API</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> setup 函数</h2>
+
+      <h3>基本用法</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref, reactive, computed, onMounted } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">export default</span> {
+  <span class="comment">// setup 在组件创建之前执行</span>
+  setup(props, context) {
+    <span class="comment">// 响应式数据</span>
+    <span class="keyword">const</span> count = ref(<span class="number">0</span>);
+    <span class="keyword">const</span> state = reactive({
+      name: <span class="string">'Vue'</span>
+    });
+
+    <span class="comment">// 计算属性</span>
+    <span class="keyword">const</span> doubleCount = computed(() => count.value * <span class="number">2</span>);
+
+    <span class="comment">// 方法</span>
+    <span class="keyword">function</span> <span class="function">increment</span>() {
+      count.value++;
+    }
+
+    <span class="comment">// 生命周期</span>
+    onMounted(() => {
+      console.log(<span class="string">'组件已挂载'</span>);
+    });
+
+    <span class="comment">// 返回模板需要使用的数据和方法</span>
+    <span class="keyword">return</span> {
+      count,
+      state,
+      doubleCount,
+      increment
+    };
+  }
+}</div>
+
+      <h3>setup 参数</h3>
+      <div class="code-block"><span class="keyword">export default</span> {
+  props: {
+    title: <span class="keyword">String</span>
+  },
+  setup(props, context) {
+    <span class="comment">// props - 响应式的 props 对象</span>
+    console.log(props.title);
+
+    <span class="comment">// context - 上下文对象</span>
+    <span class="comment">// context.attrs - 非 prop 的 attribute</span>
+    <span class="comment">// context.slots - 插槽</span>
+    <span class="comment">// context.emit - 触发事件</span>
+    <span class="comment">// context.expose - 暴露给父组件</span>
+
+    <span class="keyword">function</span> <span class="function">handleSubmit</span>() {
+      context.emit(<span class="string">'submit'</span>, { value: <span class="string">'data'</span> });
+    }
+
+    <span class="keyword">return</span> { handleSubmit };
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> script setup 语法</h2>
+      <p>&lt;script setup&gt; 是 Vue 3.2+ 的编译时语法糖，简化了组合式 API 的使用。</p>
+      <div class="code-block">&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { ref, computed, onMounted } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 定义 props</span>
+<span class="keyword">const</span> props = defineProps&lt;{
+  title: <span class="keyword">string</span>;
+  count?: <span class="keyword">number</span>;
+}&gt;();
+
+<span class="comment">// 定义 emits</span>
+<span class="keyword">const</span> emit = defineEmits&lt;{
+  (e: <span class="string">'update'</span>, value: <span class="keyword">number</span>): <span class="keyword">void</span>;
+  (e: <span class="string">'submit'</span>): <span class="keyword">void</span>;
+}&gt;();
+
+<span class="comment">// 响应式数据 - 自动暴露到模板</span>
+<span class="keyword">const</span> count = ref(props.count ?? <span class="number">0</span>);
+<span class="keyword">const</span> doubleCount = computed(() => count.value * <span class="number">2</span>);
+
+<span class="comment">// 方法 - 自动暴露到模板</span>
+<span class="keyword">function</span> <span class="function">increment</span>() {
+  count.value++;
+  emit(<span class="string">'update'</span>, count.value);
+}
+
+<span class="comment">// 生命周期</span>
+onMounted(() => {
+  console.log(<span class="string">'Mounted'</span>);
+});
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div&gt;
+    &lt;h2&gt;{{ props.title }}&lt;/h2&gt;
+    &lt;p&gt;Count: {{ count }}&lt;/p&gt;
+    &lt;p&gt;Double: {{ doubleCount }}&lt;/p&gt;
+    &lt;button @click=<span class="string">"increment"</span>&gt;+1&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> ref 和 reactive</h2>
+
+      <h3>ref - 基本类型响应式</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 创建 ref</span>
+<span class="keyword">const</span> count = ref(<span class="number">0</span>);
+<span class="keyword">const</span> name = ref(<span class="string">'Vue'</span>);
+<span class="keyword">const</span> isActive = ref(<span class="keyword">true</span>);
+
+<span class="comment">// 访问和修改需要 .value</span>
+console.log(count.value);  <span class="comment">// 0</span>
+count.value++;
+
+<span class="comment">// 在模板中自动解包，不需要 .value</span>
+<span class="comment">// &lt;div&gt;{{ count }}&lt;/div&gt;</span>
+
+<span class="comment">// ref 也可以存储对象</span>
+<span class="keyword">const</span> user = ref({ name: <span class="string">'John'</span>, age: <span class="number">20</span> });
+user.value.name = <span class="string">'Jane'</span>; <span class="comment">// 需要通过 .value 访问</span></div>
+
+      <h3>reactive - 对象响应式</h3>
+      <div class="code-block"><span class="keyword">import</span> { reactive } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 创建 reactive 对象</span>
+<span class="keyword">const</span> state = reactive({
+  count: <span class="number">0</span>,
+  user: {
+    name: <span class="string">'John'</span>,
+    profile: {
+      email: <span class="string">'john@example.com'</span>
+    }
+  }
+});
+
+<span class="comment">// 直接访问，不需要 .value</span>
+console.log(state.count);     <span class="comment">// 0</span>
+console.log(state.user.name); <span class="comment">// 'John'</span>
+
+<span class="comment">// 修改</span>
+state.count++;
+state.user.name = <span class="string">'Jane'</span>;
+
+<span class="comment">// 注意：解构会失去响应性</span>
+<span class="keyword">const</span> { count } = state; <span class="comment">// count 不是响应式的！</span>
+
+<span class="comment">// 使用 toRefs 保持响应性</span>
+<span class="keyword">import</span> { toRefs } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">const</span> { count } = toRefs(state); <span class="comment">// count 是响应式的 ref</span></div>
+
+      <h3>ref vs reactive</h3>
+      <table>
+        <tr>
+          <th>特性</th>
+          <th>ref</th>
+          <th>reactive</th>
+        </tr>
+        <tr>
+          <td>适用类型</td>
+          <td>基本类型、对象</td>
+          <td>对象、数组</td>
+        </tr>
+        <tr>
+          <td>访问方式</td>
+          <td>.value</td>
+          <td>直接访问</td>
+        </tr>
+        <tr>
+          <td>重新赋值</td>
+          <td>可以</td>
+          <td>不可以（会丢失响应性）</td>
+        </tr>
+        <tr>
+          <td>解构</td>
+          <td>支持</td>
+          <td>需要 toRefs</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> computed 和 watch</h2>
+
+      <h3>computed - 计算属性</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref, computed } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> firstName = ref(<span class="string">'John'</span>);
+<span class="keyword">const</span> lastName = ref(<span class="string">'Doe'</span>);
+
+<span class="comment">// 只读计算属性</span>
+<span class="keyword">const</span> fullName = computed(() => {
+  <span class="keyword">return</span> <span class="string">`${firstName.value} ${lastName.value}`</span>;
+});
+
+<span class="comment">// 可写计算属性</span>
+<span class="keyword">const</span> fullNameWritable = computed({
+  <span class="function">get</span>() {
+    <span class="keyword">return</span> <span class="string">`${firstName.value} ${lastName.value}`</span>;
+  },
+  <span class="function">set</span>(value: <span class="keyword">string</span>) {
+    [firstName.value, lastName.value] = value.split(<span class="string">' '</span>);
+  }
+});
+
+fullNameWritable.value = <span class="string">'Jane Smith'</span>;
+console.log(firstName.value); <span class="comment">// 'Jane'</span></div>
+
+      <h3>watch - 侦听器</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref, watch, watchEffect } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> count = ref(<span class="number">0</span>);
+<span class="keyword">const</span> name = ref(<span class="string">'Vue'</span>);
+
+<span class="comment">// 侦听单个 ref</span>
+watch(count, (newVal, oldVal) => {
+  console.log(<span class="string">`count: ${oldVal} -> ${newVal}`</span>);
+});
+
+<span class="comment">// 侦听多个源</span>
+watch([count, name], ([newCount, newName], [oldCount, oldName]) => {
+  console.log(<span class="string">`count: ${newCount}, name: ${newName}`</span>);
+});
+
+<span class="comment">// 侦听 reactive 对象的属性</span>
+<span class="keyword">const</span> state = reactive({ user: { name: <span class="string">''</span> } });
+watch(
+  () => state.user.name,
+  (newName) => console.log(newName)
+);
+
+<span class="comment">// 深度侦听</span>
+watch(
+  () => state.user,
+  (newUser) => console.log(<span class="string">'user changed'</span>),
+  { deep: <span class="keyword">true</span> }
+);
+
+<span class="comment">// 立即执行</span>
+watch(count, <span class="function">handler</span> => { /* ... */ }, { immediate: <span class="keyword">true</span> });
+
+<span class="comment">// watchEffect - 自动追踪依赖</span>
+watchEffect(() => {
+  console.log(<span class="string">`count is ${count.value}`</span>);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 生命周期钩子</h2>
+      <div class="code-block"><span class="keyword">import</span> {
+  onBeforeMount,
+  onMounted,
+  onBeforeUpdate,
+  onUpdated,
+  onBeforeUnmount,
+  onUnmounted,
+  onErrorCaptured
+} <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">export default</span> {
+  setup() {
+    <span class="comment">// 组件挂载前</span>
+    onBeforeMount(() => {
+      console.log(<span class="string">'beforeMount'</span>);
+    });
+
+    <span class="comment">// 组件挂载后</span>
+    onMounted(() => {
+      console.log(<span class="string">'mounted'</span>);
+    });
+
+    <span class="comment">// 组件更新前</span>
+    onBeforeUpdate(() => {
+      console.log(<span class="string">'beforeUpdate'</span>);
+    });
+
+    <span class="comment">// 组件更新后</span>
+    onUpdated(() => {
+      console.log(<span class="string">'updated'</span>);
+    });
+
+    <span class="comment">// 组件卸载前</span>
+    onBeforeUnmount(() => {
+      console.log(<span class="string">'beforeUnmount'</span>);
+    });
+
+    <span class="comment">// 组件卸载后</span>
+    onUnmounted(() => {
+      console.log(<span class="string">'unmounted'</span>);
+    });
+  }
+}</div>
+
+      <table>
+        <tr>
+          <th>选项式 API</th>
+          <th>组合式 API</th>
+        </tr>
+        <tr>
+          <td>beforeCreate</td>
+          <td>setup()</td>
+        </tr>
+        <tr>
+          <td>created</td>
+          <td>setup()</td>
+        </tr>
+        <tr>
+          <td>beforeMount</td>
+          <td>onBeforeMount</td>
+        </tr>
+        <tr>
+          <td>mounted</td>
+          <td>onMounted</td>
+        </tr>
+        <tr>
+          <td>beforeUpdate</td>
+          <td>onBeforeUpdate</td>
+        </tr>
+        <tr>
+          <td>updated</td>
+          <td>onUpdated</td>
+        </tr>
+        <tr>
+          <td>beforeUnmount</td>
+          <td>onBeforeUnmount</td>
+        </tr>
+        <tr>
+          <td>unmounted</td>
+          <td>onUnmounted</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>组合式 API 提供更灵活的代码组织方式</li>
+        <li>setup 是组合式 API 的入口函数</li>
+        <li>script setup 是推荐的语法糖，简化代码</li>
+        <li>ref 用于基本类型，reactive 用于对象</li>
+        <li>watch 用于显式侦听，watchEffect 自动追踪依赖</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="81-1-Vue3简介.html">← 上一节：Vue 3 简介</a>
+      <a href="81-3-响应式系统.html">下一节：响应式系统 →</a>
+    </div>
+  </div>
+</body>
+</html>

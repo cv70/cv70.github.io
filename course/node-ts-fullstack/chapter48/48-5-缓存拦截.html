@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>48.5 缓存拦截 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="48-1-拦截器概念.html">第四十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>48.5 缓存拦截</h1>
+      <p class="subtitle">使用拦截器实现响应缓存</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解缓存拦截器原理</li>
+        <li>实现简单的内存缓存</li>
+        <li>学会使用 Redis 缓存</li>
+        <li>掌握缓存装饰器</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 缓存拦截器原理</h2>
+      <p>缓存拦截器在请求到达控制器前检查缓存，如果命中则直接返回缓存数据，否则执行控制器方法并缓存结果。</p>
+
+      <div class="code-block">
+缓存流程：
+
+请求
+  ↓
+检查缓存
+  ├─ 命中 → 返回缓存数据
+  └─ 未命中 ↓
+       执行控制器
+            ↓
+       缓存结果
+            ↓
+       返回响应
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内存缓存拦截器</h2>
+      <div class="code-block">
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Reflector } from '@nestjs/core';
+
+export const CACHE_KEY = 'cache';
+export const Cache = (ttl: number = 60) => SetMetadata(CACHE_KEY, { ttl });
+
+@Injectable()
+export class CacheInterceptor implements NestInterceptor {
+  private cache = new Map<string, { data: any; expireAt: number }>();
+
+  constructor(private reflector: Reflector) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const cacheConfig = this.reflector.get(CACHE_KEY, context.getHandler());
+
+    if (!cacheConfig) {
+      return next.handle();
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const cacheKey = this.generateCacheKey(request);
+    const cached = this.cache.get(cacheKey);
+
+    // 检查缓存是否存在且未过期
+    if (cached && cached.expireAt > Date.now()) {
+      console.log(`Cache hit: ${cacheKey}`);
+      return of(cached.data);
+    }
+
+    console.log(`Cache miss: ${cacheKey}`);
+
+    return next.handle().pipe(
+      tap((data) => {
+        this.cache.set(cacheKey, {
+          data,
+          expireAt: Date.now() + cacheConfig.ttl * 1000,
+        });
+      }),
+    );
+  }
+
+  private generateCacheKey(request: Request): string {
+    const { method, url, body } = request;
+    return `${method}:${url}:${JSON.stringify(body)}`;
+  }
+}
+
+// 使用装饰器
+@Controller('users')
+export class UsersController {
+  @Cache(60)  // 缓存 60 秒
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Cache(300)  // 缓存 5 分钟
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(+id);
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">of 操作符</div>
+          <p>of() 创建一个立即发射指定值的 Observable。缓存命中时使用 of(cachedData) 直接返回缓存数据，跳过控制器执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Redis 缓存拦截器</h2>
+      <div class="code-block">
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable, of, from } from 'rxjs';
+import { switchMap, tap } from 'rxjs/operators';
+import { RedisService } from './redis.service';
+
+@Injectable()
+export class RedisCacheInterceptor implements NestInterceptor {
+  constructor(
+    private redisService: RedisService,
+    private reflector: Reflector,
+  ) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const cacheConfig = this.reflector.get(CACHE_KEY, context.getHandler());
+
+    if (!cacheConfig) {
+      return next.handle();
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const cacheKey = this.generateCacheKey(request);
+
+    return from(this.redisService.get(cacheKey)).pipe(
+      switchMap((cached) => {
+        if (cached) {
+          console.log(`Cache hit: ${cacheKey}`);
+          return of(JSON.parse(cached));
+        }
+
+        console.log(`Cache miss: ${cacheKey}`);
+
+        return next.handle().pipe(
+          tap((data) => {
+            this.redisService.set(
+              cacheKey,
+              JSON.stringify(data),
+              cacheConfig.ttl,
+            );
+          }),
+        );
+      }),
+    );
+  }
+
+  private generateCacheKey(request: Request): string {
+    return `cache:${request.method}:${request.url}`;
+  }
+}
+
+// Redis 服务
+@Injectable()
+export class RedisService {
+  private client: Redis;
+
+  constructor() {
+    this.client = new Redis({
+      host: process.env.REDIS_HOST,
+      port: parseInt(process.env.REDIS_PORT, 10),
+    });
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
+
+  async set(key: string, value: string, ttl: number): Promise<void> {
+    await this.client.setex(key, ttl, value);
+  }
+
+  async del(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+
+  async delPattern(pattern: string): Promise<void> {
+    const keys = await this.client.keys(pattern);
+    if (keys.length > 0) {
+      await this.client.del(...keys);
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 缓存清除装饰器</h2>
+      <div class="code-block">
+export const CACHE_CLEAR_KEY = 'cacheClear';
+export const CacheClear = (...patterns: string[]) =>
+  SetMetadata(CACHE_CLEAR_KEY, patterns);
+
+@Injectable()
+export class CacheClearInterceptor implements NestInterceptor {
+  constructor(private redisService: RedisService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const patterns = this.reflector.get(CACHE_CLEAR_KEY, context.getHandler());
+
+    return next.handle().pipe(
+      tap(async () => {
+        if (patterns) {
+          for (const pattern of patterns) {
+            await this.redisService.delPattern(`cache:${pattern}*`);
+          }
+        }
+      }),
+    );
+  }
+}
+
+// 使用
+@Controller('users')
+export class UsersController {
+  @Cache(60)
+  @Get()
+  findAll() {}  // 缓存结果
+
+  @CacheClear('GET:/users')  // 清除用户列表缓存
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @CacheClear('GET:/users', 'GET:/users/:id')
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(+id, updateUserDto);
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">缓存注意</div>
+          <p>缓存拦截器应该只用于 GET 请求。POST、PUT、DELETE 等修改操作不应该缓存。确保缓存键能唯一标识请求。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 缓存拦截器命中时跳过控制器执行</li>
+            <li>• of() 返回缓存数据</li>
+            <li>• Redis 实现分布式缓存</li>
+            <li>• 缓存清除装饰器更新缓存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="48-4-日志拦截.html">← 上一节：日志拦截</a>
+      <a href="../chapter49/49-1-异常过滤器.html">下一章：异常过滤器 →</a>
+    </div>
+  </div>
+</body>
+</html>

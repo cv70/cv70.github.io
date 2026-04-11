@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.5 预定义条件类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="8-1-条件类型基础.html">第八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>8.5 预定义条件类型</h1>
+      <p class="subtitle">TypeScript 内置的条件类型工具</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Exclude 和 Extract 类型</li>
+        <li>理解 NonNullable 的作用</li>
+        <li>学会使用 ReturnType 和 Parameters</li>
+        <li>了解 InstanceType 的用法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Exclude 和 Extract</h2>
+      <div class="code-block">
+// Exclude<T, U> - 从 T 中排除可赋值给 U 的类型
+// type Exclude<T, U> = T extends U ? never : T;
+
+type T1 = Exclude<'a' | 'b' | 'c', 'a'>;           // 'b' | 'c'
+type T2 = Exclude<string | number | boolean, number>;  // string | boolean
+type T3 = Exclude<string | number, string | number>;   // never
+
+// Extract<T, U> - 从 T 中提取可赋值给 U 的类型
+// type Extract<T, U> = T extends U ? T : never;
+
+type T4 = Extract<'a' | 'b' | 'c', 'a' | 'f'>;    // 'a'
+type T5 = Extract<string | number | boolean, number>;  // number
+type T6 = Extract<string | number, boolean>;     // never
+
+// 实际应用：过滤事件类型
+type AllEvents = 'click' | 'focus' | 'blur' | 'keydown' | 'keyup';
+type KeyboardEvents = Extract<AllEvents, `key${string}`>;  // 'keydown' | 'keyup'
+type MouseEvents = Exclude<AllEvents, `key${string}`>;     // 'click' | 'focus' | 'blur'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> NonNullable</h2>
+      <div class="code-block">
+// NonNullable<T> - 从 T 中排除 null 和 undefined
+// type NonNullable<T> = T extends null | undefined ? never : T;
+
+type T7 = NonNullable<string | null | undefined>;  // string
+type T8 = NonNullable<number | null>;               // number
+type T9 = NonNullable<null | undefined>;            // never
+
+// 实际应用：确保值不为空
+function processValue<T>(value: NonNullable<T>): void {
+  console.log(value);
+}
+
+processValue('hello');  // OK
+processValue(42);       // OK
+// processValue(null);  // Error
+
+// 对象属性非空化
+interface User {
+  name: string | null;
+  email: string | undefined;
+}
+
+type NonNullUser = {
+  [K in keyof User]: NonNullable<User[K]>;
+};
+// { name: string; email: string; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> ReturnType 和 Parameters</h2>
+      <div class="code-block">
+// ReturnType<T> - 获取函数返回值类型
+// type ReturnType<T extends (...args: any) => any> =
+//   T extends (...args: any) => infer R ? R : any;
+
+function getUser() {
+  return { id: 1, name: 'Alice', email: 'alice@example.com' };
+}
+
+type User = ReturnType<typeof getUser>;
+// { id: number; name: string; email: string; }
+
+// Parameters<T> - 获取函数参数类型元组
+// type Parameters<T extends (...args: any) => any> =
+//   T extends (...args: infer P) => any ? P : never;
+
+function greet(name: string, age: number): string {
+  return `Hello, ${name}!`;
+}
+
+type GreetParams = Parameters<typeof greet>;
+// [name: string, age: number]
+
+// 实际应用：包装函数保持类型
+function logResult<T extends (...args: any[]) => any>(fn: T) {
+  return (...args: Parameters<T>): ReturnType<T> => {
+    console.log('Calling with:', args);
+    const result = fn(...args);
+    console.log('Result:', result);
+    return result;
+  };
+}
+
+const loggedGreet = logResult(greet);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> InstanceType</h2>
+      <div class="code-block">
+// InstanceType<T> - 获取构造函数的实例类型
+// type InstanceType<T extends new (...args: any) => any> =
+//   T extends new (...args: any) => infer R ? R : any;
+
+class Person {
+  constructor(public name: string, public age: number) {}
+}
+
+type PersonInstance = InstanceType<typeof Person>;
+// Person
+
+function createInstance<T extends new (...args: any[]) => any>(
+  ctor: T,
+  ...args: ConstructorParameters<T>
+): InstanceType<T> {
+  return new ctor(...args);
+}
+
+const person = createInstance(Person, 'Alice', 30);
+// person: Person
+
+// ConstructorParameters<T> - 获取构造函数参数类型
+type PersonParams = ConstructorParameters<typeof Person>;
+// [name: string, age: number]
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">内置条件类型一览</div>
+          <p>Exclude、Extract、NonNullable、ReturnType、Parameters、InstanceType、ConstructorParameters 都是 TypeScript 内置的条件类型工具，在日常开发中非常实用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Exclude 排除类型，Extract 提取类型</li>
+            <li>• NonNullable 排除 null 和 undefined</li>
+            <li>• ReturnType 获取函数返回值类型</li>
+            <li>• Parameters 和 InstanceType 用于函数和类</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="8-4-条件类型约束.html">← 上一节：条件类型约束</a>
+      <a href="../chapter09/9-1-映射类型基础.html">下一章：映射类型基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>100.2 GitHub Actions - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="100-1-CICD概念.html">第100章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>100.2 GitHub Actions</h1>
+      <p class="subtitle">使用 GitHub Actions 构建自动化 CI/CD 流水线</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 GitHub Actions 的核心概念</li>
+        <li>掌握 Workflow 配置文件编写</li>
+        <li>学会使用 Actions 和 Secrets</li>
+        <li>构建完整的 Node.js CI/CD 流水线</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=800" alt="GitHub Actions" class="card-image">
+      <h3 class="card-title">GitHub Actions 简介</h3>
+      <p class="card-text">
+        <strong>GitHub Actions</strong> 是 GitHub 提供的自动化平台，可以直接在仓库中创建 CI/CD 工作流。
+        支持 Linux、Windows、macOS 多平台，拥有丰富的 Actions 市场，可免费使用。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 核心概念</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Workflow</strong></td>
+            <td>工作流，一个自动化流程，定义在 .github/workflows/ 目录下的 YAML 文件中</td>
+          </tr>
+          <tr>
+            <td><strong>Event</strong></td>
+            <td>触发事件，如 push、pull_request、schedule 等</td>
+          </tr>
+          <tr>
+            <td><strong>Job</strong></td>
+            <td>任务，包含多个 Step，默认并行执行，可配置依赖关系</td>
+          </tr>
+          <tr>
+            <td><strong>Step</strong></td>
+            <td>步骤，执行具体操作，可以是 shell 命令或 Action</td>
+          </tr>
+          <tr>
+            <td><strong>Action</strong></td>
+            <td>可复用的操作单元，可来自官方市场或自定义</td>
+          </tr>
+          <tr>
+            <td><strong>Runner</strong></td>
+            <td>执行任务的虚拟机环境，支持 GitHub 托管或自托管</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 基础 Workflow 结构</h2>
+      <div class="code-block">
+<span class="comment"># .github/workflows/ci.yml</span>
+<span class="keyword">name</span>: <span class="string">CI Pipeline</span>
+
+<span class="keyword">on</span>:
+  <span class="keyword">push</span>:
+    <span class="keyword">branches</span>: [<span class="string">main</span>, <span class="string">develop</span>]
+  <span class="keyword">pull_request</span>:
+    <span class="keyword">branches</span>: [<span class="string">main</span>]
+
+<span class="keyword">jobs</span>:
+  <span class="keyword">build</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+
+    <span class="keyword">strategy</span>:
+      <span class="keyword">matrix</span>:
+        <span class="keyword">node-version</span>: [<span class="string">18.x</span>, <span class="string">20.x</span>]
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Setup Node.js ${{ matrix.node-version }}</span>
+        <span class="keyword">uses</span>: <span class="string">actions/setup-node@v4</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">node-version</span>: <span class="string">${{ matrix.node-version }}</span>
+          <span class="keyword">cache</span>: <span class="string">'npm'</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install dependencies</span>
+        <span class="keyword">run</span>: <span class="string">npm ci</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run linter</span>
+        <span class="keyword">run</span>: <span class="string">npm run lint</span>
+
+      - <span class="keyword">name</span>: <span class="string">Run tests</span>
+        <span class="keyword">run</span>: <span class="string">npm test</span>
+
+      - <span class="keyword">name</span>: <span class="string">Build</span>
+        <span class="keyword">run</span>: <span class="string">npm run build</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 完整 CI/CD 示例</h2>
+      <div class="code-block">
+<span class="comment"># .github/workflows/ci-cd.yml</span>
+<span class="keyword">name</span>: <span class="string">CI/CD Pipeline</span>
+
+<span class="keyword">on</span>:
+  <span class="keyword">push</span>:
+    <span class="keyword">branches</span>: [<span class="string">main</span>, <span class="string">develop</span>]
+    <span class="keyword">tags</span>: [<span class="string">'v*'</span>]
+  <span class="keyword">pull_request</span>:
+    <span class="keyword">branches</span>: [<span class="string">main</span>]
+
+<span class="keyword">env</span>:
+  <span class="keyword">REGISTRY</span>: <span class="string">ghcr.io</span>
+  <span class="keyword">IMAGE_NAME</span>: <span class="string">${{ github.repository }}</span>
+
+<span class="keyword">jobs</span>:
+  <span class="comment"># ==================== 测试任务 ====================</span>
+  <span class="keyword">test</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Setup Node.js</span>
+        <span class="keyword">uses</span>: <span class="string">actions/setup-node@v4</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">node-version</span>: <span class="string">'20'</span>
+          <span class="keyword">cache</span>: <span class="string">'npm'</span>
+
+      - <span class="keyword">name</span>: <span class="string">Install dependencies</span>
+        <span class="keyword">run</span>: <span class="string">npm ci</span>
+
+      - <span class="keyword">name</span>: <span class="string">Lint</span>
+        <span class="keyword">run</span>: <span class="string">npm run lint</span>
+
+      - <span class="keyword">name</span>: <span class="string">Test</span>
+        <span class="keyword">run</span>: <span class="string">npm run test:coverage</span>
+
+      - <span class="keyword">name</span>: <span class="string">Upload coverage</span>
+        <span class="keyword">uses</span>: <span class="string">codecov/codecov-action@v3</span>
+
+  <span class="comment"># ==================== 构建任务 ====================</span>
+  <span class="keyword">build</span>:
+    <span class="keyword">needs</span>: <span class="string">test</span>
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">outputs</span>:
+      <span class="keyword">version</span>: <span class="string">${{ steps.meta.outputs.version }}</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Set up Docker Buildx</span>
+        <span class="keyword">uses</span>: <span class="string">docker/setup-buildx-action@v3</span>
+
+      - <span class="keyword">name</span>: <span class="string">Log in to Container Registry</span>
+        <span class="keyword">uses</span>: <span class="string">docker/login-action@v3</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">registry</span>: <span class="string">${{ env.REGISTRY }}</span>
+          <span class="keyword">username</span>: <span class="string">${{ github.actor }}</span>
+          <span class="keyword">password</span>: <span class="string">${{ secrets.GITHUB_TOKEN }}</span>
+
+      - <span class="keyword">name</span>: <span class="string">Extract metadata</span>
+        <span class="keyword">id</span>: <span class="string">meta</span>
+        <span class="keyword">uses</span>: <span class="string">docker/metadata-action@v5</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">images</span>: <span class="string">${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}</span>
+          <span class="keyword">tags</span>: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+
+      - <span class="keyword">name</span>: <span class="string">Build and push</span>
+        <span class="keyword">uses</span>: <span class="string">docker/build-push-action@v5</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">context</span>: <span class="string">.</span>
+          <span class="keyword">push</span>: <span class="string">${{ github.event_name != 'pull_request' }}</span>
+          <span class="keyword">tags</span>: <span class="string">${{ steps.meta.outputs.tags }}</span>
+          <span class="keyword">labels</span>: <span class="string">${{ steps.meta.outputs.labels }}</span>
+          <span class="keyword">cache-from</span>: <span class="string">type=gha</span>
+          <span class="keyword">cache-to</span>: <span class="string">type=gha,mode=max</span>
+
+  <span class="comment"># ==================== 部署任务 ====================</span>
+  <span class="keyword">deploy</span>:
+    <span class="keyword">needs</span>: <span class="string">build</span>
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">if</span>: <span class="string">github.ref == 'refs/heads/main'</span>
+    <span class="keyword">environment</span>: <span class="string">production</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Deploy to server</span>
+        <span class="keyword">uses</span>: <span class="string">appleboy/ssh-action@v1.0.0</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">host</span>: <span class="string">${{ secrets.SERVER_HOST }}</span>
+          <span class="keyword">username</span>: <span class="string">${{ secrets.SERVER_USER }}</span>
+          <span class="keyword">key</span>: <span class="string">${{ secrets.SSH_PRIVATE_KEY }}</span>
+          <span class="keyword">script</span>: <span class="string">|
+            cd /app/myapp
+            docker compose pull
+            docker compose up -d
+            docker image prune -f</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Secrets 管理</h2>
+      <p>在 Settings -> Secrets and variables -> Actions 中配置敏感信息。</p>
+      <div class="code-block">
+<span class="comment"># 使用 Secrets</span>
+<span class="keyword">env</span>:
+  <span class="keyword">DATABASE_URL</span>: <span class="string">${{ secrets.DATABASE_URL }}</span>
+  <span class="keyword">JWT_SECRET</span>: <span class="string">${{ secrets.JWT_SECRET }}</span>
+
+<span class="keyword">steps</span>:
+  - <span class="keyword">name</span>: <span class="string">Deploy</span>
+    <span class="keyword">env</span>:
+      <span class="keyword">SSH_KEY</span>: <span class="string">${{ secrets.SSH_PRIVATE_KEY }}</span>
+    <span class="keyword">run</span>: <span class="string">|
+      echo "$SSH_KEY" > key.pem
+      chmod 600 key.pem</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 常用 Actions</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">代码操作</h3>
+          <ul class="feature-list">
+            <li>actions/checkout - 检出代码</li>
+            <li>actions/setup-node - Node.js 环境</li>
+            <li>actions/setup-python - Python 环境</li>
+            <li>actions/cache - 缓存管理</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Docker 操作</h3>
+          <ul class="feature-list">
+            <li>docker/login-action - 登录仓库</li>
+            <li>docker/build-push-action - 构建推送</li>
+            <li>docker/setup-buildx-action - Buildx 设置</li>
+            <li>docker/metadata-action - 元数据提取</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">缓存最佳实践</div>
+        <p>使用 npm cache 和 Docker buildx cache 加速构建：</p>
+        <pre style="margin-top: 0.5rem;">- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'npm'  # 启用 npm 缓存
+
+- uses: docker/build-push-action@v5
+  with:
+    cache-from: type=gha  # GitHub Actions 缓存
+    cache-to: type=gha,mode=max</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Workflow 定义在 .github/workflows/ 目录</li>
+            <li>• Job 包含多个 Step，可配置依赖关系</li>
+            <li>• 使用 Secrets 存储敏感信息</li>
+            <li>• 利用缓存加速构建过程</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="100-1-CICD概念.html">← 上一节</a>
+      <a href="100-3-GitLab-CI.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

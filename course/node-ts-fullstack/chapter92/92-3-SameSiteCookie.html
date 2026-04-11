@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>92.3 SameSite Cookie - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="92-1-CSRF攻击原理.html">第九十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>92.3 SameSite Cookie</h1>
+      <p class="subtitle">Cookie SameSite 属性详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 SameSite 属性的作用</li>
+        <li>掌握三种 SameSite 值的区别</li>
+        <li>学会配置 SameSite 属性</li>
+        <li>了解浏览器兼容性</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> SameSite 属性概述</h2>
+      <p>SameSite 是 Cookie 的一个属性，用于控制 Cookie 在跨站请求时是否发送，是防止 CSRF 攻击的有效手段。</p>
+      <div class="code-block">
+# SameSite 三种值
+
+## Strict（严格）
+- 完全禁止跨站发送 Cookie
+- 只有同站请求才携带
+- 最安全，但可能影响用户体验
+
+## Lax（宽松）
+- 允许安全的跨站请求携带
+- GET 导航、链接跳转可以携带
+- POST 表单、iframe、AJAX 不携带
+- 平衡安全与体验
+
+## None（无限制）
+- 允许所有跨站请求携带
+- 必须配合 Secure 属性
+- 需要配合其他防护措施
+
+# SameSite 工作原理
+
+当用户从 site-b.com 访问 site-a.com 的资源时：
+
+SameSite=Strict: 不发送 site-a.com 的 Cookie
+SameSite=Lax:   GET 导航发送，POST 不发送
+SameSite=None:  发送 site-a.com 的 Cookie
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">浏览器默认行为</div>
+          <p>现代浏览器（Chrome 80+）默认 SameSite=Lax，未显式设置 SameSite 的 Cookie 将被当作 Lax 处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> SameSite 配置</h2>
+      <div class="code-block">
+# Express 设置 SameSite
+
+// 单个 Cookie
+res.cookie('sessionId', 'abc123', {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict', // 'strict' | 'lax' | 'none'
+});
+
+// Session 配置
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 3600000,
+  },
+}));
+
+# 不同场景的配置建议
+
+## 敏感操作（推荐 Strict）
+// 银行、支付等敏感应用
+cookie: {
+  sameSite: 'strict',
+  secure: true,
+  httpOnly: true,
+}
+
+## 一般应用（推荐 Lax）
+// 大多数 Web 应用
+cookie: {
+  sameSite: 'lax',
+  secure: true,
+  httpOnly: true,
+}
+
+## 需要跨站的场景（None + Secure）
+// OAuth 回调、第三方集成等
+cookie: {
+  sameSite: 'none',
+  secure: true,  // None 必须配合 Secure
+  httpOnly: true,
+}
+
+# Set-Cookie 响应头示例
+Set-Cookie: sessionId=abc123; Path=/; HttpOnly; Secure; SameSite=Strict
+Set-Cookie: trackingId=xyz789; Path=/; Secure; SameSite=None
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> SameSite=Lax 详细行为</h2>
+      <div class="code-block">
+# Lax 模式下 Cookie 发送规则
+
+┌───────────────────────────┬─────────────┬─────────────┐
+│          请求类型          │ 发送 Cookie │    说明     │
+├───────────────────────────┼─────────────┼─────────────┤
+│ 同站请求                  │     是      │ 正常行为    │
+│ 顶级导航 GET（链接）      │     是      │ 点击链接    │
+│ 顶级导航 GET（表单）      │     是      │ GET 表单    │
+│ 顶级导航 POST（表单）     │     否      │ POST 表单   │
+│ iframe 嵌入               │     否      │ 防止嵌入    │
+│ AJAX 请求                 │     否      │ 跨站请求    │
+│ 图片加载                  │     否      │ img 标签    │
+│ script 加载               │     否      │ script 标签 │
+└───────────────────────────┴─────────────┴─────────────┘
+
+# 顶级导航
+用户直接在地址栏输入 URL
+点击链接跳转
+表单提交后页面跳转
+
+# 子资源请求
+图片、脚本、样式表加载
+AJAX/fetch 请求
+iframe 嵌入
+
+# Lax 为什么安全
+- 阻止 CSRF POST 请求
+- 阻止 iframe 嵌入的 CSRF
+- 允许正常的链接跳转
+- 平衡安全与可用性
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 特殊场景处理</h2>
+      <div class="code-block">
+# OAuth 回调场景
+
+// OAuth 提供商需要跨站接收 Cookie
+// 临时使用 None
+
+// 跳转到 OAuth 提供商之前
+res.cookie('oauth_state', state, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',  // 允许跨站
+  maxAge: 60000,     // 短期有效
+});
+
+// OAuth 回调验证后
+res.clearCookie('oauth_state');
+res.cookie('session', sessionToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',  // 恢复严格模式
+});
+
+# 子域名场景
+
+// 同一主域的子域名视为同站
+// a.example.com → b.example.com
+// sameSite=strict 允许
+
+// 完全不同域名
+// example.com → other.com
+// sameSite=strict 禁止
+
+# 第三方集成
+
+// 如果必须使用 sameSite=none
+// 确保：
+// 1. Secure=true（必须）
+// 2. 配合 CSRF Token
+// 3. 限制 Cookie 有效期
+// 4. 监控异常请求
+
+res.cookie('integration', token, {
+  httpOnly: true,
+  secure: true,        // 必须为 true
+  sameSite: 'none',
+  maxAge: 300000,      // 5 分钟有效
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SameSite 控制跨站请求时 Cookie 的发送</li>
+            <li>• Strict 最安全，Lax 平衡安全与体验</li>
+            <li>• None 需要配合 Secure 属性</li>
+            <li>• 推荐使用 Strict 或 Lax</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="92-2-CSRFToken.html">← 上一节：CSRF Token</a>
+      <a href="92-4-Referer验证.html">下一节：Referer 验证 →</a>
+    </div>
+  </div>
+</body>
+</html>

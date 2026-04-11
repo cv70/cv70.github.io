@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.3 Session 存储 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="52-1-Session原理.html">第五十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>52.3 Session 存储</h1>
+      <p class="subtitle">选择合适的 Session 存储方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解不同存储方案的特点</li>
+        <li>掌握 Redis 存储的配置</li>
+        <li>学会数据库存储的实现</li>
+        <li>理解存储选择的权衡</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 存储方案对比</h2>
+      <div class="code-block">
+/*
++------------+------------+----------------+------------------+
+|   存储类型  |   性能     |     持久化     |     适用场景     |
++------------+------------+----------------+------------------+
+|   内存     |   极快     |     否         |   开发/测试     |
+|   文件     |   一般     |     是         |   小型应用      |
+|   Redis    |   快       |     是         |   生产环境      |
+|   数据库   |   一般     |     是         |   需要查询      |
+|   MongoDB  |   较快     |     是         |   MongoDB项目   |
++------------+------------+----------------+------------------+
+*/
+
+// 默认内存存储的问题
+// 1. 服务器重启，所有 Session 丢失
+// 2. 无法支持多实例部署
+// 3. 内存占用不可控
+// 4. 不适合生产环境
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔴</span> Redis 存储</h2>
+      <div class="code-block">
+// 安装依赖
+// npm install connect-redis redis
+
+import session from 'express-session';
+import RedisStore from 'connect-redis';
+import { createClient } from 'redis';
+
+// 创建 Redis 客户端
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  password: process.env.REDIS_PASSWORD
+});
+
+redisClient.connect().catch(console.error);
+
+redisClient.on('error', (err) => {
+  console.error('Redis 连接错误:', err);
+});
+
+redisClient.on('connect', () => {
+  console.log('Redis 连接成功');
+});
+
+// 配置 Session 存储
+app.use(session({
+  store: new RedisStore({
+    client: redisClient,
+    prefix: 'sess:',           // Key 前缀
+    ttl: 86400,               // 过期时间（秒）
+    disableTouch: false,      // 是否禁用触摸（延长过期时间）
+  }),
+
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 // 24小时
+  }
+}));
+
+// Redis 中的 Session Key 格式
+// sess:sessionId -> JSON.stringify(sessionData)
+
+// 高级 Redis 配置
+const advancedRedisStore = new RedisStore({
+  client: redisClient,
+  prefix: 'myapp:sess:',
+
+  // 自定义序列化（如果存储复杂对象）
+  serializer: {
+    parse: (str) => JSON.parse(str),
+    stringify: (obj) => JSON.stringify(obj)
+  },
+
+  // 不自动移除过期 Session（让 Redis TTL 处理）
+  disableTTL: true
+});
+
+// 手动管理 Session（可选）
+async function manageSessions() {
+  // 获取所有 Session Keys
+  const keys = await redisClient.keys('sess:*');
+
+  // 获取特定 Session
+  const sessionData = await redisClient.get('sess:abc123');
+
+  // 删除 Session
+  await redisClient.del('sess:abc123');
+
+  // 设置过期时间
+  await redisClient.expire('sess:abc123', 3600);
+
+  // 获取 Session 数量
+  const count = await redisClient.dbSize();
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Redis 优势</div>
+          <p>Redis是生产环境首选的Session存储方案：快速、支持过期时间、支持分布式部署、持久化可选。使用Redis Sentinel或Cluster可以进一步提高可用性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🍃</span> MongoDB 存储</h2>
+      <div class="code-block">
+// 安装依赖
+// npm install connect-mongo
+
+import MongoStore from 'connect-mongo';
+
+// MongoDB Session 存储
+app.use(session({
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI!,
+    dbName: 'myapp',
+    collectionName: 'sessions',
+
+    // 自动删除过期 Session
+    autoRemove: 'native',      // 使用 MongoDB TTL 索引
+    autoRemoveInterval: 10,    // 检查间隔（分钟）
+
+    // 可选：加密 Session 数据
+    // crypto: {
+    //   secret: process.env.SESSION_CRYPTO_SECRET!
+    // }
+  }),
+
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 1000 * 60 * 60 * 24 }
+}));
+
+// MongoDB Session 文档结构
+interface SessionDocument {
+  _id: string;               // Session ID
+  expires: Date;             // 过期时间
+  session: {
+    userId: string;
+    username: string;
+    // ... 其他 Session 数据
+  };
+}
+
+// 查询活跃用户
+async function getActiveUsers(): Promise&lt;string[]&gt; {
+  const sessions = await db.collection('sessions')
+    .find({
+      expires: { $gt: new Date() }
+    })
+    .toArray();
+
+  return sessions.map(s => s.session.userId);
+}
+
+// 获取用户所有活跃 Session
+async function getUserSessions(userId: string) {
+  const sessions = await db.collection('sessions')
+    .find({
+      'session.userId': userId,
+      expires: { $gt: new Date() }
+    })
+    .toArray();
+
+  return sessions;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗄️</span> 数据库存储（TypeORM）</h2>
+      <div class="code-block">
+// 自定义 Session 存储
+import { Entity, PrimaryColumn, Column } from 'typeorm';
+
+@Entity()
+class Session {
+  @PrimaryColumn()
+  id: string;
+
+  @Column({ type: 'json' })
+  data: Record&lt;string, any&gt;;
+
+  @Column({ type: 'timestamp' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamp' })
+  createdAt: Date;
+
+  @Column({ type: 'varchar', nullable: true })
+  userId?: string;
+}
+
+// 实现 Session Store
+import { Store } from 'express-session';
+
+class TypeORMStore extends Store {
+  private sessionRepository;
+
+  constructor(sessionRepository: any) {
+    super();
+    this.sessionRepository = sessionRepository;
+  }
+
+  async get(
+    sid: string,
+    callback: (err: any, session?: any) => void
+  ) {
+    try {
+      const session = await this.sessionRepository.findOne({
+        where: { id: sid }
+      });
+
+      if (!session || session.expiresAt < new Date()) {
+        return callback(null, null);
+      }
+
+      callback(null, session.data);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  async set(
+    sid: string,
+    session: any,
+    callback: (err?: any) => void
+  ) {
+    try {
+      const expiresAt = new Date(
+        Date.now() + (session.cookie?.maxAge || 86400000)
+      );
+
+      await this.sessionRepository.save({
+        id: sid,
+        data: session,
+        expiresAt,
+        createdAt: new Date(),
+        userId: session.userId
+      });
+
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  async destroy(sid: string, callback: (err?: any) => void) {
+    try {
+      await this.sessionRepository.delete({ id: sid });
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  async touch(
+    sid: string,
+    session: any,
+    callback: (err?: any) => void
+  ) {
+    try {
+      const expiresAt = new Date(
+        Date.now() + (session.cookie?.maxAge || 86400000)
+      );
+
+      await this.sessionRepository.update(
+        { id: sid },
+        { expiresAt }
+      );
+
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  // 清理过期 Session
+  async cleanup() {
+    await this.sessionRepository
+      .createQueryBuilder()
+      .delete()
+      .where('expiresAt < :now', { now: new Date() })
+      .execute();
+  }
+}
+
+// 使用
+const sessionStore = new TypeORMStore(
+  dataSource.getRepository(Session)
+);
+
+// 定期清理
+setInterval(() => sessionStore.cleanup(), 3600000);
+
+app.use(session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 内存存储不适合生产环境</li>
+            <li>• Redis是生产环境首选方案</li>
+            <li>• MongoDB适合已有MongoDB的项目</li>
+            <li>• 数据库存储便于查询和分析</li>
+            <li>• 需要定期清理过期Session</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="52-2-express-session.html">← 上一节：express-session</a>
+      <a href="52-4-分布式Session.html">下一节：分布式Session →</a>
+    </div>
+  </div>
+</body>
+</html>

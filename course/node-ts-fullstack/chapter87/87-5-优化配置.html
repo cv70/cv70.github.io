@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>87.5 优化配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="87-1-Webpack基础.html">第八十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>87.5 优化配置</h1>
+      <p class="subtitle">Webpack 性能优化技巧</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Webpack 优化策略</li>
+        <li>掌握代码分割配置</li>
+        <li>学会缓存优化技巧</li>
+        <li>了解构建性能优化</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 代码分割</h2>
+      <div class="code-block">
+// 代码分割方式
+// 1. 多入口自动分割
+// 2. 动态 import() 语法
+// 3. SplitChunksPlugin 配置
+
+module.exports = {
+  optimization: {
+    splitChunks: {
+      chunks: 'all', // 'async' | 'initial' | 'all'
+      minSize: 20000,
+      minChunks: 1,
+      maxAsyncRequests: 30,
+      maxInitialRequests: 30,
+      cacheGroups: {
+        // 第三方库
+        vendors: {
+          test: /[\\/]node_modules[\\/]/,
+          name: 'vendors',
+          chunks: 'all',
+          priority: 10,
+        },
+        // 公共模块
+        commons: {
+          minChunks: 2,
+          name: 'commons',
+          chunks: 'all',
+          priority: 5,
+          reuseExistingChunk: true,
+        },
+        // React 相关
+        react: {
+          test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+          name: 'react',
+          chunks: 'all',
+          priority: 20,
+        },
+      },
+    },
+
+    // 运行时代码分离
+    runtimeChunk: 'single', // 或 { name: 'runtime' }
+  },
+};
+
+// 动态导入
+// 使用 import() 语法
+button.addEventListener('click', async () => {
+  const module = await import('./heavy-module.js');
+  module.doSomething();
+});
+
+// 魔法注释
+const module = await import(
+  /* webpackChunkName: "my-chunk" */
+  /* webpackMode: "lazy" */
+  './module.js'
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">代码分割好处</div>
+          <p>代码分割可以减小初始加载体积，按需加载模块，提高页面加载速度和用户体验。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 缓存优化</h2>
+      <div class="code-block">
+module.exports = {
+  output: {
+    // 使用 contenthash 实现长期缓存
+    filename: '[name].[contenthash:8].js',
+    chunkFilename: '[name].[contenthash:8].chunk.js',
+  },
+
+  plugins: [
+    // 稳定的模块 ID
+    new webpack.HashedModuleIdsPlugin(),
+  ],
+
+  optimization: {
+    // 运行时代码单独提取
+    runtimeChunk: 'single',
+
+    // 模块 ID 确定性
+    moduleIds: 'deterministic',
+
+    splitChunks: {
+      chunks: 'all',
+      cacheGroups: {
+        vendor: {
+          test: /[\\/]node_modules[\\/]/,
+          name: 'vendors',
+          chunks: 'all',
+        },
+      },
+    },
+  },
+
+  module: {
+    rules: [
+      {
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: [
+          {
+            loader: 'cache-loader',
+            options: {
+              cacheDirectory: path.resolve('.cache'),
+            },
+          },
+          'babel-loader',
+        ],
+      },
+    ],
+  },
+};
+
+// 持久化缓存 (Webpack 5)
+module.exports = {
+  cache: {
+    type: 'filesystem',
+    buildDependencies: {
+      config: [__filename],
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 构建性能优化</h2>
+      <div class="code-block">
+module.exports = {
+  // 缩小搜索范围
+  resolve: {
+    // 明确扩展名
+    extensions: ['.js', '.ts', '.json'],
+
+    // 指定目录
+    modules: [path.resolve(__dirname, 'src'), 'node_modules'],
+
+    // 别名
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@components': path.resolve(__dirname, 'src/components'),
+    },
+
+    // 主字段
+    mainFields: ['browser', 'module', 'main'],
+  },
+
+  module: {
+    rules: [
+      {
+        test: /\.js$/,
+        // 排除 node_modules
+        exclude: /node_modules/,
+        // 或限定范围
+        include: path.resolve(__dirname, 'src'),
+        use: 'babel-loader',
+      },
+    ],
+
+    // 禁用性能提示
+    noParse: /jquery|lodash/,
+  },
+
+  // 多线程构建
+  module: {
+    rules: [
+      {
+        test: /\.js$/,
+        use: [
+          {
+            loader: 'thread-loader',
+            options: {
+              workers: require('os').cpus().length - 1,
+            },
+          },
+          'babel-loader',
+        ],
+      },
+    ],
+  },
+
+  // 开发环境优化
+  devtool: 'eval-cheap-module-source-map',
+
+  // externals 排除大型库
+  externals: {
+    react: 'React',
+    'react-dom': 'ReactDOM',
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 生产环境优化</h2>
+      <div class="code-block">
+const TerserPlugin = require('terser-webpack-plugin');
+const CompressionPlugin = require('compression-webpack-plugin');
+
+module.exports = {
+  mode: 'production',
+
+  devtool: 'source-map',
+
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        parallel: true,
+        terserOptions: {
+          compress: {
+            drop_console: true,
+            drop_debugger: true,
+          },
+          output: {
+            comments: false,
+          },
+        },
+        extractComments: false,
+      }),
+    ],
+
+    // Tree Shaking
+    usedExports: true,
+    sideEffects: true,
+
+    // Scope Hoisting
+    concatenateModules: true,
+  },
+
+  plugins: [
+    // Gzip 压缩
+    new CompressionPlugin({
+      algorithm: 'gzip',
+      test: /\.(js|css|html|svg)$/,
+      threshold: 10240,
+      minRatio: 0.8,
+    }),
+
+    // Brotli 压缩
+    new CompressionPlugin({
+      algorithm: 'brotliCompress',
+      test: /\.(js|css|html|svg)$/,
+      threshold: 10240,
+      minRatio: 0.8,
+    }),
+  ],
+
+  performance: {
+    hints: 'warning',
+    maxAssetSize: 250000,
+    maxEntrypointSize: 250000,
+  },
+};
+
+// Tree Shaking
+// package.json
+{
+  "sideEffects": false
+}
+// 或
+{
+  "sideEffects": ["*.css", "*.scss"]
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 代码分割减小初始加载体积</li>
+            <li>• contenthash 实现长期缓存</li>
+            <li>• 缩小搜索范围提升构建速度</li>
+            <li>• 生产环境开启压缩和 Tree Shaking</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="87-4-Plugin配置.html">← 上一节：Plugin 配置</a>
+      <a href="../chapter88/88-1-Vite简介.html">下一章：Vite 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

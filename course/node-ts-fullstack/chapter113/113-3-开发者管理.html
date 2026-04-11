@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>113.3 开发者管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="113-1-平台架构.html">第113章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>113.3 开发者管理</h1>
+      <p class="subtitle">开发者注册与应用管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握开发者注册流程</li>
+        <li>学会应用管理设计</li>
+        <li>理解API Key机制</li>
+        <li>了解签名验证实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 数据模型</h2>
+      <div class="code-block">
+// developer.entity.ts
+@Entity('developers')
+export class Developer {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  email: string;
+
+  @Column()
+  name: string;
+
+  @Column({ nullable: true })
+  company: string;
+
+  @Column({ default: 'pending' })
+  status: 'pending' | 'active' | 'suspended';
+
+  @Column({ type: 'json', nullable: true })
+  settings: Record<string, any>;
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// application.entity.ts
+@Entity('applications')
+export class Application {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column()
+  developerId: string;
+
+  @Column()
+  appKey: string;        // 应用Key（公开）
+
+  @Column()
+  appSecret: string;     // 应用密钥（保密）
+
+  @Column({ nullable: true })
+  callbackUrl: string;   // 回调地址
+
+  @Column({ default: 'development' })
+  environment: 'development' | 'production';
+
+  @Column({ default: 0 })
+  dailyQuota: number;    // 每日配额
+
+  @Column({ default: 100 })
+  rateLimit: number;     // 每秒限制
+
+  @Column({ default: 'active' })
+  status: 'active' | 'suspended' | 'deleted';
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// API Key格式
+// AppKey: 前缀 + 随机字符串，如：ak_xxxxxxxxxxxx
+// AppSecret: 高强度随机字符串，如：sk_xxxxxxxxxxxxxxxxxxxxxxxx
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">API Key安全</div>
+          <p>Secret只显示一次，务必保管好。支持重新生成。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 签名验证</h2>
+      <div class="code-block">
+// 签名验证中间件
+
+@Injectable()
+export class SignatureMiddleware implements NestMiddleware {
+  async use(req: Request, res: Response, next: NextFunction) {
+    const { appkey, timestamp, nonce, signature } = req.headers;
+
+    // 1. 验证必要参数
+    if (!appkey || !timestamp || !nonce || !signature) {
+      throw new UnauthorizedException('Missing signature parameters');
+    }
+
+    // 2. 验证时间戳（防止重放攻击）
+    const now = Date.now();
+    const requestTime = parseInt(timestamp as string);
+    if (Math.abs(now - requestTime) > 300000) {  // 5分钟
+      throw new UnauthorizedException('Request expired');
+    }
+
+    // 3. 验证nonce是否已使用（防止重放）
+    const nonceUsed = await this.checkNonce(nonce as string);
+    if (nonceUsed) {
+      throw new UnauthorizedException('Nonce already used');
+    }
+
+    // 4. 获取应用信息
+    const app = await this.getApplication(appkey as string);
+    if (!app || app.status !== 'active') {
+      throw new UnauthorizedException('Invalid app key');
+    }
+
+    // 5. 构造签名字符串
+    const stringToSign = this.buildSignString(req);
+
+    // 6. 计算签名
+    const expectedSignature = crypto
+      .createHmac('sha256', app.appSecret)
+      .update(stringToSign)
+      .digest('hex');
+
+    // 7. 验证签名
+    if (signature !== expectedSignature) {
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    // 8. 记录nonce
+    await this.recordNonce(nonce as string);
+
+    // 9. 将应用信息挂载到请求
+    req['app'] = app;
+
+    next();
+  }
+
+  private buildSignString(req: Request): string {
+    const method = req.method.toUpperCase();
+    const path = req.path;
+    const timestamp = req.headers['timestamp'];
+    const nonce = req.headers['nonce'];
+
+    // GET请求使用query参数，POST使用body
+    let params = '';
+    if (method === 'GET') {
+      params = this.sortParams(req.query as Record<string, string>);
+    } else {
+      params = JSON.stringify(req.body);
+    }
+
+    return `${method}\n${path}\n${timestamp}\n${nonce}\n${params}`;
+  }
+
+  private sortParams(params: Record<string, string>): string {
+    return Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key]}`)
+      .join('&');
+  }
+
+  private async checkNonce(nonce: string): Promise<boolean> {
+    const key = `nonce:${nonce}`;
+    const exists = await this.redis.get(key);
+    return !!exists;
+  }
+
+  private async recordNonce(nonce: string): Promise<void> {
+    const key = `nonce:${nonce}`;
+    await this.redis.set(key, '1', 'EX', 300);  // 5分钟过期
+  }
+}
+
+// 客户端签名示例
+class ApiClient {
+  private appKey: string;
+  private appSecret: string;
+
+  constructor(appKey: string, appSecret: string) {
+    this.appKey = appKey;
+    this.appSecret = appSecret;
+  }
+
+  async request(method: string, path: string, params?: any): Promise<any> {
+    const timestamp = Date.now().toString();
+    const nonce = uuidv4();
+
+    const stringToSign = this.buildSignString(method, path, timestamp, nonce, params);
+    const signature = crypto
+      .createHmac('sha256', this.appSecret)
+      .update(stringToSign)
+      .digest('hex');
+
+    const config: any = {
+      method,
+      url: path,
+      headers: {
+        'X-App-Key': this.appKey,
+        'X-Timestamp': timestamp,
+        'X-Nonce': nonce,
+        'X-Signature': signature,
+      },
+    };
+
+    if (method === 'GET') {
+      config.params = params;
+    } else {
+      config.data = params;
+    }
+
+    return axios(config);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 开发者注册后创建应用获取Key</li>
+            <li>• AppKey公开，AppSecret保密</li>
+            <li>• 签名验证保证请求安全</li>
+            <li>• Nonce和时间戳防止重放攻击</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="113-2-API设计.html">← 上一节：API 设计</a>
+      <a href="113-4-限流与计费.html">下一节：限流与计费 →</a>
+    </div>
+  </div>
+</body>
+</html>

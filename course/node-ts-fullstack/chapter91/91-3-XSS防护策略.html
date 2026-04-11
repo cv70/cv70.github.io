@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>91.3 XSS 防护策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="91-1-XSS攻击原理.html">第九十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>91.3 XSS 防护策略</h1>
+      <p class="subtitle">多层次的 XSS 防护方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 XSS 防护的核心原则</li>
+        <li>学会输出编码技术</li>
+        <li>理解 CSP 策略配置</li>
+        <li>了解安全编码实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 防护原则</h2>
+      <div class="code-block">
+# XSS 防护核心原则
+
+## 1. 永远不要信任用户输入
+所有输入都可能是恶意的，必须进行处理
+
+## 2. 输出编码
+根据输出上下文进行编码，是最有效的防护方式
+
+## 3. 内容安全策略 (CSP)
+限制资源加载来源，防止未授权脚本执行
+
+## 4. Cookie 安全
+设置 HttpOnly 和 Secure 属性
+
+## 5. 纵深防御
+多种防护措施组合使用
+
+# 防护层次
+输入验证 → 输出编码 → CSP 策略 → Cookie 安全 → 监控审计
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 输出编码</h2>
+      <div class="code-block">
+# HTML 上下文编码
+import escapeHtml from 'escape-html';
+
+// 转义特殊字符
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// 使用
+res.send(`&lt;div&gt;${escapeHtml(userInput)}&lt;/div&gt;`);
+
+# HTML 属性编码
+function escapeAttr(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
+// 使用
+res.send(`&lt;div title="${escapeAttr(userInput)}"&gt;&lt;/div&gt;`);
+
+# JavaScript 上下文编码
+// 使用 JSON.stringify 自动转义
+res.send(`&lt;script&gt;var data = ${JSON.stringify(userInput)};&lt;/script&gt;`);
+
+# URL 编码
+const encoded = encodeURIComponent(userInput);
+res.redirect(`/search?q=${encoded}`);
+
+# CSS 上下文编码
+// 避免用户输入动态生成 CSS
+// 如果必须，使用严格白名单
+function escapeCss(str: string): string {
+  return str.replace(/[^\w-]/g, '');
+}
+
+# 使用模板引擎自动编码
+// EJS（自动编码）
+&lt;%= userInput %&gt;
+
+// Pug（自动编码）
+#{userInput}
+
+// React（自动编码）
+&lt;div&gt;{userInput}&lt;/div&gt;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">编码库推荐</div>
+          <p>推荐使用成熟的编码库如 escape-html、xss、DOMPurify 等，而不是自己实现编码函数。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> DOM 安全操作</h2>
+      <div class="code-block">
+# 避免 innerHTML，使用安全的 DOM 操作
+
+// 危险 ❌
+element.innerHTML = userInput;
+document.write(userInput);
+
+// 安全 ✅
+element.textContent = userInput;
+element.innerText = userInput;
+
+// 创建元素
+const div = document.createElement('div');
+div.textContent = userInput;
+element.appendChild(div);
+
+// 使用 DOMPurify 清理 HTML
+import DOMPurify from 'dompurify';
+
+// 清理并允许部分标签
+const clean = DOMPurify.sanitize(userInput, {
+  ALLOWED_TAGS: ['p', 'b', 'i', 'em', 'strong'],
+  ALLOWED_ATTR: [],
+});
+element.innerHTML = clean;
+
+# Vue.js 安全实践
+// 模板中自动转义
+&lt;div&gt;{{ userInput }}&lt;/div&gt;  // 安全
+
+// v-html 需要谨慎
+&lt;div v-html="userInput"&gt;&lt;/div&gt;  // 危险！需要先清理
+
+// 使用 v-html 前清理
+const safeHtml = DOMPurify.sanitize(userInput);
+
+# React 安全实践
+// JSX 自动转义
+&lt;div&gt;{userInput}&lt;/div&gt;  // 安全
+
+// dangerouslySetInnerHTML 需要谨慎
+&lt;div dangerouslySetInnerHTML={{ __html: userInput }} /&gt;  // 危险！
+
+// 使用前清理
+&lt;div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(userInput) }} /&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> Cookie 安全设置</h2>
+      <div class="code-block">
+# 设置 Cookie 安全属性
+
+// Express 设置安全 Cookie
+res.cookie('session', token, {
+  httpOnly: true,    // 防止 JavaScript 读取
+  secure: true,      // 仅 HTTPS 传输
+  sameSite: 'strict', // 防止 CSRF
+  maxAge: 3600000,   // 过期时间
+  path: '/',
+  domain: 'example.com',
+});
+
+// Session 配置
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 3600000,
+  },
+}));
+
+# Cookie 属性说明
+
+## HttpOnly
+- 防止 JavaScript 通过 document.cookie 读取
+- 有效防止 XSS 窃取 Cookie
+
+## Secure
+- 仅通过 HTTPS 传输
+- 防止中间人攻击
+
+## SameSite
+- Strict: 完全禁止跨站发送
+- Lax: 允许 GET 请求跨站发送
+- None: 允许跨站发送（需要 Secure）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 输出编码是最有效的 XSS 防护方式</li>
+            <li>• 根据输出上下文选择正确的编码方式</li>
+            <li>• 使用 textContent 代替 innerHTML</li>
+            <li>• Cookie 设置 HttpOnly 防止窃取</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="91-2-XSS类型.html">← 上一节：XSS 类型</a>
+      <a href="91-4-内容安全策略.html">下一节：内容安全策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

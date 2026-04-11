@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.3 交叉类型与泛型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="7-1-交叉类型基础.html">第七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>7.3 交叉类型与泛型</h1>
+      <p class="subtitle">结合泛型实现灵活的类型组合</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握交叉类型与泛型的结合使用</li>
+        <li>学会创建高阶类型工具</li>
+        <li>理解类型推断与交叉类型</li>
+        <li>了解 mixins 模式的类型实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 泛型函数中的交叉类型</h2>
+      <div class="code-block">
+// 合并两个对象的泛型函数
+function merge<T extends object, U extends object>(a: T, b: U): T & U {
+  return { ...a, ...b };
+}
+
+const defaults = { theme: 'light', lang: 'en' };
+const userConfig = { lang: 'zh', debug: true };
+
+const config = merge(defaults, userConfig);
+// 类型推断为 { theme: string; lang: string; } & { lang: string; debug: boolean; }
+
+// 扩展对象类型
+function withTimestamp<T extends object>(obj: T): T & { timestamp: Date } {
+  return { ...obj, timestamp: new Date() };
+}
+
+const message = withTimestamp({ text: 'Hello', author: 'Alice' });
+// 类型：{ text: string; author: string; } & { timestamp: Date }
+
+console.log(message.text);      // string
+console.log(message.timestamp); // Date
+
+// 添加 ID 属性
+function withId<T extends object>(obj: T, id: number): T & { id: number } {
+  return { ...obj, id };
+}
+
+const entity = withId({ name: 'Product', price: 99.9 }, 1);
+// 类型：{ name: string; price: number; } & { id: number }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> Mixins 模式</h2>
+      <div class="code-block">
+// 使用交叉类型实现 mixins
+type Constructor<T = object> = new (...args: any[]) => T;
+
+// 时间戳 mixin
+function Timestamped<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    timestamp = new Date();
+  };
+}
+
+// 可序列化 mixin
+function Serializable<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    serialize() {
+      return JSON.stringify(this);
+    }
+  };
+}
+
+// 基础类
+class User {
+  constructor(public name: string, public email: string) {}
+}
+
+// 应用 mixins
+const TimestampedUser = Timestamped(User);
+const FullUser = Serializable(TimestampedUser);
+
+const user = new FullUser('Alice', 'alice@example.com');
+console.log(user.timestamp);    // Date
+console.log(user.serialize());  // JSON string
+
+// 类型定义辅助
+type MixinType<T, M> = T & M;
+
+interface TimestampMixin {
+  timestamp: Date;
+}
+
+interface SerializableMixin {
+  serialize(): string;
+}
+
+type EnhancedUser = User & TimestampMixin & SerializableMixin;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 条件类型与交叉类型</h2>
+      <div class="code-block">
+// 在条件类型中使用交叉类型
+type OptionalKeys<T> = {
+  [K in keyof T]-?: {} extends Pick<T, K> ? K : never
+}[keyof T];
+
+// 扩展类型工具
+type Extend<T, U> = T & U;
+
+type Base = { id: number };
+type WithName = Extend<Base, { name: string }>;
+// { id: number; name: string }
+
+// 条件性添加属性
+type AddOptional<T, K extends string, V> =
+  T & { [P in K]?: V };
+
+type ConfigWithDebug = AddOptional<{ port: number }, 'debug', boolean>;
+// { port: number; debug?: boolean }
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">最佳实践</div>
+          <p>结合泛型和交叉类型可以创建灵活的类型工具，但要避免过度复杂的类型定义，保持代码可读性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 泛型函数可以返回交叉类型</li>
+            <li>• 常用于对象扩展和增强</li>
+            <li>• Mixins 模式依赖交叉类型</li>
+            <li>• 与条件类型结合更强大</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="7-2-同名属性合并.html">← 上一节：同名属性合并</a>
+      <a href="7-4-实际应用场景.html">下一节：实际应用场景 →</a>
+    </div>
+  </div>
+</body>
+</html>

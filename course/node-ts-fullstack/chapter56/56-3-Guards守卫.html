@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>56.3 Guards 守卫 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="56-1-NestJS认证模块.html">第五十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>56.3 Guards 守卫</h1>
+      <p class="subtitle">NestJS 的权限守卫机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 NestJS 守卫的概念</li>
+        <li>掌握自定义守卫的实现</li>
+        <li>学会角色守卫的实现</li>
+        <li>了解守卫的作用范围</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 守卫基础概念</h2>
+      <div class="code-block">
+/*
+NestJS 守卫（Guard）
+
+作用：决定请求是否应该被路由处理器处理
+返回 true：继续处理请求
+返回 false：拒绝请求（抛出异常）
+
+守卫执行时机：
+1. 中间件之后
+2. 拦截器之前
+3. 管道之前
+
+与中间件的区别：
+- 中间件：处理请求前后逻辑，不决定是否继续
+- 守卫：明确决定请求是否继续
+
+典型应用：
+- 认证：检查用户是否登录
+- 授权：检查用户是否有权限
+- 限流：控制请求频率
+*/
+
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Observable } from 'rxjs';
+
+@Injectable()
+export class SimpleGuard implements CanActivate {
+  canActivate(
+    context: ExecutionContext
+  ): boolean | Promise&lt;boolean&gt; | Observable&lt;boolean&gt; {
+    const request = context.switchToHttp().getRequest();
+
+    // 返回 true 允许请求继续
+    // 返回 false 拒绝请求
+    return true;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证守卫</h2>
+      <div class="code-block">
+// src/auth/guards/jwt-auth.guard.ts
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { Request } from 'express';
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private jwtService: JwtService) {}
+
+  async canActivate(context: ExecutionContext): Promise&lt;boolean&gt; {
+    const request = context.switchToHttp().getRequest&lt;Request&gt;();
+
+    // 提取 Token
+    const token = this.extractTokenFromHeader(request);
+
+    if (!token) {
+      throw new UnauthorizedException('未提供认证令牌');
+    }
+
+    try {
+      // 验证 Token
+      const payload = await this.jwtService.verifyAsync(token);
+
+      // 将用户信息附加到请求对象
+      request.user = payload;
+
+      return true;
+    } catch (error) {
+      throw new UnauthorizedException('无效的令牌');
+    }
+  }
+
+  private extractTokenFromHeader(request: Request): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
+  }
+}
+
+// 使用示例
+@Controller('profile')
+@UseGuards(JwtAuthGuard)
+export class ProfileController {
+  @Get()
+  getProfile(@Request() req) {
+    return req.user;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👥</span> 角色守卫</h2>
+      <div class="code-block">
+// src/auth/decorators/roles.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+
+// src/auth/guards/roles.guard.ts
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from '../decorators/roles.decorator';
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    // 获取所需角色
+    const requiredRoles = this.reflector.getAllAndOverride&lt;string[]&gt;(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    // 如果没有角色要求，允许通过
+    if (!requiredRoles) {
+      return true;
+    }
+
+    const { user } = context.switchToHttp().getRequest();
+
+    if (!user) {
+      throw new ForbiddenException('未认证');
+    }
+
+    // 检查用户是否有所需角色
+    const hasRole = requiredRoles.some(role => user.role === role);
+
+    if (!hasRole) {
+      throw new ForbiddenException('权限不足');
+    }
+
+    return true;
+  }
+}
+
+// 使用示例
+@Controller('admin')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin')
+export class AdminController {
+  @Get('users')
+  getUsers() {
+    // 只有 admin 可以访问
+  }
+
+  @Get('settings')
+  @Roles('admin', 'superadmin')
+  getSettings() {
+    // admin 或 superadmin 可以访问
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">守卫顺序</div>
+          <p>多个守卫按顺序执行。先认证（JwtAuthGuard）后授权（RolesGuard）。第一个守卫返回 false 则后续守卫不会执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 权限守卫</h2>
+      <div class="code-block">
+// src/auth/decorators/permissions.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const PERMISSIONS_KEY = 'permissions';
+export const RequirePermissions = (...permissions: string[]) =>
+  SetMetadata(PERMISSIONS_KEY, permissions);
+
+// src/auth/guards/permissions.guard.ts
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { RbacService } from '../services/rbac.service';
+
+@Injectable()
+export class PermissionsGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    private rbacService: RbacService
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise&lt;boolean&gt; {
+    const requiredPermissions = this.reflector.getAllAndOverride&lt;string[]&gt;(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (!requiredPermissions) {
+      return true;
+    }
+
+    const { user } = context.switchToHttp().getRequest();
+
+    if (!user) {
+      throw new ForbiddenException('未认证');
+    }
+
+    // 检查用户权限
+    const hasPermission = await this.rbacService.hasPermissions(
+      user.id,
+      requiredPermissions
+    );
+
+    if (!hasPermission) {
+      throw new ForbiddenException({
+        message: '权限不足',
+        required: requiredPermissions
+      });
+    }
+
+    return true;
+  }
+}
+
+// RBAC 服务
+@Injectable()
+export class RbacService {
+  constructor(
+    @InjectRepository(User)
+    private userRepository: Repository&lt;User&gt;
+  ) {}
+
+  async hasPermissions(userId: number, permissions: string[]): Promise&lt;boolean&gt; {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['roles', 'roles.permissions']
+    });
+
+    if (!user) return false;
+
+    const userPermissions = new Set&lt;string&gt;();
+
+    for (const role of user.roles) {
+      for (const perm of role.permissions) {
+        userPermissions.add(perm.name);
+      }
+    }
+
+    // 检查是否拥有所有需要的权限
+    return permissions.every(p =>
+      userPermissions.has(p) || userPermissions.has('*')
+    );
+  }
+}
+
+// 使用示例
+@Controller('users')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class UsersController {
+  @Get()
+  @RequirePermissions('user:read')
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Post()
+  @RequirePermissions('user:create')
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('user:delete')
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(+id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 守卫作用范围</h2>
+      <div class="code-block">
+// 1. 全局守卫 - 应用于所有路由
+// src/app.module.ts
+import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+
+@Module({
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard
+    }
+  ]
+})
+export class AppModule {}
+
+// 2. 控制器级别 - 应用于控制器所有方法
+@Controller('admin')
+@UseGuards(RolesGuard)
+@Roles('admin')
+export class AdminController {
+  @Get('users')
+  getUsers() {}
+
+  @Get('settings')
+  getSettings() {}
+}
+
+// 3. 方法级别 - 应用于单个方法
+@Controller('posts')
+export class PostsController {
+  @Get()  // 公开
+  findAll() {}
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  create() {}
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  remove() {}
+}
+
+// 4. 全局守卫的例外
+// src/auth/decorators/public.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+// 修改 JwtAuthGuard 支持公开路由
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
+
+  canActivate(context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride&lt;boolean&gt;(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (isPublic) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+}
+
+// 使用公开装饰器
+@Controller('auth')
+export class AuthController {
+  @Public()
+  @Post('login')
+  login() {}
+
+  @Public()
+  @Post('register')
+  register() {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 守卫决定请求是否应该被处理</li>
+            <li>• 实现 CanActivate 接口创建守卫</li>
+            <li>• JwtAuthGuard 用于认证检查</li>
+            <li>• RolesGuard 用于角色检查</li>
+            <li>• PermissionsGuard 用于细粒度权限</li>
+            <li>• 守卫可应用于全局、控制器、方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="56-2-Passport集成.html">← 上一节：Passport集成</a>
+      <a href="56-4-权限装饰器.html">下一节：权限装饰器 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>73.3 测试隔离 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="73-2-AAA模式.html">上一节</a></li>
+      <li><a href="73-4-测试数据管理.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>73.3 测试隔离</h1>
+      <p class="subtitle">第十部分：测试篇 - 保证测试的独立性和可靠性</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 为什么需要测试隔离</h2>
+      <p>测试隔离确保每个测试独立运行，不依赖其他测试的状态或执行顺序。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">隔离的好处</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>测试可以并行执行</li>
+            <li>测试失败不影响其他测试</li>
+            <li>测试可以单独运行</li>
+            <li>测试结果可重复</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 隔离原则</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">✅ 应该做到</h3>
+          <ul class="feature-list">
+            <li>每个测试有独立的初始状态</li>
+            <li>测试后清理所有副作用</li>
+            <li>不共享可变状态</li>
+            <li>不依赖执行顺序</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">❌ 应该避免</h3>
+          <ul class="feature-list">
+            <li>测试间共享变量</li>
+            <li>依赖前一个测试的结果</li>
+            <li>修改全局状态</li>
+            <li>留下未清理的资源</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 使用钩子函数隔离</h2>
+
+      <div class="code-block">describe('UserService', () => {
+  let service: UserService;
+  let mockRepository: jest.Mocked&lt;UserRepository&gt;;
+
+  // 每个测试前重置状态
+  beforeEach(() => {
+    mockRepository = createMockRepository();
+    service = new UserService(mockRepository);
+  });
+
+  // 每个测试后清理
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // 所有测试前执行一次
+  beforeAll(async () => {
+    // 连接数据库等一次性操作
+  });
+
+  // 所有测试后执行一次
+  afterAll(async () => {
+    // 关闭连接等清理操作
+  });
+
+  test('test 1', () => {
+    // 使用独立的 service 实例
+  });
+
+  test('test 2', () => {
+    // 使用另一个独立的 service 实例
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 数据库隔离</h2>
+
+      <div class="code-block">describe('Database Tests', () => {
+  let connection: Connection;
+
+  beforeAll(async () => {
+    // 使用内存数据库
+    connection = await createConnection({
+      type: 'sqlite',
+      database: ':memory:',
+      entities: [User],
+      synchronize: true
+    });
+  });
+
+  afterAll(async () => {
+    await connection.close();
+  });
+
+  // 方式一：每个测试后清空数据
+  afterEach(async () => {
+    await connection.getRepository(User).clear();
+  });
+
+  // 方式二：使用事务回滚
+  let queryRunner: QueryRunner;
+
+  beforeEach(async () => {
+    queryRunner = connection.createQueryRunner();
+    await queryRunner.startTransaction();
+  });
+
+  afterEach(async () => {
+    await queryRunner.rollbackTransaction();
+    await queryRunner.release();
+  });
+
+  test('should create user', async () => {
+    // 在事务中操作
+    const repo = queryRunner.manager.getRepository(User);
+    await repo.save({ name: 'John' });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 隔离反模式</h2>
+
+      <div class="code-block">// ❌ 反模式：共享可变状态
+describe('Bad Example', () => {
+  let sharedUser: User;
+
+  test('creates user', async () => {
+    sharedUser = await service.create({ name: 'John' });
+    expect(sharedUser.id).toBeDefined();
+  });
+
+  test('updates user', async () => {
+    // 依赖前一个测试创建的 user
+    await service.update(sharedUser.id, { name: 'Jane' });
+  });
+});
+
+// ✅ 正确：独立测试
+describe('Good Example', () => {
+  test('creates user', async () => {
+    const user = await service.create({ name: 'John' });
+    expect(user.id).toBeDefined();
+  });
+
+  test('updates user', async () => {
+    // 独立创建测试数据
+    const user = await service.create({ name: 'John' });
+    const updated = await service.update(user.id, { name: 'Jane' });
+    expect(updated.name).toBe('Jane');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 全局状态隔离</h2>
+
+      <div class="code-block">describe('Environment Variables', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    // 重置环境变量
+    jest.resetModules();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('uses test environment', () => {
+    process.env.NODE_ENV = 'test';
+    // ...
+  });
+});
+
+describe('Global State', () => {
+  let originalConfig: Config;
+
+  beforeAll(() => {
+    originalConfig = { ...globalConfig };
+  });
+
+  afterAll(() => {
+    Object.assign(globalConfig, originalConfig);
+  });
+
+  test('modifies config', () => {
+    globalConfig.debug = true;
+    // ...
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> Mock 隔离</h2>
+
+      <div class="code-block">describe('Mock Isolation', () => {
+  let mockFn: jest.Mock;
+
+  beforeEach(() => {
+    // 每个测试使用新的 Mock
+    mockFn = jest.fn();
+  });
+
+  afterEach(() => {
+    // 清理 Mock 调用记录
+    jest.clearAllMocks();
+  });
+
+  test('test 1', () => {
+    mockFn.mockReturnValue('value1');
+    // ...
+  });
+
+  test('test 2', () => {
+    // 不会受 test 1 的影响
+    mockFn.mockReturnValue('value2');
+    // ...
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>每个测试应该有独立的初始状态</li>
+            <li>使用 beforeEach/afterEach 重置状态</li>
+            <li>使用事务或清空数据保证数据库隔离</li>
+            <li>避免测试间共享可变状态</li>
+            <li>每个测试后清理 Mock 和全局状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="73-2-AAA模式.html">← 上一节：AAA 模式</a>
+      <a href="73-4-测试数据管理.html">下一节：测试数据管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

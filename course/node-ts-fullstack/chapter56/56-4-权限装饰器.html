@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>56.4 权限装饰器 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="56-1-NestJS认证模块.html">第五十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>56.4 权限装饰器</h1>
+      <p class="subtitle">声明式权限控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握自定义装饰器的创建</li>
+        <li>学会组合装饰器</li>
+        <li>实现声明式权限控制</li>
+        <li>了解装饰器的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基础权限装饰器</h2>
+      <div class="code-block">
+// src/auth/decorators/roles.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+
+// src/auth/decorators/permissions.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const PERMISSIONS_KEY = 'permissions';
+export const RequirePermissions = (...permissions: string[]) =>
+  SetMetadata(PERMISSIONS_KEY, permissions);
+
+// src/auth/decorators/public.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+// 使用示例
+@Controller('users')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class UsersController {
+  @Public()
+  @Get('public')
+  getPublicInfo() {
+    // 无需认证
+  }
+
+  @Get()
+  @Roles('admin', 'manager')
+  findAll() {
+    // 需要 admin 或 manager 角色
+  }
+
+  @Post()
+  @RequirePermissions('user:create')
+  create(@Body() createUserDto: CreateUserDto) {
+    // 需要 user:create 权限
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👤</span> 当前用户装饰器</h2>
+      <div class="code-block">
+// src/auth/decorators/current-user.decorator.ts
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export interface UserPayload {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+}
+
+export const CurrentUser = createParamDecorator(
+  (data: keyof UserPayload | undefined, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user as UserPayload;
+
+    if (!user) {
+      return null;
+    }
+
+    // 如果指定了字段，返回该字段
+    return data ? user[data] : user;
+  }
+);
+
+// 使用示例
+@Controller('profile')
+@UseGuards(JwtAuthGuard)
+export class ProfileController {
+  @Get()
+  getProfile(@CurrentUser() user: UserPayload) {
+    return user;
+  }
+
+  @Get('id')
+  getUserId(@CurrentUser('id') id: number) {
+    return { id };
+  }
+
+  @Get('username')
+  getUsername(@CurrentUser('username') username: string) {
+    return { username };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎭</span> 组合装饰器</h2>
+      <div class="code-block">
+// src/auth/decorators/auth.decorator.ts
+import { applyDecorators, SetMetadata, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { RolesGuard } from '../guards/roles.guard';
+import { Roles } from './roles.decorator';
+
+// 组合认证和角色检查
+export function Auth(...roles: string[]) {
+  return applyDecorators(
+    UseGuards(JwtAuthGuard, RolesGuard),
+    Roles(...roles)
+  );
+}
+
+// 使用示例
+@Controller('admin')
+export class AdminController {
+  @Get('users')
+  @Auth('admin')
+  getUsers() {
+    // 需要 admin 角色
+  }
+
+  @Get('settings')
+  @Auth('admin', 'manager')
+  getSettings() {
+    // 需要 admin 或 manager 角色
+  }
+}
+
+// 组合认证和权限检查
+import { PermissionsGuard } from '../guards/permissions.guard';
+import { RequirePermissions } from './permissions.decorator';
+
+export function RequireAuth(...permissions: string[]) {
+  return applyDecorators(
+    UseGuards(JwtAuthGuard, PermissionsGuard),
+    RequirePermissions(...permissions)
+  );
+}
+
+// 使用示例
+@Controller('posts')
+export class PostsController {
+  @Get()
+  findAll() {
+    // 公开
+  }
+
+  @Post()
+  @RequireAuth('post:create')
+  create(@Body() createPostDto: CreatePostDto, @CurrentUser('id') userId: number) {
+    // 需要 post:create 权限
+    return this.postsService.create({ ...createPostDto, authorId: userId });
+  }
+
+  @Delete(':id')
+  @RequireAuth('post:delete')
+  remove(@Param('id') id: string) {
+    // 需要 post:delete 权限
+    return this.postsService.remove(+id);
+  }
+}
+
+// 完整的认证装饰器
+export function Secure(options: {
+  roles?: string[];
+  permissions?: string[];
+  public?: boolean;
+}) {
+  const decorators: MethodDecorator[] = [];
+
+  if (options.public) {
+    decorators.push(Public());
+  } else {
+    const guards: any[] = [JwtAuthGuard];
+
+    if (options.roles?.length) {
+      guards.push(RolesGuard);
+      decorators.push(Roles(...options.roles));
+    }
+
+    if (options.permissions?.length) {
+      guards.push(PermissionsGuard);
+      decorators.push(RequirePermissions(...options.permissions));
+    }
+
+    decorators.push(UseGuards(...guards));
+  }
+
+  return applyDecorators(...decorators);
+}
+
+// 使用示例
+@Controller('articles')
+export class ArticlesController {
+  @Get()
+  @Secure({ public: true })
+  findAll() {}
+
+  @Post()
+  @Secure({ permissions: ['article:create'] })
+  create() {}
+
+  @Delete(':id')
+  @Secure({ roles: ['admin'], permissions: ['article:delete'] })
+  remove() {}
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">装饰器组合</div>
+          <p>applyDecorators 可以组合多个装饰器，创建语义化的组合装饰器，提高代码可读性和复用性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 资源所有权装饰器</h2>
+      <div class="code-block">
+// src/auth/decorators/owner.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const OWNER_KEY = 'owner_check';
+export const CheckOwner = (resource: string, idParam: string = 'id') =>
+  SetMetadata(OWNER_KEY, { resource, idParam });
+
+// src/auth/guards/owner.guard.ts
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { OWNER_KEY } from '../decorators/owner.decorator';
+
+@Injectable()
+export class OwnerGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  async canActivate(context: ExecutionContext): Promise&lt;boolean&gt; {
+    const ownerConfig = this.reflector.getAllAndOverride(
+      OWNER_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (!ownerConfig) {
+      return true;
+    }
+
+    const { resource, idParam } = ownerConfig;
+    const request = context.switchToHttp().getRequest();
+    const resourceId = request.params[idParam];
+    const userId = request.user?.id;
+
+    // 检查是否是所有者或管理员
+    const isOwner = await this.checkOwnership(resource, resourceId, userId);
+    const isAdmin = request.user?.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('无权访问此资源');
+    }
+
+    return true;
+  }
+
+  private async checkOwnership(
+    resource: string,
+    resourceId: string,
+    userId: number
+  ): Promise&lt;boolean&gt; {
+    // 根据资源类型检查所有权
+    // 实际实现需要注入相应的服务
+    return true;
+  }
+}
+
+// 使用示例
+@Controller('posts')
+@UseGuards(JwtAuthGuard)
+export class PostsController {
+  @Put(':id')
+  @UseGuards(OwnerGuard)
+  @CheckOwner('post', 'id')
+  update(
+    @Param('id') id: string,
+    @Body() updatePostDto: UpdatePostDto,
+    @CurrentUser('id') userId: number
+  ) {
+    // 只有作者或管理员可以更新
+    return this.postsService.update(+id, updatePostDto, userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(OwnerGuard)
+  @CheckOwner('post', 'id')
+  remove(@Param('id') id: string, @CurrentUser('id') userId: number) {
+    // 只有作者或管理员可以删除
+    return this.postsService.remove(+id, userId);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整示例</h2>
+      <div class="code-block">
+// src/auth/decorators/index.ts
+export * from './roles.decorator';
+export * from './permissions.decorator';
+export * from './public.decorator';
+export * from './current-user.decorator';
+export * from './auth.decorator';
+export * from './owner.decorator';
+
+// src/posts/posts.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param
+} from '@nestjs/common';
+import { CurrentUser, Public, Auth, RequireAuth, CheckOwner, OwnerGuard, UserPayload } from '../auth/decorators';
+
+@Controller('posts')
+export class PostsController {
+  constructor(private postsService: PostsService) {}
+
+  // 公开接口：获取文章列表
+  @Public()
+  @Get()
+  findAll() {
+    return this.postsService.findAll();
+  }
+
+  // 公开接口：获取文章详情
+  @Public()
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.postsService.findOne(+id);
+  }
+
+  // 需要认证：创建文章
+  @Post()
+  @RequireAuth('post:create')
+  create(
+    @Body() createPostDto: CreatePostDto,
+    @CurrentUser('id') userId: number
+  ) {
+    return this.postsService.create({ ...createPostDto, authorId: userId });
+  }
+
+  // 需要是作者或管理员：更新文章
+  @Put(':id')
+  @UseGuards(OwnerGuard)
+  @CheckOwner('post', 'id')
+  update(
+    @Param('id') id: string,
+    @Body() updatePostDto: UpdatePostDto,
+    @CurrentUser('id') userId: number
+  ) {
+    return this.postsService.update(+id, updatePostDto, userId);
+  }
+
+  // 需要管理员权限：发布文章
+  @Put(':id/publish')
+  @Auth('admin')
+  publish(@Param('id') id: string) {
+    return this.postsService.publish(+id);
+  }
+
+  // 需要权限或所有权：删除文章
+  @Delete(':id')
+  @UseGuards(OwnerGuard, PermissionsGuard)
+  @CheckOwner('post', 'id')
+  @RequirePermissions('post:delete')
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: UserPayload
+  ) {
+    // 管理员或有权限的用户可以删除任何文章
+    // 普通用户只能删除自己的文章（OwnerGuard 检查）
+    return this.postsService.remove(+id, user.id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SetMetadata 创建元数据装饰器</li>
+            <li>• createParamDecorator 创建参数装饰器</li>
+            <li>• applyDecorators 组合多个装饰器</li>
+            <li>• @Public() 标记公开接口</li>
+            <li>• @Auth() 组合认证和角色检查</li>
+            <li>• @CurrentUser() 获取当前用户信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="56-3-Guards守卫.html">← 上一节：Guards守卫</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

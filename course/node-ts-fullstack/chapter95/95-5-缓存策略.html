@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>95.5 缓存策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="95-1-性能分析方法.html">第九十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>95.5 缓存策略</h1>
+      <p class="subtitle">应用缓存优化实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解缓存的作用和类型</li>
+        <li>掌握 Redis 缓存使用</li>
+        <li>学会缓存策略设计</li>
+        <li>了解缓存常见问题</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 缓存概述</h2>
+      <div class="code-block">
+# 缓存的作用
+
+## 性能提升
+- 减少数据库查询
+- 减少 API 调用
+- 降低响应延迟
+
+## 成本节约
+- 减少服务器负载
+- 减少数据库资源消耗
+- 节省带宽
+
+# 缓存层次
+
+┌─────────────────────────────────────────────────────┐
+│                 浏览器缓存                           │
+│   Cache-Control, ETag, LocalStorage                │
+├─────────────────────────────────────────────────────┤
+│                  CDN 缓存                           │
+│   Cloudflare, CloudFront                           │
+├─────────────────────────────────────────────────────┤
+│               负载均衡缓存                           │
+│   Nginx, HAProxy                                   │
+├─────────────────────────────────────────────────────┤
+│               应用内存缓存                           │
+│   Node-cache, LRU-cache                            │
+├─────────────────────────────────────────────────────┤
+│               分布式缓存                            │
+│   Redis, Memcached                                 │
+├─────────────────────────────────────────────────────┤
+│                数据库缓存                           │
+│   Query Cache, Buffer Pool                        │
+└─────────────────────────────────────────────────────┘
+
+# 缓存策略
+
+## 缓存位置选择
+- 内存缓存：快速、容量小、进程内
+- Redis：中等延迟、共享、持久化
+
+## 缓存粒度
+- 整页缓存：简单、更新慢
+- 片段缓存：灵活、管理复杂
+- 对象缓存：最灵活、代码复杂
+
+## 缓存更新
+- 主动更新：数据变更时更新
+- 被动更新：读取时检查更新
+- 定时更新：周期性刷新
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Redis 缓存</h2>
+      <div class="code-block">
+# Redis 基本使用
+
+import Redis from 'ioredis';
+
+const redis = new Redis({
+  host: 'localhost',
+  port: 6379,
+  password: process.env.REDIS_PASSWORD,
+  db: 0,
+});
+
+// 设置缓存
+await redis.set('key', 'value');
+await redis.set('key', 'value', 'EX', 3600);  // 过期时间 1 小时
+
+// 获取缓存
+const value = await redis.get('key');
+
+// 删除缓存
+await redis.del('key');
+
+# 缓存服务封装
+
+class CacheService {
+  private redis: Redis;
+  private defaultTTL = 3600;  // 1 小时
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL!);
+  }
+
+  async get&lt;T&gt;(key: string): Promise&lt;T | null&gt; {
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data);
+  }
+
+  async set&lt;T&gt;(key: string, value: T, ttl = this.defaultTTL): Promise&lt;void&gt; {
+    await this.redis.set(key, JSON.stringify(value), 'EX', ttl);
+  }
+
+  async delete(key: string): Promise&lt;void&gt; {
+    await this.redis.del(key);
+  }
+
+  async getOrSet&lt;T&gt;(
+    key: string,
+    fetcher: () => Promise&lt;T&gt;,
+    ttl = this.defaultTTL
+  ): Promise&lt;T&gt; {
+    const cached = await this.get&lt;T&gt;(key);
+    if (cached !== null) return cached;
+
+    const data = await fetcher();
+    await this.set(key, data, ttl);
+    return data;
+  }
+}
+
+const cache = new CacheService();
+
+// 使用示例
+const user = await cache.getOrSet(
+  `user:${userId}`,
+  () => User.findById(userId),
+  3600
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">getOrSet 模式</div>
+          <p>getOrSet 是常用的缓存模式，先尝试读取缓存，未命中则执行数据获取并写入缓存。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 缓存策略实现</h2>
+      <div class="code-block">
+# Cache-Aside 模式（旁路缓存）
+
+async function getUser(userId: string) {
+  // 1. 先查缓存
+  const cached = await cache.get(`user:${userId}`);
+  if (cached) return cached;
+
+  // 2. 缓存未命中，查数据库
+  const user = await db.users.findById(userId);
+  if (!user) return null;
+
+  // 3. 写入缓存
+  await cache.set(`user:${userId}`, user, 3600);
+
+  return user;
+}
+
+async function updateUser(userId: string, data: object) {
+  // 1. 更新数据库
+  const user = await db.users.update(userId, data);
+
+  // 2. 删除缓存（下次读取时重建）
+  await cache.delete(`user:${userId}`);
+
+  return user;
+}
+
+# Write-Through 模式（写穿透）
+
+async function createUser(data: object) {
+  // 同时写入数据库和缓存
+  const user = await db.users.create(data);
+  await cache.set(`user:${user.id}`, user, 3600);
+  return user;
+}
+
+# 缓存预热
+
+async function warmupCache() {
+  // 启动时预加载热点数据
+  const hotUsers = await db.users.findHotUsers(100);
+
+  for (const user of hotUsers) {
+    await cache.set(`user:${user.id}`, user, 3600);
+  }
+
+  console.log(`Warmed up ${hotUsers.length} users`);
+}
+
+# 缓存批量操作
+
+async function getUsers(userIds: string[]) {
+  const keys = userIds.map(id => `user:${id}`);
+
+  // 批量获取
+  const cached = await redis.mget(...keys);
+
+  // 找出未命中的
+  const missed = userIds.filter((_, i) => !cached[i]);
+
+  // 批量查询数据库
+  const users = await db.users.findByIds(missed);
+
+  // 批量写入缓存
+  const multi = redis.multi();
+  for (const user of users) {
+    multi.set(`user:${user.id}`, JSON.stringify(user), 'EX', 3600);
+  }
+  await multi.exec();
+
+  // 合并结果
+  return userIds.map((id, i) => {
+    if (cached[i]) return JSON.parse(cached[i]!);
+    return users.find(u => u.id === id);
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 缓存问题与解决</h2>
+      <div class="code-block">
+# 1. 缓存穿透
+
+// 问题：查询不存在的数据，每次都穿透到数据库
+// 解决：缓存空值
+
+async function getUser(userId: string) {
+  const cached = await cache.get(`user:${userId}`);
+  if (cached !== null) {
+    return cached === 'NULL' ? null : cached;  // 区分空值和未命中
+  }
+
+  const user = await db.users.findById(userId);
+
+  if (user) {
+    await cache.set(`user:${userId}`, user, 3600);
+  } else {
+    // 缓存空值，短时间过期
+    await cache.set(`user:${userId}`, 'NULL', 60);
+  }
+
+  return user;
+}
+
+# 2. 缓存雪崩
+
+// 问题：大量缓存同时过期
+// 解决：随机过期时间
+
+function getRandomTTL(base: number, range: number): number {
+  return base + Math.random() * range;
+}
+
+await cache.set(key, value, getRandomTTL(3600, 600));
+
+# 3. 缓存击穿
+
+// 问题：热点数据过期，大量请求同时查数据库
+// 解决：使用分布式锁
+
+import Redlock from 'redlock';
+
+const redlock = new Redlock([redis]);
+
+async function getUserWithLock(userId: string) {
+  const cached = await cache.get(`user:${userId}`);
+  if (cached) return cached;
+
+  // 获取分布式锁
+  const lock = await redlock.acquire([`lock:user:${userId}`], 5000);
+
+  try {
+    // 再次检查缓存
+    const cachedAgain = await cache.get(`user:${userId}`);
+    if (cachedAgain) return cachedAgain;
+
+    // 查询数据库
+    const user = await db.users.findById(userId);
+    if (user) {
+      await cache.set(`user:${userId}`, user, 3600);
+    }
+    return user;
+  } finally {
+    await lock.release();
+  }
+}
+
+# 4. 缓存一致性
+
+// 策略：先更新数据库，再删除缓存
+async function updateUser(userId: string, data: object) {
+  await db.users.update(userId, data);
+  await cache.delete(`user:${userId}`);  // 下次读取时重建
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 多层缓存：浏览器、CDN、应用、数据库</li>
+            <li>• Cache-Aside 是最常用的缓存模式</li>
+            <li>• 注意缓存穿透、雪崩、击穿问题</li>
+            <li>• 合理设置过期时间和更新策略</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="95-4-集群模式.html">← 上一节：集群模式</a>
+      <a href="../chapter96/96-1-索引优化.html">下一章：索引优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

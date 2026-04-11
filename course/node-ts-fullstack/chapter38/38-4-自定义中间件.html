@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.4 自定义中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="38-1-中间件原理.html">第三十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>38.4 自定义中间件</h1>
+      <p class="subtitle">编写符合业务需求的中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握自定义中间件的编写方法</li>
+        <li>学会编写可配置的中间件</li>
+        <li>理解中间件的模块化组织</li>
+        <li>掌握中间件的单元测试方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 中间件基本结构</h2>
+      <p>一个标准的 Koa 中间件是一个 async 函数，接收 ctx 和 next 两个参数。</p>
+      <div class="code-block">
+// 基本中间件结构
+async function myMiddleware(ctx, next) {
+  // 前置处理 - 在请求进入时执行
+
+  await next(); // 传递给下一个中间件
+
+  // 后置处理 - 在响应返回时执行
+}
+
+// 注册中间件
+app.use(myMiddleware);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 日志中间件</h2>
+      <div class="code-block">
+// middlewares/logger.js
+function logger(options = {}) {
+  const { logBody = false } = options;
+
+  return async (ctx, next) => {
+    const start = Date.now();
+
+    // 请求信息
+    console.log(`[${new Date().toISOString()}] --> ${ctx.method} ${ctx.url}`);
+
+    if (logBody && ctx.request.body) {
+      console.log('Request Body:', ctx.request.body);
+    }
+
+    await next();
+
+    // 响应信息
+    const ms = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] <-- ${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms`);
+  };
+}
+
+module.exports = logger;
+
+// 使用
+app.use(logger({ logBody: true }));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> JWT 认证中间件</h2>
+      <div class="code-block">
+// middlewares/auth.js
+const jwt = require('jsonwebtoken');
+
+function auth(options = {}) {
+  const { secret = 'default-secret', excludePaths = [] } = options;
+
+  return async (ctx, next) => {
+    // 排除不需要认证的路径
+    if (excludePaths.some(path => ctx.path.startsWith(path))) {
+      await next();
+      return;
+    }
+
+    const authHeader = ctx.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      ctx.status = 401;
+      ctx.body = { error: 'No token provided' };
+      return;
+    }
+
+    const token = authHeader.slice(7);
+
+    try {
+      const decoded = jwt.verify(token, secret);
+      ctx.state.user = decoded;
+      await next();
+    } catch (err) {
+      ctx.status = 401;
+      ctx.body = { error: 'Invalid token' };
+    }
+  };
+}
+
+module.exports = auth;
+
+// 使用
+app.use(auth({
+  secret: process.env.JWT_SECRET,
+  excludePaths: ['/api/auth/login', '/api/auth/register', '/public']
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 请求限流中间件</h2>
+      <div class="code-block">
+// middlewares/rateLimit.js
+function rateLimit(options = {}) {
+  const {
+    windowMs = 60000,      // 时间窗口（毫秒）
+    max = 100,             // 最大请求数
+    message = 'Too many requests'
+  } = options;
+
+  const requests = new Map();
+
+  return async (ctx, next) => {
+    const ip = ctx.ip;
+    const now = Date.now();
+
+    // 获取该 IP 的请求记录
+    let record = requests.get(ip);
+
+    if (!record || now - record.startTime > windowMs) {
+      // 新窗口期
+      record = { count: 1, startTime: now };
+      requests.set(ip, record);
+    } else {
+      record.count++;
+    }
+
+    // 设置响应头
+    ctx.set('X-RateLimit-Limit', max);
+    ctx.set('X-RateLimit-Remaining', Math.max(0, max - record.count));
+
+    if (record.count > max) {
+      ctx.status = 429;
+      ctx.body = { error: message };
+      return;
+    }
+
+    await next();
+  };
+}
+
+module.exports = rateLimit;
+
+// 使用
+app.use(rateLimit({
+  windowMs: 60000,  // 1分钟
+  max: 100          // 每分钟最多 100 次请求
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 响应格式化中间件</h2>
+      <div class="code-block">
+// middlewares/responseFormatter.js
+function responseFormatter(options = {}) {
+  const { successCode = 200 } = options;
+
+  return async (ctx, next) => {
+    await next();
+
+    // 只处理 JSON 响应
+    if (!ctx.body || typeof ctx.body !== 'object') {
+      return;
+    }
+
+    // 如果已经是标准格式，跳过
+    if (ctx.body.success !== undefined) {
+      return;
+    }
+
+    // 标准化响应格式
+    ctx.body = {
+      success: true,
+      data: ctx.body,
+      timestamp: new Date().toISOString()
+    };
+  };
+}
+
+module.exports = responseFormatter;
+
+// 使用后，所有响应自动格式化
+app.use(responseFormatter());
+
+router.get('/users', async ctx => {
+  ctx.body = [{ id: 1, name: 'John' }];
+});
+// 输出: { success: true, data: [{ id: 1, name: 'John' }], timestamp: '...' }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 参数验证中间件</h2>
+      <div class="code-block">
+// middlewares/validate.js
+function validate(schema) {
+  return async (ctx, next) => {
+    const data = ctx.method === 'GET' ? ctx.query : ctx.request.body;
+
+    const errors = [];
+
+    // 简单验证逻辑
+    for (const [field, rules] of Object.entries(schema)) {
+      const value = data[field];
+
+      if (rules.required && !value) {
+        errors.push(`${field} is required`);
+        continue;
+      }
+
+      if (value && rules.type && typeof value !== rules.type) {
+        errors.push(`${field} must be ${rules.type}`);
+      }
+
+      if (value && rules.minLength && value.length < rules.minLength) {
+        errors.push(`${field} must be at least ${rules.minLength} characters`);
+      }
+    }
+
+    if (errors.length > 0) {
+      ctx.status = 400;
+      ctx.body = { errors };
+      return;
+    }
+
+    await next();
+  };
+}
+
+module.exports = validate;
+
+// 使用
+router.post('/users',
+  validate({
+    name: { required: true, type: 'string', minLength: 2 },
+    email: { required: true, type: 'string' },
+    age: { required: false, type: 'number' }
+  }),
+  async ctx => {
+    ctx.body = { message: 'User created' };
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 中间件模块化组织</h2>
+      <div class="code-block">
+// middlewares/index.js
+const logger = require('./logger');
+const auth = require('./auth');
+const rateLimit = require('./rateLimit');
+const responseFormatter = require('./responseFormatter');
+
+module.exports = {
+  logger,
+  auth,
+  rateLimit,
+  responseFormatter
+};
+
+// app.js
+const middlewares = require('./middlewares');
+
+app.use(middlewares.logger());
+app.use(middlewares.rateLimit({ max: 100 }));
+app.use(middlewares.auth({ excludePaths: ['/api/auth'] }));
+app.use(middlewares.responseFormatter());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> 中间件单元测试</h2>
+      <div class="code-block">
+// tests/logger.test.js
+const logger = require('../middlewares/logger');
+
+describe('Logger Middleware', () => {
+  it('should log request and response', async () => {
+    const ctx = {
+      method: 'GET',
+      url: '/test',
+      status: 200,
+      set: jest.fn()
+    };
+
+    const next = jest.fn().mockResolvedValue();
+
+    const middleware = logger();
+    await middleware(ctx, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(ctx.set).toHaveBeenCalled();
+  });
+});
+
+// tests/auth.test.js
+const auth = require('../middlewares/auth');
+
+describe('Auth Middleware', () => {
+  it('should reject requests without token', async () => {
+    const ctx = {
+      headers: {},
+      status: null,
+      body: null
+    };
+
+    const middleware = auth({ secret: 'test' });
+    await middleware(ctx, () => {});
+
+    expect(ctx.status).toBe(401);
+    expect(ctx.body.error).toBe('No token provided');
+  });
+
+  it('should pass valid tokens', async () => {
+    const ctx = {
+      headers: {
+        authorization: 'Bearer valid-token'
+      },
+      state: {}
+    };
+
+    const next = jest.fn().mockResolvedValue();
+
+    // Mock jwt.verify
+    const middleware = auth({ secret: 'test' });
+    // ... 测试逻辑
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 中间件是 async 函数，接收 ctx 和 next</li>
+            <li>• 返回函数的方式可以创建可配置的中间件</li>
+            <li>• 使用 ctx.state 在中间件间传递数据</li>
+            <li>• 将中间件模块化便于复用和测试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="38-3-常用中间件.html">← 上一节：常用中间件</a>
+      <a href="38-5-错误处理中间件.html">下一节：错误处理中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

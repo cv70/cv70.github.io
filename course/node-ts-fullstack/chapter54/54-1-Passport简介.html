@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>54.1 Passport 简介 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="54-1-Passport简介.html">第五十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>54.1 Passport 简介</h1>
+      <p class="subtitle">Node.js 最流行的认证中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Passport 的设计理念</li>
+        <li>掌握 Passport 的核心概念</li>
+        <li>了解不同的认证策略</li>
+        <li>学会基础配置方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 什么是 Passport</h2>
+      <div class="code-block">
+/*
+Passport 是 Express 的认证中间件
+
+特点：
+1. 策略模式 - 支持多种认证方式
+2. 可扩展 - 500+ 认证策略
+3. 轻量级 - 核心仅 50KB
+4. 无状态 - 可选 Session 或 Token
+
+支持的认证策略：
+- Local（用户名密码）
+- JWT
+- OAuth（Google, Facebook, GitHub 等）
+- OpenID
+- SAML
+- ...500+
+*/
+
+// 安装
+// npm install passport passport-local
+// npm install passport-jwt passport-google-oauth20
+
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
+
+// Passport 核心 API
+/*
+passport.use()       - 注册认证策略
+passport.initialize() - 初始化 Passport
+passport.session()    - 启用 Session 支持
+passport.authenticate() - 认证请求
+req.login()          - 登录用户
+req.logout()         - 登出用户
+req.isAuthenticated() - 检查是否已认证
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 核心概念</h2>
+      <div class="code-block">
+// 1. 策略（Strategy）
+// 策略定义了如何认证用户
+
+// 本地策略示例
+const localStrategy = new LocalStrategy(
+  {
+    usernameField: 'email',    // 自定义用户名字段
+    passwordField: 'password'  // 自定义密码字段
+  },
+  async (email, password, done) => {
+    try {
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        return done(null, false, { message: '用户不存在' });
+      }
+
+      const isValid = await user.comparePassword(password);
+
+      if (!isValid) {
+        return done(null, false, { message: '密码错误' });
+      }
+
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }
+);
+
+// 注册策略
+passport.use('local', localStrategy);
+
+// 2. 验证回调（verify callback）
+// done 的调用方式：
+// done(null, user)     - 认证成功
+// done(null, false)    - 认证失败
+// done(null, false, { message: '原因' }) - 认证失败带消息
+// done(err)            - 发生错误
+
+// 3. 序列化与反序列化（Session 支持）
+passport.serializeUser((user: any, done) => {
+  // 将用户信息存储到 Session
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    // 从 Session 中恢复用户信息
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 基础配置</h2>
+      <div class="code-block">
+import express from 'express';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+
+const app = express();
+
+// 1. 配置 Session（如果需要）
+app.use(session({
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false
+}));
+
+// 2. 初始化 Passport
+app.use(passport.initialize());
+
+// 3. 启用 Session 支持（可选）
+app.use(passport.session());
+
+// 4. 配置策略
+passport.use(new LocalStrategy(
+  async (username, password, done) => {
+    const user = await authenticateUser(username, password);
+
+    if (user) {
+      return done(null, user);
+    }
+
+    return done(null, false, { message: '认证失败' });
+  }
+));
+
+// 5. 序列化配置
+passport.serializeUser((user: any, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id: string, done) => {
+  const user = await User.findById(id);
+  done(null, user);
+});
+
+// 6. 认证路由
+app.post('/login',
+  passport.authenticate('local', {
+    successRedirect: '/dashboard',
+    failureRedirect: '/login',
+    failureFlash: true
+  })
+);
+
+// 7. 受保护路由
+function ensureAuthenticated(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.redirect('/login');
+}
+
+app.get('/dashboard', ensureAuthenticated, (req, res) => {
+  res.json({ user: req.user });
+});
+
+// 8. 登出
+app.post('/logout', (req, res, next) => {
+  req.logout((err) => {
+    if (err) { return next(err); }
+    res.redirect('/');
+  });
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Session vs JWT</div>
+          <p>Passport默认使用Session，但也支持无状态认证（如JWT）。对于API服务，推荐使用JWT策略而非Session。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 认证流程</h2>
+      <div class="code-block">
+/*
+Passport 认证流程：
+
+1. 请求到达认证中间件
+   app.post('/login', passport.authenticate('local', options))
+
+2. 调用策略的验证函数
+   LocalStrategy.verify(username, password, done)
+
+3. 验证函数执行：
+   - 查询数据库验证用户
+   - 调用 done(null, user) 或 done(null, false)
+
+4. Passport 处理结果：
+   - 成功：调用 req.login(user)
+   - 失败：返回 401 或重定向
+
+5. req.login() 执行：
+   - 调用 serializeUser 存储用户ID到 Session
+
+6. 后续请求：
+   - passport.session() 中间件
+   - 调用 deserializeUser 恢复用户对象
+   - 设置 req.user
+*/
+
+// 自定义认证回调
+app.post('/login', (req, res, next) => {
+  passport.authenticate('local', (err: any, user: any, info: any) => {
+    if (err) {
+      return next(err);
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        error: info?.message || '认证失败'
+      });
+    }
+
+    req.login(user, (err) => {
+      if (err) {
+        return next(err);
+      }
+
+      return res.json({
+        message: '登录成功',
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role
+        }
+      });
+    });
+  })(req, res, next);
+});
+
+// 不同认证方式选项
+const authOptions = {
+  // Session 认证
+  session: {
+    successRedirect: '/dashboard',
+    failureRedirect: '/login',
+    failureFlash: true
+  },
+
+  // API 认证
+  api: {
+    session: false,  // 不使用 Session
+    failWithError: true
+  },
+
+  // JWT 认证
+  jwt: {
+    session: false,
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken()
+  }
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Passport 是 Express 的认证中间件</li>
+            <li>• 策略模式支持多种认证方式</li>
+            <li>• serializeUser/deserializeUser 用于 Session 支持</li>
+            <li>• API 认证设置 session: false</li>
+            <li>• 可以自定义认证回调处理结果</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter53/53-4-JWT安全最佳实践.html">← 上一章：JWT安全最佳实践</a>
+      <a href="54-2-本地策略.html">下一节：本地策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

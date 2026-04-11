@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>105.5 消息可靠性 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="105-1-消息队列概述.html">第105章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>105.5 消息可靠性</h1>
+      <p class="subtitle">保证消息不丢失的核心机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解消息丢失的场景</li>
+        <li>掌握生产者确认机制</li>
+        <li>学会消费者确认机制</li>
+        <li>了解消息持久化策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 消息丢失场景分析</h2>
+      <div class="code-block">
+// 消息可能丢失的三个阶段
+
+const lossScenarios = {
+  '生产阶段': {
+    problem: '消息发送到Broker失败',
+    cause: ['网络故障', 'Broker宕机', '消息格式错误'],
+    solution: ['生产者确认机制', '消息重试', '事务消息']
+  },
+  '存储阶段': {
+    problem: 'Broker存储消息失败',
+    cause: ['Broker宕机', '磁盘故障', '内存溢出'],
+    solution: ['消息持久化', '多副本机制', '集群部署']
+  },
+  '消费阶段': {
+    problem: '消费者处理消息失败',
+    cause: ['消费者宕机', '处理异常', '网络中断'],
+    solution: ['手动确认机制', '消息重试', '死信队列']
+  }
+};
+
+// 消息可靠性投递流程
+const reliableFlow = `
+Producer              Broker              Consumer
+   |                    |                    |
+   |--发送消息--------->|                    |
+   |                    |--存储消息--------->|
+   |<--确认收到---------|                    |
+   |                    |                    |
+   |                    |<--拉取消息---------|
+   |                    |--发送消息--------->|
+   |                    |<--确认消费---------|
+   |                    |--删除/标记消息---->|
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">可靠性原则</div>
+          <p>每个阶段都要保证：发送确认、存储持久化、消费确认。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 生产者确认机制</h2>
+      <div class="code-block">
+// RabbitMQ 生产者确认
+
+import * as amqp from 'amqplib';
+
+async function producerConfirm() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createConfirmChannel();
+
+  const queue = 'reliable_queue';
+  await channel.assertQueue(queue, { durable: true });
+
+  // 方式1：回调确认
+  channel.sendToQueue(queue, Buffer.from('message'), { persistent: true },
+    (err, ok) => {
+      if (err) {
+        console.error('消息发送失败');
+        // 重试逻辑
+      } else {
+        console.log('消息发送成功');
+      }
+    }
+  );
+
+  // 方式2：事务机制（性能较低）
+  try {
+    await channel.txSelect();  // 开启事务
+    channel.sendToQueue(queue, Buffer.from('message'));
+    await channel.txCommit();  // 提交事务
+  } catch (err) {
+    await channel.txRollback();  // 回滚事务
+  }
+
+  // 方式3：发布确认（推荐）
+  await channel.waitForConfirms();
+}
+
+// Kafka 生产者确认
+
+import { Kafka } from 'kafkajs';
+
+const kafka = new Kafka({ brokers: ['localhost:9092'] });
+
+async function kafkaProducerReliable() {
+  const producer = kafka.producer({
+    acks: 'all',  // 等待所有副本确认
+    retries: 5,   // 重试次数
+    retry: {
+      initialRetryTime: 100,
+      multiplier: 2,
+      maxRetryTime: 30000
+    }
+  });
+
+  await producer.connect();
+
+  const result = await producer.send({
+    topic: 'orders',
+    messages: [{ key: 'order-1', value: JSON.stringify({ id: 1 }) }],
+    acks: -1  // -1表示等待所有副本确认，0不等待，1等待leader确认
+  });
+
+  console.log('发送结果:', result);
+  // [{ topicName: 'orders', partition: 0, errorCode: 0, offset: '123', baseOffset: '123' }]
+}
+
+// 消息重试机制
+async function sendWithRetry(producer: any, topic: string, message: any, maxRetries = 3) {
+  let lastError: Error | null = null;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await producer.send({
+        topic,
+        messages: [message]
+      });
+      return;  // 成功则退出
+    } catch (error) {
+      lastError = error;
+      console.log(`第${i + 1}次发送失败，准备重试...`);
+
+      // 指数退避
+      await new Promise(resolve =>
+        setTimeout(resolve, 1000 * Math.pow(2, i))
+      );
+    }
+  }
+
+  // 重试耗尽，进入死信处理
+  throw lastError;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 消费者确认机制</h2>
+      <div class="code-block">
+// RabbitMQ 消费者确认
+
+async function consumerAck() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  const queue = 'reliable_queue';
+  await channel.assertQueue(queue, { durable: true });
+
+  // 预取数量，控制并发
+  channel.prefetch(1);
+
+  // 手动确认模式
+  channel.consume(queue, async (msg) => {
+    if (!msg) return;
+
+    try {
+      const content = JSON.parse(msg.content.toString());
+      await processMessage(content);
+
+      // 确认消息处理成功
+      channel.ack(msg);
+    } catch (error) {
+      console.error('处理失败:', error);
+
+      // 判断是否重试
+      const retryCount = getRetryCount(msg);
+
+      if (retryCount < 3) {
+        // 拒绝消息，重新入队
+        channel.nack(msg, false, true);
+        incrementRetryCount(msg);
+      } else {
+        // 重试次数耗尽，发送到死信队列
+        channel.nack(msg, false, false);
+      }
+    }
+  }, { noAck: false });  // 手动确认
+}
+
+// 死信队列处理
+async function setupDeadLetterQueue() {
+  const channel = await conn.createChannel();
+
+  // 定义死信交换机
+  await channel.assertExchange('dlx', 'direct', { durable: true });
+
+  // 定义死信队列
+  await channel.assertQueue('dead_letter_queue', { durable: true });
+  await channel.bindQueue('dead_letter_queue', 'dlx', 'dead');
+
+  // 定义业务队列，指定死信交换机
+  await channel.assertQueue('business_queue', {
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx',
+      'x-dead-letter-routing-key': 'dead',
+      'x-message-ttl': 86400000  // 消息过期时间（毫秒）
+    }
+  });
+}
+
+// Kafka 消费者确认（提交偏移量）
+
+async function kafkaConsumerManual() {
+  const consumer = kafka.consumer({
+    groupId: 'order-processor',
+    sessionTimeout: 30000
+  });
+
+  await consumer.connect();
+  await consumer.subscribe({ topic: 'orders' });
+
+  await consumer.run({
+    autoCommit: false,  // 禁用自动提交
+    eachMessage: async ({ topic, partition, message }) => {
+      try {
+        await processMessage(message);
+        // 手动提交偏移量
+        await consumer.commitOffsets([{
+          topic,
+          partition,
+          offset: (parseInt(message.offset) + 1).toString()
+        }]);
+      } catch (error) {
+        console.error('处理失败，不提交偏移量');
+        // 不提交偏移量，下次重新消费
+      }
+    }
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 消息丢失可能发生在三个阶段</li>
+            <li>• 生产者确认保证消息成功发送</li>
+            <li>• 持久化保证消息存储可靠</li>
+            <li>• 消费者确认保证消息正确处理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="105-4-Redis消息.html">← 上一节：Redis 消息</a>
+      <a href="../chapter106/106-1-RPC概念.html">下一章：RPC 概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>82.2 动态路由 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>82.2 动态路由</h1>
+      <p class="subtitle">路由参数与动态匹配</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>动态路由允许我们在路由路径中使用参数，实现路由的动态匹配。本节将介绍路由参数、查询参数、多个参数的处理，以及动态添加路由。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握路由参数的定义和使用</li>
+        <li>学会获取路由参数和查询参数</li>
+        <li>理解路由匹配规则和优先级</li>
+        <li>掌握动态添加路由的方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔢</span> 路由参数</h2>
+
+      <h3>基本参数</h3>
+      <div class="code-block"><span class="comment">// 定义带参数的路由</span>
+<span class="keyword">const</span> routes: RouteRecordRaw[] = [
+  {
+    path: <span class="string">'/users/:id'</span>,
+    name: <span class="string">'UserDetail'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/UserDetail.vue'</span>)
+  }
+];</div>
+
+      <h3>获取参数</h3>
+      <div class="code-block"><span class="comment">&lt;!-- UserDetail.vue --&gt;</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { useRoute } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+<span class="keyword">import</span> { ref, watch } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> route = useRoute();
+
+<span class="comment">// 获取参数</span>
+<span class="keyword">const</span> userId = route.params.id; <span class="comment">// string 或 string[]</span>
+console.log(<span class="string">'User ID:'</span>, userId);
+
+<span class="comment">// 监听参数变化</span>
+watch(
+  () => route.params.id,
+  (newId) => {
+    console.log(<span class="string">'ID changed:'</span>, newId);
+    <span class="comment">// 重新加载数据</span>
+  }
+);
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div&gt;用户 ID: {{ $route.params.id }}&lt;/div&gt;
+&lt;/template&gt;</div>
+
+      <h3>多个参数</h3>
+      <div class="code-block"><span class="comment">// 多个参数</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/users/:userId/posts/:postId'</span>,
+    name: <span class="string">'PostDetail'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/PostDetail.vue'</span>)
+  }
+];
+
+<span class="comment">// 在组件中获取</span>
+<span class="keyword">const</span> route = useRoute();
+<span class="keyword">const</span> userId = route.params.userId;
+<span class="keyword">const</span> postId = route.params.postId;</div>
+
+      <h3>可选参数</h3>
+      <div class="code-block"><span class="comment">// 可选参数（使用 ?）</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/users/:id/:tab?'</span>, <span class="comment">// tab 是可选的</span>
+    component: UserView
+  }
+];
+
+<span class="comment">// 匹配：</span>
+<span class="comment">// /users/123        -> id: '123', tab: undefined</span>
+<span class="comment">// /users/123/posts -> id: '123', tab: 'posts'</span></div>
+
+      <h3>可重复参数</h3>
+      <div class="code-block"><span class="comment">// 可重复参数（使用 + 或 *）</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/files/:path+'</span>, <span class="comment">// 至少一个</span>
+    component: FileView
+  },
+  {
+    path: <span class="string">'/search/:keywords*'</span>, <span class="comment">// 零个或多个</span>
+    component: SearchView
+  }
+];
+
+<span class="comment">// 匹配：</span>
+<span class="comment">// /files/docs/work/report.pdf -> path: ['docs', 'work', 'report.pdf']</span>
+<span class="comment">// /search/vue/router         -> keywords: ['vue', 'router']</span>
+<span class="comment">// /search                    -> keywords: []</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">❓</span> 查询参数</h2>
+      <div class="code-block"><span class="comment">// 导航时传递查询参数</span>
+router.push({
+  path: <span class="string">'/search'</span>,
+  query: {
+    q: <span class="string">'vue'</span>,
+    page: <span class="string">'1'</span>,
+    sort: <span class="string">'date'</span>
+  }
+});
+
+<span class="comment">// URL: /search?q=vue&page=1&sort=date</span>
+
+<span class="comment">// 在组件中获取</span>
+<span class="keyword">const</span> route = useRoute();
+console.log(route.query.q);    <span class="comment">// 'vue'</span>
+console.log(route.query.page); <span class="comment">// '1'</span>
+console.log(route.query.sort); <span class="comment">// 'date'</span>
+
+<span class="comment">&lt;!-- 模板中使用 --&gt;</span>
+&lt;template&gt;
+  &lt;div&gt;
+    搜索关键词: {{ $route.query.q }}
+    当前页: {{ $route.query.page }}
+  &lt;/div&gt;
+&lt;/template&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 路由匹配优先级</h2>
+      <div class="code-block"><span class="comment">// 路由按定义顺序匹配</span>
+<span class="keyword">const</span> routes = [
+  <span class="comment">// 更具体的路由放在前面</span>
+  {
+    path: <span class="string">'/users/create'</span>,
+    name: <span class="string">'UserCreate'</span>,
+    component: UserCreate
+  },
+  <span class="comment">// 动态参数路由放在后面</span>
+  {
+    path: <span class="string">'/users/:id'</span>,
+    name: <span class="string">'UserDetail'</span>,
+    component: UserDetail
+  },
+  <span class="comment">// 捕获所有路由</span>
+  {
+    path: <span class="string">'/:pathMatch(.*)*'</span>,
+    name: <span class="string">'NotFound'</span>,
+    component: NotFound
+  }
+];</div>
+
+      <h3>正则匹配</h3>
+      <div class="code-block"><span class="comment">// 使用正则限制参数格式</span>
+<span class="keyword">const</span> routes = [
+  {
+    <span class="comment">// 只匹配数字</span>
+    path: <span class="string">'/users/:id(\\d+)'</span>,
+    component: UserDetail
+  },
+  {
+    <span class="comment">// 只匹配特定格式</span>
+    path: <span class="string">'/posts/:slug([a-z-]+)'</span>,
+    component: PostDetail
+  }
+];</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">➕</span> 动态添加路由</h2>
+
+      <h3>添加单个路由</h3>
+      <div class="code-block"><span class="keyword">import</span> { useRouter } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+
+<span class="keyword">const</span> router = useRouter();
+
+<span class="comment">// 添加路由</span>
+router.addRoute({
+  path: <span class="string">'/admin'</span>,
+  name: <span class="string">'Admin'</span>,
+  component: () => <span class="keyword">import</span>(<span class="string">'@/views/Admin.vue'</span>)
+});
+
+<span class="comment">// 添加嵌套路由</span>
+router.addRoute(<span class="string">'Admin'</span>, {
+  path: <span class="string">'dashboard'</span>,
+  name: <span class="string">'AdminDashboard'</span>,
+  component: () => <span class="keyword">import</span>(<span class="string">'@/views/AdminDashboard.vue'</span>)
+});</div>
+
+      <h3>动态路由权限控制</h3>
+      <div class="code-block"><span class="comment">// 根据用户权限动态添加路由</span>
+<span class="keyword">const</span> adminRoutes = [
+  {
+    path: <span class="string">'/admin'</span>,
+    name: <span class="string">'Admin'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/Admin.vue'</span>),
+    children: [
+      {
+        path: <span class="string">'users'</span>,
+        name: <span class="string">'AdminUsers'</span>,
+        component: () => <span class="keyword">import</span>(<span class="string">'@/views/AdminUsers.vue'</span>)
+      },
+      {
+        path: <span class="string">'settings'</span>,
+        name: <span class="string">'AdminSettings'</span>,
+        component: () => <span class="keyword">import</span>(<span class="string">'@/views/AdminSettings.vue'</span>)
+      }
+    ]
+  }
+];
+
+<span class="keyword">function</span> <span class="function">setupDynamicRoutes</span>(roles: <span class="keyword">string</span>[]) {
+  <span class="keyword">if</span> (roles.includes(<span class="string">'admin'</span>)) {
+    adminRoutes.forEach(route => {
+      router.addRoute(route);
+    });
+  }
+}
+
+<span class="comment">// 移除路由</span>
+router.removeRoute(<span class="string">'Admin'</span>);
+
+<span class="comment">// 检查路由是否存在</span>
+router.hasRoute(<span class="string">'Admin'</span>); <span class="comment">// true/false</span>
+
+<span class="comment">// 获取所有路由</span>
+router.getRoutes(); <span class="comment">// RouteRecordRaw[]</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 路由元信息</h2>
+      <div class="code-block"><span class="comment">// 定义路由元信息</span>
+<span class="keyword">const</span> routes: RouteRecordRaw[] = [
+  {
+    path: <span class="string">'/admin'</span>,
+    name: <span class="string">'Admin'</span>,
+    component: Admin,
+    meta: {
+      requiresAuth: <span class="keyword">true</span>,
+      title: <span class="string">'管理后台'</span>,
+      roles: [<span class="string">'admin'</span>]
+    }
+  }
+];
+
+<span class="comment">// 类型扩展</span>
+<span class="keyword">import</span> <span class="string">'vue-router'</span>;
+
+declare module <span class="string">'vue-router'</span> {
+  <span class="keyword">interface</span> RouteMeta {
+    requiresAuth?: <span class="keyword">boolean</span>;
+    title?: <span class="keyword">string</span>;
+    roles?: <span class="keyword">string</span>[];
+  }
+}
+
+<span class="comment">// 使用元信息</span>
+<span class="keyword">const</span> route = useRoute();
+console.log(route.meta.title);      <span class="comment">// '管理后台'</span>
+console.log(route.meta.requiresAuth); <span class="comment">// true</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>使用 :param 定义动态路由参数</li>
+        <li>通过 route.params 获取路由参数</li>
+        <li>通过 route.query 获取查询参数</li>
+        <li>路由按定义顺序匹配，更具体的路由放前面</li>
+        <li>使用 addRoute/removeRoute 动态管理路由</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="82-1-路由配置.html">← 上一节：路由配置</a>
+      <a href="82-3-导航守卫.html">下一节：导航守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

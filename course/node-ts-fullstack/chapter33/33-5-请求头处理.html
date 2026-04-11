@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.5 请求头处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter33.html">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.5 请求头处理</h1>
+      <p class="subtitle">掌握 Express 中请求头的读取和处理方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握请求头的读取方法</li>
+        <li>理解常用请求头的含义</li>
+        <li>学会使用请求头进行认证和内容协商</li>
+        <li>了解请求头安全注意事项</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 常用请求头</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>请求头</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Content-Type</code></td>
+            <td>请求体类型</td>
+            <td>application/json</td>
+          </tr>
+          <tr>
+            <td><code>Accept</code></td>
+            <td>接受的内容类型</td>
+            <td>application/json</td>
+          </tr>
+          <tr>
+            <td><code>Authorization</code></td>
+            <td>认证凭证</td>
+            <td>Bearer token</td>
+          </tr>
+          <tr>
+            <td><code>User-Agent</code></td>
+            <td>客户端信息</td>
+            <td>Mozilla/5.0...</td>
+          </tr>
+          <tr>
+            <td><code>Host</code></td>
+            <td>目标主机</td>
+            <td>example.com</td>
+          </tr>
+          <tr>
+            <td><code>Cookie</code></td>
+            <td>Cookie 数据</td>
+            <td>sessionId=abc123</td>
+          </tr>
+          <tr>
+            <td><code>Referer</code></td>
+            <td>来源页面</td>
+            <td>https://example.com</td>
+          </tr>
+          <tr>
+            <td><code>X-Forwarded-For</code></td>
+            <td>客户端真实 IP</td>
+            <td>192.168.1.1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 读取请求头</h2>
+
+      <h3>基本读取</h3>
+      <div class="code-block">
+app.get('/headers', (req, res) => {
+  // 所有请求头
+  console.log(req.headers);
+
+  // 获取单个请求头（推荐方式）
+  const contentType = req.get('Content-Type');
+  const auth = req.get('Authorization');
+
+  // 直接访问（小写）
+  const userAgent = req.headers['user-agent'];
+  const host = req.headers.host;
+
+  res.json({
+    contentType,
+    auth,
+    userAgent,
+    host
+  });
+});</div>
+
+      <h3>req.get() 方法</h3>
+      <div class="code-block">
+// req.get(name) 不区分大小写
+req.get('Content-Type');
+req.get('content-type');
+req.get('CONTENT-TYPE');
+// 以上三种写法等效
+
+// 返回值
+// 存在 -> 返回字符串
+// 不存在 -> 返回 undefined
+
+// 处理可能不存在的头
+const token = req.get('Authorization') || '';
+if (!token) {
+  return res.status(401).json({ error: 'No token' });
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Authorization 头处理</h2>
+
+      <div class="code-block">
+// 解析 Bearer Token
+function extractBearerToken(req) {
+  const auth = req.get('Authorization');
+  if (!auth) return null;
+
+  const parts = auth.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return null;
+  }
+
+  return parts[1];
+}
+
+// 认证中间件
+function authMiddleware(req, res, next) {
+  const token = extractBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({
+      error: 'Authorization header missing or invalid'
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// Basic Auth
+function parseBasicAuth(req) {
+  const auth = req.get('Authorization');
+  if (!auth || !auth.startsWith('Basic ')) return null;
+
+  const encoded = auth.slice(6);
+  const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+  const [username, password] = decoded.split(':');
+
+  return { username, password };
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> Content-Type 处理</h2>
+
+      <div class="code-block">
+// 检查请求内容类型
+app.post('/api/data', (req, res) => {
+  const contentType = req.get('Content-Type');
+
+  if (!contentType || !contentType.includes('application/json')) {
+    return res.status(415).json({
+      error: 'Unsupported Media Type',
+      message: 'Content-Type must be application/json'
+    });
+  }
+
+  // 处理 JSON 请求
+  res.json(req.body);
+});
+
+// 使用 req.is() 检查类型
+app.post('/upload', (req, res) => {
+  if (req.is('multipart/form-data')) {
+    // 文件上传处理
+  } else if (req.is('application/json')) {
+    // JSON 数据处理
+  } else {
+    res.status(415).json({ error: 'Unsupported content type' });
+  }
+});
+
+// 检查多种类型
+app.post('/submit', (req, res) => {
+  const type = req.is(['json', 'urlencoded']);
+
+  if (type === false) {
+    return res.status(415).json({ error: 'Unsupported type' });
+  }
+
+  // type 为 'json' 或 'urlencoded'
+  res.json(req.body);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> Accept 头和内容协商</h2>
+
+      <div class="code-block">
+// 根据客户端接受类型返回不同格式
+app.get('/api/data', (req, res) => {
+  const data = { message: 'Hello' };
+
+  // 检查客户端接受什么类型
+  const accepted = req.accepts(['json', 'xml', 'html']);
+
+  switch (accepted) {
+    case 'json':
+      res.json(data);
+      break;
+    case 'xml':
+      res.set('Content-Type', 'application/xml');
+      res.send(`<response><message>${data.message}</message></response>`);
+      break;
+    case 'html':
+      res.send(`<h1>${data.message}</h1>`);
+      break;
+    default:
+      res.status(406).send('Not Acceptable');
+  }
+});
+
+// Accept-Encoding - 压缩协商
+app.get('/large-data', (req, res) => {
+  const encoding = req.acceptsEncodings(['gzip', 'deflate', 'br']);
+
+  if (encoding) {
+    // 使用对应的压缩方式
+    console.log(`Client accepts ${encoding} encoding`);
+  }
+
+  // 通常由 compression 中间件自动处理
+});
+
+// Accept-Language - 语言协商
+app.get('/', (req, res) => {
+  const language = req.acceptsLanguages(['zh', 'en', 'ja']);
+
+  switch (language) {
+    case 'zh':
+      res.send('你好');
+      break;
+    case 'en':
+      res.send('Hello');
+      break;
+    case 'ja':
+      res.send('こんにちは');
+      break;
+    default:
+      res.send('Hello');
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> User-Agent 处理</h2>
+
+      <div class="code-block">
+// 简单的设备检测
+function detectDevice(userAgent) {
+  const ua = userAgent.toLowerCase();
+
+  if (/mobile|android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+    return 'mobile';
+  }
+
+  if (/tablet|ipad/i.test(ua)) {
+    return 'tablet';
+  }
+
+  return 'desktop';
+}
+
+app.get('/', (req, res) => {
+  const userAgent = req.get('User-Agent');
+  const device = detectDevice(userAgent);
+
+  res.json({
+    userAgent,
+    device
+  });
+});
+
+// 使用 ua-parser-js 进行详细解析
+const UAParser = require('ua-parser-js');
+
+app.get('/ua-info', (req, res) => {
+  const parser = new UAParser();
+  parser.setUA(req.get('User-Agent'));
+
+  res.json({
+    browser: parser.getBrowser(),
+    os: parser.getOS(),
+    device: parser.getDevice(),
+    engine: parser.getEngine(),
+    cpu: parser.getCPU()
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> X-Forwarded-For 和真实 IP</h2>
+
+      <div class="code-block">
+// 获取客户端真实 IP（反向代理后）
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim()
+    || req.headers['x-real-ip']
+    || req.connection?.remoteAddress
+    || req.socket?.remoteAddress;
+}
+
+// Express 设置信任代理
+app.set('trust proxy', true);  // 信任所有代理
+
+// 或指定特定代理
+app.set('trust proxy', 'loopback, 123.123.123.123');
+
+// 或使用函数
+app.set('trust proxy', (ip) => {
+  return ip === '127.0.0.1' || ip.startsWith('10.');
+});
+
+// 然后可以直接使用 req.ip
+app.get('/ip', (req, res) => {
+  res.json({
+    ip: req.ip,
+    ips: req.ips  // X-Forwarded-For 数组
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 自定义请求头</h2>
+
+      <div class="code-block">
+// 读取自定义请求头
+app.post('/webhook', (req, res) => {
+  const signature = req.get('X-Webhook-Signature');
+  const timestamp = req.get('X-Webhook-Timestamp');
+  const eventType = req.get('X-Event-Type');
+
+  // 验证签名
+  if (!verifySignature(req.body, signature)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  res.json({ received: true });
+});
+
+// CORS 相关自定义头
+// 客户端需要设置 Access-Control-Request-Headers
+// 服务端需要设置 Access-Control-Allow-Headers
+
+app.options('/api', (req, res) => {
+  res.set('Access-Control-Allow-Headers', 'X-API-Key, X-Request-ID');
+  res.sendStatus(204);
+});
+
+app.get('/api', (req, res) => {
+  const apiKey = req.get('X-API-Key');
+  const requestId = req.get('X-Request-ID');
+
+  res.json({ apiKey, requestId });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 req.get() 读取请求头，不区分大小写</li>
+            <li>Authorization 头用于认证，常用 Bearer Token</li>
+            <li>Accept 头用于内容协商</li>
+            <li>使用 trust proxy 配置获取真实 IP</li>
+            <li>自定义请求头常用于 API 认证和追踪</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-4-Cookie处理.html">← 上一节：Cookie 处理</a>
+      <a href="33-6-获取客户端信息.html">下一节：获取客户端信息 →</a>
+    </div>
+  </div>
+</body>
+</html>

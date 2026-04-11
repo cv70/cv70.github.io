@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>56.2 Passport 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="56-1-NestJS认证模块.html">第五十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>56.2 Passport 集成</h1>
+      <p class="subtitle">在 NestJS 中使用 Passport 策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Passport 策略在 NestJS 中的实现</li>
+        <li>学会 Local 策略配置</li>
+        <li>学会 JWT 策略配置</li>
+        <li>理解策略验证流程</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Local 策略实现</h2>
+      <div class="code-block">
+// src/auth/strategies/local.strategy.ts
+import { Strategy } from 'passport-local';
+import { PassportStrategy } from '@nestjs/passport';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { AuthService } from '../auth.service';
+
+@Injectable()
+export class LocalStrategy extends PassportStrategy(Strategy) {
+  constructor(private authService: AuthService) {
+    super({
+      usernameField: 'username',  // 可以改为 'email'
+      passwordField: 'password'
+    });
+  }
+
+  // Passport 自动调用此方法验证用户
+  async validate(username: string, password: string): Promise&lt;any&gt; {
+    const user = await this.authService.validateUser(username, password);
+
+    if (!user) {
+      throw new UnauthorizedException('用户名或密码错误');
+    }
+
+    return user;  // 返回的用户会附加到 req.user
+  }
+}
+
+/*
+验证流程：
+1. LocalAuthGuard 拦截请求
+2. Passport 调用 LocalStrategy.validate()
+3. validate() 调用 AuthService.validateUser()
+4. 验证成功返回用户对象
+5. 用户对象附加到 req.user
+6. 控制器方法可以访问 req.user
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> JWT 策略实现</h2>
+      <div class="code-block">
+// src/auth/strategies/jwt.strategy.ts
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { PassportStrategy } from '@nestjs/passport';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { UsersService } from '../../users/users.service';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor(
+    private configService: ConfigService,
+    private usersService: UsersService
+  ) {
+    super({
+      // 从 Authorization: Bearer <token> 提取
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+
+      // 拒绝过期的 Token
+      ignoreExpiration: false,
+
+      // 密钥
+      secretOrKey: configService.get&lt;string&gt;('JWT_SECRET')
+    });
+  }
+
+  // Passport 自动调用此方法验证 Token
+  async validate(payload: any) {
+    // payload 是 JWT 解码后的内容
+    // { sub: userId, username: 'alice', role: 'admin', iat: ..., exp: ... }
+
+    // 可选：验证用户是否存在
+    const user = await this.usersService.findById(payload.sub);
+
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('账户已被禁用');
+    }
+
+    // 返回的对象会附加到 req.user
+    return {
+      id: payload.sub,
+      username: payload.username,
+      role: payload.role
+    };
+  }
+}
+
+// 从其他地方提取 JWT
+@Injectable()
+export class JwtCookieStrategy extends PassportStrategy(Strategy, 'jwt-cookie') {
+  constructor(configService: ConfigService) {
+    super({
+      // 从 Cookie 提取
+      jwtFromRequest: (req) => {
+        return req?.cookies?.access_token || null;
+      },
+      ignoreExpiration: false,
+      secretOrKey: configService.get&lt;string&gt;('JWT_SECRET')
+    });
+  }
+
+  async validate(payload: any) {
+    return { id: payload.sub, username: payload.username, role: payload.role };
+  }
+}
+
+// 从 URL 参数提取
+@Injectable()
+export class JwtQueryStrategy extends PassportStrategy(Strategy, 'jwt-query') {
+  constructor(configService: ConfigService) {
+    super({
+      jwtFromRequest: ExtractJwt.fromUrlQueryParameter('token'),
+      ignoreExpiration: false,
+      secretOrKey: configService.get&lt;string&gt;('JWT_SECRET')
+    });
+  }
+
+  async validate(payload: any) {
+    return { id: payload.sub, username: payload.username, role: payload.role };
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">策略命名</div>
+          <p>PassportStrategy 的第二个参数是策略名称。不指定时使用默认名称（'jwt'、'local'等）。可以创建多个同名策略的不同实例。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 守卫实现</h2>
+      <div class="code-block">
+// src/auth/guards/local-auth.guard.ts
+import { Injectable } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+
+@Injectable()
+export class LocalAuthGuard extends AuthGuard('local') {}
+
+// src/auth/guards/jwt-auth.guard.ts
+import { Injectable, ExecutionContext } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
+
+  canActivate(context: ExecutionContext) {
+    // 检查是否标记为公开接口
+    const isPublic = this.reflector.getAllAndOverride&lt;boolean&gt;(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (isPublic) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+}
+
+// 公开接口装饰器
+// src/auth/decorators/public.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+// 使用示例
+@Controller('posts')
+export class PostsController {
+  @Public()
+  @Get()
+  findAll() {
+    // 无需认证
+  }
+
+  @Post()
+  create() {
+    // 需要认证
+  }
+}
+
+// 全局启用 JWT 守卫
+// src/app.module.ts
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+
+@Module({
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard
+    }
+  ]
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 多策略组合</h2>
+      <div class="code-block">
+// 组合多个策略
+// src/auth/guards/optional-jwt-auth.guard.ts
+import { Injectable, ExecutionContext } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+
+@Injectable()
+export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
+  canActivate(context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest();
+
+    // 没有 Token 也放行
+    if (!request.headers.authorization) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+
+  handleRequest(err: any, user: any) {
+    // 忽略错误，允许无用户通过
+    return user;
+  }
+}
+
+// JWT + API Key 双重认证
+@Injectable()
+export class JwtOrApiKeyGuard extends AuthGuard(['jwt', 'apikey']) {
+  constructor() {
+    super();
+  }
+}
+
+// API Key 策略
+// src/auth/strategies/api-key.strategy.ts
+import { Strategy } from 'passport-custom';
+import { PassportStrategy } from '@nestjs/passport';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+
+@Injectable()
+export class ApiKeyStrategy extends PassportStrategy(Strategy, 'apikey') {
+  constructor(private usersService: UsersService) {
+    super();
+  }
+
+  async validate(req: Request): Promise&lt;any&gt; {
+    const apiKey = req.headers['x-api-key'] as string;
+
+    if (!apiKey) {
+      throw new UnauthorizedException('API Key 缺失');
+    }
+
+    const user = await this.usersService.findByApiKey(apiKey);
+
+    if (!user) {
+      throw new UnauthorizedException('无效的 API Key');
+    }
+
+    return user;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👤</span> 当前用户装饰器</h2>
+      <div class="code-block">
+// src/auth/decorators/current-user.decorator.ts
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export const CurrentUser = createParamDecorator(
+  (data: string, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user;
+
+    // 如果指定了字段，返回该字段
+    return data ? user?.[data] : user;
+  }
+);
+
+// 使用示例
+@Controller('profile')
+@UseGuards(JwtAuthGuard)
+export class ProfileController {
+  @Get()
+  getProfile(@CurrentUser() user: any) {
+    return user;
+  }
+
+  @Get('username')
+  getUsername(@CurrentUser('username') username: string) {
+    return { username };
+  }
+
+  @Get('id')
+  getUserId(@CurrentUser('id') id: number) {
+    return { id };
+  }
+}
+
+// 类型安全的用户装饰器
+interface UserPayload {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+}
+
+export const CurrentUser = createParamDecorator(
+  (data: keyof UserPayload | undefined, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user as UserPayload;
+
+    return data ? user?.[data] : user;
+  }
+);
+
+// 使用
+@Get()
+getProfile(@CurrentUser() user: UserPayload) {
+  return user;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• PassportStrategy 基类简化策略实现</li>
+            <li>• LocalStrategy 用于用户名密码登录</li>
+            <li>• JwtStrategy 用于 API 认证</li>
+            <li>• AuthGuard 包装策略为守卫</li>
+            <li>• CurrentUser 装饰器获取当前用户</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="56-1-NestJS认证模块.html">← 上一节：NestJS认证模块</a>
+      <a href="56-3-Guards守卫.html">下一节：Guards守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

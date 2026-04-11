@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>100.5 自动化部署 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="100-1-CICD概念.html">第100章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>100.5 自动化部署</h1>
+      <p class="subtitle">构建端到端的自动化部署流程</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解不同部署策略的适用场景</li>
+        <li>掌握 Docker 镜像构建与推送</li>
+        <li>学会配置自动化部署流水线</li>
+        <li>了解回滚机制与安全实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Automated Deployment" class="card-image">
+      <h3 class="card-title">部署策略</h3>
+      <p class="card-text">
+        选择合适的部署策略对于保证服务稳定性和用户体验至关重要。
+        不同的策略适用于不同的场景和风险承受能力。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 部署策略对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>特点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>滚动更新</strong></td>
+            <td>逐步替换旧版本</td>
+            <td>常规发布，资源有限</td>
+          </tr>
+          <tr>
+            <td><strong>蓝绿部署</strong></td>
+            <td>两套环境，瞬间切换</td>
+            <td>需要快速回滚的场景</td>
+          </tr>
+          <tr>
+            <td><strong>金丝雀发布</strong></td>
+            <td>小流量验证后全量</td>
+            <td>风险较高的重大更新</td>
+          </tr>
+          <tr>
+            <td><strong>A/B 测试</strong></td>
+            <td>同时运行多个版本</td>
+            <td>功能验证和数据对比</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐳</span> Docker 镜像构建与推送</h2>
+      <div class="code-block">
+<span class="comment"># GitHub Actions Docker 构建</span>
+<span class="keyword">jobs</span>:
+  <span class="keyword">build-and-push</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">permissions</span>:
+      <span class="keyword">contents</span>: <span class="string">read</span>
+      <span class="keyword">packages</span>: <span class="string">write</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Set up QEMU</span>
+        <span class="keyword">uses</span>: <span class="string">docker/setup-qemu-action@v3</span>
+
+      - <span class="keyword">name</span>: <span class="string">Set up Docker Buildx</span>
+        <span class="keyword">uses</span>: <span class="string">docker/setup-buildx-action@v3</span>
+
+      - <span class="keyword">name</span>: <span class="string">Login to GitHub Container Registry</span>
+        <span class="keyword">uses</span>: <span class="string">docker/login-action@v3</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">registry</span>: <span class="string">ghcr.io</span>
+          <span class="keyword">username</span>: <span class="string">${{ github.actor }}</span>
+          <span class="keyword">password</span>: <span class="string">${{ secrets.GITHUB_TOKEN }}</span>
+
+      - <span class="keyword">name</span>: <span class="string">Extract metadata</span>
+        <span class="keyword">id</span>: <span class="string">meta</span>
+        <span class="keyword">uses</span>: <span class="string">docker/metadata-action@v5</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">images</span>: <span class="string">ghcr.io/${{ github.repository }}</span>
+          <span class="keyword">tags</span>: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - <span class="keyword">name</span>: <span class="string">Build and push</span>
+        <span class="keyword">uses</span>: <span class="string">docker/build-push-action@v5</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">context</span>: <span class="string">.</span>
+          <span class="keyword">platforms</span>: <span class="string">linux/amd64,linux/arm64</span>
+          <span class="keyword">push</span>: <span class="string">true</span>
+          <span class="keyword">tags</span>: <span class="string">${{ steps.meta.outputs.tags }}</span>
+          <span class="keyword">labels</span>: <span class="string">${{ steps.meta.outputs.labels }}</span>
+          <span class="keyword">cache-from</span>: <span class="string">type=gha</span>
+          <span class="keyword">cache-to</span>: <span class="string">type=gha,mode=max</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> SSH 部署配置</h2>
+      <div class="code-block">
+<span class="keyword">jobs</span>:
+  <span class="keyword">deploy</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">needs</span>: <span class="string">build-and-push</span>
+    <span class="keyword">if</span>: <span class="string">github.ref == 'refs/heads/main'</span>
+    <span class="keyword">environment</span>:
+      <span class="keyword">name</span>: <span class="string">production</span>
+      <span class="keyword">url</span>: <span class="string">https://example.com</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">name</span>: <span class="string">Deploy to server</span>
+        <span class="keyword">uses</span>: <span class="string">appleboy/ssh-action@v1.0.0</span>
+        <span class="keyword">with</span>:
+          <span class="keyword">host</span>: <span class="string">${{ secrets.SERVER_HOST }}</span>
+          <span class="keyword">username</span>: <span class="string">${{ secrets.SERVER_USER }}</span>
+          <span class="keyword">key</span>: <span class="string">${{ secrets.SSH_PRIVATE_KEY }}</span>
+          <span class="keyword">port</span>: <span class="string">22</span>
+          <span class="keyword">script</span>: <span class="string">|
+            cd /app/myapp
+
+            # 拉取最新镜像
+            docker compose pull
+
+            # 滚动更新
+            docker compose up -d --no-deps --build app
+
+            # 清理旧镜像
+            docker image prune -f
+
+            # 健康检查
+            sleep 10
+            curl -f http://localhost:3000/health || exit 1
+
+            echo "Deployment successful!"</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⎈</span> Kubernetes 部署</h2>
+      <div class="code-block">
+<span class="keyword">jobs</span>:
+  <span class="keyword">deploy-k8s</span>:
+    <span class="keyword">runs-on</span>: <span class="string">ubuntu-latest</span>
+    <span class="keyword">needs</span>: <span class="string">build-and-push</span>
+
+    <span class="keyword">steps</span>:
+      - <span class="keyword">uses</span>: <span class="string">actions/checkout@v4</span>
+
+      - <span class="keyword">name</span>: <span class="string">Set up kubectl</span>
+        <span class="keyword">uses</span>: <span class="string">azure/setup-kubectl@v3</span>
+
+      - <span class="keyword">name</span>: <span class="string">Configure kubeconfig</span>
+        <span class="keyword">run</span>: <span class="string">|
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config</span>
+
+      - <span class="keyword">name</span>: <span class="string">Deploy to Kubernetes</span>
+        <span class="keyword">run</span>: <span class="string">|
+          # 更新镜像版本
+          kubectl set image deployment/myapp \
+            myapp=ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            -n production
+
+          # 等待滚动更新完成
+          kubectl rollout status deployment/myapp -n production --timeout=300s
+
+          # 验证部署
+          kubectl get pods -n production -l app=myapp</span>
+
+      - <span class="keyword">name</span>: <span class="string">Rollback on failure</span>
+        <span class="keyword">if</span>: <span class="string">failure()</span>
+        <span class="keyword">run</span>: <span class="string">kubectl rollout undo deployment/myapp -n production</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 回滚机制</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">自动回滚</h3>
+          <div class="code-block">
+<span class="comment"># 健康检查失败自动回滚</span>
+- <span class="keyword">name</span>: <span class="string">Health check</span>
+  <span class="keyword">run</span>: <span class="string">|
+    for i in {1..30}; do
+      if curl -f http://localhost:3000/health; then
+        exit 0
+      fi
+      sleep 2
+    done
+    exit 1</span>
+
+- <span class="keyword">name</span>: <span class="string">Rollback</span>
+  <span class="keyword">if</span>: <span class="string">failure()</span>
+  <span class="keyword">run</span>: <span class="string">|
+    docker compose down
+    docker compose up -d --force-recreate</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">手动回滚</h3>
+          <div class="code-block">
+<span class="comment"># 保留历史版本便于回滚</span>
+<span class="keyword">tags</span>: |
+  type=semver,pattern={{version}}
+  type=sha,prefix=v
+  type=raw,value=latest
+
+<span class="comment"># 回滚到指定版本</span>
+docker compose down
+docker tag myapp:v-abc123 myapp:latest
+docker compose up -d
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">部署安全检查清单</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>确保敏感信息通过 Secrets 管理，不要硬编码</li>
+          <li>使用环境保护规则，审批后再部署生产</li>
+          <li>配置部署通知，及时获知部署状态</li>
+          <li>保留足够的历史版本用于回滚</li>
+          <li>测试回滚流程，确保紧急情况可用</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 选择合适的部署策略：滚动更新、蓝绿、金丝雀</li>
+            <li>• 使用 Docker Buildx 构建多平台镜像</li>
+            <li>• 配置健康检查确保部署成功</li>
+            <li>• 建立完善的回滚机制应对问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="100-4-自动化测试集成.html">← 上一节</a>
+      <a href="../chapter101/101-1-云服务器部署.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

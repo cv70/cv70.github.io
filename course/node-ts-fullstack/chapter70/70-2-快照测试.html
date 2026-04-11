@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>70.2 快照测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="70-1-模拟模块.html">上一节</a></li>
+      <li><a href="70-3-参数化测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>70.2 快照测试</h1>
+      <p class="subtitle">第十部分：测试篇 - 掌握快照测试技术</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 快照测试简介</h2>
+      <p>快照测试是一种测试方法，它会保存值的快照，并在后续测试中比较当前值是否与快照匹配。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">快照测试的价值</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>捕获意外的变化</li>
+            <li>适合测试配置对象、API 响应、UI 组件渲染结果</li>
+            <li>减少手动编写断言的工作量</li>
+            <li>作为"活文档"记录预期输出</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> toMatchSnapshot</h2>
+
+      <div class="code-block">// 基本快照测试
+describe('Snapshot Testing', () => {
+  test('object snapshot', () => {
+    const user = {
+      name: 'John Doe',
+      email: 'john@example.com',
+      age: 30
+    };
+
+    // 第一次运行会创建快照
+    // 后续运行会比较是否匹配
+    expect(user).toMatchSnapshot();
+  });
+
+  test('array snapshot', () => {
+    const items = [
+      { id: 1, name: 'Item 1' },
+      { id: 2, name: 'Item 2' },
+      { id: 3, name: 'Item 3' }
+    ];
+
+    expect(items).toMatchSnapshot();
+  });
+});</div>
+
+      <h3>生成的快照文件</h3>
+      <div class="code-block">// __snapshots__/example.test.ts.snap
+exports[`Snapshot Testing array snapshot 1`] = `
+Array [
+  Object {
+    "id": 1,
+    "name": "Item 1",
+  },
+  Object {
+    "id": 2,
+    "name": "Item 2",
+  },
+  Object {
+    "id": 3,
+    "name": "Item 3",
+  },
+]
+`;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> toMatchInlineSnapshot</h2>
+
+      <div class="code-block">// 内联快照：快照内容直接写在代码中
+describe('Inline Snapshot', () => {
+  test('inline object snapshot', () => {
+    const config = {
+      apiUrl: 'https://api.example.com',
+      timeout: 5000,
+      retries: 3
+    };
+
+    // 快照内容会自动生成并插入到代码中
+    expect(config).toMatchInlineSnapshot(`
+Object {
+  "apiUrl": "https://api.example.com",
+  "retries": 3,
+  "timeout": 5000,
+}
+`);
+  });
+
+  test('string inline snapshot', () => {
+    const greeting = 'Hello, World!';
+    expect(greeting).toMatchInlineSnapshot(`"Hello, World!"`);
+  });
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">内联快照 vs 外部快照</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>内联快照：快照在测试文件中，便于代码审查</li>
+            <li>外部快照：快照在独立文件中，适合大型对象</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 属性匹配器</h2>
+
+      <div class="code-block">// 对于动态值，使用属性匹配器
+describe('Property Matchers', () => {
+  test('user with dynamic values', () => {
+    const user = {
+      id: 'random-uuid-12345',
+      name: 'John Doe',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // 对于动态值，使用 expect.any
+    expect(user).toMatchSnapshot({
+      id: expect.any(String),
+      createdAt: expect.any(Date),
+      updatedAt: expect.any(Date)
+    });
+  });
+
+  test('API response with dynamic data', () => {
+    const response = {
+      data: {
+        users: [
+          { id: 'user-1', name: 'John' },
+          { id: 'user-2', name: 'Jane' }
+        ]
+      },
+      meta: {
+        total: 2,
+        page: 1,
+        timestamp: Date.now()
+      }
+    };
+
+    expect(response).toMatchSnapshot({
+      meta: {
+        total: expect.any(Number),
+        page: expect.any(Number),
+        timestamp: expect.any(Number)
+      }
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 更新快照</h2>
+
+      <div class="code-block"># 当快照不匹配且是预期变化时，更新快照
+
+# 更新所有失败的快照
+npm test -- -u
+
+# 或
+npm test -- --updateSnapshot
+
+# 只更新特定测试的快照
+npm test -- -u -t "test name"</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>更新快照时应该仔细审查变化，确保不是 Bug 导致的不匹配。建议在代码审查中检查快照变化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 快照测试最佳实践</h2>
+
+      <h3>应该测试的</h3>
+      <div class="code-block">// ✅ 配置对象
+test('default config', () => {
+  expect(getDefaultConfig()).toMatchSnapshot();
+});
+
+// ✅ API 响应结构
+test('API response structure', async () => {
+  const response = await fetchUser(1);
+  expect(response).toMatchSnapshot({
+    id: expect.any(String),
+    createdAt: expect.any(String)
+  });
+});
+
+// ✅ 生成的代码
+test('generated code', () => {
+  const code = generateCode(schema);
+  expect(code).toMatchSnapshot();
+});</div>
+
+      <h3>应该避免的</h3>
+      <div class="code-block">// ❌ 避免快照过大
+test('large data', () => {
+  // 快照太大，难以审查
+  expect(largeDataset).toMatchSnapshot();
+});
+
+// ❌ 避免快照频繁变化
+test('timestamp', () => {
+  expect({ time: Date.now() }).toMatchSnapshot();
+});
+
+// ✅ 正确做法：使用属性匹配器
+test('timestamp', () => {
+  expect({ time: Date.now() }).toMatchSnapshot({
+    time: expect.any(Number)
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 快照序列化</h2>
+
+      <div class="code-block">// 自定义序列化器
+// 在 jest.config.ts 中配置
+export default {
+  snapshotSerializers: ['./tests/serializers/mySerializer.js']
+};
+
+// tests/serializers/mySerializer.js
+module.exports = {
+  test: (val) => val &amp;&amp; val.isCustomType,
+  serialize: (val, config, indentation, depth, refs, printer) => {
+    return `CustomType { value: ${printer(val.value, config, indentation, depth, refs)} }`;
+  }
+};
+
+// pretty-format 内置序列化器
+import prettyFormat from 'pretty-format';
+const { DOMElement, DOMCollection } = prettyFormat.plugins;
+
+module.exports = {
+  snapshotSerializers: [
+    // DOM 元素序列化
+    DOMElement,
+    DOMCollection
+  ]
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 异常快照</h2>
+
+      <div class="code-block">describe('Error Snapshots', () => {
+  test('error message snapshot', () => {
+    const error = new Error('Something went wrong');
+    expect(error).toMatchSnapshot();
+  });
+
+  test('toThrowErrorMatchingSnapshot', () => {
+    const throwError = () => {
+      throw new Error('Custom error message');
+    };
+
+    expect(throwError).toThrowErrorMatchingSnapshot();
+  });
+
+  test('toThrowErrorMatchingInlineSnapshot', () => {
+    const throwError = () => {
+      throw new Error('Custom error message');
+    };
+
+    expect(throwError).toThrowErrorMatchingInlineSnapshot(`"Custom error message"`);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 快照文件管理</h2>
+
+      <div class="code-block"># 快照文件结构
+__snapshots__/
+  api.test.ts.snap
+  config.test.ts.snap
+  user.test.ts.snap
+
+# .gitignore 通常不忽略快照文件
+# 快照应该提交到版本控制
+
+# 清理未使用的快照
+npm test -- -u --testPathPattern="none"</div>
+
+      <h3>快照文件配置</h3>
+      <div class="code-block">// jest.config.ts
+export default {
+  // 快照文件位置
+  snapshotSerializers: [],
+
+  // 快照格式化
+  snapshotFormat: {
+    escapeString: true,
+    printBasicPrototype: true
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>toMatchSnapshot 将快照保存在独立文件</li>
+            <li>toMatchInlineSnapshot 将快照嵌入测试代码</li>
+            <li>使用属性匹配器处理动态值</li>
+            <li>快照应该提交到版本控制</li>
+            <li>避免快照过大或过于频繁变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="70-1-模拟模块.html">← 上一节：模拟模块</a>
+      <a href="70-3-参数化测试.html">下一节：参数化测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

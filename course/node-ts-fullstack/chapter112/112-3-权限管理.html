@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>112.3 权限管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="112-1-需求分析.html">第112章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>112.3 权限管理</h1>
+      <p class="subtitle">RBAC权限控制实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解RBAC权限模型</li>
+        <li>掌握权限实体设计</li>
+        <li>学会权限中间件实现</li>
+        <li>了解细粒度权限控制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> RBAC模型</h2>
+      <div class="code-block">
+// RBAC (Role-Based Access Control)
+
+// 用户-角色-权限关系
+/*
+User ←→ Role ←→ Permission
+
+用户可以有多个角色
+角色可以有多个权限
+权限控制具体操作
+*/
+
+// 权限类型
+enum PermissionAction {
+  CREATE = 'create',
+  READ = 'read',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  PUBLISH = 'publish',
+  MANAGE = 'manage'  // 管理权限
+}
+
+// 权限资源
+interface Permission {
+  resource: string;     // 资源类型：article, user, media
+  action: PermissionAction;
+  conditions?: {
+    own?: boolean;      // 仅自己的内容
+    roles?: string[];   // 特定角色
+  };
+}
+
+// 示例权限配置
+const roles = {
+  admin: {
+    name: '管理员',
+    permissions: [
+      { resource: '*', action: PermissionAction.MANAGE }
+    ]
+  },
+  editor: {
+    name: '编辑',
+    permissions: [
+      { resource: 'article', action: PermissionAction.CREATE },
+      { resource: 'article', action: PermissionAction.READ },
+      { resource: 'article', action: PermissionAction.UPDATE, conditions: { own: true } },
+      { resource: 'article', action: PermissionAction.DELETE, conditions: { own: true } },
+      { resource: 'media', action: PermissionAction.CREATE },
+      { resource: 'media', action: PermissionAction.READ },
+    ]
+  },
+  author: {
+    name: '作者',
+    permissions: [
+      { resource: 'article', action: PermissionAction.CREATE },
+      { resource: 'article', action: PermissionAction.READ },
+      { resource: 'article', action: PermissionAction.UPDATE, conditions: { own: true } },
+    ]
+  },
+  viewer: {
+    name: '访客',
+    permissions: [
+      { resource: 'article', action: PermissionAction.READ },
+    ]
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">RBAC优势</div>
+          <p>简化权限管理、角色继承、易于维护。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 权限实体与中间件</h2>
+      <div class="code-block">
+// role.entity.ts
+@Entity('roles')
+export class Role {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ unique: true })
+  name: string;
+
+  @Column({ nullable: true })
+  description: string;
+
+  @Column({ type: 'json' })
+  permissions: Permission[];
+
+  @ManyToMany(() => User, user => user.roles)
+  users: User[];
+}
+
+// user.entity.ts 添加角色关联
+@Entity('users')
+export class User {
+  // ...其他字段
+
+  @ManyToMany(() => Role, role => role.users)
+  @JoinTable()
+  roles: Role[];
+}
+
+// permission.guard.ts
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+
+@Injectable()
+export class PermissionGuard implements CanActivate {
+  constructor(private permissionService: PermissionService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user) {
+      throw new ForbiddenException('未登录');
+    }
+
+    // 获取需要的权限
+    const requiredPermission = this.reflector.get<Permission>(
+      'permission',
+      context.getHandler()
+    );
+
+    if (!requiredPermission) {
+      return true;  // 无权限要求
+    }
+
+    // 检查权限
+    const hasPermission = await this.permissionService.checkPermission(
+      user.id,
+      requiredPermission,
+      request.params  // 传入请求参数用于own检查
+    );
+
+    if (!hasPermission) {
+      throw new ForbiddenException('无权限');
+    }
+
+    return true;
+  }
+}
+
+// permission.service.ts
+@Injectable()
+export class PermissionService {
+  constructor(
+    @InjectRepository(User) private userRepo: Repository<User>,
+  ) {}
+
+  async checkPermission(
+    userId: string,
+    required: Permission,
+    params?: any
+  ): Promise<boolean> {
+    // 获取用户角色
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['roles'],
+    });
+
+    if (!user || !user.roles) {
+      return false;
+    }
+
+    // 遍历角色权限
+    for (const role of user.roles) {
+      for (const permission of role.permissions) {
+        // 检查资源匹配
+        if (permission.resource !== '*' && permission.resource !== required.resource) {
+          continue;
+        }
+
+        // 检查操作匹配
+        if (permission.action !== PermissionAction.MANAGE && permission.action !== required.action) {
+          continue;
+        }
+
+        // 检查条件
+        if (permission.conditions?.own && required.conditions?.own) {
+          // 需要检查是否是自己的内容
+          const contentId = params?.id;
+          const content = await this.getContent(contentId);
+
+          if (content.createdBy !== userId) {
+            continue;  // 不是自己的内容，继续检查下一个权限
+          }
+        }
+
+        return true;  // 找到匹配的权限
+      }
+    }
+
+    return false;
+  }
+}
+
+// 使用权限守卫
+@Controller('articles')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+export class ArticleController {
+  @Post()
+  @RequirePermission({ resource: 'article', action: PermissionAction.CREATE })
+  async create() {}
+
+  @Put(':id')
+  @RequirePermission({ resource: 'article', action: PermissionAction.UPDATE, conditions: { own: true } })
+  async update() {}
+
+  @Delete(':id')
+  @RequirePermission({ resource: 'article', action: PermissionAction.DELETE })
+  async remove() {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• RBAC通过角色管理权限</li>
+            <li>• 权限由资源和操作组成</li>
+            <li>• 支持条件约束实现细粒度控制</li>
+            <li>• 守卫实现声明式权限检查</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="112-2-内容模型设计.html">← 上一节：内容模型设计</a>
+      <a href="112-4-富文本编辑.html">下一节：富文本编辑 →</a>
+    </div>
+  </div>
+</body>
+</html>

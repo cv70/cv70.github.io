@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>54.4 OAuth 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="54-1-Passport简介.html">第五十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>54.4 OAuth 集成</h1>
+      <p class="subtitle">实现第三方登录（Google、GitHub）</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 OAuth 2.0 授权流程</li>
+        <li>实现 Google OAuth 登录</li>
+        <li>实现 GitHub OAuth 登录</li>
+        <li>处理第三方账号绑定</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> OAuth 2.0 流程</h2>
+      <div class="code-block">
+// OAuth 2.0 授权码流程
+
+┌─────────┐                                  ┌─────────────┐
+│  User   │                                  │   Client    │
+│ (Browser)│                                  │  (Your App) │
+└────┬────┘                                  └──────┬──────┘
+     │                                              │
+     │ 1. 点击"使用 Google 登录"                      │
+     │──────────────────────────────────────────────>│
+     │                                              │
+     │ 2. 重定向到 Google 授权页面                     │
+     │<──────────────────────────────────────────────│
+     │                                              │
+     │ 3. 用户同意授权                                │
+     │───────────────────────────────────────>┌─────┴─────┐
+     │                                         │   Google  │
+     │ 4. 重定向回应用（带授权码）                  │   OAuth   │
+     │<────────────────────────────────────────│  Server   │
+     │                                         └───────────┘
+     │                                              │
+     │                         5. 用授权码换取 Token  │
+     │                                              │────────>│
+     │                                              │         │
+     │                         6. 返回 Access Token │<────────│
+     │                                              │         │
+     │                         7. 获取用户信息       │         │
+     │                                              │────────>│
+     │                                              │         │
+     │                         8. 返回用户信息       │<────────│
+     │                                              │         │
+     │ 9. 创建会话/JWT                               │         │
+     │<──────────────────────────────────────────────│         │
+
+// 关键概念：
+// - client_id: 应用标识
+// - client_secret: 应用密钥
+// - redirect_uri: 回调地址
+// - scope: 请求的权限范围
+// - code: 授权码（一次性）
+// - access_token: 访问令牌
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装 OAuth 策略
+npm install passport-google-oauth20 passport-github2
+
+# 安装类型定义
+npm install -D @types/passport-google-oauth20 @types/passport-github2
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Google OAuth 配置</h2>
+      <div class="code-block">
+// src/config/passport.ts
+import passport from 'passport';
+import { Strategy as GoogleStrategy, Profile } from 'passport-google-oauth20';
+import { User } from '../models/User';
+
+// Google OAuth 策略
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/api/auth/google/callback',
+      scope: ['profile', 'email'],
+    },
+    async (
+      accessToken: string,
+      refreshToken: string,
+      profile: Profile,
+      done: Function
+    ) => {
+      try {
+        // 查找是否已绑定 Google 账号
+        let user = await User.findOne({
+          'oauth.google.id': profile.id,
+        });
+
+        if (user) {
+          return done(null, user);
+        }
+
+        // 检查邮箱是否已注册
+        const email = profile.emails?.[0]?.value;
+        if (email) {
+          user = await User.findOne({ email });
+
+          if (user) {
+            // 绑定 Google 账号到现有用户
+            user.oauth = {
+              ...user.oauth,
+              google: {
+                id: profile.id,
+                accessToken,
+                refreshToken,
+              },
+            };
+            await user.save();
+            return done(null, user);
+          }
+        }
+
+        // 创建新用户
+        const newUser = await User.create({
+          email: email,
+          username: profile.displayName?.replace(/\s+/g, '_').toLowerCase() ||
+                    `google_${profile.id}`,
+          password: Math.random().toString(36).slice(-16), // 随机密码
+          avatar: profile.photos?.[0]?.value,
+          oauth: {
+            google: {
+              id: profile.id,
+              accessToken,
+              refreshToken,
+            },
+          },
+          isEmailVerified: true, // Google 邮箱已验证
+        });
+
+        done(null, newUser);
+      } catch (error) {
+        done(error, false);
+      }
+    }
+  )
+);
+
+export default passport;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐙</span> GitHub OAuth 配置</h2>
+      <div class="code-block">
+// src/config/passport.ts
+import { Strategy as GitHubStrategy, Profile } from 'passport-github2';
+
+// GitHub OAuth 策略
+passport.use(
+  new GitHubStrategy(
+    {
+      clientID: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+      callbackURL: process.env.GITHUB_CALLBACK_URL || '/api/auth/github/callback',
+      scope: ['user:email'],
+    },
+    async (
+      accessToken: string,
+      refreshToken: string,
+      profile: Profile,
+      done: Function
+    ) => {
+      try {
+        // 查找是否已绑定 GitHub 账号
+        let user = await User.findOne({
+          'oauth.github.id': profile.id,
+        });
+
+        if (user) {
+          return done(null, user);
+        }
+
+        // 检查邮箱是否已注册
+        const email = profile.emails?.[0]?.value;
+        if (email) {
+          user = await User.findOne({ email });
+
+          if (user) {
+            // 绑定 GitHub 账号到现有用户
+            user.oauth = {
+              ...user.oauth,
+              github: {
+                id: profile.id,
+                accessToken,
+                refreshToken,
+              },
+            };
+            await user.save();
+            return done(null, user);
+          }
+        }
+
+        // 创建新用户
+        const newUser = await User.create({
+          email: email || `${profile.id}@github.placeholder`,
+          username: profile.username || `github_${profile.id}`,
+          password: Math.random().toString(36).slice(-16),
+          avatar: profile.photos?.[0]?.value,
+          oauth: {
+            github: {
+              id: profile.id,
+              accessToken,
+              refreshToken,
+            },
+          },
+        });
+
+        done(null, newUser);
+      } catch (error) {
+        done(error, false);
+      }
+    }
+  )
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛣️</span> OAuth 路由</h2>
+      <div class="code-block">
+// src/routes/auth.routes.ts
+import { Router } from 'express';
+import passport from '../config/passport';
+import { AuthController } from '../controllers/auth.controller';
+import { authenticate } from '../middleware/auth.middleware';
+
+const router = Router();
+const authController = new AuthController();
+
+// Google OAuth
+router.get(
+  '/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get(
+  '/google/callback',
+  passport.authenticate('google', {
+    failureRedirect: '/login?error=google_auth_failed',
+    session: false,
+  }),
+  authController.oauthCallback
+);
+
+// GitHub OAuth
+router.get(
+  '/github',
+  passport.authenticate('github', { scope: ['user:email'] })
+);
+
+router.get(
+  '/github/callback',
+  passport.authenticate('github', {
+    failureRedirect: '/login?error=github_auth_failed',
+    session: false,
+  }),
+  authController.oauthCallback
+);
+
+// 绑定第三方账号（需要登录）
+router.post(
+  '/bind/google',
+  authenticate,
+  (req, res, next) => {
+    passport.authorize('google', { scope: ['profile', 'email'] })(req, res, next);
+  }
+);
+
+router.get(
+  '/bind/google/callback',
+  authenticate,
+  passport.authorize('google', { session: false }),
+  authController.bindOAuthCallback
+);
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> OAuth 控制器</h2>
+      <div class="code-block">
+// src/controllers/auth.controller.ts
+import { Request, Response } from 'express';
+import { JwtService } from '../services/jwt.service';
+
+export class AuthController {
+  // OAuth 回调处理
+  async oauthCallback(req: Request, res: Response) {
+    const user = req.user as any;
+
+    if (!user) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+    }
+
+    // 生成 JWT
+    const payload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const token = JwtService.sign(payload);
+
+    // 重定向到前端，携带 Token
+    res.redirect(
+      `${process.env.FRONTEND_URL}/auth/callback?token=${token}`
+    );
+  }
+
+  // 绑定 OAuth 账号回调
+  async bindOAuthCallback(req: Request, res: Response) {
+    const user = req.user as any;
+    const account = req.account as any; // OAuth 账号信息
+
+    if (!account) {
+      return res.redirect(`${process.env.FRONTEND_URL}/settings?error=bind_failed`);
+    }
+
+    res.redirect(
+      `${process.env.FRONTEND_URL}/settings?success=account_bound`
+    );
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 环境变量配置</h2>
+      <div class="code-block">
+# .env
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_CALLBACK_URL=http://localhost:3000/api/auth/github/callback
+
+# 前端地址
+FRONTEND_URL=http://localhost:5173
+
+# 获取 OAuth 凭证：
+# Google: https://console.cloud.google.com/apis/credentials
+# GitHub: https://github.com/settings/developers
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全提示</div>
+          <p>回调 URL 必须与 OAuth 提供商后台配置的完全一致，包括协议（http/https）、域名、端口和路径。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• OAuth 2.0 使用授权码流程获取用户信息</li>
+            <li>• passport-google-oauth20 实现 Google 登录</li>
+            <li>• passport-github2 实现 GitHub 登录</li>
+            <li>• 处理新用户注册和现有用户绑定</li>
+            <li>• 使用 passport.authorize() 绑定已登录用户的第三方账号</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="54-3-JWT策略.html">← 上一节：JWT 策略</a>
+      <a href="../chapter55/55-1-RBAC模型.html">下一章：RBAC 模型 →</a>
+    </div>
+  </div>
+</body>
+</html>

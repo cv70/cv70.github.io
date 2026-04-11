@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>102.3 Vercel 部署 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="102-1-Serverless概念.html">第102章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>102.3 Vercel 部署</h1>
+      <p class="subtitle">使用 Vercel 部署全栈应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解 Vercel 平台特点与优势</li>
+        <li>掌握 Next.js 应用的 Vercel 部署</li>
+        <li>学会配置环境变量和域名</li>
+        <li>掌握 Serverless Functions 开发</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Vercel Deployment" class="card-image">
+      <h3 class="card-title">Vercel 简介</h3>
+      <p class="card-text">
+        <strong>Vercel</strong> 是一个前端云平台，由 Next.js 团队开发。它提供零配置部署、
+        自动 SSL、全球 CDN、Serverless Functions 等功能，是部署 React、Vue、Next.js 等前端应用的首选平台。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> Vercel 核心特性</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">零配置部署</h3>
+          <p class="card-text">自动检测框架，无需配置</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🌍</div>
+          <h3 class="card-title">全球 CDN</h3>
+          <p class="card-text">全球边缘节点加速</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
+          <h3 class="card-title">自动 HTTPS</h3>
+          <p class="card-text">免费 SSL 证书</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">Git 集成</h3>
+          <p class="card-text">推送即部署，预览分支</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 部署 Next.js 应用</h2>
+      <h3>1. 安装 Vercel CLI</h3>
+      <div class="code-block">
+<span class="comment"># 全局安装</span>
+npm install -g vercel
+
+<span class="comment"># 登录 Vercel</span>
+vercel login
+      </div>
+
+      <h3>2. 项目结构</h3>
+      <div class="code-block">
+my-nextjs-app/
+├── pages/
+│   ├── index.tsx          <span class="comment"># 首页</span>
+│   ├── api/               <span class="comment"># API Routes (Serverless Functions)</span>
+│   │   ├── users.ts
+│   │   └── auth/
+│   │       └── [...nextauth].ts
+│   └── _app.tsx
+├── public/                <span class="comment"># 静态资源</span>
+├── styles/
+├── components/
+├── lib/
+├── next.config.js
+├── vercel.json            <span class="comment"># Vercel 配置（可选）</span>
+└── package.json
+      </div>
+
+      <h3>3. 部署命令</h3>
+      <div class="code-block">
+<span class="comment"># 首次部署</span>
+vercel
+
+<span class="comment"># 生产部署</span>
+vercel --prod
+
+<span class="comment"># 查看部署列表</span>
+vercel list
+
+<span class="comment"># 查看部署详情</span>
+vercel inspect [deployment-url]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> API Routes 示例</h2>
+      <div class="code-block">
+<span class="comment">// pages/api/users.ts</span>
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { prisma } from '@/lib/prisma';
+
+type ResponseData = {
+  success: boolean;
+  data?: any;
+  error?: string;
+};
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<ResponseData>
+) {
+  <span class="comment">// CORS 处理</span>
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  try {
+    switch (req.method) {
+      case 'GET':
+        const users = await prisma.user.findMany();
+        res.status(200).json({ success: true, data: users });
+        break;
+
+      case 'POST':
+        const { name, email } = req.body;
+        const user = await prisma.user.create({
+          data: { name, email }
+        });
+        res.status(201).json({ success: true, data: user });
+        break;
+
+      default:
+        res.setHeader('Allow', ['GET', 'POST']);
+        res.status(405).json({ success: false, error: 'Method not allowed' });
+    }
+  } catch (error) {
+    console.error('API Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> vercel.json 配置</h2>
+      <div class="code-block">
+{
+  "version": 2,
+  "name": "my-nextjs-app",
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://api.example.com"
+  },
+  "functions": {
+    "pages/api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
+  "regions": ["hkg1", "sin1"],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
+  ]
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 环境变量配置</h2>
+      <div class="code-block">
+<span class="comment"># 通过 CLI 设置</span>
+vercel env add DATABASE_URL
+
+<span class="comment"># 环境类型</span>
+<span class="comment"># - Development: 开发环境</span>
+<span class="comment"># - Preview: 预览环境（分支部署）</span>
+<span class="comment"># - Production: 生产环境</span>
+
+<span class="comment"># 查看环境变量</span>
+vercel env ls
+
+<span class="comment"># 拉取环境变量到本地</span>
+vercel env pull .env.local
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 自定义域名</h2>
+      <div class="code-block">
+<span class="comment"># 添加域名</span>
+vercel domains add example.com
+
+<span class="comment"># 在 DNS 提供商添加记录：</span>
+<span class="comment"># A 记录: 76.76.21.21</span>
+<span class="comment"># 或 CNAME 记录: cname.vercel-dns.com</span>
+
+<span class="comment"># 验证域名</span>
+vercel domains inspect example.com
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 部署配置对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>配置项</th>
+            <th>Hobby (免费)</th>
+            <th>Pro ($20/月)</th>
+            <th>Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>部署次数</td>
+            <td>无限制</td>
+            <td>无限制</td>
+            <td>无限制</td>
+          </tr>
+          <tr>
+            <td>函数执行时间</td>
+            <td>10秒</td>
+            <td>60秒</td>
+            <td>可配置</td>
+          </tr>
+          <tr>
+            <td>函数内存</td>
+            <td>1GB</td>
+            <td>3GB</td>
+            <td>可配置</td>
+          </tr>
+          <tr>
+            <td>团队协作</td>
+            <td>不支持</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+          <tr>
+            <td>分析功能</td>
+            <td>基础</td>
+            <td>高级</td>
+            <td>企业级</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Vercel 最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用 vercel.json 配置路由和缓存策略</li>
+          <li>敏感信息通过环境变量管理</li>
+          <li>利用 ISR (增量静态生成) 提升性能</li>
+          <li>API Routes 使用 TypeScript 获得类型安全</li>
+          <li>设置合理的函数超时和内存</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Vercel 是 Next.js 官方推荐的部署平台</li>
+            <li>• API Routes 自动转换为 Serverless Functions</li>
+            <li>• 支持自定义域名和免费 SSL</li>
+            <li>• 通过 vercel.json 配置路由和函数参数</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="102-2-云函数.html">← 上一节</a>
+      <a href="102-4-AWS-Lambda.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

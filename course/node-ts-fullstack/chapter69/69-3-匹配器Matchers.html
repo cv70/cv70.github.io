@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.3 匹配器 Matchers - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="69-2-断言expect.html">上一节</a></li>
+      <li><a href="69-4-测试异步代码.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>69.3 匹配器 Matchers</h1>
+      <p class="subtitle">第十部分：测试篇 - 全面了解 Jest 提供的匹配器</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 匹配器概述</h2>
+      <p>匹配器（Matchers）是 Jest 中用于验证值的函数。Jest 提供了丰富的内置匹配器，同时支持自定义匹配器。</p>
+
+      <div class="code-block">// 匹配器基本用法
+expect(实际值).匹配器(预期值);
+
+// 使用 .not 进行否定
+expect(实际值).not.匹配器(预期值);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 类型检查匹配器</h2>
+
+      <div class="code-block">describe('类型检查匹配器', () => {
+  test('toBeInstanceOf - 检查实例类型', () => {
+    class User {}
+    const user = new User();
+
+    expect(user).toBeInstanceOf(User);
+    expect([]).toBeInstanceOf(Array);
+    expect(new Error()).toBeInstanceOf(Error);
+    expect(new Date()).toBeInstanceOf(Date);
+  });
+
+  test('typeof 检查', () => {
+    // Jest 没有内置的 typeof 匹配器
+    // 可以使用 expect.any() 或自定义
+
+    expect(typeof 'hello').toBe('string');
+    expect(typeof 123).toBe('number');
+    expect(typeof true).toBe('boolean');
+  });
+
+  test('expect.any - 任意类型匹配', () => {
+    expect('hello').toEqual(expect.any(String));
+    expect(123).toEqual(expect.any(Number));
+    expect({}).toEqual(expect.any(Object));
+
+    // 搭配其他匹配器
+    expect({
+      name: 'John',
+      age: 30
+    }).toEqual({
+      name: expect.any(String),
+      age: expect.any(Number)
+    });
+  });
+
+  test('expect.anything - 任意非 null/undefined', () => {
+    expect('hello').toEqual(expect.anything());
+    expect(0).toEqual(expect.anything());
+    expect('').toEqual(expect.anything());
+
+    // null 和 undefined 不匹配
+    expect(null).not.toEqual(expect.anything());
+    expect(undefined).not.toEqual(expect.anything());
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 数组匹配器</h2>
+
+      <div class="code-block">describe('数组匹配器', () => {
+  test('arrayContaining - 包含指定元素', () => {
+    expect([1, 2, 3, 4, 5]).toEqual(
+      expect.arrayContaining([1, 2, 3])
+    );
+
+    expect(['apple', 'banana', 'orange']).toEqual(
+      expect.arrayContaining(['banana'])
+    );
+  });
+
+  test('arrayNotContaining - 不包含指定元素', () => {
+    expect([1, 2, 3]).toEqual(
+      expect.not.arrayContaining([4, 5])
+    );
+  });
+
+  test('toHaveLength - 长度检查', () => {
+    expect([1, 2, 3]).toHaveLength(3);
+    expect([]).toHaveLength(0);
+    expect('hello').toHaveLength(5);
+  });
+
+  test('toContain / toContainEqual', () => {
+    const arr = [1, 2, { a: 1 }];
+
+    // toContain 检查基本类型或引用
+    expect(arr).toContain(1);
+
+    // toContainEqual 检查对象内容
+    expect(arr).toContainEqual({ a: 1 });
+  });
+
+  test('组合使用', () => {
+    const result = {
+      users: [
+        { id: 1, name: 'John' },
+        { id: 2, name: 'Jane' }
+      ]
+    };
+
+    expect(result).toEqual({
+      users: expect.arrayContaining([
+        expect.objectContaining({ name: 'John' })
+      ])
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 对象匹配器</h2>
+
+      <div class="code-block">describe('对象匹配器', () => {
+  test('objectContaining - 包含指定属性', () => {
+    expect({ a: 1, b: 2, c: 3 }).toEqual(
+      expect.objectContaining({ a: 1 })
+    );
+
+    // 可以嵌套
+    expect({
+      user: {
+        name: 'John',
+        age: 30,
+        email: 'john@example.com'
+      }
+    }).toEqual({
+      user: expect.objectContaining({
+        name: 'John'
+      })
+    });
+  });
+
+  test('objectNotContaining - 不包含属性', () => {
+    expect({ a: 1, b: 2 }).toEqual(
+      expect.not.objectContaining({ c: 3 })
+    );
+  });
+
+  test('toHaveProperty - 属性检查', () => {
+    const obj = {
+      user: {
+        profile: {
+          name: 'John'
+        }
+      }
+    };
+
+    // 支持路径
+    expect(obj).toHaveProperty('user.profile.name', 'John');
+    expect(obj).toHaveProperty(['user', 'profile', 'name'], 'John');
+  });
+
+  test('toMatchObject - 部分匹配', () => {
+    const user = {
+      name: 'John',
+      age: 30,
+      email: 'john@example.com',
+      address: {
+        city: 'NYC'
+      }
+    };
+
+    expect(user).toMatchObject({ name: 'John' });
+    expect(user).toMatchObject({
+      address: { city: 'NYC' }
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 字符串匹配器</h2>
+
+      <div class="code-block">describe('字符串匹配器', () => {
+  test('toMatch - 正则匹配', () => {
+    expect('hello world').toMatch(/world/);
+    expect('hello world').toMatch(/^hello/);
+    expect('hello world').toMatch(/world$/);
+    expect('Hello World').toMatch(/hello/i); // 忽略大小写
+
+    // 支持字符串
+    expect('hello world').toMatch('hello');
+  });
+
+  test('stringContaining - 包含字符串', () => {
+    expect('hello world').toEqual(
+      expect.stringContaining('hello')
+    );
+  });
+
+  test('stringMatching - 正则匹配', () => {
+    expect('hello world').toEqual(
+      expect.stringMatching(/hello/)
+    );
+
+    // 组合使用
+    expect({
+      message: 'Error: User not found'
+    }).toEqual({
+      message: expect.stringMatching(/Error:/)
+    });
+  });
+
+  test('toHaveLength - 字符串长度', () => {
+    expect('hello').toHaveLength(5);
+    expect('').toHaveLength(0);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 数字匹配器</h2>
+
+      <div class="code-block">describe('数字匹配器', () => {
+  test('大小比较', () => {
+    const value = 10;
+
+    expect(value).toBeGreaterThan(5);
+    expect(value).toBeGreaterThanOrEqual(10);
+    expect(value).toBeLessThan(20);
+    expect(value).toBeLessThanOrEqual(10);
+  });
+
+  test('toBeCloseTo - 浮点数近似', () => {
+    // 浮点数计算
+    expect(0.1 + 0.2).toBeCloseTo(0.3);
+    expect(0.1 + 0.2).not.toBe(0.3); // 注意！
+
+    // 指定精度
+    expect(Math.PI).toBeCloseTo(3.14, 2);
+    expect(Math.PI).toBeCloseTo(3.14159, 4);
+  });
+
+  test('toBeNaN', () => {
+    expect(NaN).toBeNaN();
+    expect(0 / 0).toBeNaN();
+    expect(1).not.toBeNaN();
+  });
+
+  test('Infinity', () => {
+    expect(Infinity).toBeGreaterThan(1000000);
+    expect(-Infinity).toBeLessThan(-1000000);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 函数匹配器</h2>
+
+      <div class="code-block">describe('函数匹配器', () => {
+  test('toHaveBeenCalled - 被调用', () => {
+    const mockFn = jest.fn();
+
+    mockFn();
+
+    expect(mockFn).toHaveBeenCalled();
+  });
+
+  test('toHaveBeenCalledTimes - 调用次数', () => {
+    const mockFn = jest.fn();
+
+    mockFn();
+    mockFn();
+    mockFn();
+
+    expect(mockFn).toHaveBeenCalledTimes(3);
+  });
+
+  test('toHaveBeenCalledWith - 调用参数', () => {
+    const mockFn = jest.fn();
+
+    mockFn('hello', 'world');
+    mockFn(1, 2, 3);
+
+    expect(mockFn).toHaveBeenCalledWith('hello', 'world');
+    expect(mockFn).toHaveBeenCalledWith(1, 2, 3);
+  });
+
+  test('toHaveBeenLastCalledWith - 最后一次调用的参数', () => {
+    const mockFn = jest.fn();
+
+    mockFn('first');
+    mockFn('second');
+    mockFn('last');
+
+    expect(mockFn).toHaveBeenLastCalledWith('last');
+  });
+
+  test('toHaveReturned - 返回值', () => {
+    const mockFn = jest.fn(() => 'result');
+
+    mockFn();
+
+    expect(mockFn).toHaveReturned();
+    expect(mockFn).toHaveReturnedWith('result');
+  });
+
+  test('toHaveLastReturnedWith - 最后一次返回值', () => {
+    const mockFn = jest.fn();
+    mockFn.mockReturnValueOnce('first');
+    mockFn.mockReturnValueOnce('last');
+
+    mockFn(); // 'first'
+    mockFn(); // 'last'
+
+    expect(mockFn).toHaveLastReturnedWith('last');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 快照匹配器</h2>
+
+      <div class="code-block">describe('快照匹配器', () => {
+  test('toMatchSnapshot - 快照测试', () => {
+    const user = {
+      name: 'John',
+      age: 30,
+      email: 'john@example.com'
+    };
+
+    // 首次运行会创建快照，后续会比较
+    expect(user).toMatchSnapshot();
+  });
+
+  test('toMatchSnapshot - 内联快照', () => {
+    const greeting = 'Hello, World!';
+
+    // 快照内容直接写在代码中
+    expect(greeting).toMatchInlineSnapshot('"Hello, World!"');
+  });
+
+  test('toThrowErrorMatchingSnapshot', () => {
+    const throwError = () => {
+      throw new Error('Something went wrong');
+    };
+
+    expect(throwError).toThrowErrorMatchingSnapshot();
+  });
+
+  test('属性匹配器与快照', () => {
+    const user = {
+      id: 'random-id-123',
+      name: 'John',
+      createdAt: new Date()
+    };
+
+    expect(user).toMatchSnapshot({
+      id: expect.any(String),
+      createdAt: expect.any(Date)
+    });
+  });
+});</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">快照测试注意</div>
+          <p>快照应该作为代码审查的一部分。当快照不匹配时，检查是预期变化还是真正的 Bug。使用 <code>jest -u</code> 更新快照。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 自定义匹配器</h2>
+
+      <div class="code-block">// tests/setup/customMatchers.ts
+declare global {
+  namespace jest {
+    interface Matchers&lt;R&gt; {
+      toBeWithinRange(floor: number, ceiling: number): R;
+    }
+  }
+}
+
+// 定义匹配器
+expect.extend({
+  toBeWithinRange(received: number, floor: number, ceiling: number) {
+    const pass = received &gt;= floor && received &lt;= ceiling;
+
+    return {
+      pass,
+      message: () =&gt;
+        pass
+          ? `expected ${received} not to be within range ${floor} - ${ceiling}`
+          : `expected ${received} to be within range ${floor} - ${ceiling}`
+    };
+  }
+});
+
+// 使用自定义匹配器
+describe('自定义匹配器', () => {
+  test('toBeWithinRange', () => {
+    expect(5).toBeWithinRange(1, 10);
+    expect(100).not.toBeWithinRange(1, 10);
+  });
+});</div>
+
+      <h3>注册自定义匹配器</h3>
+      <div class="code-block">// jest.config.ts
+export default {
+  setupFilesAfterEnv: ['./tests/setup/customMatchers.ts']
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 匹配器速查表</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>类别</th>
+            <th>匹配器</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>相等</td>
+            <td>toBe, toEqual, toStrictEqual</td>
+            <td>值比较</td>
+          </tr>
+          <tr>
+            <td>真值</td>
+            <td>toBeTruthy, toBeFalsy, toBeNull</td>
+            <td>布尔值检查</td>
+          </tr>
+          <tr>
+            <td>数字</td>
+            <td>toBeGreaterThan, toBeCloseTo</td>
+            <td>数字比较</td>
+          </tr>
+          <tr>
+            <td>字符串</td>
+            <td>toMatch, toContain, stringContaining</td>
+            <td>字符串匹配</td>
+          </tr>
+          <tr>
+            <td>数组</td>
+            <td>toContain, arrayContaining, toHaveLength</td>
+            <td>数组检查</td>
+          </tr>
+          <tr>
+            <td>对象</td>
+            <td>toHaveProperty, toMatchObject, objectContaining</td>
+            <td>对象检查</td>
+          </tr>
+          <tr>
+            <td>异常</td>
+            <td>toThrow, toThrowError</td>
+            <td>异常检查</td>
+          </tr>
+          <tr>
+            <td>函数</td>
+            <td>toHaveBeenCalled, toHaveBeenCalledWith</td>
+            <td>Mock 函数检查</td>
+          </tr>
+          <tr>
+            <td>快照</td>
+            <td>toMatchSnapshot, toMatchInlineSnapshot</td>
+            <td>快照测试</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">11.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Jest 提供丰富的内置匹配器，覆盖各种测试场景</li>
+            <li>expect.any() 和 expect.anything() 用于灵活匹配</li>
+            <li>arrayContaining/objectContaining 用于部分匹配</li>
+            <li>快照匹配器用于保持数据结构的一致性</li>
+            <li>可以通过 expect.extend() 创建自定义匹配器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-2-断言expect.html">← 上一节：断言 expect</a>
+      <a href="69-4-测试异步代码.html">下一节：测试异步代码 →</a>
+    </div>
+  </div>
+</body>
+</html>

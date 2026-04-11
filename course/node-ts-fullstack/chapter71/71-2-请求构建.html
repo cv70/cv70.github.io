@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.2 请求构建 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="71-1-Supertest简介.html">上一节</a></li>
+      <li><a href="71-3-断言响应.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>71.2 请求构建</h1>
+      <p class="subtitle">第十部分：测试篇 - 学习构建各种类型的 HTTP 请求</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 基本请求</h2>
+
+      <div class="code-block">import request from 'supertest';
+import app from './app';
+
+// GET 请求
+const response = await request(app)
+  .get('/users');
+
+// POST 请求
+const response = await request(app)
+  .post('/users');
+
+// PUT 请求
+const response = await request(app)
+  .put('/users/1');
+
+// DELETE 请求
+const response = await request(app)
+  .delete('/users/1');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 查询参数</h2>
+
+      <div class="code-block">// 方式一：直接在 URL 中
+await request(app)
+  .get('/users?page=1&limit=10');
+
+// 方式二：使用 query()
+await request(app)
+  .get('/users')
+  .query({ page: 1, limit: 10 });
+
+// 多个同名参数
+await request(app)
+  .get('/search')
+  .query({ tags: ['node', 'typescript', 'jest'] });
+// 生成: /search?tags=node&tags=typescript&tags=jest
+
+// 复杂查询
+await request(app)
+  .get('/products')
+  .query({
+    category: 'electronics',
+    minPrice: 100,
+    maxPrice: 1000,
+    sort: 'price',
+    order: 'desc'
+  });</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 路径参数</h2>
+
+      <div class="code-block">// 路径参数直接拼接
+await request(app)
+  .get('/users/123');
+
+// 使用模板字符串
+const userId = '123';
+await request(app)
+  .get(`/users/${userId}`);
+
+// 多个路径参数
+await request(app)
+  .get('/users/123/posts/456');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 请求体</h2>
+
+      <h3>JSON 请求体</h3>
+      <div class="code-block">// 默认就是 JSON
+await request(app)
+  .post('/users')
+  .send({
+    name: 'John Doe',
+    email: 'john@example.com',
+    age: 30
+  });
+
+// 显式设置 JSON
+await request(app)
+  .post('/users')
+  .set('Content-Type', 'application/json')
+  .send({ name: 'John' });</div>
+
+      <h3>表单数据</h3>
+      <div class="code-block">// 表单编码
+await request(app)
+  .post('/login')
+  .type('form')
+  .send({
+    username: 'john',
+    password: 'secret'
+  });
+
+// 或
+await request(app)
+  .post('/login')
+  .set('Content-Type', 'application/x-www-form-urlencoded')
+  .send('username=john&password=secret');</div>
+
+      <h3>文件上传</h3>
+      <div class="code-block">// 单文件上传
+await request(app)
+  .post('/upload')
+  .attach('avatar', 'tests/fixtures/profile.jpg');
+
+// 多文件上传
+await request(app)
+  .post('/upload')
+  .attach('photos', 'tests/fixtures/photo1.jpg')
+  .attach('photos', 'tests/fixtures/photo2.jpg');
+
+// 文件 + 字段
+await request(app)
+  .post('/upload')
+  .attach('file', 'tests/fixtures/document.pdf')
+  .field('title', 'My Document')
+  .field('description', 'A sample document');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 请求头</h2>
+
+      <div class="code-block">// 设置单个请求头
+await request(app)
+  .get('/protected')
+  .set('Authorization', 'Bearer token123');
+
+// 设置多个请求头
+await request(app)
+  .get('/protected')
+  .set('Authorization', 'Bearer token123')
+  .set('X-API-Key', 'api-key-123')
+  .set('Accept-Language', 'zh-CN');
+
+// Content-Type
+await request(app)
+  .post('/api/data')
+  .set('Content-Type', 'application/json');
+
+// Accept 头
+await request(app)
+  .get('/api/users')
+  .set('Accept', 'application/json');
+
+// Cookie
+await request(app)
+  .get('/dashboard')
+  .set('Cookie', ['session=abc123', 'user=john']);
+
+// User-Agent
+await request(app)
+  .get('/api')
+  .set('User-Agent', 'Mozilla/5.0 ...');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 认证请求</h2>
+
+      <div class="code-block">// Bearer Token
+await request(app)
+  .get('/protected')
+  .set('Authorization', 'Bearer your-jwt-token');
+
+// Basic Auth
+await request(app)
+  .get('/protected')
+  .auth('username', 'password');
+
+// Basic Auth with custom
+await request(app)
+  .get('/protected')
+  .auth('username', 'password', { type: 'basic' });
+
+// Bearer with auth helper
+const token = 'your-jwt-token';
+await request(app)
+  .get('/protected')
+  .auth(token, { type: 'bearer' });
+
+// 辅助函数
+async function authenticatedRequest(method: string, path: string) {
+  const token = await getTestToken();
+  return request(app)
+    [method](path)
+    .set('Authorization', `Bearer ${token}`);
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> Cookie 操作</h2>
+
+      <div class="code-block">// 设置 Cookie
+await request(app)
+  .get('/dashboard')
+  .set('Cookie', 'session=abc123');
+
+// 多个 Cookie
+await request(app)
+  .get('/dashboard')
+  .set('Cookie', ['session=abc123', 'user=john']);
+
+// 从响应获取 Cookie
+const loginResponse = await request(app)
+  .post('/login')
+  .send({ username: 'john', password: 'secret' });
+
+const cookies = loginResponse.headers['set-cookie'];
+
+// 在后续请求中使用 Cookie
+await request(app)
+  .get('/dashboard')
+  .set('Cookie', cookies);
+
+// 完整的登录流程测试
+describe('Authentication', () => {
+  let cookies: string[];
+
+  beforeAll(async () => {
+    const response = await request(app)
+      .post('/login')
+      .send({ username: 'john', password: 'secret' });
+    cookies = response.headers['set-cookie'];
+  });
+
+  test('can access protected route', async () => {
+    const response = await request(app)
+      .get('/protected')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 超时和重定向</h2>
+
+      <div class="code-block">// 设置超时
+await request(app)
+  .get('/slow-endpoint')
+  .timeout(5000); // 5 秒超时
+
+// 禁用自动重定向跟随
+await request(app)
+  .get('/redirect')
+  .redirects(0);
+
+// 设置最大重定向次数
+await request(app)
+  .get('/redirect')
+  .redirects(5);
+
+// 测试重定向响应
+test('redirects to login when unauthorized', async () => {
+  const response = await request(app)
+    .get('/protected')
+    .redirects(0);
+
+  expect(response.status).toBe(302);
+  expect(response.headers.location).toBe('/login');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 请求构建完整示例</h2>
+
+      <div class="code-block">// tests/api/users.test.ts
+import request from 'supertest';
+import app from '@/app';
+import { createTestUser, getAuthToken } from '../helpers';
+
+describe('User API', () => {
+  let authToken: string;
+
+  beforeAll(async () => {
+    authToken = await getAuthToken();
+  });
+
+  describe('GET /api/users', () => {
+    test('returns paginated users', async () => {
+      const response = await request(app)
+        .get('/api/users')
+        .query({ page: 1, limit: 10 })
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeInstanceOf(Array);
+      expect(response.body.pagination).toBeDefined();
+    });
+  });
+
+  describe('POST /api/users', () => {
+    test('creates a new user', async () => {
+      const response = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .set('Content-Type', 'application/json')
+        .send({
+          name: 'New User',
+          email: 'newuser@example.com',
+          role: 'user'
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.id).toBeDefined();
+    });
+
+    test('validates required fields', async () => {
+      const response = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.errors).toBeDefined();
+    });
+  });
+
+  describe('PUT /api/users/:id', () => {
+    test('updates existing user', async () => {
+      const user = await createTestUser();
+
+      const response = await request(app)
+        .put(`/api/users/${user.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'Updated Name' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Updated Name');
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 query() 设置查询参数</li>
+            <li>使用 send() 发送请求体</li>
+            <li>使用 set() 设置请求头</li>
+            <li>使用 auth() 进行认证</li>
+            <li>使用 attach() 上传文件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="71-1-Supertest简介.html">← 上一节：Supertest 简介</a>
+      <a href="71-3-断言响应.html">下一节：断言响应 →</a>
+    </div>
+  </div>
+</body>
+</html>

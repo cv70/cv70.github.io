@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>91.5 输入过滤与输出编码 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="91-1-XSS攻击原理.html">第九十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>91.5 输入过滤与输出编码</h1>
+      <p class="subtitle">安全数据处理实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握输入过滤的方法</li>
+        <li>学会输出编码的最佳实践</li>
+        <li>理解两者的区别和应用场景</li>
+        <li>了解常用安全库的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 输入过滤与输出编码的区别</h2>
+      <div class="code-block">
+# 输入过滤 (Input Filtering)
+在数据进入系统时进行清理和验证
+
+## 特点
+- 在数据进入时处理
+- 移除或转换危险字符
+- 一次处理，多处使用
+
+## 问题
+- 可能过滤掉合法内容
+- 无法预见所有输出场景
+- 可能被绕过
+
+# 输出编码 (Output Encoding)
+在数据输出时根据上下文进行编码
+
+## 特点
+- 在数据输出时处理
+- 根据输出上下文选择编码方式
+- 不改变原始数据
+
+## 优势
+- 更安全可靠
+- 保持数据完整性
+- 针对不同上下文正确处理
+
+# 最佳实践
+输入验证 + 输出编码
+而非 输入过滤
+
+# 处理流程
+用户输入 → 输入验证 → 存储 → 输出编码 → 显示
+         (白名单)           (根据上下文)
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">优先输出编码</div>
+          <p>输出编码比输入过滤更可靠。因为输入过滤无法预见所有输出场景，而输出编码可以根据具体上下文正确处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 输入验证</h2>
+      <div class="code-block">
+# 使用 Zod 进行输入验证
+import { z } from 'zod';
+
+// 定义验证模式
+const userSchema = z.object({
+  username: z.string()
+    .min(3, '用户名至少 3 个字符')
+    .max(20, '用户名最多 20 个字符')
+    .regex(/^[a-zA-Z0-9_]+$/, '用户名只能包含字母、数字和下划线'),
+
+  email: z.string().email('请输入有效的邮箱地址'),
+
+  age: z.number()
+    .int('年龄必须是整数')
+    .min(0, '年龄不能小于 0')
+    .max(150, '年龄不能大于 150'),
+
+  bio: z.string()
+    .max(500, '个人简介最多 500 字符')
+    .optional(),
+});
+
+// 验证函数
+function validateUser(input: unknown) {
+  const result = userSchema.safeParse(input);
+
+  if (!result.success) {
+    return {
+      success: false,
+      errors: result.error.flatten().fieldErrors,
+    };
+  }
+
+  return {
+    success: true,
+    data: result.data,
+  };
+}
+
+// Express 中使用
+app.post('/user', (req, res) => {
+  const validation = validateUser(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({ errors: validation.errors });
+  }
+
+  // 使用验证后的数据
+  createUser(validation.data);
+});
+
+# 白名单验证
+const ALLOWED_TAGS = ['p', 'b', 'i', 'em', 'strong'];
+const ALLOWED_PROTOCOLS = ['http', 'https', 'mailto'];
+
+function validateUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_PROTOCOLS.includes(parsed.protocol.slice(0, -1));
+  } catch {
+    return false;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 输出编码实践</h2>
+      <div class="code-block">
+# HTML 编码
+import escapeHtml from 'escape-html';
+
+function renderComment(comment: string): string {
+  return `&lt;div class="comment"&gt;${escapeHtml(comment)}&lt;/div&gt;`;
+}
+
+# 属性编码
+function renderLink(url: string, text: string): string {
+  const safeUrl = escapeHtml(url);
+  const safeText = escapeHtml(text);
+  return `&lt;a href="${safeUrl}"&gt;${safeText}&lt;/a&gt;`;
+}
+
+# JavaScript 编码
+function renderScript(data: object): string {
+  return `&lt;script&gt;const data = ${JSON.stringify(data)};&lt;/script&gt;`;
+}
+
+# URL 编码
+function buildSearchUrl(query: string): string {
+  return `/search?q=${encodeURIComponent(query)}`;
+}
+
+# CSS 编码（应避免动态 CSS）
+// 如必须，使用白名单
+function safeColor(color: string): string {
+  const allowed = ['red', 'blue', 'green', 'black', 'white'];
+  return allowed.includes(color) ? color : 'black';
+}
+
+# 使用 DOMPurify 清理 HTML
+import DOMPurify from 'dompurify';
+
+function sanitizeHtml(dirty: string): string {
+  return DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS: ['p', 'b', 'i', 'em', 'strong', 'a', 'br'],
+    ALLOWED_ATTR: ['href'],
+    ALLOW_DATA_ATTR: false,
+  });
+}
+
+// 允许特定协议的链接
+DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+  if (data.attrName === 'href') {
+    const href = data.attrValue;
+    if (!/^https?:\/\//i.test(href)) {
+      data.attrValue = '';
+    }
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 常用安全库</h2>
+      <div class="code-block">
+# DOMPurify - HTML 清理
+npm install dompurify
+npm install @types/dompurify -D
+
+import DOMPurify from 'dompurify';
+
+const clean = DOMPurify.sanitize(dirtyHtml);
+
+# xss - XSS 过滤器
+npm install xss
+
+import xss from 'xss';
+
+// 基本使用
+const clean = xss(dirtyHtml);
+
+// 自定义规则
+const options = {
+  whiteList: {
+    a: ['href', 'title'],
+    p: [],
+    span: ['class'],
+  },
+  stripIgnoreTag: true,
+};
+const clean = xss(dirtyHtml, options);
+
+# escape-html - HTML 转义
+npm install escape-html
+
+import escapeHtml from 'escape-html';
+
+const escaped = escapeHtml('&lt;script&gt;alert(1)&lt;/script&gt;');
+// &lt;script&gt;alert(1)&lt;/script&gt;
+
+# validator.js - 输入验证
+npm install validator
+
+import validator from 'validator';
+
+validator.isEmail('test@example.com');  // true
+validator.isURL('https://example.com'); // true
+validator.isInt('123');                 // true
+validator.escape('&lt;script&gt;');        // '&lt;script&gt;'
+
+# helmet - HTTP 安全头
+npm install helmet
+
+import helmet from 'helmet';
+app.use(helmet());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 输入验证使用白名单，输出编码根据上下文</li>
+            <li>• 输出编码比输入过滤更可靠</li>
+            <li>• 使用成熟的安全库处理数据</li>
+            <li>• DOMPurify 是清理 HTML 的最佳选择</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="91-4-内容安全策略.html">← 上一节：内容安全策略</a>
+      <a href="../chapter92/92-1-CSRF攻击原理.html">下一章：CSRF 攻击原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

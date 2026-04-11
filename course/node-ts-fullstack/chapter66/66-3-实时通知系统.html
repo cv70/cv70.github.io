@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>66.3 实时通知系统 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="66-1-实时聊天室.html">第六十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>66.3 实时通知系统</h1>
+      <p class="subtitle">构建实时推送通知服务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>实现完整的实时通知系统</li>
+        <li>掌握通知的分类和优先级</li>
+        <li>学会离线通知的存储和推送</li>
+        <li>了解浏览器通知 API 集成</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 通知系统设计</h2>
+
+      <div class="card">
+        <h3 class="card-title">通知类型定义</h3>
+        <div class="code-block">
+// types/notification.ts
+
+// 通知类型
+export enum NotificationType {
+  SYSTEM = 'system',       // 系统通知
+  MESSAGE = 'message',     // 消息通知
+  ALERT = 'alert',         // 警告通知
+  UPDATE = 'update',       // 更新通知
+  PROMOTION = 'promotion', // 推广通知
+  REMINDER = 'reminder'    // 提醒通知
+}
+
+// 通知优先级
+export enum NotificationPriority {
+  LOW = 'low',
+  NORMAL = 'normal',
+  HIGH = 'high',
+  URGENT = 'urgent'
+}
+
+// 通知状态
+export enum NotificationStatus {
+  UNREAD = 'unread',
+  READ = 'read',
+  DISMISSED = 'dismissed'
+}
+
+// 通知接口
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  title: string;
+  body: string;
+  icon?: string;
+  image?: string;
+  url?: string;           // 点击跳转链接
+  data?: Record&lt;string, any&gt;;  // 附加数据
+  userId: string;         // 接收用户
+  senderId?: string;      // 发送者
+  createdAt: Date;
+  readAt?: Date;
+  expiresAt?: Date;       // 过期时间
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖥️</span> 服务端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">通知服务</h3>
+        <div class="code-block">
+// services/notification.service.ts
+import { Server } from 'socket.io';
+import { Notification, NotificationType, NotificationPriority, NotificationStatus } from '../types';
+
+class NotificationService {
+  private io: Server;
+  private userSockets = new Map&lt;string, Set&lt;string&gt;&gt;();
+
+  constructor(io: Server) {
+    this.io = io;
+  }
+
+  // 注册用户连接
+  registerUser(userId: string, socketId: string) {
+    if (!this.userSockets.has(userId)) {
+      this.userSockets.set(userId, new Set());
+    }
+    this.userSockets.get(userId)!.add(socketId);
+  }
+
+  // 用户断开
+  unregisterUser(userId: string, socketId: string) {
+    const sockets = this.userSockets.get(userId);
+    if (sockets) {
+      sockets.delete(socketId);
+      if (sockets.size === 0) {
+        this.userSockets.delete(userId);
+      }
+    }
+  }
+
+  // 用户是否在线
+  isUserOnline(userId: string): boolean {
+    const sockets = this.userSockets.get(userId);
+    return sockets !== undefined && sockets.size > 0;
+  }
+
+  // 发送通知
+  async send(notification: Omit&lt;Notification, 'id' | 'status' | 'createdAt'&gt;): Promise&lt;Notification&gt; {
+    const fullNotification: Notification = {
+      ...notification,
+      id: this.generateId(),
+      status: NotificationStatus.UNREAD,
+      createdAt: new Date()
+    };
+
+    // 保存到数据库
+    await this.saveNotification(fullNotification);
+
+    // 如果用户在线，实时推送
+    if (this.isUserOnline(notification.userId)) {
+      this.io.to(`user:${notification.userId}`).emit('notification:new', fullNotification);
+    }
+
+    // 如果是高优先级，发送邮件或短信
+    if (notification.priority === NotificationPriority.URGENT) {
+      await this.sendUrgentNotification(fullNotification);
+    }
+
+    return fullNotification;
+  }
+
+  // 批量发送
+  async sendBulk(userIds: string[], notification: Omit&lt;Notification, 'id' | 'userId' | 'status' | 'createdAt'&gt;) {
+    const notifications = await Promise.all(
+      userIds.map(userId => this.send({ ...notification, userId }))
+    );
+    return notifications;
+  }
+
+  // 发送给所有用户
+  async broadcast(notification: Omit&lt;Notification, 'id' | 'userId' | 'status' | 'createdAt'&gt;) {
+    const fullNotification = {
+      ...notification,
+      id: this.generateId(),
+      userId: 'all',
+      status: NotificationStatus.UNREAD,
+      createdAt: new Date()
+    };
+
+    // 保存到数据库
+    await this.saveNotification(fullNotification);
+
+    // 广播给所有在线用户
+    this.io.emit('notification:broadcast', fullNotification);
+
+    return fullNotification;
+  }
+
+  // 获取未读通知
+  async getUnread(userId: string): Promise&lt;Notification[]&gt; {
+    // 从数据库获取
+    return this.fetchUnreadFromDb(userId);
+  }
+
+  // 标记已读
+  async markAsRead(notificationId: string, userId: string): Promise&lt;boolean&gt; {
+    const success = await this.updateStatus(notificationId, userId, NotificationStatus.READ);
+    if (success) {
+      this.io.to(`user:${userId}`).emit('notification:read', { notificationId });
+    }
+    return success;
+  }
+
+  // 标记全部已读
+  async markAllAsRead(userId: string): Promise&lt;number&gt; {
+    const count = await this.markAllReadInDb(userId);
+    this.io.to(`user:${userId}`).emit('notification:all-read', { count });
+    return count;
+  }
+
+  // 用户上线时推送离线通知
+  async pushOfflineNotifications(userId: string) {
+    const notifications = await this.getUnread(userId);
+    this.io.to(`user:${userId}`).emit('notification:offline', notifications);
+  }
+
+  // 私有方法
+  private generateId(): string {
+    return `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private async saveNotification(notification: Notification): Promise&lt;void&gt; {
+    // 数据库保存逻辑
+  }
+
+  private async fetchUnreadFromDb(userId: string): Promise&lt;Notification[]&gt; {
+    // 数据库查询逻辑
+    return [];
+  }
+
+  private async updateStatus(id: string, userId: string, status: NotificationStatus): Promise&lt;boolean&gt; {
+    // 数据库更新逻辑
+    return true;
+  }
+
+  private async markAllReadInDb(userId: string): Promise&lt;number&gt; {
+    // 数据库更新逻辑
+    return 0;
+  }
+
+  private async sendUrgentNotification(notification: Notification): Promise&lt;void&gt; {
+    // 发送邮件或短信
+    console.log('发送紧急通知:', notification.title);
+  }
+}
+
+export { NotificationService };
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Socket.IO 集成</h3>
+        <div class="code-block">
+// socket.ts
+import { Server } from 'socket.io';
+import { NotificationService } from './services/notification.service';
+
+export function setupNotificationSocket(io: Server) {
+  const notificationService = new NotificationService(io);
+
+  // 通知命名空间
+  const notificationNS = io.of('/notifications');
+
+  notificationNS.use((socket, next) => {
+    const userId = socket.handshake.auth.userId;
+    if (!userId) {
+      return next(new Error('认证失败'));
+    }
+    socket.data.userId = userId;
+    next();
+  });
+
+  notificationNS.on('connection', async (socket) => {
+    const userId = socket.data.userId;
+
+    // 加入用户专属房间
+    socket.join(`user:${userId}`);
+
+    // 注册用户
+    notificationService.registerUser(userId, socket.id);
+
+    console.log(`用户 ${userId} 连接通知服务`);
+
+    // 推送离线通知
+    await notificationService.pushOfflineNotifications(userId);
+
+    // 获取未读数量
+    socket.on('notification:unread-count', async (callback) => {
+      const notifications = await notificationService.getUnread(userId);
+      callback(notifications.length);
+    });
+
+    // 获取通知列表
+    socket.on('notification:list', async (params: { page: number; limit: number }, callback) => {
+      // 分页获取通知
+      callback({ notifications: [], total: 0 });
+    });
+
+    // 标记已读
+    socket.on('notification:read', async (notificationId: string, callback) => {
+      const success = await notificationService.markAsRead(notificationId, userId);
+      callback(success);
+    });
+
+    // 标记全部已读
+    socket.on('notification:read-all', async (callback) => {
+      const count = await notificationService.markAllAsRead(userId);
+      callback(count);
+    });
+
+    // 断开连接
+    socket.on('disconnect', () => {
+      notificationService.unregisterUser(userId, socket.id);
+      console.log(`用户 ${userId} 断开通知服务`);
+    });
+  });
+
+  return notificationService;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 客户端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">通知 Hook</h3>
+        <div class="code-block">
+// hooks/useNotifications.ts
+import { useEffect, useState, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { Notification } from '../types';
+
+export function useNotifications(userId: string) {
+  const [socket, setSocket] = useState&lt;Socket | null&gt;(null);
+  const [notifications, setNotifications] = useState&lt;Notification[]&gt;([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const newSocket = io('http://localhost:3000/notifications', {
+      auth: { userId }
+    });
+
+    setSocket(newSocket);
+
+    // 接收新通知
+    newSocket.on('notification:new', (notification: Notification) => {
+      setNotifications(prev => [notification, ...prev]);
+      setUnreadCount(prev => prev + 1);
+
+      // 显示浏览器通知
+      showBrowserNotification(notification);
+    });
+
+    // 接收离线通知
+    newSocket.on('notification:offline', (offlineNotifications: Notification[]) => {
+      setNotifications(prev => [...offlineNotifications, ...prev]);
+      setUnreadCount(offlineNotifications.filter(n => n.status === 'unread').length);
+    });
+
+    // 广播通知
+    newSocket.on('notification:broadcast', (notification: Notification) => {
+      setNotifications(prev => [notification, ...prev]);
+      setUnreadCount(prev => prev + 1);
+      showBrowserNotification(notification);
+    });
+
+    // 已读状态更新
+    newSocket.on('notification:read', ({ notificationId }) => {
+      setNotifications(prev =>
+        prev.map(n => n.id === notificationId ? { ...n, status: 'read' } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    });
+
+    // 全部已读
+    newSocket.on('notification:all-read', ({ count }) => {
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, status: 'read' }))
+      );
+      setUnreadCount(0);
+    });
+
+    // 获取未读数量
+    newSocket.emit('notification:unread-count', (count: number) => {
+      setUnreadCount(count);
+    });
+
+    return () => {
+      newSocket.close();
+    };
+  }, [userId]);
+
+  const markAsRead = useCallback((notificationId: string) => {
+    socket?.emit('notification:read', notificationId, (success: boolean) => {
+      if (success) {
+        console.log('通知已标记已读');
+      }
+    });
+  }, [socket]);
+
+  const markAllAsRead = useCallback(() => {
+    socket?.emit('notification:read-all', (count: number) => {
+      console.log(`已标记 ${count} 条通知为已读`);
+    });
+  }, [socket]);
+
+  return {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead
+  };
+}
+
+// 浏览器通知
+function showBrowserNotification(notification: Notification) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(notification.title, {
+      body: notification.body,
+      icon: notification.icon,
+      tag: notification.id
+    });
+  }
+}
+
+// 请求通知权限
+export async function requestNotificationPermission(): Promise&lt;boolean&gt; {
+  if ('Notification' in window) {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  }
+  return false;
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">通知组件</h3>
+        <div class="code-block">
+// components/NotificationBell.tsx
+import React, { useState } from 'react';
+import { useNotifications } from '../hooks/useNotifications';
+
+export function NotificationBell({ userId }: { userId: string }) {
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(userId);
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    &lt;div className="notification-bell"&gt;
+      &lt;button onClick={() => setIsOpen(!isOpen)} className="bell-button"&gt;
+        🔔
+        {unreadCount > 0 && (
+          &lt;span className="badge"&gt;{unreadCount &gt; 99 ? '99+' : unreadCount}&lt;/span&gt;
+        )}
+      &lt;/button&gt;
+
+      {isOpen && (
+        &lt;div className="notification-dropdown"&gt;
+          &lt;div className="dropdown-header"&gt;
+            &lt;h3&gt;通知&lt;/h3&gt;
+            {unreadCount > 0 && (
+              &lt;button onClick={markAllAsRead}&gt;全部已读&lt;/button&gt;
+            )}
+          &lt;/div&gt;
+
+          &lt;div className="notification-list"&gt;
+            {notifications.length === 0 ? (
+              &lt;div className="empty"&gt;暂无通知&lt;/div&gt;
+            ) : (
+              notifications.slice(0, 10).map(notification => (
+                &lt;div
+                  key={notification.id}
+                  className={`notification-item ${notification.status}`}
+                  onClick={() => markAsRead(notification.id)}
+                &gt;
+                  &lt;div className="notification-icon"&gt;
+                    {getNotificationIcon(notification.type)}
+                  &lt;/div&gt;
+                  &lt;div className="notification-content"&gt;
+                    &lt;div className="title"&gt;{notification.title}&lt;/div&gt;
+                    &lt;div className="body"&gt;{notification.body}&lt;/div&gt;
+                    &lt;div className="time"&gt;{formatTime(notification.createdAt)}&lt;/div&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              ))
+            )}
+          &lt;/div&gt;
+        &lt;/div&gt;
+      )}
+    &lt;/div&gt;
+  );
+}
+
+function getNotificationIcon(type: string): string {
+  const icons: Record&lt;string, string&gt; = {
+    system: '⚙️',
+    message: '💬',
+    alert: '⚠️',
+    update: '🔄',
+    promotion: '🎉',
+    reminder: '⏰'
+  };
+  return icons[type] || '📌';
+}
+
+function formatTime(date: Date): string {
+  const now = new Date();
+  const diff = now.getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes}分钟前`;
+  if (hours < 24) return `${hours}小时前`;
+  return `${days}天前`;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 通知系统需要支持多种类型和优先级</li>
+            <li>• 使用专用命名空间管理通知连接</li>
+            <li>• 离线通知需要持久化存储</li>
+            <li>• 用户上线时自动推送离线通知</li>
+            <li>• 集成浏览器 Notification API</li>
+            <li>• 前端组件实时更新通知状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="66-2-在线人数统计.html">← 上一节</a>
+      <a href="66-4-协作编辑.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

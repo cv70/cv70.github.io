@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.3 自定义异常 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="49-1-异常过滤器.html">第四十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>49.3 自定义异常</h1>
+      <p class="subtitle">创建业务相关的自定义异常</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会创建自定义异常类</li>
+        <li>了解异常错误码设计</li>
+        <li>创建自定义异常过滤器</li>
+        <li>掌握异常的统一处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 创建自定义异常类</h2>
+      <div class="code-block">
+// exceptions/business.exception.ts
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+export enum ErrorCode {
+  // 用户相关错误 (1xxx)
+  USER_NOT_FOUND = 1001,
+  USER_INACTIVE = 1002,
+  USER_ALREADY_EXISTS = 1003,
+  INVALID_CREDENTIALS = 1004,
+
+  // 产品相关错误 (2xxx)
+  PRODUCT_OUT_OF_STOCK = 2001,
+  PRODUCT_NOT_FOUND = 2002,
+
+  // 订单相关错误 (3xxx)
+  ORDER_ALREADY_PAID = 3001,
+  ORDER_CANNOT_CANCEL = 3002,
+
+  // 通用错误
+  VALIDATION_ERROR = 400,
+  INTERNAL_ERROR = 500,
+}
+
+export class BusinessException extends HttpException {
+  constructor(
+    public readonly errorCode: ErrorCode,
+    public readonly message: string,
+    public readonly details?: any,
+  ) {
+    super(
+      {
+        code: errorCode,
+        message,
+        details,
+        timestamp: new Date().toISOString(),
+      },
+      BusinessException.getHttpStatus(errorCode),
+    );
+  }
+
+  private static getHttpStatus(errorCode: ErrorCode): number {
+    // 根据错误码确定 HTTP 状态码
+    if (errorCode >= 1000 && errorCode < 2000) {
+      return HttpStatus.BAD_REQUEST;
+    }
+    if (errorCode >= 2000 && errorCode < 3000) {
+      return HttpStatus.BAD_REQUEST;
+    }
+    return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+}
+
+// 具体业务异常
+export class UserNotFoundException extends BusinessException {
+  constructor(userId: number) {
+    super(ErrorCode.USER_NOT_FOUND, `User with id ${userId} not found`);
+  }
+}
+
+export class ProductOutOfStockException extends BusinessException {
+  constructor(productId: number, available: number, requested: number) {
+    super(
+      ErrorCode.PRODUCT_OUT_OF_STOCK,
+      'Product out of stock',
+      { productId, available, requested },
+    );
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">错误码设计</div>
+          <p>使用数字错误码便于前端处理和国际化。可以按模块分段分配错误码，便于定位问题。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用自定义异常</h2>
+      <div class="code-block">
+// users.service.ts
+@Injectable()
+export class UsersService {
+  async findOne(id: number) {
+    const user = await this.userRepository.findOne({ where: { id } });
+
+    if (!user) {
+      throw new UserNotFoundException(id);
+    }
+
+    if (!user.isActive) {
+      throw new BusinessException(
+        ErrorCode.USER_INACTIVE,
+        'User account is inactive',
+        { userId: id, activationRequired: true },
+      );
+    }
+
+    return user;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.findByEmail(email);
+
+    if (!user || !(await user.comparePassword(password))) {
+      throw new BusinessException(
+        ErrorCode.INVALID_CREDENTIALS,
+        'Invalid email or password',
+      );
+    }
+
+    return this.generateToken(user);
+  }
+}
+
+// products.service.ts
+@Injectable()
+export class ProductsService {
+  async order(productId: number, quantity: number) {
+    const product = await this.findOne(productId);
+
+    if (product.stock < quantity) {
+      throw new ProductOutOfStockException(productId, product.stock, quantity);
+    }
+
+    // 创建订单...
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 自定义异常过滤器</h2>
+      <div class="code-block">
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { BusinessException } from './business.exception';
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let errorResponse: any = {
+      code: ErrorCode.INTERNAL_ERROR,
+      message: 'Internal server error',
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    };
+
+    if (exception instanceof BusinessException) {
+      status = exception.getStatus();
+      errorResponse = {
+        ...exception.getResponse(),
+        path: request.url,
+      };
+    } else if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      errorResponse = {
+        code: ErrorCode.VALIDATION_ERROR,
+        message:
+          typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : (exceptionResponse as any).message,
+        details: typeof exceptionResponse === 'object' ? exceptionResponse : undefined,
+        timestamp: new Date().toISOString(),
+        path: request.url,
+      };
+    } else if (exception instanceof Error) {
+      this.logger.error(
+        `Unexpected error: ${exception.message}`,
+        exception.stack,
+      );
+    }
+
+    response.status(status).json(errorResponse);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 自定义异常继承 HttpException</li>
+            <li>• 使用错误码便于前端处理</li>
+            <li>• 业务异常可以携带详细信息</li>
+            <li>• 全局过滤器统一异常响应格式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="49-2-内置异常.html">← 上一节：内置异常</a>
+      <a href="49-4-全局异常处理.html">下一节：全局异常处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

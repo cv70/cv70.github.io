@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>51.1 认证与授权 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="51-1-认证与授权.html">第五十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>51.1 认证与授权</h1>
+      <p class="subtitle">理解身份验证和权限控制的核心概念</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解认证（Authentication）的概念</li>
+        <li>理解授权（Authorization）的概念</li>
+        <li>掌握两者的区别与联系</li>
+        <li>了解Web应用中的安全模型</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 认证（Authentication）</h2>
+      <p>认证是验证用户身份的过程，回答"你是谁"的问题。</p>
+      <div class="code-block">
+// 认证流程示例
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  passwordHash: string;
+}
+
+interface AuthResult {
+  success: boolean;
+  user?: User;
+  token?: string;
+  message?: string;
+}
+
+// 用户登录认证
+async function authenticate(
+  username: string,
+  password: string
+): Promise&lt;AuthResult&gt; {
+  // 1. 查找用户
+  const user = await findUserByUsername(username);
+
+  if (!user) {
+    return { success: false, message: '用户不存在' };
+  }
+
+  // 2. 验证密码
+  const isValid = await verifyPassword(password, user.passwordHash);
+
+  if (!isValid) {
+    return { success: false, message: '密码错误' };
+  }
+
+  // 3. 生成令牌
+  const token = generateToken(user);
+
+  return {
+    success: true,
+    user: { ...user, passwordHash: '' }, // 移除敏感信息
+    token
+  };
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">认证因素</div>
+          <p>常见的认证因素包括：知识因素（密码）、拥有因素（手机、令牌）、生物因素（指纹、面部识别）。多因素认证（MFA）组合使用多种因素提高安全性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 授权（Authorization）</h2>
+      <p>授权是确定用户权限的过程，回答"你能做什么"的问题。</p>
+      <div class="code-block">
+// 授权模型示例
+interface Permission {
+  resource: string;   // 资源：user, post, comment
+  action: string;     // 操作：create, read, update, delete
+}
+
+interface Role {
+  name: string;
+  permissions: Permission[];
+}
+
+interface UserWithRole extends User {
+  roles: Role[];
+}
+
+// 检查用户是否有特定权限
+function hasPermission(
+  user: UserWithRole,
+  resource: string,
+  action: string
+): boolean {
+  return user.roles.some(role =>
+    role.permissions.some(p =>
+      p.resource === resource && p.action === action
+    )
+  );
+}
+
+// 使用示例
+const adminRole: Role = {
+  name: 'admin',
+  permissions: [
+    { resource: 'user', action: 'create' },
+    { resource: 'user', action: 'read' },
+    { resource: 'user', action: 'update' },
+    { resource: 'user', action: 'delete' },
+    { resource: 'post', action: 'delete' }
+  ]
+};
+
+const editorRole: Role = {
+  name: 'editor',
+  permissions: [
+    { resource: 'post', action: 'create' },
+    { resource: 'post', action: 'update' },
+    { resource: 'post', action: 'delete' }
+  ]
+};
+
+// 检查权限
+if (hasPermission(currentUser, 'user', 'delete')) {
+  await deleteUser(userId);
+} else {
+  throw new Error('无权限删除用户');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 认证与授权的区别</h2>
+      <div class="code-block">
+/*
++------------------+------------------------+------------------------+
+|     特性         |      认证              |       授权            |
++------------------+------------------------+------------------------+
+| 问题             | 你是谁？               | 你能做什么？          |
+| 发生时机         | 请求之前               | 认证之后              |
+| 数据来源         | 用户提供凭证           | 系统权限配置          |
+| 可见性           | 用户可见               | 用户不可见            |
+| 失败结果         | 返回401 Unauthorized   | 返回403 Forbidden     |
+| 示例             | 登录、注册             | 权限检查、角色验证    |
++------------------+------------------------+------------------------+
+*/
+
+// Express 中间件示例
+import { Request, Response, NextFunction } from 'express';
+
+// 认证中间件
+function authenticateMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: '未提供认证令牌' });
+  }
+
+  try {
+    const payload = verifyToken(token);
+    req.user = payload;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: '令牌无效或已过期' });
+  }
+}
+
+// 授权中间件
+function authorizeMiddleware(...requiredRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: '未认证' });
+    }
+
+    const hasRole = requiredRoles.some(role =>
+      req.user.roles.includes(role)
+    );
+
+    if (!hasRole) {
+      return res.status(403).json({ error: '权限不足' });
+    }
+
+    next();
+  };
+}
+
+// 使用示例
+app.delete('/api/users/:id',
+  authenticateMiddleware,          // 先认证
+  authorizeMiddleware('admin'),    // 再授权
+  deleteUserController
+);
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">安全原则</div>
+          <p>默认拒绝所有访问，只允许明确授权的操作。遵循最小权限原则，用户只应拥有完成工作所需的最小权限。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 认证验证用户身份（你是谁）</li>
+            <li>• 授权确定用户权限（你能做什么）</li>
+            <li>• 认证失败返回401，授权失败返回403</li>
+            <li>• 先认证后授权是Web安全的基本流程</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter50/50-4-项目发布.html">← 上一章：项目发布</a>
+      <a href="51-2-常见认证方式.html">下一节：常见认证方式 →</a>
+    </div>
+  </div>
+</body>
+</html>

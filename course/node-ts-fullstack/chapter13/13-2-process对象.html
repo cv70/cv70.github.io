@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.2 process 对象 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="13-1-global对象.html">第十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>13.2 process 对象</h1>
+      <p class="subtitle">进程控制与系统信息</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 process 对象的作用</li>
+        <li>掌握获取系统信息的方法</li>
+        <li>学会处理进程事件</li>
+        <li>掌握命令行参数处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 常用属性</h2>
+      <div class="code-block">
+// 进程信息
+console.log(process.pid);        // 进程 ID
+console.log(process.ppid);       // 父进程 ID
+console.log(process.title);      // 进程标题
+console.log(process.version);    // Node.js 版本
+console.log(process.versions);   // 各组件版本
+console.log(process.arch);       // CPU 架构: 'x64', 'arm64'
+console.log(process.platform);   // 操作系统: 'win32', 'darwin', 'linux'
+
+// 环境信息
+console.log(process.env);        // 环境变量对象
+console.log(process.env.NODE_ENV);  // NODE_ENV
+console.log(process.env.PATH);      // PATH 变量
+
+// 当前工作目录
+console.log(process.cwd());      // 当前工作目录
+console.log(__dirname);          // 模块所在目录（不同！）
+
+// 运行时间和内存
+console.log(process.uptime());   // 进程运行时间（秒）
+console.log(process.memoryUsage());
+// {
+//   rss: 35635200,        // 常驻内存
+//   heapTotal: 7340032,   // 堆总量
+//   heapUsed: 4567890,    // 堆使用量
+//   external: 123456,     // 外部内存
+//   arrayBuffers: 12345
+// }
+
+// CPU 使用情况
+console.log(process.cpuUsage());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 命令行参数</h2>
+      <div class="code-block">
+// 命令: node app.js --port 3000 --mode dev
+
+console.log(process.argv);
+// [
+//   '/usr/local/bin/node',  // Node.js 可执行文件路径
+//   '/path/to/app.js',      // 脚本路径
+//   '--port',               // 参数1
+//   '3000',                 // 参数2
+//   '--mode',               // 参数3
+//   'dev'                   // 参数4
+// ]
+
+// 解析参数
+const args = process.argv.slice(2);
+
+function parseArgs(args) {
+  const result = {};
+  for (let i = 0; i < args.length; i += 2) {
+    const key = args[i].replace('--', '');
+    const value = args[i + 1];
+    result[key] = value;
+  }
+  return result;
+}
+
+console.log(parseArgs(args));  // { port: '3000', mode: 'dev' }
+
+// 使用 minimist 库解析（推荐）
+// npm install minimist
+const minimist = require('minimist');
+const argv = minimist(process.argv.slice(2));
+console.log(argv);  // { _: [], port: 3000, mode: 'dev' }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 标准输入输出</h2>
+      <div class="code-block">
+// 标准输出
+process.stdout.write('Hello ');
+process.stdout.write('World\n');
+
+// 标准错误
+process.stderr.write('Error message\n');
+
+// 标准输入
+process.stdin.setEncoding('utf8');
+
+process.stdin.on('readable', () => {
+  const chunk = process.stdin.read();
+  if (chunk !== null) {
+    process.stdout.write(`你输入了: ${chunk}`);
+  }
+});
+
+// 简单的命令行交互
+const readline = require('readline');
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+rl.question('你的名字是？', (answer) => {
+  console.log(`你好，${answer}！`);
+  rl.close();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 进程事件</h2>
+      <div class="code-block">
+// 进程退出事件
+process.on('exit', (code) => {
+  console.log(`进程退出，退出码: ${code}`);
+});
+
+// 未捕获的异常
+process.on('uncaughtException', (err) => {
+  console.error('未捕获的异常:', err);
+  process.exit(1);
+});
+
+// 未处理的 Promise 拒绝
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
+
+// 信号处理
+process.on('SIGINT', () => {
+  console.log('收到 SIGINT 信号 (Ctrl+C)');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('收到 SIGTERM 信号');
+  // 清理资源
+  process.exit(0);
+});
+
+// 退出进程
+process.exit(0);   // 正常退出
+process.exit(1);   // 异常退出
+
+// 设置退出码
+process.exitCode = 1;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> nextTick 与 setImmediate</h2>
+      <div class="code-block">
+// process.nextTick - 微任务，在当前操作完成后立即执行
+process.nextTick(() => {
+  console.log('nextTick');
+});
+
+// setImmediate - 宏任务，在下一个事件循环执行
+setImmediate(() => {
+  console.log('setImmediate');
+});
+
+// setTimeout - 定时器
+setTimeout(() => {
+  console.log('setTimeout');
+}, 0);
+
+// 执行顺序：
+// 1. nextTick（微任务队列）
+// 2. Promise.then（微任务队列）
+// 3. setTimeout/setImmediate（取决于环境）
+
+console.log('同步代码');
+
+// 输出顺序：
+// 同步代码
+// nextTick
+// setTimeout 或 setImmediate
+// setTimeout 或 setImmediate
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• process 提供进程信息和控制</li>
+            <li>• process.argv 获取命令行参数</li>
+            <li>• process.env 访问环境变量</li>
+            <li>• process.on 监听进程事件</li>
+            <li>• process.nextTick 是微任务，优先执行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="13-1-global对象.html">← 上一节：global 对象</a>
+      <a href="13-3-console对象.html">下一节：console 对象 →</a>
+    </div>
+  </div>
+</body>
+</html>

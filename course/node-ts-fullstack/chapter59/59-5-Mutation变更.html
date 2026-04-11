@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>59.5 Mutation 变更 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="59-1-GraphQL简介.html">第59章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>59.5 Mutation 变更</h1>
+      <p class="subtitle">GraphQL 数据变更操作详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Mutation 基础</h2>
+      <p>Mutation 是 GraphQL 中用于创建、更新、删除数据的操作类型。与 Query 不同，Mutation 用于修改服务器端的数据状态。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Mutation vs Query</div>
+          <ul>
+            <li>Query：只读操作，不修改数据</li>
+            <li>Mutation：写操作，修改数据状态</li>
+            <li>Mutation 保证串行执行，Query 可并行执行</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>基本语法</h3>
+      <div class="code-block">
+<span class="comment">// 基本语法</span>
+mutation {
+  mutationName(input: { ... }) {
+    field1
+    field2
+  }
+}
+
+<span class="comment">// 示例：创建用户</span>
+mutation {
+  createUser(input: {
+    name: <span class="string">"张三"</span>
+    email: <span class="string">"zhangsan@example.com"</span>
+    password: <span class="string">"Password123!"</span>
+  }) {
+    id
+    name
+    email
+    createdAt
+  }
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"createUser"</span>: {
+      <span class="string">"id"</span>: <span class="string">"1"</span>,
+      <span class="string">"name"</span>: <span class="string">"张三"</span>,
+      <span class="string">"email"</span>: <span class="string">"zhangsan@example.com"</span>,
+      <span class="string">"createdAt"</span>: <span class="string">"2024-01-15T10:30:00Z"</span>
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">➕</span> 创建操作</h2>
+
+      <h3>使用 Input 类型</h3>
+      <div class="code-block">
+<span class="comment">// Schema 定义</span>
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+  role: UserRole = USER
+}
+
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): User!
+}
+
+<span class="comment">// Mutation 调用</span>
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    name
+    email
+    role
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"input"</span>: {
+    <span class="string">"name"</span>: <span class="string">"李四"</span>,
+    <span class="string">"email"</span>: <span class="string">"lisi@example.com"</span>,
+    <span class="string">"password"</span>: <span class="string">"Password123!"</span>
+  }
+}
+      </div>
+
+      <h3>批量创建</h3>
+      <div class="code-block">
+<span class="keyword">type</span> Mutation {
+  createUsers(inputs: [CreateUserInput!]!): [User!]!
+}
+
+<span class="comment">// 批量创建用户</span>
+mutation CreateUsers {
+  createUsers(inputs: [
+    { name: <span class="string">"用户1"</span>, email: <span class="string">"user1@example.com"</span>, password: <span class="string">"Pass123!"</span> },
+    { name: <span class="string">"用户2"</span>, email: <span class="string">"user2@example.com"</span>, password: <span class="string">"Pass123!"</span> }
+  ]) {
+    id
+    name
+    email
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✏️</span> 更新操作</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema 定义</span>
+<span class="keyword">input</span> UpdateUserInput {
+  name: String
+  email: String
+  age: Int
+  role: UserRole
+}
+
+<span class="keyword">type</span> Mutation {
+  updateUser(id: ID!, input: UpdateUserInput!): User
+}
+
+<span class="comment">// 更新用户</span>
+mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
+  updateUser(id: $id, input: $input) {
+    id
+    name
+    email
+    age
+    updatedAt
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"id"</span>: <span class="string">"123"</span>,
+  <span class="string">"input"</span>: {
+    <span class="string">"name"</span>: <span class="string">"张三更新"</span>,
+    <span class="string">"age"</span>: <span class="number">25</span>
+  }
+}
+      </div>
+
+      <h3>部分更新 vs 全量更新</h3>
+      <div class="code-block">
+<span class="comment">// 部分更新（只更新提供的字段）</span>
+<span class="keyword">input</span> UpdateUserInput {
+  name: String    <span class="comment">// 可选</span>
+  email: String   <span class="comment">// 可选</span>
+}
+
+<span class="comment">// 全量更新（需要提供所有字段）</span>
+<span class="keyword">input</span> ReplaceUserInput {
+  name: String!   <span class="comment">// 必填</span>
+  email: String!  <span class="comment">// 必填</span>
+}
+
+<span class="keyword">type</span> Mutation {
+  updateUser(id: ID!, input: UpdateUserInput!): User    <span class="comment">// 部分更新</span>
+  replaceUser(id: ID!, input: ReplaceUserInput!): User  <span class="comment">// 全量更新</span>
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> 删除操作</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema 定义</span>
+<span class="keyword">type</span> DeleteResult {
+  success: Boolean!
+  message: String
+  deletedId: ID
+}
+
+<span class="keyword">type</span> Mutation {
+  deleteUser(id: ID!): DeleteResult!
+}
+
+<span class="comment">// 删除用户</span>
+mutation DeleteUser($id: ID!) {
+  deleteUser(id: $id) {
+    success
+    message
+    deletedId
+  }
+}
+
+<span class="comment">// 变量</span>
+{
+  <span class="string">"id"</span>: <span class="string">"123"</span>
+}
+
+<span class="comment">// 响应</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"deleteUser"</span>: {
+      <span class="string">"success"</span>: <span class="keyword">true</span>,
+      <span class="string">"message"</span>: <span class="string">"用户已成功删除"</span>,
+      <span class="string">"deletedId"</span>: <span class="string">"123"</span>
+    }
+  }
+}
+      </div>
+
+      <h3>软删除 vs 硬删除</h3>
+      <div class="code-block">
+<span class="keyword">type</span> Mutation {
+  <span class="comment">// 软删除（标记为已删除）</span>
+  archiveUser(id: ID!): User
+
+  <span class="comment">// 硬删除（永久删除）</span>
+  deleteUser(id: ID!): DeleteResult!
+
+  <span class="comment">// 恢复已删除</span>
+  restoreUser(id: ID!): User
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证相关 Mutation</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">input</span> LoginInput {
+  email: String!
+  password: String!
+}
+
+<span class="keyword">input</span> RegisterInput {
+  name: String!
+  email: String!
+  password: String!
+}
+
+<span class="keyword">type</span> AuthPayload {
+  token: String!
+  refreshToken: String!
+  user: User!
+  expiresIn: Int!
+}
+
+<span class="keyword">type</span> Mutation {
+  login(input: LoginInput!): AuthPayload!
+  register(input: RegisterInput!): AuthPayload!
+  logout: Boolean!
+  refreshToken(token: String!): AuthPayload!
+  changePassword(oldPassword: String!, newPassword: String!): Boolean!
+}
+
+<span class="comment">// 登录</span>
+mutation Login($input: LoginInput!) {
+  login(input: $input) {
+    token
+    refreshToken
+    user {
+      id
+      name
+      email
+    }
+    expiresIn
+  }
+}
+
+<span class="comment">// 注册</span>
+mutation Register($input: RegisterInput!) {
+  register(input: $input) {
+    token
+    user {
+      id
+      name
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 文件上传 Mutation</h2>
+
+      <div class="code-block">
+<span class="comment">// 使用 Upload 标量</span>
+<span class="keyword">scalar</span> Upload
+
+<span class="keyword">input</span> UploadFileInput {
+  file: Upload!
+  folder: String
+}
+
+<span class="keyword">type</span> File {
+  id: ID!
+  url: String!
+  filename: String!
+  mimetype: String!
+  size: Int!
+}
+
+<span class="keyword">type</span> Mutation {
+  uploadFile(input: UploadFileInput!): File!
+  uploadFiles(files: [Upload!]!): [File!]!
+}
+
+<span class="comment">// 客户端上传（需要 multipart 请求）</span>
+mutation UploadFile($file: Upload!) {
+  uploadFile(input: { file: $file }) {
+    id
+    url
+    filename
+    size
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 多个 Mutation</h2>
+
+      <div class="code-block">
+<span class="comment">// 在一个请求中执行多个 Mutation</span>
+mutation CreateOrder($userInput: CreateUserInput!, $orderInput: CreateOrderInput!) {
+  createUser(input: $userInput) {
+    id
+    name
+  }
+  createOrder(input: $orderInput) {
+    id
+    total
+    status
+  }
+}
+
+<span class="comment">// 注意：Mutation 是串行执行的</span>
+<span class="comment">// createUser 先执行，createOrder 后执行</span>
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">执行顺序</div>
+          <p>与 Query 不同，多个 Mutation 是串行执行的，保证操作的顺序性和数据一致性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 返回更新后的数据</h2>
+
+      <div class="code-block">
+<span class="comment">// 最佳实践：返回更新后的完整对象</span>
+mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
+  updateUser(id: $id, input: $input) {
+    id
+    name
+    email
+    age
+    updatedAt
+    posts {
+      id
+      title
+    }
+    followers {
+      id
+      name
+    }
+  }
+}
+
+<span class="comment">// 返回类型选择</span>
+<span class="keyword">type</span> Mutation {
+  <span class="comment">// 返回更新后的对象（推荐）</span>
+  updateUser(id: ID!, input: UpdateUserInput!): User
+
+  <span class="comment">// 返回操作结果</span>
+  updateUserResult(id: ID!, input: UpdateUserInput!): UpdateResult!
+
+  <span class="comment">// 返回 ID（简单场景）</span>
+  updateUserSimple(id: ID!, input: UpdateUserInput!): ID
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> TypeScript 中使用 Mutation</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { gql, useMutation } <span class="keyword">from</span> <span class="string">'@apollo/client'</span>;
+
+<span class="comment">// 定义 Mutation</span>
+<span class="keyword">const</span> CREATE_USER = gql<span class="string">`
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      name
+      email
+    }
+  }
+`</span>;
+
+<span class="comment">// React 组件中使用</span>
+<span class="keyword">function</span> <span class="function">CreateUserForm</span>() {
+  <span class="keyword">const</span> [createUser, { loading, error, data }] = useMutation(CREATE_USER, {
+    <span class="comment">// 成功回调</span>
+    onCompleted: (data) => {
+      console.log(<span class="string">'用户创建成功:'</span>, data.createUser);
+    },
+    <span class="comment">// 错误回调</span>
+    onError: (error) => {
+      console.error(<span class="string">'创建失败:'</span>, error.message);
+    },
+    <span class="comment">// 更新缓存</span>
+    update: (cache, { data }) => {
+      cache.modify({
+        fields: {
+          users(existingUsers = []) {
+            <span class="keyword">const</span> newUserRef = cache.writeFragment({
+              data: data.createUser,
+              fragment: gql<span class="string">`
+                fragment NewUser on User {
+                  id
+                  name
+                  email
+                }
+              `</span>
+            });
+            <span class="keyword">return</span> [...existingUsers, newUserRef];
+          }
+        }
+      });
+    }
+  });
+
+  <span class="keyword">const</span> handleSubmit = <span class="keyword">async</span> (formData: FormData) => {
+    <span class="keyword">await</span> createUser({
+      variables: {
+        input: {
+          name: formData.get(<span class="string">'name'</span>),
+          email: formData.get(<span class="string">'email'</span>),
+          password: formData.get(<span class="string">'password'</span>),
+        }
+      }
+    });
+  };
+
+  <span class="keyword">return</span> (
+    <form onSubmit={handleSubmit}>
+      <span class="comment">// ... 表单内容</span>
+      <button type="submit" disabled={loading}>
+        {loading ? <span class="string">'创建中...'</span> : <span class="string">'创建用户'</span>}
+      </button>
+      {error && <p>错误: {error.message}</p>}
+    </form>
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Mutation 用于创建、更新、删除数据</li>
+        <li>使用 Input 类型组织复杂参数</li>
+        <li>返回更新后的数据便于客户端更新状态</li>
+        <li>多个 Mutation 串行执行保证顺序性</li>
+        <li>支持文件上传、认证等特殊操作</li>
+        <li>结合客户端缓存实现数据同步</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="59-4-Query查询.html">← 上一节：Query 查询</a>
+      <a href="59-6-Apollo-Server基础.html">下一节：Apollo Server 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

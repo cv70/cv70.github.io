@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>107.3 Etcd - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="107-1-服务发现原理.html">第107章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>107.3 Etcd</h1>
+      <p class="subtitle">高可用的键值存储系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Etcd的核心特性</li>
+        <li>掌握Etcd的基本操作</li>
+        <li>学会使用租约和监听</li>
+        <li>了解Etcd在Kubernetes中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Etcd概述</h2>
+      <div class="code-block">
+// Etcd是CoreOS开发的分布式键值存储系统
+
+const features = {
+  distributed: '分布式架构，多节点保证高可用',
+  consistent: 'Raft协议保证强一致性',
+  fast: '内存索引，写入性能高',
+  watch: '支持监听键变化',
+  lease: '租约机制，支持TTL',
+  transaction: '事务支持，原子操作'
+};
+
+// Etcd架构
+const architecture = `
+┌─────────────────────────────────────┐
+│           Raft Consensus            │
+│  ┌────────┐ ┌────────┐ ┌────────┐  │
+│  │ Node 1 │ │ Node 2 │ │ Node 3 │  │
+│  │(Leader)│ │(Follow)│ │(Follow)│  │
+│  └────────┘ └────────┘ └────────┘  │
+│       ↓         ↓         ↓        │
+│  ┌─────────────────────────────┐   │
+│  │       WAL & Snapshot        │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+`;
+
+// Etcd vs ZooKeeper vs Consul
+const comparison = {
+  etcd: {
+    protocol: 'Raft',
+    api: 'HTTP/gRPC',
+    features: ['KV存储', '租约', '监听', '事务'],
+    usedBy: 'Kubernetes'
+  },
+  zookeeper: {
+    protocol: 'ZAB',
+    api: 'TCP',
+    features: ['文件系统模型', '临时节点', '监听'],
+    usedBy: 'Hadoop, Kafka'
+  },
+  consul: {
+    protocol: 'Raft',
+    api: 'HTTP/gRPC',
+    features: ['服务发现', 'KV存储', '健康检查'],
+    usedBy: 'Consul Connect'
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Etcd特点</div>
+          <p>Kubernetes默认的存储后端、强一致性、简单API、支持租约和事务。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基本操作</h2>
+      <div class="code-block">
+import { Etcd3 } from 'etcd3';
+
+// 创建客户端
+const client = new Etcd3({
+  hosts: ['http://localhost:2379']
+});
+
+// ==================== KV操作 ====================
+
+// 设置键值
+await client.put('name', 'Alice');
+
+// 设置带TTL的键值
+const lease = client.lease(60);  // 60秒过期
+await lease.put('session', 'active');
+
+// 获取键值
+const value = await client.get('name').string();
+console.log(value);  // 'Alice'
+
+// 获取所有匹配前缀的键
+const all = await client.getAll().prefix('config/').strings();
+// { 'config/db.host': 'localhost', 'config/db.port': '3306' }
+
+// 删除键
+await client.delete().key('name');
+
+// 删除所有匹配前缀的键
+await client.delete().prefix('cache/');
+
+// ==================== 服务注册与发现 ====================
+
+// 服务注册（使用租约）
+async function registerService(serviceName: string, instance: ServiceInstance) {
+  const lease = client.lease(10);  // 10秒TTL
+
+  // 注册服务实例
+  const key = `/services/${serviceName}/${instance.id}`;
+  await lease.put(key).value(JSON.stringify({
+    id: instance.id,
+    host: instance.host,
+    port: instance.port,
+    metadata: instance.metadata
+  }));
+
+  // 定期续租
+  lease.on('lost', () => {
+    console.log('Lease lost, re-registering...');
+    registerService(serviceName, instance);
+  });
+
+  return lease;
+}
+
+// 服务发现
+async function discoverService(serviceName: string) {
+  const instances = await client.getAll()
+    .prefix(`/services/${serviceName}/`)
+    .strings();
+
+  return Object.entries(instances).map(([key, value]) => {
+    const data = JSON.parse(value);
+    return {
+      id: data.id,
+      host: data.host,
+      port: data.port
+    };
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 监听与事务</h2>
+      <div class="code-block">
+// ==================== Watch监听 ====================
+
+// 监听单个键
+const watcher = await client.watch().key('config').create();
+
+watcher.on('put', (event) => {
+  console.log(`Key ${event.key} set to ${event.value}`);
+});
+
+watcher.on('delete', (event) => {
+  console.log(`Key ${event.key} deleted`);
+});
+
+// 监听前缀
+const prefixWatcher = await client.watch()
+  .prefix('/services/user-service/')
+  .create();
+
+prefixWatcher.on('put', (event) => {
+  console.log('Service instance added:', event.key);
+  // 更新本地服务列表
+  updateServiceList(event.key, JSON.parse(event.value));
+});
+
+prefixWatcher.on('delete', (event) => {
+  console.log('Service instance removed:', event.key);
+  // 从本地服务列表移除
+  removeFromServiceList(event.key);
+});
+
+// ==================== 事务操作 ====================
+
+// 原子性比较和设置
+async function atomicUpdate(key: string, expectedValue: string, newValue: string) {
+  const result = await client.if(
+    // 条件：当前值等于期望值
+    client.key(key).value(expectedValue),
+    'value',
+    '==',
+    expectedValue
+  ).then(
+    // 成功则更新
+    client.put(key).value(newValue)
+  ).commit();
+
+  return result.succeeded;
+}
+
+// 分布式锁实现
+class EtcdLock {
+  private client: Etcd3;
+  private lockKey: string;
+  private lease: any;
+
+  constructor(client: Etcd3, lockName: string) {
+    this.client = client;
+    this.lockKey = `/locks/${lockName}`;
+  }
+
+  async acquire(timeout: number = 5000): Promise<boolean> {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      try {
+        // 创建租约
+        this.lease = this.client.lease(10);
+
+        // 尝试获取锁
+        const succeeded = await this.client
+          .if(this.client.key(this.lockKey).value(''), 'value', '==', '')
+          .then(this.lease.put(this.lockKey).value('locked'))
+          .commit();
+
+        if (succeeded.succeeded) {
+          return true;
+        }
+
+        // 释放租约
+        await this.lease.revoke();
+
+      } catch (error) {
+        // 继续重试
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return false;
+  }
+
+  async release() {
+    if (this.lease) {
+      await this.lease.revoke();
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Etcd是Kubernetes的存储后端</li>
+            <li>• Raft协议保证强一致性</li>
+            <li>• 租约机制实现服务注册</li>
+            <li>• Watch机制监听变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="107-2-Consul.html">← 上一节：Consul</a>
+      <a href="107-4-Nacos.html">下一节：Nacos →</a>
+    </div>
+  </div>
+</body>
+</html>

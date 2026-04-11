@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.5 数据转换 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="46-1-管道概念.html">第四十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>46.5 数据转换</h1>
+      <p class="subtitle">使用 class-transformer 转换数据</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解数据转换的作用</li>
+        <li>掌握 class-transformer 装饰器</li>
+        <li>学会响应序列化</li>
+        <li>掌握隐式类型转换</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 为什么需要数据转换？</h2>
+      <p>HTTP 请求的数据都是字符串格式，需要转换为 TypeScript 的类型。响应时可能需要排除某些字段（如密码）。class-transformer 帮助完成这些转换。</p>
+
+      <div class="code-block">
+// 问题示例
+@Post()
+create(@Body() createUserDto: CreateUserDto) {
+  // createUserDto 中的 age 是 string 类型，不是 number
+  // 需要手动转换或使用自动转换
+}
+
+// 解决方案：ValidationPipe 配置 transform: true
+app.useGlobalPipes(
+  new ValidationPipe({
+    transform: true,  // 启用自动转换
+  }),
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> class-transformer 装饰器</h2>
+      <div class="code-block">
+import {
+  Exclude,
+  Expose,
+  Transform,
+  Type,
+  plainToClass,
+} from 'class-transformer';
+
+export class UserDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  email: string;
+
+  @Exclude()  // 响应时排除此字段
+  password: string;
+
+  @Expose()
+  @Type(() => Date)  // 转换为 Date 类型
+  createdAt: Date;
+
+  @Expose({ name: 'user_name' })  // 重命名
+  userName: string;
+
+  @Transform(({ value }) => value?.toUpperCase())  // 自定义转换
+  @Expose()
+  country: string;
+
+  @Expose()
+  @Type(() => RoleDto)  // 嵌套对象
+  role: RoleDto;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 响应序列化</h2>
+      <div class="code-block">
+// user.entity.ts
+import { Exclude, Expose, Type } from 'class-transformer';
+
+export class User {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Exclude()
+  password: string;
+
+  @Exclude()
+  salt: string;
+
+  @Expose()
+  @Type(() => Profile)
+  profile: Profile;
+}
+
+// 控制器中使用 ClassSerializerInterceptor
+import { ClassSerializerInterceptor, UseInterceptors } from '@nestjs/common';
+
+@Controller('users')
+@UseInterceptors(ClassSerializerInterceptor)  // 启用序列化
+export class UsersController {
+
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<User> {
+    const user = await this.usersService.findOne(+id);
+    return new User(user);  // 返回实例，自动应用序列化
+  }
+
+  @Get()
+  async findAll(): Promise<User[]> {
+    const users = await this.usersService.findAll();
+    return users.map(user => new User(user));
+  }
+}
+
+// 全局启用
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  await app.listen(3000);
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">序列化注意</div>
+          <p>ClassSerializerInterceptor 需要返回类的实例才能生效。直接返回普通对象不会应用 @Exclude/@Expose 装饰器。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 隐式类型转换</h2>
+      <div class="code-block">
+// dto/query.dto.ts
+import { IsInt, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class QueryDto {
+  @IsOptional()
+  @Type(() => Number)  // 显式类型转换
+  @IsInt()
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  limit?: number;
+}
+
+// 或使用 ValidationPipe 的隐式转换
+app.useGlobalPipes(
+  new ValidationPipe({
+    transform: true,
+    transformOptions: {
+      enableImplicitConversion: true,  // 根据类型自动转换
+    },
+  }),
+);
+
+// DTO 定义类型后自动转换
+export class QueryDto {
+  @IsOptional()
+  @IsInt()
+  page?: number;  // 会自动转换为 number
+
+  @IsOptional()
+  @IsInt()
+  limit?: number;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 自定义转换示例</h2>
+      <div class="code-block">
+import { Transform, Type } from 'class-transformer';
+
+export class CreateProductDto {
+  // 字符串数组转换
+  @Transform(({ value }) => value?.split(',').map(Number))
+  tags: number[];
+
+  // 日期转换
+  @Type(() => Date)
+  @Transform(({ value }) => new Date(value))
+  publishDate: Date;
+
+  // 布尔值转换
+  @Transform(({ value }) => value === 'true' || value === true)
+  isActive: boolean;
+
+  // JSON 字符串转换
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return JSON.parse(value);
+    }
+    return value;
+  })
+  metadata: Record<string, any>;
+
+  // 大小写转换
+  @Transform(({ value }) => value?.toLowerCase())
+  email: string;
+
+  // 去除空格
+  @Transform(({ value }) => value?.trim())
+  name: string;
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">转换顺序</div>
+          <p>ValidationPipe 先执行验证，再执行转换。确保 @Transform 不会破坏验证结果。复杂转换建议在 Service 层处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• transform: true 启用自动类型转换</li>
+            <li>• @Exclude/@Expose 控制响应字段</li>
+            <li>• ClassSerializerInterceptor 实现响应序列化</li>
+            <li>• @Transform 自定义转换逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="46-4-数据验证.html">← 上一节：数据验证</a>
+      <a href="../chapter47/47-1-守卫概念.html">下一章：守卫概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

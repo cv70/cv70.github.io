@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>90.5 安全头配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="90-1-Web安全概述.html">第九十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>90.5 安全头配置</h1>
+      <p class="subtitle">HTTP 安全响应头设置</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 HTTP 安全响应头的作用</li>
+        <li>掌握常用安全头配置</li>
+        <li>学会使用 helmet 中间件</li>
+        <li>了解内容安全策略配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 安全响应头概述</h2>
+      <p>HTTP 安全响应头可以增强 Web 应用的安全性，防止多种攻击类型。</p>
+      <div class="code-block">
+# 常用安全响应头
+
+┌──────────────────────────┬────────────────────────────────┐
+│       响应头名称          │           作用                 │
+├──────────────────────────┼────────────────────────────────┤
+│ Strict-Transport-Security│ 强制 HTTPS                    │
+│ X-Content-Type-Options   │ 防止 MIME 嗅探                │
+│ X-Frame-Options          │ 防止点击劫持                  │
+│ X-XSS-Protection         │ XSS 过滤（已废弃）            │
+│ Content-Security-Policy  │ 内容安全策略                  │
+│ X-Permitted-Cross-Domain │ Flash 跨域限制               │
+│ Referrer-Policy          │ Referer 控制策略             │
+│ Permissions-Policy       │ 浏览器功能权限                │
+└──────────────────────────┴────────────────────────────────┘
+
+# 检查安全头
+curl -I https://example.com
+
+# 在线检测工具
+https://securityheaders.com/
+https://observatory.mozilla.org/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用 Helmet 配置</h2>
+      <div class="code-block">
+import helmet from 'helmet';
+import express from 'express';
+
+const app = express();
+
+// 使用默认配置
+app.use(helmet());
+
+// 等价于以下配置
+app.use(helmet({
+  contentSecurityPolicy: true,
+  crossOriginEmbedderPolicy: true,
+  crossOriginOpenerPolicy: true,
+  crossOriginResourcePolicy: true,
+  dnsPrefetchControl: true,
+  frameguard: true,
+  hidePoweredBy: true,
+  hsts: true,
+  ieNoOpen: true,
+  noSniff: true,
+  originAgentCluster: true,
+  permittedCrossDomainPolicies: true,
+  referrerPolicy: true,
+  xssFilter: true,
+}));
+
+// 自定义配置
+app.use(helmet({
+  // HSTS 配置
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+
+  // 防止点击劫持
+  frameguard: {
+    action: 'deny', // 'deny' | 'sameorigin' | 'allow-from'
+  },
+
+  // 防止 MIME 嗅探
+  noSniff: true,
+
+  // 隐藏 X-Powered-By
+  hidePoweredBy: true,
+
+  // DNS 预取控制
+  dnsPrefetchControl: {
+    allow: false,
+  },
+
+  // Referrer 策略
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
+  },
+}));
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Helmet 推荐配置</div>
+          <p>Helmet 是 Express 应用设置安全头的最佳方式，默认配置已经足够安全，可以根据需要自定义调整。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 内容安全策略 (CSP)</h2>
+      <div class="code-block">
+# CSP 用于防止 XSS 和数据注入攻击
+
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: [
+      "'self'",
+      "'unsafe-inline'",  // 不推荐，仅开发时使用
+      "https://cdn.jsdelivr.net",
+    ],
+    styleSrc: [
+      "'self'",
+      "'unsafe-inline'",
+      "https://fonts.googleapis.com",
+    ],
+    imgSrc: [
+      "'self'",
+      "data:",
+      "https://cdn.example.com",
+    ],
+    fontSrc: [
+      "'self'",
+      "https://fonts.gstatic.com",
+    ],
+    connectSrc: [
+      "'self'",
+      "https://api.example.com",
+    ],
+    frameSrc: ["'none'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+    upgradeInsecureRequests: [],
+  },
+  reportOnly: false, // true 时只报告不阻止
+}));
+
+# CSP 指令说明
+defaultSrc    - 默认资源来源
+scriptSrc     - JavaScript 来源
+styleSrc      - CSS 来源
+imgSrc        - 图片来源
+fontSrc       - 字体来源
+connectSrc    - AJAX/WebSocket 来源
+frameSrc      - iframe 来源
+objectSrc     - object/embed 来源
+frameAncestors - 允许嵌入的父页面
+
+# 特殊值
+'self'         - 同源
+'none'         - 禁止
+'unsafe-inline' - 允许内联（不安全）
+'unsafe-eval'  - 允许 eval（不安全）
+data:          - 允许 data URI
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 权限策略</h2>
+      <div class="code-block">
+# Permissions-Policy 控制浏览器功能访问
+
+app.use(helmet.permittedCrossDomainPolicies({
+  permittedPolicies: 'none',
+}));
+
+// 或手动设置
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    [
+      'geolocation=()',
+      'microphone=()',
+      'camera=()',
+      'payment=()',
+      'usb=()',
+      'magnetometer=()',
+      'gyroscope=()',
+      'speaker=(self)',
+      'fullscreen=(self)',
+    ].join(', ')
+  );
+  next();
+});
+
+# 常见功能权限
+geolocation - 地理位置
+camera      - 摄像头
+microphone  - 麦克风
+payment     - 支付请求
+usb         - USB 设备
+fullscreen  - 全屏
+autoplay    - 自动播放
+
+# 禁用所有功能
+res.setHeader('Permissions-Policy', 'default-src "none"');
+
+# 允许特定源访问功能
+res.setHeader(
+  'Permissions-Policy',
+  'camera=(self "https://trusted.com")'
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 安全响应头可以防御多种攻击</li>
+            <li>• 使用 Helmet 简化安全头配置</li>
+            <li>• CSP 是防御 XSS 的重要手段</li>
+            <li>• 定期检查和更新安全策略</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="90-4-HTTPS配置.html">← 上一节：HTTPS 配置</a>
+      <a href="../chapter91/91-1-XSS攻击原理.html">下一章：XSS 攻击原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

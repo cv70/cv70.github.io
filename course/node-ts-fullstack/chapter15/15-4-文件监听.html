@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.4 文件监听 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="15-1-同步与异步操作.html">第十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>15.4 文件监听</h1>
+      <p class="subtitle">监控文件和目录变化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 fs.watch 和 fs.watchFile</li>
+        <li>理解两种监听方式的区别</li>
+        <li>学会实现自动重载功能</li>
+        <li>了解监听的注意事项</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> fs.watch</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 监听文件变化（推荐）
+const watcher = fs.watch('file.txt', (eventType, filename) => {
+  console.log(`事件类型: ${eventType}`);
+  console.log(`文件名: ${filename}`);
+});
+
+// eventType 可能是: 'rename' 或 'change'
+// rename: 文件被重命名或删除
+// change: 文件内容被修改
+
+// 监听目录
+fs.watch('./src', (eventType, filename) => {
+  console.log(`检测到变化: ${filename} - ${eventType}`);
+});
+
+// 使用选项
+fs.watch('file.txt', {
+  persistent: true,   // 持续监听（默认 true）
+  recursive: false,   // 递归监听子目录（仅 Windows/macOS）
+  encoding: 'utf8'    // 文件名编码
+}, (eventType, filename) => {
+  console.log(`${filename} 发生了 ${eventType} 事件`);
+});
+
+// 关闭监听
+watcher.close();
+
+// 监听错误事件
+watcher.on('error', (err) => {
+  console.error('监听出错:', err);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> fs.watchFile</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 监听文件变化（使用轮询）
+fs.watchFile('file.txt', (curr, prev) => {
+  console.log('当前文件状态:', curr);
+  console.log('之前文件状态:', prev);
+
+  if (curr.mtime !== prev.mtime) {
+    console.log('文件被修改了');
+  }
+
+  if (curr.size !== prev.size) {
+    console.log(`文件大小从 ${prev.size} 变为 ${curr.size}`);
+  }
+});
+
+// 设置轮询间隔（默认 5007ms）
+fs.watchFile('file.txt', { interval: 1000 }, (curr, prev) => {
+  console.log('每秒检查一次文件变化');
+});
+
+// 停止监听
+fs.unwatchFile('file.txt');
+
+// 使用 stat 对象属性
+fs.watchFile('file.txt', (curr, prev) => {
+  console.log('修改时间:', curr.mtime);
+  console.log('访问时间:', curr.atime);
+  console.log('文件大小:', curr.size);
+  console.log('文件权限:', curr.mode);
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">watch vs watchFile</div>
+          <p>watch 基于事件，效率高但不稳定；watchFile 基于轮询，稳定但消耗资源。优先使用 watch。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 实现自动重载</h2>
+      <div class="code-block">
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
+
+class AutoReload {
+  constructor(entryFile) {
+    this.entryFile = entryFile;
+    this.process = null;
+    this.watcher = null;
+    this.restart();
+    this.watch();
+  }
+
+  start() {
+    this.process = spawn('node', [this.entryFile], {
+      stdio: 'inherit'
+    });
+
+    this.process.on('exit', (code) => {
+      if (code !== null) {
+        console.log(`进程退出，代码: ${code}`);
+      }
+    });
+  }
+
+  restart() {
+    if (this.process) {
+      this.process.kill();
+    }
+    console.log('\n正在重启...');
+    this.start();
+  }
+
+  watch() {
+    let debounceTimer;
+
+    this.watcher = fs.watch('./', { recursive: true }, (eventType, filename) => {
+      if (filename && filename.endsWith('.js')) {
+        // 防抖处理
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          console.log(`检测到 ${filename} 变化`);
+          this.restart();
+        }, 100);
+      }
+    });
+  }
+
+  close() {
+    if (this.process) this.process.kill();
+    if (this.watcher) this.watcher.close();
+  }
+}
+
+// 使用
+const reloader = new AutoReload('app.js');
+
+// 退出时清理
+process.on('SIGINT', () => {
+  reloader.close();
+  process.exit();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 监听配置文件</h2>
+      <div class="code-block">
+const fs = require('fs');
+const path = require('path');
+
+class ConfigWatcher {
+  constructor(configPath) {
+    this.configPath = configPath;
+    this.config = null;
+    this.listeners = [];
+
+    this.load();
+    this.watch();
+  }
+
+  load() {
+    try {
+      const data = fs.readFileSync(this.configPath, 'utf8');
+      this.config = JSON.parse(data);
+      this.notify();
+    } catch (err) {
+      console.error('配置加载失败:', err);
+    }
+  }
+
+  watch() {
+    let debounceTimer;
+
+    fs.watch(this.configPath, (eventType) => {
+      if (eventType === 'change') {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          console.log('配置文件已更新');
+          this.load();
+        }, 100);
+      }
+    });
+  }
+
+  onChange(callback) {
+    this.listeners.push(callback);
+  }
+
+  notify() {
+    this.listeners.forEach(cb => cb(this.config));
+  }
+
+  get() {
+    return this.config;
+  }
+}
+
+// 使用
+const configWatcher = new ConfigWatcher('./config.json');
+
+configWatcher.onChange((config) => {
+  console.log('配置已更新:', config);
+});
+
+// 获取当前配置
+console.log(configWatcher.get());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 注意事项</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• fs.watch 在不同系统上行为可能不同</li>
+            <li>• filename 参数在某些系统可能为 null</li>
+            <li>• 一次修改可能触发多次事件</li>
+            <li>• 使用防抖避免频繁触发</li>
+            <li>• 生产环境建议使用 chokidar 库</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• fs.watch 基于事件，效率高</li>
+            <li>• fs.watchFile 基于轮询，更稳定</li>
+            <li>• 使用防抖处理频繁变化</li>
+            <li>• 生产环境推荐 chokidar 库</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-3-目录操作.html">← 上一节：目录操作</a>
+      <a href="15-5-文件流操作.html">下一节：文件流操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

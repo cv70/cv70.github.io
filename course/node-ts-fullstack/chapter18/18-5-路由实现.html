@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.5 路由实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-创建HTTP服务器.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.5 路由实现</h1>
+      <p class="subtitle">实现 URL 路由分发</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握基本路由实现</li>
+        <li>学会路径参数解析</li>
+        <li>理解中间件模式</li>
+        <li>实现简单路由框架</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本路由</h2>
+      <div class="code-block">
+const http = require('http');
+
+const routes = {
+  'GET /': (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1>Home Page</h1>');
+  },
+  'GET /about': (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1>About Page</h1>');
+  },
+  'GET /api/users': (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ users: ['Alice', 'Bob'] }));
+  },
+  'POST /api/users': (req, res) => {
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    req.on('end', () => {
+      const user = JSON.parse(body);
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ created: user }));
+    });
+  }
+};
+
+const server = http.createServer((req, res) => {
+  const key = `${req.method} ${req.url}`;
+  const handler = routes[key];
+
+  if (handler) {
+    handler(req, res);
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+});
+
+server.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 路由器类</h2>
+      <div class="code-block">
+const http = require('http');
+const url = require('url');
+
+class Router {
+  constructor() {
+    this.routes = [];
+  }
+
+  // 注册路由
+  get(path, handler) {
+    this.routes.push({ method: 'GET', path, handler });
+  }
+
+  post(path, handler) {
+    this.routes.push({ method: 'POST', path, handler });
+  }
+
+  put(path, handler) {
+    this.routes.push({ method: 'PUT', path, handler });
+  }
+
+  delete(path, handler) {
+    this.routes.push({ method: 'DELETE', path, handler });
+  }
+
+  // 匹配路由
+  match(req) {
+    const parsedUrl = url.parse(req.url, true);
+    const pathname = parsedUrl.pathname;
+
+    for (const route of this.routes) {
+      if (route.method !== req.method) continue;
+
+      // 简单路径匹配
+      if (route.path === pathname) {
+        return { handler: route.handler, params: {}, query: parsedUrl.query };
+      }
+
+      // 动态路径匹配 /users/:id
+      const routeParts = route.path.split('/');
+      const pathParts = pathname.split('/');
+
+      if (routeParts.length !== pathParts.length) continue;
+
+      const params = {};
+      let match = true;
+
+      for (let i = 0; i < routeParts.length; i++) {
+        if (routeParts[i].startsWith(':')) {
+          params[routeParts[i].slice(1)] = pathParts[i];
+        } else if (routeParts[i] !== pathParts[i]) {
+          match = false;
+          break;
+        }
+      }
+
+      if (match) {
+        return { handler: route.handler, params, query: parsedUrl.query };
+      }
+    }
+
+    return null;
+  }
+
+  // 处理请求
+  handle(req, res) {
+    const match = this.match(req);
+
+    if (match) {
+      req.params = match.params;
+      req.query = match.query;
+      match.handler(req, res);
+    } else {
+      res.writeHead(404);
+      res.end('Not Found');
+    }
+  }
+}
+
+// 使用路由器
+const router = new Router();
+
+router.get('/', (req, res) => {
+  res.end('Home');
+});
+
+router.get('/users/:id', (req, res) => {
+  res.end(`User ID: ${req.params.id}`);
+});
+
+router.get('/search', (req, res) => {
+  res.end(`Search: ${req.query.q}`);
+});
+
+const server = http.createServer((req, res) => {
+  router.handle(req, res);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 中间件模式</h2>
+      <div class="code-block">
+const http = require('http');
+
+class App {
+  constructor() {
+    this.middlewares = [];
+    this.router = new Router();
+  }
+
+  // 添加中间件
+  use(middleware) {
+    this.middlewares.push(middleware);
+  }
+
+  // 路由方法
+  get(path, handler) { this.router.get(path, handler); }
+  post(path, handler) { this.router.post(path, handler); }
+
+  // 执行中间件链
+  async runMiddlewares(req, res) {
+    const middlewares = [...this.middlewares];
+
+    const next = async () => {
+      const middleware = middlewares.shift();
+      if (middleware) {
+        await middleware(req, res, next);
+      }
+    };
+
+    await next();
+  }
+
+  // 处理请求
+  async handle(req, res) {
+    try {
+      await this.runMiddlewares(req, res);
+
+      // 如果响应未结束，继续路由
+      if (!res.writableEnded) {
+        this.router.handle(req, res);
+      }
+    } catch (err) {
+      res.writeHead(500);
+      res.end('Internal Server Error');
+    }
+  }
+}
+
+// 使用
+const app = new App();
+
+// 日志中间件
+app.use(async (req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  await next();
+});
+
+// JSON 解析中间件
+app.use(async (req, res, next) => {
+  if (req.headers['content-type'] === 'application/json') {
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    await new Promise(resolve => req.on('end', resolve));
+    req.body = JSON.parse(body || '{}');
+  }
+  await next();
+});
+
+// 路由
+app.get('/', (req, res) => {
+  res.end('Hello World');
+});
+
+app.post('/api/data', (req, res) => {
+  res.end(JSON.stringify({ received: req.body }));
+});
+
+const server = http.createServer((req, res) => app.handle(req, res));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 完整示例</h2>
+      <div class="code-block">
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+class SimpleServer {
+  constructor() {
+    this.routes = [];
+    this.middlewares = [];
+  }
+
+  use(middleware) {
+    this.middlewares.push(middleware);
+  }
+
+  route(method, pattern, handler) {
+    this.routes.push({ method, pattern, handler });
+  }
+
+  get(pattern, handler) { this.route('GET', pattern, handler); }
+  post(pattern, handler) { this.route('POST', pattern, handler); }
+
+  async handle(req, res) {
+    // 执行中间件
+    for (const middleware of this.middlewares) {
+      await new Promise((resolve, reject) => {
+        middleware(req, res, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+
+    // 匹配路由
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    for (const route of this.routes) {
+      if (route.method !== req.method) continue;
+
+      const params = this.matchPattern(route.pattern, url.pathname);
+      if (params) {
+        req.params = params;
+        req.query = Object.fromEntries(url.searchParams);
+        return route.handler(req, res);
+      }
+    }
+
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+
+  matchPattern(pattern, pathname) {
+    const patternParts = pattern.split('/');
+    const pathParts = pathname.split('/');
+
+    if (patternParts.length !== pathParts.length) return null;
+
+    const params = {};
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i].startsWith(':')) {
+        params[patternParts[i].slice(1)] = pathParts[i];
+      } else if (patternParts[i] !== pathParts[i]) {
+        return null;
+      }
+    }
+
+    return params;
+  }
+
+  listen(port, callback) {
+    const server = http.createServer((req, res) => this.handle(req, res));
+    server.listen(port, callback);
+    return server;
+  }
+}
+
+// 使用
+const app = new SimpleServer();
+
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+app.get('/', (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end('<h1>Hello World</h1>');
+});
+
+app.get('/users/:id', (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ userId: req.params.id }));
+});
+
+app.listen(3000, () => console.log('Server running on port 3000'));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 路由根据方法和路径分发请求</li>
+            <li>• 动态路径使用 :param 匹配参数</li>
+            <li>• 中间件模式实现请求预处理</li>
+            <li>• 生产环境推荐使用 Express 等框架</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="18-4-静态文件服务.html">← 上一节：静态文件服务</a>
+      <a href="../chapter19/19-1-URL解析.html">下一章：URL 解析 →</a>
+    </div>
+  </div>
+</body>
+</html>

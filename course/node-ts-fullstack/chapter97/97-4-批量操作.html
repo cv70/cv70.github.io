@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>97.4 批量操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="97-1-接口缓存.html">第九十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>97.4 批量操作</h1>
+      <p class="subtitle">高效批量数据处理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解批量操作的重要性</li>
+        <li>掌握批量插入优化</li>
+        <li>学会批量更新技巧</li>
+        <li>了解事务批处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 批量操作概述</h2>
+      <div class="code-block">
+# 为什么需要批量操作
+
+## 单条操作问题
+for (const item of items) {
+  await db.insert(item);  // 1000 次 INSERT
+}
+
+问题：
+- 大量数据库连接/释放
+- 大量网络往返
+- 事务开销
+- 性能极差
+
+## 批量操作优势
+- 减少网络往返
+- 减少连接开销
+- 更好的事务控制
+- 显著提升性能
+
+# 性能对比
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│     操作        │   1000 条单条插入 │   1000 条批量插入 │
+├─────────────────┼──────────────────┼──────────────────┤
+│ 数据库调用      │ 1000 次          │ 1 次             │
+│ 网络往返        │ 1000 次          │ 1 次             │
+│ 执行时间        │ ~10 秒           │ ~100 毫秒        │
+└─────────────────┴──────────────────┴──────────────────┘
+
+# 批量操作类型
+- 批量插入
+- 批量更新
+- 批量删除
+- 批量查询（IN）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 批量插入</h2>
+      <div class="code-block">
+# Prisma 批量插入
+
+// 基础批量插入
+const result = await prisma.user.createMany({
+  data: users,
+  skipDuplicates: true,  // 跳过重复
+});
+
+console.log(`Created ${result.count} users`);
+
+// 分批插入（处理大量数据）
+async function batchInsert&lt;T&gt;(
+  model: any,
+  data: T[],
+  batchSize: number = 1000
+) {
+  const results = [];
+
+  for (let i = 0; i < data.length; i += batchSize) {
+    const batch = data.slice(i, i + batchSize);
+    const result = await model.createMany({ data: batch });
+    results.push(result);
+  }
+
+  return results;
+}
+
+// 使用
+await batchInsert(prisma.user, largeUserArray, 500);
+
+# TypeORM 批量插入
+
+// 使用 insert
+await userRepository.insert(users);
+
+// 使用 QueryBuilder
+await userRepository
+  .createQueryBuilder()
+  .insert()
+  .into(User)
+  .values(users)
+  .execute();
+
+// 使用原生 SQL
+await connection.query(`
+  INSERT INTO users (name, email) VALUES ?
+`, [
+  users.map(u => [u.name, u.email])
+]);
+
+# MySQL 批量插入优化
+
+// 使用 LOAD DATA INFILE（最快）
+await connection.query(`
+  LOAD DATA LOCAL INFILE '/path/to/data.csv'
+  INTO TABLE users
+  FIELDS TERMINATED BY ','
+  LINES TERMINATED BY '\n'
+  (name, email)
+`);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">批量大小选择</div>
+          <p>批量大小通常在 100-1000 之间。太大会导致单次操作时间过长和内存压力，太小则优化效果不明显。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 批量更新</h2>
+      <div block">
+# 使用 CASE WHEN 批量更新
+
+// 单个 SQL 批量更新
+async function batchUpdateStatus(updates: { id: string; status: string }[]) {
+  const cases = updates
+    .map(u => `WHEN id = '${u.id}' THEN '${u.status}'`)
+    .join(' ');
+
+  const ids = updates.map(u => `'${u.id}'`).join(',');
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE orders
+    SET status = CASE ${cases} END
+    WHERE id IN (${ids})
+  `);
+}
+
+# TypeORM 批量更新
+
+// 使用 UPDATE ... CASE WHEN
+await orderRepository
+  .createQueryBuilder()
+  .update(Order)
+  .set({
+    status: () => `
+      CASE id
+        ${updates.map(u => `WHEN '${u.id}' THEN '${u.status}'`).join(' ')}
+      END
+    `,
+  })
+  .where('id IN (:...ids)', { ids: updates.map(u => u.id) })
+  .execute();
+
+# 使用事务批量更新
+
+async function batchUpdateWithTransaction(updates: Order[]) {
+  await prisma.$transaction(async (tx) => {
+    for (const update of updates) {
+      await tx.order.update({
+        where: { id: update.id },
+        data: update,
+      });
+    }
+  });
+}
+
+# 批量 Upsert
+
+// Prisma upsert 批量
+await prisma.$transaction(
+  items.map(item =>
+    prisma.user.upsert({
+      where: { email: item.email },
+      update: item,
+      create: item,
+    })
+  )
+);
+
+// MySQL INSERT ... ON DUPLICATE KEY UPDATE
+await prisma.$executeRaw`
+  INSERT INTO users (email, name)
+  VALUES ${Prisma.join(users.map(u => `('${u.email}', '${u.name}')`))}
+  ON DUPLICATE KEY UPDATE name = VALUES(name)
+`;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 批量处理模式</h2>
+      <div class="code-block">
+# 生产者-消费者模式
+
+import Queue from 'bull';
+
+const updateQueue = new Queue('batch-updates', {
+  redis: process.env.REDIS_URL,
+});
+
+// 添加任务
+async function scheduleBatchUpdate(items: any[]) {
+  await updateQueue.add('process', { items });
+}
+
+// 消费者处理
+updateQueue.process('process', async (job) => {
+  const { items } = job.data;
+
+  // 分批处理
+  for (let i = 0; i < items.length; i += 100) {
+    const batch = items.slice(i, i + 100);
+    await prisma.order.updateMany({
+      where: { id: { in: batch.map(b => b.id) } },
+      data: { status: 'processed' },
+    });
+  }
+});
+
+# 批量处理服务类
+
+class BatchProcessor&lt;T&gt; {
+  private batch: T[] = [];
+  private timer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private processFn: (batch: T[]) => Promise&lt;void&gt;,
+    private batchSize: number = 100,
+    private flushInterval: number = 5000
+  ) {}
+
+  add(item: T) {
+    this.batch.push(item);
+
+    if (this.batch.length >= this.batchSize) {
+      this.flush();
+    } else if (!this.timer) {
+      this.timer = setTimeout(() => this.flush(), this.flushInterval);
+    }
+  }
+
+  async flush() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+
+    if (this.batch.length === 0) return;
+
+    const batch = this.batch;
+    this.batch = [];
+
+    await this.processFn(batch);
+  }
+}
+
+// 使用
+const processor = new BatchProcessor(
+  async (logs) => {
+    await prisma.log.createMany({ data: logs });
+  },
+  100,
+  5000
+);
+
+// 添加日志
+processor.add({ level: 'info', message: 'test' });
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 批量操作大幅提升数据库性能</li>
+            <li>• 使用 createMany、insert 等批量方法</li>
+            <li>• 大数据量分批处理</li>
+            <li>• 使用队列处理异步批量任务</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="97-3-分页优化.html">← 上一节：分页优化</a>
+      <a href="97-5-异步处理.html">下一节：异步处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

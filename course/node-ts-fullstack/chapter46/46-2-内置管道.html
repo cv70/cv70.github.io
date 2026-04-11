@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.2 内置管道 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="46-1-管道概念.html">第四十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>46.2 内置管道</h1>
+      <p class="subtitle">使用 NestJS 提供的内置管道</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 ParseIntPipe 的使用</li>
+        <li>学会 ParseBoolPipe 和 ParseUUIDPipe</li>
+        <li>了解 ParseArrayPipe 的配置</li>
+        <li>掌握 ValidationPipe 的配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 内置管道概览</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>管道</th>
+            <th>功能</th>
+            <th>错误响应</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ParseIntPipe</td>
+            <td>转换为整数</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>ParseFloatPipe</td>
+            <td>转换为浮点数</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>ParseBoolPipe</td>
+            <td>转换为布尔值</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>ParseArrayPipe</td>
+            <td>转换为数组</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>ParseUUIDPipe</td>
+            <td>验证 UUID 格式</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>ParseEnumPipe</td>
+            <td>验证枚举值</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>DefaultValuePipe</td>
+            <td>设置默认值</td>
+            <td>不抛出异常</td>
+          </tr>
+          <tr>
+            <td>ValidationPipe</td>
+            <td>DTO 验证</td>
+            <td>400 Bad Request</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> ParseIntPipe / ParseFloatPipe</h2>
+      <div class="code-block">
+import { Controller, Get, Param, ParseIntPipe, ParseFloatPipe } from '@nestjs/common';
+
+@Controller('numbers')
+export class NumbersController {
+
+  @Get('int/:id')
+  parseInt(@Param('id', ParseIntPipe) id: number) {
+    console.log(typeof id);  // number
+    return { id, type: typeof id };
+  }
+
+  @Get('float/:value')
+  parseFloat(@Param('value', ParseFloatPipe) value: number) {
+    return { value, type: typeof value };
+  }
+
+  // 自定义错误消息
+  @Get('custom/:id')
+  customParse(
+    @Param('id', new ParseIntPipe({ errorHttpStatusCode: HttpStatus.NOT_ACCEPTABLE }))
+    id: number,
+  ) {
+    return { id };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> ParseBoolPipe / ParseUUIDPipe</h2>
+      <div class="code-block">
+import { Controller, Get, Param, Query, ParseBoolPipe, ParseUUIDPipe } from '@nestjs/common';
+
+@Controller('validation')
+export class ValidationController {
+
+  @Get('bool')
+  parseBool(@Query('active', ParseBoolPipe) active: boolean) {
+    return { active, type: typeof active };
+  }
+  // GET /validation/bool?active=true  => { active: true, type: 'boolean' }
+
+  @Get('uuid/:id')
+  parseUUID(@Param('id', ParseUUIDPipe) id: string) {
+    return { id };
+  }
+  // GET /validation/uuid/123e4567-e89b-12d3-a456-426614174000
+
+  // 指定 UUID 版本
+  @Get('uuid-v4/:id')
+  parseUUIDV4(
+    @Param('id', new ParseUUIDPipe({ version: '4' }))
+    id: string,
+  ) {
+    return { id };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> ParseArrayPipe</h2>
+      <div class="code-block">
+import { Controller, Get, Query, ParseArrayPipe } from '@nestjs/common';
+
+@Controller('arrays')
+export class ArraysController {
+
+  // 解析逗号分隔的字符串为数组
+  @Get('tags')
+  parseArray(
+    @Query('tags', new ParseArrayPipe({ items: String, separator: ',' }))
+    tags: string[],
+  ) {
+    return { tags };
+  }
+  // GET /arrays/tags?tags=node,nest,typescript => { tags: ['node', 'nest', 'typescript'] }
+
+  // 必需数组
+  @Get('required')
+  parseRequired(
+    @Query('ids', new ParseArrayPipe({ items: Number, separator: ',', optional: false }))
+    ids: number[],
+  ) {
+    return { ids };
+  }
+
+  // 转换为数字数组
+  @Get('numbers')
+  parseNumbers(
+    @Query('nums', new ParseArrayPipe({ items: Number, separator: ',' }))
+    nums: number[],
+  ) {
+    return { nums };
+  }
+  // GET /arrays/numbers?nums=1,2,3 => { nums: [1, 2, 3] }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> DefaultValuePipe</h2>
+      <div class="code-block">
+import { Controller, Get, Query, DefaultValuePipe } from '@nestjs/common';
+
+@Controller('defaults')
+export class DefaultsController {
+
+  @Get()
+  find(
+    @Query('page', new DefaultValuePipe(1)) page: number,
+    @Query('limit', new DefaultValuePipe(10)) limit: number,
+    @Query('sort', new DefaultValuePipe('createdAt')) sort: string,
+  ) {
+    return { page, limit, sort };
+  }
+  // GET /defaults => { page: 1, limit: 10, sort: 'createdAt' }
+  // GET /defaults?page=2&limit=20 => { page: '2', limit: '20', sort: 'createdAt' }
+
+  // 组合使用
+  @Get('combined')
+  combined(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return { page, limit, type: typeof page };
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">管道组合</div>
+          <p>可以在同一个参数上使用多个管道，按顺序执行。DefaultValuePipe 应该放在前面，为空值设置默认值后再由其他管道处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ParseIntPipe 转换参数为整数</li>
+            <li>• ParseUUIDPipe 验证 UUID 格式</li>
+            <li>• ParseArrayPipe 解析数组参数</li>
+            <li>• DefaultValuePipe 设置默认值</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="46-1-管道概念.html">← 上一节：管道概念</a>
+      <a href="46-3-自定义管道.html">下一节：自定义管道 →</a>
+    </div>
+  </div>
+</body>
+</html>

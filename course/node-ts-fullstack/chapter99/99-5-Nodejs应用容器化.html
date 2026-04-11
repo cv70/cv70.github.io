@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>99.5 Node.js 应用容器化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="99-1-容器化概念.html">第99章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>99.5 Node.js 应用容器化</h1>
+      <p class="subtitle">完整实战：将 Node.js + TypeScript 项目容器化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Node.js 应用的完整容器化流程</li>
+        <li>学会处理 TypeScript 项目的构建与运行</li>
+        <li>了解生产环境最佳实践</li>
+        <li>掌握容器调试技巧</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Node.js Docker" class="card-image">
+      <h3 class="card-title">项目结构</h3>
+      <div class="code-block">
+myapp/
+├── src/
+│   ├── index.ts
+│   ├── app.ts
+│   └── modules/
+├── dist/
+├── package.json
+├── tsconfig.json
+├── Dockerfile
+├── Dockerfile.dev
+├── docker-compose.yml
+├── docker-compose.override.yml
+└── .dockerignore
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 生产环境 Dockerfile</h2>
+      <div class="code-block">
+<span class="comment"># ==================== 构建阶段 ====================</span>
+FROM node:20-alpine AS builder
+
+<span class="comment"># 安装构建工具（如果需要编译原生模块）</span>
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+<span class="comment"># 复制依赖文件</span>
+COPY package.json package-lock.json ./
+COPY tsconfig.json ./
+
+<span class="comment"># 安装所有依赖</span>
+RUN npm ci
+
+<span class="comment"># 复制源代码</span>
+COPY src ./src
+
+<span class="comment"># 构建 TypeScript</span>
+RUN npm run build
+
+<span class="comment"># 清理 devDependencies</span>
+RUN npm prune --production
+
+<span class="comment"># ==================== 生产阶段 ====================</span>
+FROM node:20-alpine
+
+<span class="comment"># 安装 tini 作为 init 进程</span>
+RUN apk add --no-cache tini
+
+WORKDIR /app
+
+<span class="comment"># 设置环境变量</span>
+ENV NODE_ENV=production \
+    PORT=3000
+
+<span class="comment"># 创建非 root 用户</span>
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+<span class="comment"># 复制构建产物</span>
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+<span class="comment"># 切换到非 root 用户</span>
+USER nodejs
+
+<span class="comment"># 暴露端口</span>
+EXPOSE 3000
+
+<span class="comment"># 健康检查</span>
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+<span class="comment"># 使用 tini 启动应用</span>
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/index.js"]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 开发环境 Dockerfile</h2>
+      <div class="code-block">
+<span class="comment"># Dockerfile.dev - 开发环境配置</span>
+FROM node:20-alpine
+
+WORKDIR /app
+
+<span class="comment"># 安装 nodemon 全局</span>
+RUN npm install -g nodemon
+
+<span class="comment"># 复制依赖文件</span>
+COPY package*.json ./
+
+<span class="comment"># 安装所有依赖（包括 devDependencies）</span>
+RUN npm install
+
+<span class="comment"># 复制源代码</span>
+COPY . .
+
+<span class="comment"># 设置环境变量</span>
+ENV NODE_ENV=development \
+    PORT=3000
+
+EXPOSE 3000
+
+<span class="comment"># 开发模式启动（热重载）</span>
+CMD ["npm", "run", "dev"]
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐙</span> Docker Compose 配置</h2>
+      <div class="code-block">
+<span class="comment"># docker-compose.yml - 生产配置</span>
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myapp:latest
+    container_name: myapp-api
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: myapp-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: myapp-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: myapp-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 开发环境覆盖配置</h2>
+      <div class="code-block">
+<span class="comment"># docker-compose.override.yml - 自动加载</span>
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      <span class="comment"># 挂载源代码实现热重载</span>
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      <span class="comment"># 使用匿名卷保护 node_modules</span>
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DEBUG=app:*
+    ports:
+      - "3000:3000"
+      <span class="comment"># 调试端口</span>
+      - "9229:9229"
+    command: npm run dev
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化技巧</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">镜像优化</h3>
+          <ul class="feature-list">
+            <li>使用 Alpine 基础镜像</li>
+            <li>多阶段构建分离构建环境</li>
+            <li>合理利用构建缓存</li>
+            <li>清理不必要的文件和缓存</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">运行优化</h3>
+          <ul class="feature-list">
+            <li>设置合理的内存限制</li>
+            <li>使用 init 进程管理</li>
+            <li>配置健康检查</li>
+            <li>日志收集与轮转</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🐛</span> 调试技巧</h2>
+      <div class="code-block">
+<span class="comment"># 查看容器日志</span>
+docker compose logs -f app
+
+<span class="comment"># 进入容器调试</span>
+docker compose exec app sh
+
+<span class="comment"># 远程调试配置 (package.json)</span>
+{
+  "scripts": {
+    "dev": "nodemon --inspect=0.0.0.0:9229 src/index.ts"
+  }
+}
+
+<span class="comment"># VS Code launch.json 配置</span>
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Docker: Attach to Node",
+      "remoteRoot": "/app",
+      "localRoot": "${workspaceFolder}",
+      "port": 9229
+    }
+  ]
+}
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">生产环境清单</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用多阶段构建减小镜像体积</li>
+          <li>以非 root 用户运行容器</li>
+          <li>设置健康检查和重启策略</li>
+          <li>使用 .dockerignore 排除不需要的文件</li>
+          <li>敏感信息通过环境变量或 secrets 传入</li>
+          <li>配置日志收集和监控</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用多阶段构建分离构建和运行环境</li>
+            <li>• 生产环境使用非 root 用户运行</li>
+            <li>• 开发环境挂载代码实现热重载</li>
+            <li>• 使用 docker-compose.override.yml 区分环境</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="99-4-Docker-Compose.html">← 上一节</a>
+      <a href="../chapter100/100-1-CICD概念.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.1 Supertest 简介 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="../chapter70/70-5-配置文件详解.html">上一节</a></li>
+      <li><a href="71-2-请求构建.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>71.1 Supertest 简介</h1>
+      <p class="subtitle">第十部分：测试篇 - Node.js HTTP 接口测试利器</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> Supertest 简介</h2>
+      <p>Supertest 是一个用于测试 Node.js HTTP 服务器的库，基于 SuperAgent 构建，提供了流畅的 API 来测试 HTTP 请求。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">为什么选择 Supertest？</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>不需要启动真实服务器</li>
+            <li>支持 Express、Koa、NestJS 等框架</li>
+            <li>流畅的链式 API</li>
+            <li>完美集成 Jest/Mocha 等测试框架</li>
+            <li>支持异步测试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 安装 Supertest</h2>
+
+      <div class="code-block"># 安装 Supertest 和类型定义
+npm install --save-dev supertest @types/supertest
+
+# 或使用 yarn
+yarn add --dev supertest @types/supertest</div>
+
+      <h3>项目依赖</h3>
+      <div class="code-block">{
+  "devDependencies": {
+    "supertest": "^6.3.3",
+    "@types/supertest": "^2.0.16",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "@types/jest": "^29.5.11"
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 第一个测试</h2>
+
+      <div class="code-block">// Express 应用
+// src/app.ts
+import express from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/users/:id', (req, res) => {
+  const { id } = req.params;
+  res.json({ id, name: 'User ' + id });
+});
+
+export default app;</div>
+
+      <div class="code-block">// 测试文件
+// tests/app.test.ts
+import request from 'supertest';
+import app from '../src/app';
+
+describe('App Tests', () => {
+  test('GET /health should return status ok', async () => {
+    const response = await request(app)
+      .get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  test('GET /users/:id should return user', async () => {
+    const response = await request(app)
+      .get('/users/123');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: '123',
+      name: 'User 123'
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 工作原理</h2>
+
+      <div class="steps">
+        <div class="step completed">
+          <div class="step-number">1</div>
+          <div class="step-label">创建请求</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">2</div>
+          <div class="step-label">发送到应用</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">3</div>
+          <div class="step-label">接收响应</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">4</div>
+          <div class="step-label">断言验证</div>
+        </div>
+      </div>
+
+      <p>Supertest 直接调用 Express 应用的请求处理函数，不需要通过真实的网络连接，这使得测试更快、更可靠。</p>
+
+      <div class="code-block">// Supertest 内部工作方式简化示意
+function request(app) {
+  return {
+    get(path) {
+      return new Promise((resolve) => {
+        // 创建模拟的请求和响应对象
+        const req = { method: 'GET', path };
+        const res = {
+          status: (code) => { /* ... */ },
+          json: (data) => {
+            resolve({ status: 200, body: data });
+          }
+        };
+
+        // 直接调用应用
+        app(req, res);
+      });
+    }
+  };
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 支持的 HTTP 方法</h2>
+
+      <div class="code-block">import request from 'supertest';
+import app from './app';
+
+// GET 请求
+await request(app).get('/users');
+
+// POST 请求
+await request(app).post('/users').send({ name: 'John' });
+
+// PUT 请求
+await request(app).put('/users/1').send({ name: 'Jane' });
+
+// PATCH 请求
+await request(app).patch('/users/1').send({ age: 25 });
+
+// DELETE 请求
+await request(app).delete('/users/1');
+
+// HEAD 请求
+await request(app).head('/users');
+
+// OPTIONS 请求
+await request(app).options('/users');</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 基本断言模式</h2>
+
+      <div class="code-block">describe('API Tests', () => {
+  test('should return 200', async () => {
+    const response = await request(app).get('/users');
+
+    // 状态码断言
+    expect(response.status).toBe(200);
+    // 或使用 supertest 的断言
+    await request(app).get('/users').expect(200);
+  });
+
+  test('should return JSON', async () => {
+    const response = await request(app).get('/users');
+
+    // 响应头断言
+    expect(response.headers['content-type']).toMatch(/json/);
+    // 或
+    await request(app).get('/users').expect('Content-Type', /json/);
+  });
+
+  test('should return specific body', async () => {
+    const response = await request(app).get('/users/1');
+
+    // 响应体断言
+    expect(response.body).toEqual({ id: 1, name: 'John' });
+    // 或使用 supertest 断言
+    await request(app)
+      .get('/users/1')
+      .expect(200, { id: 1, name: 'John' });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 测试组织结构</h2>
+
+      <div class="code-block">tests/
+├── integration/
+│   ├── users.test.ts      # 用户相关 API 测试
+│   ├── auth.test.ts       # 认证相关测试
+│   └── products.test.ts   # 产品相关测试
+├── helpers/
+│   ├── database.ts        # 数据库辅助函数
+│   └── auth.ts            # 认证辅助函数
+└── setup/
+    └── jest-setup.ts      # 测试设置</div>
+
+      <h3>测试文件结构</h3>
+      <div class="code-block">import request from 'supertest';
+import app from '@/app';
+import { setupDatabase, cleanupDatabase } from '../helpers/database';
+
+describe('User API', () => {
+  beforeAll(async () => {
+    await setupDatabase();
+  });
+
+  afterAll(async () => {
+    await cleanupDatabase();
+  });
+
+  describe('GET /users', () => {
+    test('should return all users', async () => {
+      // ...
+    });
+
+    test('should filter users by status', async () => {
+      // ...
+    });
+  });
+
+  describe('POST /users', () => {
+    test('should create user', async () => {
+      // ...
+    });
+
+    test('should validate input', async () => {
+      // ...
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Supertest 是测试 Node.js HTTP 应用的利器</li>
+            <li>不需要启动真实服务器，测试更快</li>
+            <li>支持所有 HTTP 方法</li>
+            <li>可以与 Jest 完美配合</li>
+            <li>支持链式断言和异步测试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter70/70-5-配置文件详解.html">← 上一节：配置文件详解</a>
+      <a href="71-2-请求构建.html">下一节：请求构建 →</a>
+    </div>
+  </div>
+</body>
+</html>

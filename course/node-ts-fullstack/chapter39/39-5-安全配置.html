@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>39.5 安全配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="39-1-文件上传.html">第三十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>39.5 安全配置</h1>
+      <p class="subtitle">构建安全的 Koa 应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解常见的 Web 安全威胁</li>
+        <li>学会使用安全中间件</li>
+        <li>掌握 XSS、CSRF 防护方法</li>
+        <li>了解安全响应头配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见安全威胁</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">XSS</h3>
+          <p class="card-text">跨站脚本攻击</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">CSRF</h3>
+          <p class="card-text">跨站请求伪造</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">💉</div>
+          <h3 class="card-title">SQL 注入</h3>
+          <p class="card-text">数据库攻击</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>威胁类型</th>
+            <th>说明</th>
+            <th>防护方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>XSS</td>
+            <td>注入恶意脚本</td>
+            <td>输入过滤、输出转义</td>
+          </tr>
+          <tr>
+            <td>CSRF</td>
+            <td>伪造用户请求</td>
+            <td>Token 验证</td>
+          </tr>
+          <tr>
+            <td>SQL 注入</td>
+            <td>执行恶意 SQL</td>
+            <td>参数化查询</td>
+          </tr>
+          <tr>
+            <td>点击劫持</td>
+            <td>iframe 嵌套欺骗</td>
+            <td>X-Frame-Options</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 安全响应头</h2>
+      <div class="code-block">
+// 安装 koa-helmet
+npm install koa-helmet
+      </div>
+
+      <div class="code-block">
+const helmet = require('koa-helmet');
+
+// 使用默认安全头
+app.use(helmet());
+
+// 自定义配置
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://cdn.example.com'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'https://api.example.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 安全头详解</h2>
+      <div class="code-block">
+// 手动设置安全响应头
+app.use(async (ctx, next) => {
+  // 防止点击劫持
+  ctx.set('X-Frame-Options', 'DENY');
+
+  // 防止 MIME 类型嗅探
+  ctx.set('X-Content-Type-Options', 'nosniff');
+
+  // XSS 保护
+  ctx.set('X-XSS-Protection', '1; mode=block');
+
+  // HSTS (强制 HTTPS)
+  ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+  // 内容安全策略
+  ctx.set('Content-Security-Policy', "default-src 'self'");
+
+  // 权限策略
+  ctx.set('Permissions-Policy', 'geolocation=(), microphone=()');
+
+  // 引用策略
+  ctx.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  await next();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> XSS 防护</h2>
+      <div class="code-block">
+// 1. 输入验证
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return input;
+
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// 2. 使用验证库
+const validator = require('validator');
+
+router.post('/comment', async ctx => {
+  const { content } = ctx.request.body;
+
+  // 清理 HTML 标签
+  const cleanContent = validator.stripLow(content);
+  const escapedContent = validator.escape(cleanContent);
+
+  await Comment.create({ content: escapedContent });
+  ctx.body = { message: 'Comment created' };
+});
+
+// 3. EJS 模板自动转义
+// <%= %> 自动转义
+// <%- %> 不转义（谨慎使用）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> CSRF 防护</h2>
+      <div class="code-block">
+# 安装 koa-csrf
+npm install koa-csrf
+      </div>
+
+      <div class="code-block">
+const CSRF = require('koa-csrf');
+
+// 配置 CSRF
+app.use(new CSRF({
+  invalidTokenMessage: 'Invalid CSRF token',
+  invalidTokenStatusCode: 403,
+  excludedMethods: ['GET', 'HEAD', 'OPTIONS'],
+  disableQuery: true
+}));
+
+// 获取 CSRF Token
+router.get('/csrf-token', async ctx => {
+  ctx.body = { csrf: ctx.csrf };
+});
+
+// 表单提交（需要携带 CSRF token）
+router.post('/submit', async ctx => {
+  // CSRF 中间件会自动验证
+  ctx.body = { message: 'Success' };
+});
+
+// 前端请求
+/*
+fetch('/submit', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': csrfToken
+  },
+  body: JSON.stringify(data)
+});
+*/
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💉</span> SQL 注入防护</h2>
+      <div class="code-block">
+// 危险！直接拼接 SQL
+router.get('/user', async ctx => {
+  const name = ctx.query.name;
+  // 可被注入: name = "admin' OR '1'='1"
+  const sql = `SELECT * FROM users WHERE name = '${name}'`;
+  const users = await sequelize.query(sql);
+  ctx.body = users;
+});
+
+// 安全：使用参数化查询
+router.get('/user', async ctx => {
+  const name = ctx.query.name;
+  const users = await sequelize.query(
+    'SELECT * FROM users WHERE name = ?',
+    { replacements: [name] }
+  );
+  ctx.body = users;
+});
+
+// 安全：使用 ORM
+router.get('/user', async ctx => {
+  const name = ctx.query.name;
+  const users = await User.findAll({
+    where: { name }
+  });
+  ctx.body = users;
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 请求限流</h2>
+      <div class="code-block">
+const rateLimit = require('koa-ratelimit');
+
+// 使用 Redis 存储
+const Redis = require('ioredis');
+const redis = new Redis();
+
+app.use(rateLimit({
+  db: redis,
+  duration: 60000,           // 时间窗口：1 分钟
+  max: 100,                  // 最大请求数
+  id: ctx => ctx.ip,         // 限流标识
+  errorMessage: 'Too many requests',
+  disableHeader: false
+}));
+
+// 响应头
+// X-RateLimit-Limit: 100
+// X-RateLimit-Remaining: 99
+// X-RateLimit-Reset: 60
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 数据验证</h2>
+      <div class="code-block">
+const Joi = require('joi');
+
+// 验证中间件
+function validate(schema) {
+  return async (ctx, next) => {
+    const data = ctx.method === 'GET' ? ctx.query : ctx.request.body;
+
+    try {
+      const value = await schema.validateAsync(data, {
+        abortEarly: false
+      });
+
+      // 替换验证后的数据
+      if (ctx.method === 'GET') {
+        ctx.query = value;
+      } else {
+        ctx.request.body = value;
+      }
+
+      await next();
+    } catch (err) {
+      ctx.status = 400;
+      ctx.body = {
+        error: 'Validation failed',
+        details: err.details
+      };
+    }
+  };
+}
+
+// 使用
+const userSchema = Joi.object({
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().pattern(new RegExp('^[a-zA-Z0-9]{3,30}$')).required()
+});
+
+router.post('/register', validate(userSchema), async ctx => {
+  const { username, email, password } = ctx.request.body;
+  // 创建用户...
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整安全配置</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const helmet = require('koa-helmet');
+const rateLimit = require('koa-ratelimit');
+const cors = require('@koa/cors');
+const Redis = require('ioredis');
+
+const app = new Koa();
+
+// 1. 安全响应头
+app.use(helmet());
+
+// 2. CORS 配置
+app.use(cors({
+  origin: 'https://example.com',
+  credentials: true
+}));
+
+// 3. 请求限流
+app.use(rateLimit({
+  db: new Redis(),
+  duration: 60000,
+  max: 100,
+  id: ctx => ctx.ip
+}));
+
+// 4. 错误处理
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    ctx.status = err.status || 500;
+    ctx.body = {
+      error: process.env.NODE_ENV === 'production'
+        ? 'Internal Server Error'
+        : err.message
+    };
+    ctx.app.emit('error', err, ctx);
+  }
+});
+
+// 5. 业务路由
+// ...
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 koa-helmet 设置安全响应头</li>
+            <li>• XSS 防护：输入过滤、输出转义</li>
+            <li>• CSRF 防护：使用 CSRF Token</li>
+            <li>• SQL 注入：使用参数化查询或 ORM</li>
+            <li>• 请求限流：防止暴力攻击</li>
+            <li>• 数据验证：使用 Joi 等验证库</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="39-4-静态文件服务.html">← 上一节：静态文件服务</a>
+      <a href="../chapter40/40-1-项目配置.html">下一章：Koa + TypeScript →</a>
+    </div>
+  </div>
+</body>
+</html>

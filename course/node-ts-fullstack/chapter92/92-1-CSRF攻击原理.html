@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>92.1 CSRF 攻击原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="92-1-CSRF攻击原理.html">第九十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>92.1 CSRF 攻击原理</h1>
+      <p class="subtitle">跨站请求伪造攻击解析</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 CSRF 攻击原理</li>
+        <li>掌握 CSRF 攻击流程</li>
+        <li>了解 CSRF 的危害</li>
+        <li>学会识别 CSRF 漏洞</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> CSRF 攻击概述</h2>
+      <p>CSRF (Cross-Site Request Forgery) 跨站请求伪造，是一种利用用户已登录状态发起非预期请求的攻击方式。</p>
+      <div class="code-block">
+# CSRF 定义
+攻击者诱导用户访问恶意网站
+在用户不知情的情况下发起请求
+利用用户在目标网站的登录状态
+执行用户非预期的操作
+
+# CSRF 与 XSS 的区别
+
+┌─────────────┬────────────────────┬────────────────────┐
+│   对比项     │       XSS          │       CSRF         │
+├─────────────┼────────────────────┼────────────────────┤
+│ 攻击方式    │ 注入恶意脚本       │ 伪造请求           │
+│ 依赖条件    │ 输入输出漏洞       │ 用户已登录         │
+│ 攻击目标    │ 窃取用户数据       │ 执行用户操作       │
+│ Cookie 访问 │ 可以               │ 不能               │
+│ 防护方式    │ 输出编码/CSP       │ Token/SameSite     │
+└─────────────┴────────────────────┴────────────────────┘
+
+# CSRF 攻击条件
+1. 用户已登录目标网站
+2. 目标网站存在 CSRF 漏洞
+3. 用户访问了恶意网站
+4. 请求不需要额外验证
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 攻击流程分析</h2>
+      <div class="code-block">
+# CSRF 攻击流程
+
+1. 用户登录银行网站 bank.com
+   浏览器保存 bank.com 的 Cookie
+
+2. 用户未登出，访问恶意网站 evil.com
+
+3. evil.com 包含攻击代码
+   发起对 bank.com 的请求
+
+4. 浏览器自动携带 bank.com 的 Cookie
+
+5. bank.com 验证 Cookie，认为请求合法
+
+6. 执行转账操作，资金被盗
+
+# 攻击示例
+
+## 目标网站（bank.com）
+POST /transfer
+参数: to=hacker&amount=10000
+
+## 恶意网站（evil.com）
+&lt;!-- 自动提交表单 --&gt;
+&lt;form action="https://bank.com/transfer" method="POST" id="csrf"&gt;
+  &lt;input type="hidden" name="to" value="hacker"&gt;
+  &lt;input type="hidden" name="amount" value="10000"&gt;
+&lt;/form&gt;
+&lt;script&gt;document.getElementById('csrf').submit();&lt;/script&gt;
+
+## 或者使用 GET 请求（如果后端允许）
+&lt;img src="https://bank.com/transfer?to=hacker&amount=10000"&gt;
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">关键点</div>
+          <p>CSRF 攻击的关键是浏览器会自动携带目标网站的 Cookie，攻击者利用这一点伪造请求。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 危害场景</h2>
+      <div class="code-block">
+# 1. 账户操作
+- 修改密码
+- 修改邮箱
+- 绑定手机号
+- 关闭安全设置
+
+# 2. 金融操作
+- 转账
+- 支付
+- 充值
+- 提现
+
+# 3. 内容操作
+- 发表文章
+- 发布评论
+- 发送消息
+- 删除内容
+
+# 4. 权限操作
+- 添加管理员
+- 授权访问
+- 分享资源
+
+# 5. 社交操作
+- 关注用户
+- 点赞内容
+- 分享动态
+
+# 实际案例
+// 修改密码
+&lt;form action="https://example.com/change-password" method="POST"&gt;
+  &lt;input type="hidden" name="newPassword" value="hacker123"&gt;
+&lt;/form&gt;
+
+// 添加管理员
+&lt;form action="https://admin.example.com/add-user" method="POST"&gt;
+  &lt;input type="hidden" name="username" value="hacker"&gt;
+  &lt;input type="hidden" name="role" value="admin"&gt;
+&lt;/form&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 为什么会发生 CSRF</h2>
+      <div class="code-block">
+# HTTP 请求的特性
+
+## Cookie 自动发送
+浏览器在发送请求时
+自动携带目标域名的 Cookie
+不管请求从哪里发起
+
+## 请求来源可伪造
+Referer 和 Origin 可被修改或绕过
+不能完全依赖这些头判断来源
+
+## 简单请求没有预检
+GET、POST 表单提交
+不会触发 CORS 预检
+直接发送请求
+
+# 不安全的实现
+
+## 仅依赖 Cookie 验证
+if (req.session.userId) {
+  // 执行敏感操作
+}
+
+## 没有验证请求来源
+// 缺少 CSRF Token 验证
+// 缺少 Referer/Origin 检查
+
+## GET 请求执行敏感操作
+app.get('/transfer', (req, res) => {
+  transfer(req.query.to, req.query.amount);
+});
+// GET 请求更容易被利用
+
+# 安全的实现应该
+1. 使用 CSRF Token
+2. 验证请求来源
+3. 使用 SameSite Cookie
+4. 敏感操作需要二次验证
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CSRF 利用浏览器自动发送 Cookie 的特性</li>
+            <li>• 攻击者伪造请求，用户在不知情下执行操作</li>
+            <li>• 仅依赖 Cookie 验证是不安全的</li>
+            <li>• 需要额外的防护措施验证请求来源</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter91/91-5-输入过滤与输出编码.html">← 上一章：输入过滤与输出编码</a>
+      <a href="92-2-CSRFToken.html">下一节：CSRF Token →</a>
+    </div>
+  </div>
+</body>
+</html>

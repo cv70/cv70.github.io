@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>73.2 AAA 模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="73-1-测试命名规范.html">上一节</a></li>
+      <li><a href="73-3-测试隔离.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>73.2 AAA 模式</h1>
+      <p class="subtitle">第十部分：测试篇 - 结构化测试的最佳实践</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> AAA 模式简介</h2>
+      <p>AAA 模式（Arrange-Act-Assert）是一种组织测试代码的结构模式，将测试分为三个清晰的阶段。</p>
+
+      <div class="steps">
+        <div class="step completed">
+          <div class="step-number">1</div>
+          <div class="step-label">Arrange<br>准备</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">2</div>
+          <div class="step-label">Act<br>执行</div>
+        </div>
+        <div class="step completed">
+          <div class="step-number">3</div>
+          <div class="step-label">Assert<br>断言</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 三个阶段详解</h2>
+
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">Arrange 准备</h3>
+          <p class="card-text">设置测试所需的所有条件和数据。</p>
+          <ul class="feature-list">
+            <li>创建测试对象</li>
+            <li>设置输入参数</li>
+            <li>配置 Mock 行为</li>
+            <li>准备预期数据</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Act 执行</h3>
+          <p class="card-text">调用被测试的方法或函数。</p>
+          <ul class="feature-list">
+            <li>执行单个操作</li>
+            <li>调用一个方法</li>
+            <li>触发一个事件</li>
+            <li>发送一个请求</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Assert 断言</h3>
+          <p class="card-text">验证实际结果是否符合预期。</p>
+          <ul class="feature-list">
+            <li>检查返回值</li>
+            <li>验证状态变化</li>
+            <li>确认方法调用</li>
+            <li>验证异常抛出</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 基本 AAA 示例</h2>
+
+      <div class="code-block">describe('Calculator', () => {
+  describe('add', () => {
+    it('should add two positive numbers', () => {
+      // Arrange - 准备
+      const calculator = new Calculator();
+      const a = 5;
+      const b = 3;
+      const expected = 8;
+
+      // Act - 执行
+      const result = calculator.add(a, b);
+
+      // Assert - 断言
+      expect(result).toBe(expected);
+    });
+
+    it('should handle negative numbers', () => {
+      // Arrange
+      const calculator = new Calculator();
+      const a = -5;
+      const b = -3;
+
+      // Act
+      const result = calculator.add(a, b);
+
+      // Assert
+      expect(result).toBe(-8);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 复杂 AAA 示例</h2>
+
+      <div class="code-block">describe('UserService', () => {
+  describe('create', () => {
+    it('should create user with valid data', async () => {
+      // Arrange
+      const mockRepository = {
+        create: jest.fn(),
+        save: jest.fn()
+      };
+      const service = new UserService(mockRepository as any);
+
+      const userData = {
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+      const savedUser = {
+        id: '1',
+        ...userData,
+        createdAt: new Date()
+      };
+
+      mockRepository.create.mockReturnValue(savedUser);
+      mockRepository.save.mockResolvedValue(savedUser);
+
+      // Act
+      const result = await service.create(userData);
+
+      // Assert
+      expect(result).toEqual(savedUser);
+      expect(mockRepository.create).toHaveBeenCalledWith(userData);
+      expect(mockRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw error for duplicate email', async () => {
+      // Arrange
+      const mockRepository = {
+        findOne: jest.fn(),
+        create: jest.fn()
+      };
+      const service = new UserService(mockRepository as any);
+
+      const userData = {
+        name: 'John',
+        email: 'existing@example.com'
+      };
+
+      mockRepository.findOne.mockResolvedValue({ id: '1', email: userData.email });
+
+      // Act & Assert
+      await expect(service.create(userData))
+        .rejects.toThrow('Email already exists');
+
+      expect(mockRepository.create).not.toHaveBeenCalled();
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 多断言场景</h2>
+
+      <div class="code-block">describe('UserService', () => {
+  it('should update user with valid data', async () => {
+    // Arrange
+    const userId = '1';
+    const updateData = { name: 'Updated Name' };
+    const existingUser = { id: userId, name: 'Old Name', email: 'test@example.com' };
+    const updatedUser = { ...existingUser, ...updateData };
+
+    mockRepository.findOne.mockResolvedValue(existingUser);
+    mockRepository.save.mockResolvedValue(updatedUser);
+
+    // Act
+    const result = await service.update(userId, updateData);
+
+    // Assert - 多个断言
+    expect(result.name).toBe('Updated Name');
+    expect(result.email).toBe('test@example.com');
+    expect(result.id).toBe(userId);
+    expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: userId } });
+    expect(mockRepository.save).toHaveBeenCalled();
+  });
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">多断言原则</div>
+          <p>虽然一个测试可以有多个断言，但它们应该验证同一个行为。如果一个测试需要验证多个独立行为，考虑拆分成多个测试。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> AAA 变体：Given-When-Then</h2>
+
+      <div class="code-block">// BDD 风格的 Given-When-Then
+describe('User Registration', () => {
+  it('should register new user', async () => {
+    // Given - 给定初始条件
+    const userData = {
+      name: 'John Doe',
+      email: 'john@example.com',
+      password: 'Password123!'
+    };
+    const mockUser = { id: '1', ...userData };
+
+    mockRepository.create.mockResolvedValue(mockUser);
+
+    // When - 当执行操作时
+    const result = await service.register(userData);
+
+    // Then - 那么应该发生
+    expect(result).toBeDefined();
+    expect(result.id).toBe('1');
+    expect(result.email).toBe(userData.email);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 常见错误</h2>
+
+      <div class="code-block">// ❌ 错误：阶段混在一起
+it('should create user', async () => {
+  const result = await service.create({ name: 'John' });
+  expect(result.name).toBe('John');
+  const user2 = await service.create({ name: 'Jane' });
+  expect(user2.name).toBe('Jane');
+});
+
+// ✅ 正确：清晰的 AAA 分离
+it('should create user with name', async () => {
+  // Arrange
+  const userData = { name: 'John' };
+
+  // Act
+  const result = await service.create(userData);
+
+  // Assert
+  expect(result.name).toBe('John');
+});
+
+// ❌ 错误：Act 中有多个操作
+it('should update user', async () => {
+  const user = await service.create({ name: 'John' }); // Act 1
+  const result = await service.update(user.id, { name: 'Jane' }); // Act 2
+  expect(result.name).toBe('Jane');
+});
+
+// ✅ 正确：每个测试一个行为
+it('should update existing user', async () => {
+  // Arrange
+  const existingUser = await createTestUser({ name: 'John' });
+
+  // Act
+  const result = await service.update(existingUser.id, { name: 'Jane' });
+
+  // Assert
+  expect(result.name).toBe('Jane');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>AAA 模式将测试分为三个清晰的阶段</li>
+            <li>Arrange：准备测试数据和条件</li>
+            <li>Act：执行被测试的方法</li>
+            <li>Assert：验证结果是否符合预期</li>
+            <li>每个测试应该只验证一个行为</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="73-1-测试命名规范.html">← 上一节：测试命名规范</a>
+      <a href="73-3-测试隔离.html">下一节：测试隔离 →</a>
+    </div>
+  </div>
+</body>
+</html>

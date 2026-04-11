@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>96.4 读写分离 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="96-1-索引优化.html">第九十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>96.4 读写分离</h1>
+      <p class="subtitle">数据库读写分离架构</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解读写分离的原理</li>
+        <li>掌握读写分离架构设计</li>
+        <li>学会配置主从复制</li>
+        <li>了解数据一致性保证</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 读写分离概述</h2>
+      <div class="code-block">
+# 什么是读写分离
+
+将数据库分为：
+- 主库（Master）：处理写操作
+- 从库（Slave）：处理读操作
+
+# 架构图
+
+                    写操作
+                      │
+                      ▼
+┌─────────────────────────────────────┐
+│            Master (主库)             │
+│         处理 INSERT/UPDATE          │
+│              DELETE                 │
+└───────────────┬─────────────────────┘
+                │
+           主从复制
+                │
+    ┌───────────┼───────────┐
+    │           │           │
+    ▼           ▼           ▼
+┌───────┐  ┌───────┐  ┌───────┐
+│Slave1 │  │Slave2 │  │Slave3 │
+└───┬───┘  └───┬───┘  └───┬───┘
+    │          │          │
+    └──────────┼──────────┘
+               │
+               ▼
+            读操作
+
+# 优势
+- 分担主库读压力
+- 提高查询并发能力
+- 提高系统可用性
+- 便于扩展
+
+# 注意事项
+- 主从延迟问题
+- 需要处理数据一致性
+- 增加系统复杂度
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 主从复制配置</h2>
+      <div class="code-block">
+# MySQL 主从复制配置
+
+## 主库配置 (my.cnf)
+[mysqld]
+server-id = 1
+log_bin = mysql-bin
+binlog_format = ROW
+binlog_do_db = mydb
+
+## 创建复制用户
+CREATE USER 'repl'@'%' IDENTIFIED BY 'password';
+GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
+
+## 查看主库状态
+SHOW MASTER STATUS;
+
+## 从库配置 (my.cnf)
+[mysqld]
+server-id = 2
+relay_log = mysql-relay
+read_only = ON
+
+## 配置从库连接主库
+CHANGE MASTER TO
+  MASTER_HOST = 'master-host',
+  MASTER_USER = 'repl',
+  MASTER_PASSWORD = 'password',
+  MASTER_LOG_FILE = 'mysql-bin.000001',
+  MASTER_LOG_POS = 154;
+
+START SLAVE;
+
+## 查看从库状态
+SHOW SLAVE STATUS\G
+
+# PostgreSQL 主从复制
+
+## 主库配置 (postgresql.conf)
+wal_level = replica
+max_wal_senders = 3
+wal_keep_segments = 10
+
+## 从库配置 (recovery.conf)
+standby_mode = on
+primary_conninfo = 'host=master port=5432 user=repl'
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">主从延迟</div>
+          <p>主从复制存在延迟，通常是毫秒级到秒级。对于需要实时读取的场景，需要特殊处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 应用层实现</h2>
+      <div class="code-block">
+# TypeORM 读写分离
+
+import { createConnection } from 'typeorm';
+
+createConnection({
+  type: 'mysql',
+  replication: {
+    master: {
+      host: 'master-host',
+      port: 3306,
+      username: 'root',
+      password: 'password',
+      database: 'mydb',
+    },
+    slaves: [
+      {
+        host: 'slave1-host',
+        port: 3306,
+        username: 'root',
+        password: 'password',
+        database: 'mydb',
+      },
+      {
+        host: 'slave2-host',
+        port: 3306,
+        username: 'root',
+        password: 'password',
+        database: 'mydb',
+      },
+    ],
+  },
+  // 自动选择：写操作走主库，读操作走从库
+});
+
+# Sequelize 读写分离
+
+import { Sequelize } from 'sequelize';
+
+const sequelize = new Sequelize('mydb', 'root', 'password', {
+  host: 'master-host',
+  dialect: 'mysql',
+  replication: {
+    read: [
+      { host: 'slave1-host', username: 'root', password: 'password' },
+      { host: 'slave2-host', username: 'root', password: 'password' },
+    ],
+    write: { host: 'master-host', username: 'root', password: 'password' },
+  },
+  pool: {
+    max: 20,
+    idle: 30000,
+  },
+});
+
+# 自定义读写分离中间件
+
+class DatabaseRouter {
+  private masterPool: mysql.Pool;
+  private slavePools: mysql.Pool[];
+
+  constructor(config: any) {
+    this.masterPool = mysql.createPool(config.master);
+    this.slavePools = config.slaves.map(
+      (slave: any) => mysql.createPool(slave)
+    );
+  }
+
+  // 写操作使用主库
+  async write(sql: string, params?: any[]) {
+    return this.masterPool.execute(sql, params);
+  }
+
+  // 读操作使用从库（轮询）
+  async read(sql: string, params?: any[]) {
+    const index = Math.floor(Math.random() * this.slavePools.length);
+    return this.slavePools[index].execute(sql, params);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 数据一致性处理</h2>
+      <div class="code-block">
+# 解决主从延迟问题
+
+## 1. 关键读操作走主库
+async function getUser(userId: string) {
+  // 用户刚更新后的数据，需要从主库读取
+  return await masterPool.query(
+    'SELECT * FROM users WHERE id = ?',
+    [userId]
+  );
+}
+
+## 2. 延迟检测
+
+async function waitForReplication(expectedPosition: number) {
+  const maxWait = 5000;  // 最多等待 5 秒
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWait) {
+    const [rows] = await slavePool.query(
+      'SHOW SLAVE STATUS'
+    );
+
+    if (rows[0].Exec_Master_Log_Pos >= expectedPosition) {
+      return true;  // 复制完成
+    }
+
+    await sleep(100);
+  }
+
+  return false;  // 超时
+}
+
+## 3. 缓存双写
+
+async function updateUser(userId: string, data: object) {
+  // 更新数据库
+  await masterPool.query('UPDATE users SET ? WHERE id = ?', [data, userId]);
+
+  // 直接更新缓存（不依赖从库）
+  await cache.set(`user:${userId}`, data, 300);
+}
+
+## 4. 读写分离策略选择
+
+┌─────────────────┬───────────────────────────────────┐
+│    场景          │              策略                 │
+├─────────────────┼───────────────────────────────────┤
+│ 普通查询        │ 从库读取                         │
+│ 刚写入后读取    │ 主库读取或缓存                   │
+│ 事务中读取      │ 主库读取                         │
+│ 实时性要求高    │ 主库读取                         │
+│ 报表统计        │ 从库读取（减轻主库压力）         │
+└─────────────────┴───────────────────────────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 读写分离分担主库读压力</li>
+            <li>• 需要注意主从延迟问题</li>
+            <li>• ORM 框架通常内置读写分离支持</li>
+            <li>• 关键数据可直接读主库或用缓存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="96-3-连接池配置.html">← 上一节：连接池配置</a>
+      <a href="96-5-分库分表.html">下一节：分库分表 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>89.5 Turborepo - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="89-1-Monorepo概念.html">第八十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>89.5 Turborepo</h1>
+      <p class="subtitle">高性能构建系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Turborepo 的核心优势</li>
+        <li>掌握 Turbo 配置方法</li>
+        <li>学会使用缓存加速构建</li>
+        <li>了解与 pnpm 的集成</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Turborepo 简介</h2>
+      <p>Turborepo 是一个高性能的 Monorepo 构建系统，通过智能缓存和并行执行大幅提升构建速度。</p>
+      <div class="code-block">
+# 创建 Turborepo 项目
+npx create-turbo@latest my-turbo
+
+# 选择包管理器
+? Which package manager do you want to use?
+  npm
+  yarn
+  pnpm
+
+# 生成的目录结构
+my-turbo/
+├── apps/
+│   ├── web/           # Next.js 应用
+│   └── docs/          # 文档站点
+├── packages/
+│   ├── ui/            # 共享 UI 组件
+│   ├── tsconfig/      # 共享 TypeScript 配置
+│   └── eslint-config/ # 共享 ESLint 配置
+├── turbo.json         # Turbo 配置
+├── package.json
+└── pnpm-workspace.yaml
+
+# 核心特性
+1. 增量构建 - 只构建变化的代码
+2. 本地缓存 - 缓存构建结果
+3. 远程缓存 - 团队共享缓存
+4. 并行执行 - 充分利用 CPU
+5. 任务编排 - 智能处理任务依赖
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> turbo.json 配置</h2>
+      <div class="code-block">
+// turbo.json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**/*.tsx", "src/**/*.ts", "test/**/*.ts"]
+    }
+  }
+}
+
+# 配置说明
+
+## dependsOn: ["^build"]
+^ 表示依赖包需要先执行 build
+
+## outputs
+指定缓存输出目录
+
+## cache: false
+禁用缓存（开发服务器）
+
+## persistent: true
+持续运行的任务
+
+## inputs
+指定影响任务的文件
+
+## globalDependencies
+全局依赖文件变化时重新构建
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">依赖符号说明</div>
+          <p>dependsOn: ["build"] 表示同一包的 build 先执行；dependsOn: ["^build"] 表示依赖包的 build 先执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 常用命令</h2>
+      <div class="code-block">
+# 运行任务
+turbo run build
+turbo run test
+turbo run lint
+
+# 并行运行多个任务
+turbo run build test lint
+
+# 过滤项目
+turbo run build --filter=web
+turbo run build --filter=./apps/web
+turbo run build --filter=...[origin/main]  # 只构建变化的包
+
+# 开发模式
+turbo run dev
+
+# 查看任务依赖图
+turbo run build --dry-run
+
+# 强制忽略缓存
+turbo run build --force
+
+# 并行数
+turbo run build --parallel=4
+
+# 只运行有变化的包
+turbo run build --since=origin/main
+
+# package.json scripts
+{
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 缓存机制</h2>
+      <div class="code-block">
+# 本地缓存
+.turbo/cache/
+├── build-abc123/
+│   └── outputs/
+└── ...
+
+# 缓存命中
+$ turbo run build
+• Packages in scope: web, admin, ui, utils
+• Running build in 4 packages
+• Remote caching disabled
+build: cache hit, replaying outputs 0.5s
+build: cache hit, replaying outputs 0.3s
+
+# 远程缓存
+turbo login
+turbo link
+
+# turbo.json 启用远程缓存
+{
+  "remoteCache": {
+    "enabled": true
+  }
+}
+
+# CI 配置
+# .github/workflows/ci.yml
+- name: Setup Turborepo
+  uses: actions/setup-node@v4
+
+- name: Build
+  run: pnpm build
+  env:
+    TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+# 缓存配置优化
+{
+  "pipeline": {
+    "build": {
+      "outputs": ["dist/**"],
+      "inputs": ["src/**", "package.json", "tsconfig.json"]
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 与 pnpm 集成</h2>
+      <div class="code-block">
+# package.json
+{
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  }
+}
+
+# pnpm-workspace.yaml
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# 完整项目结构
+my-turbo/
+├── apps/
+│   ├── web/
+│   │   ├── package.json
+│   │   ├── next.config.js
+│   │   └── src/
+│   └── admin/
+├── packages/
+│   ├── ui/
+│   │   ├── package.json
+│   │   └── src/
+│   └── utils/
+├── turbo.json
+├── package.json
+├── pnpm-workspace.yaml
+├── pnpm-lock.yaml
+└── .gitignore
+
+# 运行开发服务器
+pnpm dev
+
+# 构建所有项目
+pnpm build
+
+# 只构建 web 应用
+turbo run build --filter=web
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Turborepo 通过缓存大幅提升构建速度</li>
+            <li>• pipeline 定义任务依赖和缓存策略</li>
+            <li>• 远程缓存让团队共享构建结果</li>
+            <li>• 与 pnpm 配合是最佳实践组合</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="89-4-pnpmWorkspace.html">← 上一节：pnpm workspace</a>
+      <a href="../chapter90/90-1-Web安全概述.html">下一章：Web 安全概述 →</a>
+    </div>
+  </div>
+</body>
+</html>

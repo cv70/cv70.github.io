@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>110.5 支付集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="110-1-需求分析.html">第110章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>110.5 支付集成</h1>
+      <p class="subtitle">接入支付宝与微信支付</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解支付流程设计</li>
+        <li>学会支付宝SDK集成</li>
+        <li>学会微信支付SDK集成</li>
+        <li>掌握支付回调处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 支付流程设计</h2>
+      <div class="code-block">
+// 支付流程
+
+const paymentFlow = `
+用户                商户系统              支付平台
+  │                    │                    │
+  │──发起支付请求──────>│                    │
+  │                    │                    │
+  │                    │──创建支付订单──────>│
+  │                    │                    │
+  │<──返回支付参数──────│                    │
+  │                    │                    │
+  │────────────────────────调用支付─────────>│
+  │                    │                    │
+  │<──────────────────────支付结果──────────│
+  │                    │                    │
+  │                    │<──异步通知──────────│
+  │                    │                    │
+  │                    │──处理支付结果──────>│
+  │                    │                    │
+  │                    │──返回确认──────────>│
+`;
+
+// 支付记录实体
+@Entity('payments')
+export class Payment {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  orderId: string;
+
+  @Column()
+  userId: string;
+
+  @Column()
+  method: 'alipay' | 'wechat' | 'balance';
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  amount: number;
+
+  @Column({ default: 'pending' })
+  status: 'pending' | 'success' | 'failed' | 'refunded';
+
+  @Column({ nullable: true })
+  transactionId: string;  // 第三方支付流水号
+
+  @Column({ type: 'json', nullable: true })
+  extra: Record<string, any>;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">支付安全要点</div>
+          <p>签名验证、金额校验、幂等处理、异步通知重试。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 支付宝集成</h2>
+      <div class="code-block">
+// alipay.service.ts
+import AlipaySdk from 'alipay-sdk';
+
+@Injectable()
+export class AlipayService {
+  private alipaySdk: AlipaySdk;
+
+  constructor() {
+    this.alipaySdk = new AlipaySdk({
+      appId: process.env.ALIPAY_APP_ID,
+      privateKey: process.env.ALIPAY_PRIVATE_KEY,
+      alipayPublicKey: process.env.ALIPAY_PUBLIC_KEY,
+      gateway: 'https://openapi.alipay.com/gateway.do',
+    });
+  }
+
+  // 创建支付
+  async createPayment(order: Order): Promise<string> {
+    const result = await this.alipaySdk.exec('alipay.trade.page.pay', {
+      notify_url: process.env.ALIPAY_NOTIFY_URL,
+      return_url: process.env.ALIPAY_RETURN_URL,
+      bizContent: {
+        out_trade_no: order.id,
+        total_amount: order.payAmount.toFixed(2),
+        subject: `订单${order.id}`,
+        product_code: 'FAST_INSTANT_TRADE_PAY',
+      },
+    });
+
+    return result;
+  }
+
+  // 处理异步通知
+  async handleNotify(params: any): Promise<boolean> {
+    // 1. 验证签名
+    const signValid = this.alipaySdk.checkNotifySign(params);
+    if (!signValid) {
+      console.error('Alipay notify sign invalid');
+      return false;
+    }
+
+    // 2. 验证金额
+    const orderId = params.out_trade_no;
+    const tradeStatus = params.trade_status;
+    const totalAmount = parseFloat(params.total_amount);
+
+    const order = await this.orderService.findById(orderId);
+    if (!order || order.payAmount !== totalAmount) {
+      console.error('Amount mismatch');
+      return false;
+    }
+
+    // 3. 处理支付结果
+    if (tradeStatus === 'TRADE_SUCCESS' || tradeStatus === 'TRADE_FINISHED') {
+      await this.orderService.handlePaymentSuccess(
+        params.trade_no,
+        orderId,
+        'alipay'
+      );
+    }
+
+    return true;
+  }
+
+  // 退款
+  async refund(orderId: string, amount: number, reason: string) {
+    const result = await this.alipaySdk.exec('alipay.trade.refund', {
+      bizContent: {
+        out_trade_no: orderId,
+        refund_amount: amount.toFixed(2),
+        refund_reason: reason,
+      },
+    });
+
+    return result;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 微信支付集成</h2>
+      <div class="code-block">
+// wechat-pay.service.ts
+import { Wechatpay } from 'wechatpay-node-v3';
+
+@Injectable()
+export class WechatPayService {
+  private pay: Wechatpay;
+
+  constructor() {
+    this.pay = new Wechatpay({
+      appid: process.env.WECHAT_APP_ID,
+      mchid: process.env.WECHAT_MCH_ID,
+      serial_no: process.env.WECHAT_SERIAL_NO,
+      privateKey: process.env.WECHAT_PRIVATE_KEY,
+      apiv3_private_key: process.env.WECHAT_API_V3_KEY,
+    });
+  }
+
+  // JSAPI支付（小程序/公众号）
+  async createJsapiPayment(order: Order, openid: string) {
+    const result = await this.pay.transactions_jsapi({
+      description: `订单${order.id}`,
+      out_trade_no: order.id,
+      notify_url: process.env.WECHAT_NOTIFY_URL,
+      amount: {
+        total: Math.round(order.payAmount * 100),  // 分
+      },
+      payer: {
+        openid,
+      },
+    });
+
+    return result;
+  }
+
+  // Native支付（扫码支付）
+  async createNativePayment(order: Order) {
+    const result = await this.pay.transactions_native({
+      description: `订单${order.id}`,
+      out_trade_no: order.id,
+      notify_url: process.env.WECHAT_NOTIFY_URL,
+      amount: {
+        total: Math.round(order.payAmount * 100),
+      },
+    });
+
+    return result.code_url;  // 返回二维码链接
+  }
+
+  // 处理异步通知
+  async handleNotify(headers: any, body: any): Promise<any> {
+    // 验证签名
+    const { id, create_time, resource_type, event_type, resource } =
+      await this.pay.decipher_notify(headers, body);
+
+    // 处理支付成功事件
+    if (event_type === 'TRANSACTION.SUCCESS') {
+      const { out_trade_no, transaction_id, amount } = resource;
+
+      await this.orderService.handlePaymentSuccess(
+        transaction_id,
+        out_trade_no,
+        'wechat'
+      );
+    }
+
+    return { code: 'SUCCESS', message: '成功' };
+  }
+
+  // 退款
+  async refund(orderId: string, amount: number, reason: string) {
+    const result = await this.pay.refunds({
+      out_trade_no: orderId,
+      out_refund_no: `refund_${Date.now()}`,
+      amount: {
+        total: Math.round(amount * 100),
+        refund: Math.round(amount * 100),
+      },
+      reason,
+    });
+
+    return result;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 支付流程需要验证签名和金额</li>
+            <li>• 异步通知是支付成功的可靠保证</li>
+            <li>• 支付宝和微信支付API类似</li>
+            <li>• 退款需要调用对应平台的退款接口</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="110-4-订单模块.html">← 上一节：订单模块</a>
+      <a href="../chapter111/111-1-需求分析.html">下一章：即时通讯实战 →</a>
+    </div>
+  </div>
+</body>
+</html>

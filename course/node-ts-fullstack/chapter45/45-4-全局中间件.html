@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.4 全局中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="45-1-中间件概念.html">第四十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>45.4 全局中间件</h1>
+      <p class="subtitle">配置全局生效的中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解全局中间件的概念</li>
+        <li>掌握全局中间件的配置方式</li>
+        <li>了解全局中间件的限制</li>
+        <li>学会使用函数式全局中间件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是全局中间件？</h2>
+      <p>全局中间件应用于所有路由，在 main.ts 中配置，不需要在模块中实现 NestModule 接口。</p>
+
+      <div class="code-block">
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { Request, Response, NextFunction } from 'express';
+
+// 函数式全局中间件
+function globalLogger(req: Request, res: Response, next: NextFunction) {
+  console.log(`[Global] ${req.method} ${req.url}`);
+  next();
+}
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // 注册全局中间件
+  app.use(globalLogger);
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">全局中间件特点</div>
+          <p>全局中间件使用 Express 的 app.use() 方法注册，只支持函数式中间件，不支持类中间件（无法使用依赖注入）。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常用全局中间件配置</h2>
+      <div class="code-block">
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // 安全相关中间件
+  app.use(helmet());
+
+  // 响应压缩
+  app.use(compression());
+
+  // 请求限流
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,  // 15分钟
+      max: 100,  // 最多100个请求
+      message: 'Too many requests',
+    })
+  );
+
+  // CORS（或使用 app.enableCors()）
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    next();
+  });
+
+  // 请求ID
+  app.use((req, res, next) => {
+    req['id'] = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    next();
+  });
+
+  // 请求计时
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.url} - ${Date.now() - start}ms`);
+    });
+    next();
+  });
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 带条件的全局中间件</h2>
+      <div class="code-block">
+// main.ts
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // 仅在开发环境启用某些中间件
+  if (process.env.NODE_ENV === 'development') {
+    app.use((req, res, next) => {
+      console.log('Request Body:', req.body);
+      next();
+    });
+  }
+
+  // 仅在生产环境启用安全中间件
+  if (process.env.NODE_ENV === 'production') {
+    app.use(helmet());
+    app.use(rateLimit({ windowMs: 60000, max: 100 }));
+  }
+
+  // 健康检查不记录日志
+  app.use((req, res, next) => {
+    if (req.url !== '/health') {
+      console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    }
+    next();
+  });
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 全局中间件限制</h2>
+      <div class="code-block">
+// 错误：全局中间件不支持类中间件
+// app.use(LoggerMiddleware);  // 这不会工作
+
+// 正确：使用函数式中间件
+app.use((req, res, next) => {
+  // ...
+  next();
+});
+
+// 如果需要依赖注入，应该在模块中配置
+@Module({})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(InjectableMiddleware)  // 支持依赖注入
+      .forRoutes('*');
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">全局中间件选择</div>
+          <p>简单的无依赖中间件使用全局配置，需要依赖注入的中间件在模块中配置并应用到所有路由。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 全局中间件在 main.ts 中用 app.use() 配置</li>
+            <li>• 只支持函数式中间件，不支持依赖注入</li>
+            <li>• 适合日志、安全、压缩等通用功能</li>
+            <li>• 需要依赖注入时在模块中配置 forRoutes('*')</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="45-3-应用中间件.html">← 上一节：应用中间件</a>
+      <a href="45-5-第三方中间件.html">下一节：第三方中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

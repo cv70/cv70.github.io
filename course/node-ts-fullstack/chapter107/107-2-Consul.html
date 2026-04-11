@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>107.2 Consul - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="107-1-服务发现原理.html">第107章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>107.2 Consul</h1>
+      <p class="subtitle">功能全面的服务网格解决方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Consul的核心功能</li>
+        <li>掌握服务注册与发现</li>
+        <li>学会使用KV存储</li>
+        <li>了解Consul在Node.js中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Consul概述</h2>
+      <div class="code-block">
+// Consul是HashiCorp开源的服务网格解决方案
+
+const features = {
+  serviceDiscovery: '服务发现，注册和发现服务',
+  healthChecking: '健康检查，主动检查服务状态',
+  kvStore: 'KV存储，分布式键值存储',
+  serviceMesh: '服务网格，服务间通信管理',
+  serviceSegmentation: '服务分段，网络隔离'
+};
+
+// Consul架构
+const architecture = `
+┌─────────────────────────────────────┐
+│            Consul Server            │
+│  ┌─────────┐ ┌─────────┐ ┌────────┐│
+│  │  Raft   │ │  KV     │ │ Health ││
+│  │  Store  │ │  Store  │ │ Check  ││
+│  └─────────┘ └─────────┘ └────────┘│
+└─────────────────────────────────────┘
+         ↑              ↑
+         │              │
+┌────────┴────┐  ┌──────┴──────┐
+│Consul Agent │  │Consul Agent │
+│(Service A)  │  │(Service B)  │
+└─────────────┘  └─────────────┘
+`;
+
+// Consul vs Eureka vs Nacos
+const comparison = {
+  Consul: {
+    CAP: 'CP',
+    features: ['服务发现', '健康检查', 'KV存储', '多数据中心'],
+    company: 'HashiCorp'
+  },
+  Eureka: {
+    CAP: 'AP',
+    features: ['服务发现', '基础健康检查'],
+    company: 'Netflix'
+  },
+  Nacos: {
+    CAP: 'AP/CP可切换',
+    features: ['服务发现', '配置中心', '动态DNS'],
+    company: '阿里巴巴'
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Consul特点</div>
+          <p>功能全面、支持多数据中心、Raft协议保证一致性、支持健康检查。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 服务注册与发现</h2>
+      <div class="code-block">
+import Consul from 'consul';
+
+// 创建Consul客户端
+const consul = new Consul({
+  host: 'localhost',
+  port: 8500,
+  promisify: true
+});
+
+// ==================== 服务注册 ====================
+
+// 注册服务
+async function registerService() {
+  await consul.agent.service.register({
+    name: 'user-service',
+    id: 'user-service-1',
+    address: '192.168.1.100',
+    port: 3001,
+    tags: ['v1', 'primary'],
+    check: {
+      http: 'http://192.168.1.100:3001/health',
+      interval: '10s',
+      timeout: '5s',
+      deregistercriticalserviceafter: '1m'
+    }
+  });
+
+  console.log('Service registered');
+}
+
+// 注销服务
+async function deregisterService() {
+  await consul.agent.service.deregister('user-service-1');
+  console.log('Service deregistered');
+}
+
+// ==================== 服务发现 ====================
+
+// 获取服务列表
+async function discoverService() {
+  // 获取健康的服务实例
+  const services = await consul.health.service({
+    service: 'user-service',
+    passing: true  // 只返回健康的实例
+  });
+
+  console.log('Available instances:', services.length);
+
+  // 选择一个实例（负载均衡）
+  const instance = services[Math.floor(Math.random() * services.length)];
+  const address = `http://${instance.Service.Address}:${instance.Service.Port}`;
+
+  return address;
+}
+
+// 使用服务发现调用服务
+async function callUserService(userId: string) {
+  const serviceUrl = await discoverService();
+
+  const response = await fetch(`${serviceUrl}/users/${userId}`);
+  return response.json();
+}
+
+// ==================== 监听服务变化 ====================
+
+// Watch服务变化
+function watchService() {
+  const watch = consul.watch({
+    method: consul.health.service,
+    options: { service: 'user-service', passing: true }
+  });
+
+  watch.on('change', (data) => {
+    console.log('Service instances changed:', data.length);
+    // 更新本地缓存
+    updateLocalCache(data);
+  });
+
+  watch.on('error', (err) => {
+    console.error('Watch error:', err);
+  });
+
+  return watch;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> KV存储</h2>
+      <div class="code-block">
+// ==================== KV存储操作 ====================
+
+// 设置键值
+async function setConfig(key: string, value: any) {
+  await consul.kv.set(`config/${key}`, JSON.stringify(value));
+  console.log(`Config ${key} saved`);
+}
+
+// 获取键值
+async function getConfig(key: string) {
+  const result = await consul.kv.get(`config/${key}`);
+
+  if (result) {
+    return JSON.parse(result.Value);
+  }
+
+  return null;
+}
+
+// 获取所有键
+async function listKeys(prefix: string) {
+  const keys = await consul.kv.keys({
+    key: prefix,
+    recurse: true
+  });
+
+  return keys;
+}
+
+// 删除键
+async function deleteConfig(key: string) {
+  await consul.kv.del(`config/${key}`);
+}
+
+// 使用KV存储实现配置中心
+class ConsulConfigCenter {
+  private consul: Consul;
+  private cache: Map<string, any> = new Map();
+  private watchers: Map<string, any> = new Map();
+
+  constructor(consul: Consul) {
+    this.consul = consul;
+  }
+
+  // 获取配置
+  async get<T>(key: string): Promise<T | null> {
+    if (this.cache.has(key)) {
+      return this.cache.get(key);
+    }
+
+    const config = await getConfig(key);
+    this.cache.set(key, config);
+
+    return config;
+  }
+
+  // 监听配置变化
+  async watch(key: string, callback: (value: any) => void) {
+    const watch = this.consul.watch({
+      method: this.consul.kv.get,
+      options: { key: `config/${key}` }
+    });
+
+    watch.on('change', (data) => {
+      const value = data ? JSON.parse(data.Value) : null;
+      this.cache.set(key, value);
+      callback(value);
+    });
+
+    this.watchers.set(key, watch);
+  }
+}
+
+// 使用示例
+const configCenter = new ConsulConfigCenter(consul);
+
+// 监听数据库配置变化
+await configCenter.watch('database', (config) => {
+  console.log('Database config changed:', config);
+  // 重新连接数据库
+  reconnectDatabase(config);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Consul提供服务发现、健康检查、KV存储</li>
+            <li>• 服务注册后自动进行健康检查</li>
+            <li>• KV存储可用于配置中心</li>
+            <li>• Watch机制可监听服务变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="107-1-服务发现原理.html">← 上一节：服务发现原理</a>
+      <a href="107-3-Etcd.html">下一节：Etcd →</a>
+    </div>
+  </div>
+</body>
+</html>

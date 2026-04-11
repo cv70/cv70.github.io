@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>95.3 事件循环优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="95-1-性能分析方法.html">第九十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>95.3 事件循环优化</h1>
+      <p class="subtitle">避免阻塞事件循环</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解事件循环机制</li>
+        <li>识别阻塞操作</li>
+        <li>学会分解复杂任务</li>
+        <li>掌握异步优化技巧</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 事件循环机制</h2>
+      <div class="code-block">
+# Node.js 事件循环阶段
+
+   ┌───────────────────────────┐
+   │        timers            │ setTimeout/setInterval
+   │   (定时器阶段)            │
+   └─────────────┬─────────────┘
+                 │
+   ┌─────────────┴─────────────┐
+   │      pending callbacks    │ I/O 回调
+   │   (待处理回调)            │
+   └─────────────┬─────────────┘
+                 │
+   ┌─────────────┴─────────────┐
+   │        idle/prepare       │ 内部使用
+   └─────────────┬─────────────┘
+                 │
+   ┌─────────────┴─────────────┐
+   │         poll              │ 轮询
+   │   (轮询阶段)              │ I/O 事件
+   └─────────────┬─────────────┘
+                 │
+   ┌─────────────┴─────────────┐
+   │         check             │ setImmediate
+   └─────────────┬─────────────┘
+                 │
+   ┌─────────────┴─────────────┐
+   │     close callbacks       │ close 事件
+   └───────────────────────────┘
+
+# 事件循环特点
+- 单线程执行 JavaScript
+- 每个 Tick 执行一个阶段
+- 同步代码会阻塞整个循环
+- 高优先级任务可能被延迟
+
+# 事件循环延迟监控
+
+let lastTime = Date.now();
+
+setImmediate(function checkLoopDelay() {
+  const now = Date.now();
+  const delay = now - lastTime;
+
+  if (delay > 50) {
+    console.warn(`Event loop delayed: ${delay}ms`);
+  }
+
+  lastTime = now;
+  setImmediate(checkLoopDelay);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 阻塞操作识别</h2>
+      <div class="code-block">
+# 常见阻塞操作
+
+## 1. CPU 密集计算
+// 阻塞事件循环
+function heavyComputation(n) {
+  let result = 0;
+  for (let i = 0; i < n; i++) {
+    result += Math.sqrt(i);
+  }
+  return result;
+}
+
+// 调用时会阻塞整个应用
+const result = heavyComputation(100000000);
+
+## 2. 同步 I/O
+// 阻塞读取文件
+const data = fs.readFileSync('large-file.txt');
+
+// 阻塞加密
+const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512');
+
+## 3. 大数组操作
+// 大数组排序
+largeArray.sort((a, b) => complexCompare(a, b));
+
+// 正则匹配大字符串
+const matches = largeString.match(/complex.*pattern/g);
+
+# 使用 blocked-at 检测阻塞
+
+import blocked from 'blocked-at';
+
+blocked((time, stack) => {
+  console.log(`Blocked for ${time}ms`);
+  console.log('Stack trace:', stack);
+}, { threshold: 100 }); // 阈值 100ms
+
+# 使用 clinic 检测
+
+clinic doctor -- node app.js
+# 会显示事件循环延迟图
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">阻塞危害</div>
+          <p>事件循环阻塞会影响所有请求，不仅当前请求变慢，其他所有请求也会被延迟，严重时导致请求超时。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 任务分解技巧</h2>
+      <div class="code-block">
+# 使用 setImmediate 分解任务
+
+// 不好的做法：一次性处理大量数据
+function processLargeArray(array) {
+  const results = [];
+  for (const item of array) {
+    results.push(processItem(item));  // 可能阻塞很久
+  }
+  return results;
+}
+
+// 好的做法：分批处理
+async function processLargeArrayChunked(array, chunkSize = 100) {
+  const results = [];
+
+  for (let i = 0; i < array.length; i += chunkSize) {
+    const chunk = array.slice(i, i + chunkSize);
+
+    // 处理当前批次
+    for (const item of chunk) {
+      results.push(processItem(item));
+    }
+
+    // 让出事件循环
+    await new Promise(resolve => setImmediate(resolve));
+  }
+
+  return results;
+}
+
+# 使用 workerpool 处理 CPU 密集任务
+
+import { WorkerPool } from 'workerpool';
+
+const pool = WorkerPool.pool('./worker.js');
+
+async function processHeavy(data) {
+  const result = await pool.exec('heavyComputation', [data]);
+  return result;
+}
+
+// worker.js
+import { workerpool as pool } from 'workerpool';
+
+function heavyComputation(data) {
+  // CPU 密集计算
+  let result = 0;
+  for (let i = 0; i < data.iterations; i++) {
+    result += Math.sqrt(i);
+  }
+  return result;
+}
+
+pool.worker({
+  heavyComputation,
+});
+
+# 使用 async/await 配合 Promise
+
+async function processWithYield(array, processFn, yieldEvery = 10) {
+  const results = [];
+
+  for (let i = 0; i < array.length; i++) {
+    results.push(processFn(array[i]));
+
+    // 每处理 yieldEvery 个项目让出一次
+    if (i % yieldEvery === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  return results;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 异步优化实践</h2>
+      <div class="code-block">
+# 使用异步 API
+
+// 不好的做法：同步加密
+const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512');
+
+// 好的做法：异步加密
+const hash = await new Promise((resolve, reject) => {
+  crypto.pbkdf2(password, salt, 100000, 64, 'sha512', (err, derivedKey) => {
+    if (err) reject(err);
+    else resolve(derivedKey);
+  });
+});
+
+// 或使用 util.promisify
+import { promisify } from 'util';
+const pbkdf2Async = promisify(crypto.pbkdf2);
+const hash = await pbkdf2Async(password, salt, 100000, 64, 'sha512');
+
+# 使用流处理大数据
+
+import { createReadStream, createWriteStream } from 'fs';
+import { Transform } from 'stream';
+
+const transform = new Transform({
+  transform(chunk, encoding, callback) {
+    // 处理数据块
+    const processed = processChunk(chunk);
+    callback(null, processed);
+  }
+});
+
+createReadStream('input.txt')
+  .pipe(transform)
+  .pipe(createWriteStream('output.txt'));
+
+# 并行处理
+
+// 串行处理（慢）
+for (const url of urls) {
+  await fetch(url);
+}
+
+// 并行处理（快）
+await Promise.all(urls.map(url => fetch(url)));
+
+// 控制并发数
+import pLimit from 'p-limit';
+
+const limit = pLimit(10);  // 最多 10 个并发
+
+await Promise.all(
+  urls.map(url => limit(() => fetch(url)))
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 避免同步操作和 CPU 密集计算</li>
+            <li>• 使用 setImmediate 分解大任务</li>
+            <li>• CPU 密集任务使用 Worker Threads</li>
+            <li>• 优先使用异步 API</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="95-2-内存管理.html">← 上一节：内存管理</a>
+      <a href="95-4-集群模式.html">下一节：集群模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

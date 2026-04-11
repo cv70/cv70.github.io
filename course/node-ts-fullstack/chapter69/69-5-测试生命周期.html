@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.5 测试生命周期 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="69-4-测试异步代码.html">上一节</a></li>
+      <li><a href="69-6-Mock函数.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>69.5 测试生命周期</h1>
+      <p class="subtitle">第十部分：测试篇 - 掌握 Jest 的钩子函数</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 生命周期钩子概述</h2>
+      <p>Jest 提供了四个生命周期钩子函数，用于在测试前后执行设置和清理操作。</p>
+
+      <div class="code-block">describe('Test Suite', () => {
+  beforeAll(() => {
+    // 所有测试之前执行一次
+  });
+
+  afterAll(() => {
+    // 所有测试之后执行一次
+  });
+
+  beforeEach(() => {
+    // 每个测试之前执行
+  });
+
+  afterEach(() => {
+    // 每个测试之后执行
+  });
+
+  test('test 1', () => {});
+  test('test 2', () => {});
+});</div>
+
+      <h3>执行顺序</h3>
+      <div class="image-container">
+        <div style="background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%); padding: 2rem;">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="padding: 1rem; background: #3b82f6; color: white; border-radius: 0.5rem; font-weight: bold; text-align: center;">
+              beforeAll
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+                <div style="padding: 0.75rem; background: #10b981; color: white; border-radius: 0.5rem; text-align: center;">beforeEach</div>
+                <div style="padding: 0.75rem; background: #f59e0b; color: white; border-radius: 0.5rem; text-align: center;">test 1</div>
+                <div style="padding: 0.75rem; background: #ef4444; color: white; border-radius: 0.5rem; text-align: center;">afterEach</div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+                <div style="padding: 0.75rem; background: #10b981; color: white; border-radius: 0.5rem; text-align: center;">beforeEach</div>
+                <div style="padding: 0.75rem; background: #f59e0b; color: white; border-radius: 0.5rem; text-align: center;">test 2</div>
+                <div style="padding: 0.75rem; background: #ef4444; color: white; border-radius: 0.5rem; text-align: center;">afterEach</div>
+              </div>
+            </div>
+            <div style="padding: 1rem; background: #8b5cf6; color: white; border-radius: 0.5rem; font-weight: bold; text-align: center;">
+              afterAll
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> beforeAll 和 afterAll</h2>
+
+      <div class="code-block">// beforeAll: 所有测试前执行一次
+// afterAll: 所有测试后执行一次
+
+describe('Database Tests', () => {
+  let connection: DatabaseConnection;
+
+  // 在所有测试前建立连接
+  beforeAll(async () => {
+    connection = await createConnection({
+      host: 'localhost',
+      database: 'test_db'
+    });
+    console.log('Database connected');
+  });
+
+  // 在所有测试后关闭连接
+  afterAll(async () => {
+    await connection.close();
+    console.log('Database closed');
+  });
+
+  test('should query users', async () => {
+    const users = await connection.query('SELECT * FROM users');
+    expect(users.length).toBeGreaterThan(0);
+  });
+
+  test('should insert user', async () => {
+    const result = await connection.insert('users', { name: 'Test' });
+    expect(result.affectedRows).toBe(1);
+  });
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">使用场景</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>beforeAll: 建立数据库连接、启动服务器、加载配置</li>
+            <li>afterAll: 关闭数据库连接、停止服务器、清理资源</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> beforeEach 和 afterEach</h2>
+
+      <div class="code-block">// beforeEach: 每个测试前执行
+// afterEach: 每个测试后执行
+
+describe('UserService', () => {
+  let service: UserService;
+  let mockRepository: MockRepository;
+
+  beforeEach(() => {
+    // 每个测试前创建新的实例
+    mockRepository = new MockRepository();
+    service = new UserService(mockRepository);
+    console.log('Test setup');
+  });
+
+  afterEach(() => {
+    // 每个测试后清理
+    mockRepository.clear();
+    jest.clearAllMocks();
+    console.log('Test cleanup');
+  });
+
+  test('should create user', () => {
+    service.create({ name: 'John' });
+    expect(mockRepository.data.length).toBe(1);
+  });
+
+  test('should find user', () => {
+    // 这个测试开始时 mockRepository 是空的
+    mockRepository.add({ id: 1, name: 'John' });
+    const user = service.findById(1);
+    expect(user).toBeDefined();
+  });
+});</div>
+
+      <h3>执行顺序示例</h3>
+      <div class="code-block">// 输出顺序：
+// Database connected     (beforeAll)
+// Test setup             (beforeEach)
+// Test cleanup           (afterEach)
+// Test setup             (beforeEach)
+// Test cleanup           (afterEach)
+// Database closed        (afterAll)</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 嵌套 describe 的生命周期</h2>
+
+      <div class="code-block">describe('Outer', () => {
+  beforeAll(() => console.log('Outer beforeAll'));
+  afterAll(() => console.log('Outer afterAll'));
+  beforeEach(() => console.log('Outer beforeEach'));
+  afterEach(() => console.log('Outer afterEach'));
+
+  describe('Inner', () => {
+    beforeAll(() => console.log('Inner beforeAll'));
+    afterAll(() => console.log('Inner afterAll'));
+    beforeEach(() => console.log('Inner beforeEach'));
+    afterEach(() => console.log('Inner afterEach'));
+
+    test('test', () => {
+      console.log('Test');
+    });
+  });
+});
+
+// 执行顺序：
+// Outer beforeAll
+// Inner beforeAll
+// Outer beforeEach
+// Inner beforeEach
+// Test
+// Inner afterEach
+// Outer afterEach
+// Inner afterAll
+// Outer afterAll</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 异步钩子</h2>
+
+      <div class="code-block">describe('Async Hooks', () => {
+    let db: Database;
+
+    // 异步 beforeAll
+    beforeAll(async () => {
+        db = await connectDatabase();
+        await db.migrate();
+    });
+
+    // 异步 afterAll
+    afterAll(async () => {
+        await db.cleanup();
+        await db.disconnect();
+    });
+
+    // 异步 beforeEach
+    beforeEach(async () => {
+        await db.seed();
+    });
+
+    // 异步 afterEach
+    afterEach(async () => {
+        await db.truncate();
+    });
+
+    test('should have data', async () => {
+        const users = await db.users.findAll();
+        expect(users.length).toBeGreaterThan(0);
+    });
+});</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>异步钩子必须使用 async/await 或返回 Promise。如果忘记 await，测试可能会在设置完成前开始。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 钩子作用域</h2>
+
+      <div class="code-block">describe('Scope Example', () => {
+  let outerVar: string;
+
+  beforeAll(() => {
+    outerVar = 'initialized';
+  });
+
+  test('outer test', () => {
+    expect(outerVar).toBe('initialized');
+  });
+
+  describe('Inner', () => {
+    let innerVar: number;
+
+    beforeEach(() => {
+      innerVar = Math.random();
+    });
+
+    test('inner test', () => {
+      // 可以访问外层变量
+      expect(outerVar).toBe('initialized');
+      // 也可以访问内层变量
+      expect(innerVar).toBeDefined();
+    });
+  });
+
+  test('cannot access inner var', () => {
+    // ❌ 错误：无法访问内层变量
+    // expect(innerVar).toBeDefined();
+    expect(outerVar).toBe('initialized');
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 钩子最佳实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">✅ 推荐做法</h3>
+          <ul class="feature-list">
+            <li>每个测试独立，不依赖执行顺序</li>
+            <li>在 beforeEach 中重置状态</li>
+            <li>在 afterAll 中清理资源</li>
+            <li>使用描述性的变量名</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">❌ 避免做法</h3>
+          <ul class="feature-list">
+            <li>测试之间共享可变状态</li>
+            <li>在测试中修改共享变量</li>
+            <li>依赖测试执行顺序</li>
+            <li>忘记清理资源</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>完整的测试结构模板</h3>
+      <div class="code-block">describe('ServiceName', () => {
+    // 模块级别的资源
+    let moduleResource: Resource;
+
+    beforeAll(async () => {
+        // 初始化模块资源
+        moduleResource = await initModule();
+    });
+
+    afterAll(async () => {
+        // 清理模块资源
+        await moduleResource.cleanup();
+    });
+
+    describe('methodName', () => {
+        // 测试级别的资源
+        let service: Service;
+        let mockDependency: MockType;
+
+        beforeEach(() => {
+            // 初始化测试资源
+            mockDependency = createMock();
+            service = new Service(mockDependency);
+        });
+
+        afterEach(() => {
+            // 清理测试资源
+            jest.clearAllMocks();
+        });
+
+        test('should do something', () => {
+            // 测试逻辑
+        });
+
+        test('should handle error', () => {
+            // 错误处理测试
+        });
+    });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 一次性设置</h2>
+
+      <div class="code-block">// 使用 describe 的作用域控制
+describe('Test Group', () => {
+    // 只在第一个测试前执行
+    let hasSetup = false;
+
+    beforeAll(() => {
+        hasSetup = true;
+    });
+
+    // 这里的测试共享状态（不推荐，但有时需要）
+    test('first test', () => {
+        expect(hasSetup).toBe(true);
+        hasSetup = 'modified';
+    });
+
+    test('second test sees modified state', () => {
+        expect(hasSetup).toBe('modified');
+    });
+});</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>共享状态会使测试变得脆弱和难以调试。尽量避免测试之间的依赖关系。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>beforeAll/afterAll 在所有测试前后各执行一次</li>
+            <li>beforeEach/afterEach 在每个测试前后执行</li>
+            <li>嵌套 describe 的钩子从外到内执行</li>
+            <li>钩子可以是异步函数</li>
+            <li>保持测试独立性，避免共享可变状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-4-测试异步代码.html">← 上一节：测试异步代码</a>
+      <a href="69-6-Mock函数.html">下一节：Mock 函数 →</a>
+    </div>
+  </div>
+</body>
+</html>

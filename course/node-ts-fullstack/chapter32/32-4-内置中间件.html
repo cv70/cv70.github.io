@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.4 内置中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.4 内置中间件</h1>
+      <p class="subtitle">深入了解 Express 内置中间件的功能和用法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 express.json() 和 express.urlencoded() 的使用</li>
+        <li>学会 express.static() 的各种配置选项</li>
+        <li>了解 express.raw() 和 express.text() 的使用场景</li>
+        <li>理解内置中间件的内部原理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Express 内置中间件列表</h2>
+      <p>Express 4.x 提供了以下内置中间件：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>中间件</th>
+            <th>功能</th>
+            <th>基于模块</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>express.json()</code></td>
+            <td>解析 JSON 格式请求体</td>
+            <td>body-parser</td>
+          </tr>
+          <tr>
+            <td><code>express.urlencoded()</code></td>
+            <td>解析 URL 编码请求体</td>
+            <td>body-parser</td>
+          </tr>
+          <tr>
+            <td><code>express.static()</code></td>
+            <td>提供静态文件服务</td>
+            <td>serve-static</td>
+          </tr>
+          <tr>
+            <td><code>express.raw()</code></td>
+            <td>解析原始 Buffer 请求体</td>
+            <td>body-parser</td>
+          </tr>
+          <tr>
+            <td><code>express.text()</code></td>
+            <td>解析文本格式请求体</td>
+            <td>body-parser</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> express.json()</h2>
+      <p>解析 Content-Type 为 application/json 的请求体。</p>
+
+      <div class="code-block">
+// 基本使用
+app.use(express.json());
+
+// 带选项
+app.use(express.json({
+  limit: '1mb',           // 请求体大小限制
+  inflate: true,          // 解压压缩的请求体
+  strict: true,           // 只接受数组和对象
+  type: 'application/json' // 指定 MIME 类型
+}));
+
+// 示例
+app.post('/api/users', (req, res) => {
+  console.log(req.body);  // 已解析的 JSON 对象
+  res.json(req.body);
+});
+
+// 请求：
+// POST /api/users
+// Content-Type: application/json
+// Body: { "name": "Alice", "email": "alice@example.com" }</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">strict 选项</div>
+          <p>默认 strict: true，只接受 JSON 对象和数组。设为 false 可以接受任何 JSON 值，包括原始类型。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> express.urlencoded()</h2>
+      <p>解析 Content-Type 为 application/x-www-form-urlencoded 的请求体。</p>
+
+      <div class="code-block">
+// 基本使用
+app.use(express.urlencoded({ extended: true }));
+
+// 选项说明
+app.use(express.urlencoded({
+  extended: true,         // 使用 qs 库解析（推荐）
+  limit: '1mb',           // 大小限制
+  parameterLimit: 1000,   // 参数数量限制
+  inflate: true           // 解压压缩的请求体
+}));
+
+// 示例
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  res.send(`Login: ${username}`);
+});
+
+// 表单提交
+// POST /login
+// Content-Type: application/x-www-form-urlencoded
+// Body: username=alice&password=123456</div>
+
+      <h3>extended 选项的区别</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>选项</th>
+            <th>解析库</th>
+            <th>特点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>extended: true</code></td>
+            <td>qs</td>
+            <td>支持嵌套对象，功能强大</td>
+          </tr>
+          <tr>
+            <td><code>extended: false</code></td>
+            <td>querystring</td>
+            <td>不支持嵌套，性能更好</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// extended: true 支持嵌套
+// 表单: user[name]=Alice&user[email]=alice@example.com
+// 解析结果: { user: { name: 'Alice', email: 'alice@example.com' } }
+
+// extended: false 不支持嵌套
+// 解析结果: { 'user[name]': 'Alice', 'user[email]': 'alice@example.com' }</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> express.static()</h2>
+      <p>提供静态文件服务，是最常用的内置中间件之一。</p>
+
+      <div class="code-block">
+// 基本使用
+app.use(express.static('public'));
+
+// 带虚拟路径前缀
+app.use('/static', express.static('public'));
+
+// 完整配置
+app.use('/assets', express.static('public', {
+  dotfiles: 'ignore',       // 处理隐藏文件: allow, deny, ignore
+  etag: true,               // 启用 ETag
+  extensions: ['html'],     // 默认文件扩展名
+  fallthrough: true,        // 404 时调用 next()
+  immutable: false,         // Cache-Control immutable
+  index: 'index.html',      // 默认索引文件
+  lastModified: true,       // Last-Modified 头
+  maxAge: 0,                // Cache-Control maxAge (毫秒)
+  redirect: true,           // 目录重定向到 /
+  setHeaders: (res, path, stat) => {
+    // 自定义响应头
+    res.set('X-Timestamp', Date.now());
+  }
+}));</div>
+
+      <h3>多个静态目录</h3>
+      <div class="code-block">
+// 多个静态目录，按顺序查找
+app.use(express.static('public'));
+app.use(express.static('uploads'));
+app.use(express.static('files'));
+
+// 带前缀的多个目录
+app.use('/static', express.static('public'));
+app.use('/uploads', express.static('uploads'));
+app.use('/downloads', express.static('files'));</div>
+
+      <h3>缓存配置示例</h3>
+      <div class="code-block">
+// 开发环境 - 禁用缓存
+app.use(express.static('public', {
+  maxAge: 0,
+  etag: false
+}));
+
+// 生产环境 - 启用缓存
+app.use(express.static('public', {
+  maxAge: '1y',           // 缓存一年
+  immutable: true,        // 文件不变
+  etag: true
+}));
+
+// 根据文件类型设置不同缓存
+app.use(express.static('public', {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.set('Cache-Control', 'no-cache');
+    } else if (path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> express.raw()</h2>
+      <p>解析请求体为 Buffer，适用于需要原始二进制数据的场景。</p>
+
+      <div class="code-block">
+// 基本使用
+app.use(express.raw());
+
+// 带选项
+app.use(express.raw({
+  limit: '10mb',          // 大小限制
+  type: 'application/octet-stream',  // MIME 类型
+  inflate: true
+}));
+
+// 示例：处理二进制数据
+app.post('/upload/binary', express.raw({ limit: '10mb' }), (req, res) => {
+  console.log(req.body);  // Buffer 对象
+  console.log(req.body.length);
+
+  // 保存文件
+  fs.writeFileSync('uploaded.bin', req.body);
+  res.send('File uploaded');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📃</span> express.text()</h2>
+      <p>解析请求体为字符串，适用于纯文本格式。</p>
+
+      <div class="code-block">
+// 基本使用
+app.use(express.text());
+
+// 带选项
+app.use(express.text({
+  limit: '1mb',
+  type: 'text/plain',
+  defaultCharset: 'utf-8'
+}));
+
+// 示例
+app.post('/submit-text', express.text(), (req, res) => {
+  console.log(req.body);  // 字符串
+  res.send(`Received: ${req.body}`);
+});
+
+// 请求：
+// POST /submit-text
+// Content-Type: text/plain
+// Body: Hello World</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 组合使用示例</h2>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// JSON 请求体解析（API 常用）
+app.use(express.json({ limit: '1mb' }));
+
+// URL 编码请求体解析（表单提交）
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// 静态文件
+app.use('/static', express.static('public', {
+  maxAge: '1d',
+  etag: true
+}));
+
+// 特定路由使用不同解析
+// 文件上传 - 原始数据
+app.post('/api/upload/binary',
+  express.raw({ limit: '50mb', type: 'application/octet-stream' }),
+  uploadController.binary
+);
+
+// 文本提交
+app.post('/api/submit-text',
+  express.text({ limit: '100kb' }),
+  textController.submit
+);
+
+// JSON API
+app.post('/api/users',
+  express.json({ limit: '10kb' }),
+  userController.create
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题</h2>
+
+      <h3>1. 请求体解析顺序</h3>
+      <div class="code-block">
+// ❌ 错误：路由之后才解析
+app.post('/users', (req, res) => {
+  console.log(req.body);  // undefined!
+});
+app.use(express.json());
+
+// ✅ 正确：先解析再使用
+app.use(express.json());
+app.post('/users', (req, res) => {
+  console.log(req.body);  // 正常
+});</div>
+
+      <h3>2. 大小限制</h3>
+      <div class="code-block">
+// 默认限制：100kb
+// 文件上传需要调整限制
+app.use(express.json({ limit: '10mb' }));
+
+// 或根据路由单独设置
+app.post('/api/upload',
+  express.raw({ limit: '100mb' }),
+  uploadController.handle
+);</div>
+
+      <h3>3. 安全考虑</h3>
+      <div class="code-block">
+// 设置合理的大小限制
+app.use(express.json({ limit: '10kb' }));
+
+// 生产环境禁用详细错误
+app.set('env', 'production');
+
+// 文件类型验证（使用第三方中间件）
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type'));
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>express.json() 解析 JSON 请求体</li>
+            <li>express.urlencoded() 解析表单数据，推荐 extended: true</li>
+            <li>express.static() 提供静态文件，支持丰富的配置选项</li>
+            <li>express.raw() 和 express.text() 用于特殊场景</li>
+            <li>注意请求体解析中间件的顺序和大小限制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-3-错误处理中间件.html">← 上一节：错误处理中间件</a>
+      <a href="32-5-第三方中间件.html">下一节：第三方中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23.4 基本 CRUD - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="23-1-typeorm简介.html">第二十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>23.4 基本 CRUD</h1>
+      <p class="subtitle">使用 Repository 进行数据操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Repository 的获取方式</li>
+        <li>学会 Create 和 Save 操作</li>
+        <li>熟悉 Read 查询方法</li>
+        <li>了解 Update 和 Delete 操作</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 获取 Repository</h2>
+      <div class="code-block">
+import { AppDataSource } from './data-source';
+import { User } from './entity/User';
+
+// 方式一：从 DataSource 获取
+const userRepository = AppDataSource.getRepository(User);
+
+// 方式二：使用 getCustomRepository
+const userRepository = AppDataSource.getCustomRepository(UserRepository);
+
+// 方式三：NestJS 依赖注入
+@Module({
+  imports: [TypeOrmModule.forFeature([User])],
+})
+export class UserModule {}
+
+@Controller('users')
+export class UserController {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
+}
+
+// 方式四：Active Record 模式
+@Entity()
+export class User extends BaseEntity {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  // 静态方法可以直接调用
+  static async findActive(): Promise<User[]> {
+    return this.find({ where: { status: 'active' } });
+  }
+}
+
+// 使用
+const users = await User.findActive();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Create 创建数据</h2>
+      <div class="code-block">
+// 方式一：save 方法
+const user = new User();
+user.username = 'alice';
+user.email = 'alice@mail.com';
+user.age = 25;
+await userRepository.save(user);
+
+// 方式二：create + save
+const user = userRepository.create({
+  username: 'bob',
+  email: 'bob@mail.com',
+  age: 30,
+});
+await userRepository.save(user);
+
+// 方式三：批量创建
+const users = userRepository.create([
+  { username: 'user1', email: 'user1@mail.com' },
+  { username: 'user2', email: 'user2@mail.com' },
+  { username: 'user3', email: 'user3@mail.com' },
+]);
+await userRepository.save(users);
+
+// 方式四：insert（不返回完整实体，性能更好）
+await userRepository.insert({
+  username: 'charlie',
+  email: 'charlie@mail.com',
+});
+
+// 批量 insert
+await userRepository.insert([
+  { username: 'user4', email: 'user4@mail.com' },
+  { username: 'user5', email: 'user5@mail.com' },
+]);
+
+// save vs insert
+// save: 触发订阅者和监听器，返回完整实体
+// insert: 原始 SQL INSERT，性能更好
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">save vs insert</div>
+          <p>save 会检查实体是否存在（有 id 则更新），触发生命周期钩子；insert 直接执行 SQL，性能更好但不触发钩子。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Read 查询数据</h2>
+      <div class="code-block">
+// 查询所有
+const users = await userRepository.find();
+
+// 条件查询
+const activeUsers = await userRepository.find({
+  where: { status: 'active' },
+});
+
+// 查询单个
+const user = await userRepository.findOne({
+  where: { id: 1 },
+});
+
+const userByEmail = await userRepository.findOneBy({
+  email: 'alice@mail.com',
+});
+
+// 查询或创建
+const user = await userRepository.findOne({
+  where: { email: 'new@mail.com' },
+});
+if (!user) {
+  // 创建新用户
+}
+
+// 按主键查询
+const user = await userRepository.findOneBy({ id: 1 });
+const users = await userRepository.findByIds([1, 2, 3]);
+
+// 查询数量
+const count = await userRepository.count({
+  where: { status: 'active' },
+});
+
+// 检查是否存在
+const exists = await userRepository.exist({
+  where: { email: 'alice@mail.com' },
+});
+
+// 选择特定列
+const users = await userRepository.find({
+  select: ['id', 'username', 'email'],
+});
+
+// 排序
+const users = await userRepository.find({
+  order: {
+    createdAt: 'DESC',
+    username: 'ASC',
+  },
+});
+
+// 分页
+const users = await userRepository.find({
+  skip: 0,
+  take: 10,
+});
+
+// 关联查询
+const users = await userRepository.find({
+  relations: ['posts', 'comments'],
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✏️</span> Update 更新数据</h2>
+      <div class="code-block">
+// 方式一：save 更新（需要先查询）
+const user = await userRepository.findOneBy({ id: 1 });
+if (user) {
+  user.age = 26;
+  user.status = 'inactive';
+  await userRepository.save(user);
+}
+
+// 方式二：update 直接更新（不需要先查询）
+await userRepository.update(
+  { id: 1 },
+  { age: 26, status: 'inactive' }
+);
+
+// 条件更新
+await userRepository.update(
+  { status: 'pending' },
+  { status: 'active' }
+);
+
+// 批量更新
+await userRepository.update(
+  { age: LessThan(18) },
+  { status: 'restricted' }
+);
+
+// 增量更新
+await userRepository.increment(
+  { id: 1 },
+  'loginCount',
+  1
+);
+
+// 减量更新
+await userRepository.decrement(
+  { id: 1 },
+  'balance',
+  100
+);
+
+// upsert（存在则更新，不存在则插入）
+await userRepository
+  .createQueryBuilder()
+  .insert()
+  .into(User)
+  .values({ id: 1, username: 'alice', email: 'new@mail.com' })
+  .orUpdate(['email'], ['id'])
+  .execute();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗑️</span> Delete 删除数据</h2>
+      <div class="code-block">
+// 方式一：remove（需要先查询，触发钩子）
+const user = await userRepository.findOneBy({ id: 1 });
+if (user) {
+  await userRepository.remove(user);
+}
+
+// 方式二：delete（不需要查询，不触发钩子）
+await userRepository.delete({ id: 1 });
+
+// 批量删除
+await userRepository.delete({ status: 'inactive' });
+
+// 按主键删除
+await userRepository.delete([1, 2, 3]);
+
+// 软删除（需要实体支持）
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ default: null })
+  deletedAt: Date | null;
+}
+
+// 执行软删除
+await userRepository.softDelete({ id: 1 });
+
+// 恢复软删除
+await userRepository.restore({ id: 1 });
+
+// 查询包含软删除
+const users = await userRepository.find({
+  withDeleted: true,
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Repository 提供数据访问的基本方法</li>
+            <li>• save 触发钩子，insert 性能更好</li>
+            <li>• find 支持条件、排序、分页、关联</li>
+            <li>• update 直接更新，remove 触发钩子</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="23-3-数据库连接.html">← 上一节：数据库连接</a>
+      <a href="../chapter24/24-1-一对一关系.html">下一章：一对一关系 →</a>
+    </div>
+  </div>
+</body>
+</html>

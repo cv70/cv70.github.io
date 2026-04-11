@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>59.3 Schema 定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="59-1-GraphQL简介.html">第59章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>59.3 Schema 定义</h1>
+      <p class="subtitle">GraphQL 类型系统的核心</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 什么是 Schema</h2>
+      <p>Schema 是 GraphQL API 的类型定义，描述了 API 能提供什么数据以及如何交互。它是客户端和服务端的契约。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Schema 的作用</div>
+          <ul>
+            <li>定义 API 的能力范围</li>
+            <li>提供类型安全</li>
+            <li>自动生成文档</li>
+            <li>支持开发工具（自动补全、验证）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 基本类型</h2>
+
+      <h3>标量类型（Scalar）</h3>
+      <p>标量类型是 GraphQL 最基本的数据类型，表示单个值。</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Int</code></td>
+            <td>有符号 32 位整数</td>
+            <td>1, -5, 100</td>
+          </tr>
+          <tr>
+            <td><code>Float</code></td>
+            <td>有符号双精度浮点数</td>
+            <td>3.14, -0.5</td>
+          </tr>
+          <tr>
+            <td><code>String</code></td>
+            <td>UTF-8 字符序列</td>
+            <td>"Hello", "张三"</td>
+          </tr>
+          <tr>
+            <td><code>Boolean</code></td>
+            <td>true 或 false</td>
+            <td>true, false</td>
+          </tr>
+          <tr>
+            <td><code>ID</code></td>
+            <td>唯一标识符，序列化为 String</td>
+            <td>"123", "abc"</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>自定义标量</h3>
+      <div class="code-block">
+<span class="comment">// 自定义标量类型</span>
+<span class="keyword">scalar</span> DateTime
+<span class="keyword">scalar</span> JSON
+<span class="keyword">scalar</span> Upload
+<span class="keyword">scalar</span> Email
+
+<span class="comment">// 使用自定义标量</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: Email!
+  createdAt: DateTime!
+  metadata: JSON
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 对象类型</h2>
+
+      <h3>定义对象类型</h3>
+      <div class="code-block">
+<span class="comment">// 定义 User 类型</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  age: Int
+  isActive: Boolean!
+  createdAt: DateTime!
+  posts: [Post!]!
+}
+
+<span class="comment">// 定义 Post 类型</span>
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!
+  comments: [Comment!]!
+  createdAt: DateTime!
+}
+
+<span class="comment">// 定义 Comment 类型</span>
+<span class="keyword">type</span> Comment {
+  id: ID!
+  content: String!
+  author: User!
+  post: Post!
+  createdAt: DateTime!
+}
+      </div>
+
+      <h3>字段说明</h3>
+      <div class="code-block">
+<span class="keyword">type</span> Example {
+  <span class="comment">// 基本字段</span>
+  name: String           <span class="comment">// 可为 null</span>
+  name: String!          <span class="comment">// 非空字段（必填）</span>
+
+  <span class="comment">// 列表字段</span>
+  tags: [String]         <span class="comment">// 可为 null 的列表，元素可为 null</span>
+  tags: [String!]        <span class="comment">// 可为 null 的列表，元素非空</span>
+  tags: [String]!        <span class="comment">// 非空列表，元素可为 null</span>
+  tags: [String!]!       <span class="comment">// 非空列表，元素非空（推荐）</span>
+
+  <span class="comment">// 带参数的字段</span>
+  posts(limit: Int = <span class="number">10</span>): [Post!]!
+  friends(first: Int, after: ID): [User!]!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 查询类型（Query）</h2>
+
+      <p>Query 类型定义了所有可用的查询操作，是 API 的入口点。</p>
+
+      <div class="code-block">
+<span class="keyword">type</span> Query {
+  <span class="comment">// 获取单个资源</span>
+  user(id: ID!): User
+  userByEmail(email: String!): User
+
+  <span class="comment">// 获取列表</span>
+  users(limit: Int, offset: Int): [User!]!
+  usersPaginated(first: Int, after: ID): UserConnection!
+
+  <span class="comment">// 搜索</span>
+  searchUsers(query: String!): [User!]!
+  searchPosts(query: String!, limit: Int = <span class="number">10</span>): [Post!]!
+
+  <span class="comment">// 当前用户</span>
+  me: User
+
+  <span class="comment">// 聚合查询</span>
+  userStats: UserStats!
+}
+
+<span class="comment">// 查询示例</span>
+query {
+  user(id: <span class="string">"123"</span>) {
+    name
+    email
+  }
+  users(limit: <span class="number">10</span>) {
+    id
+    name
+  }
+  me {
+    id
+    name
+    posts {
+      title
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✏️</span> 变更类型（Mutation）</h2>
+
+      <p>Mutation 类型定义了所有可用的数据修改操作。</p>
+
+      <div class="code-block">
+<span class="keyword">type</span> Mutation {
+  <span class="comment">// 创建用户</span>
+  createUser(input: CreateUserInput!): User!
+
+  <span class="comment">// 更新用户</span>
+  updateUser(id: ID!, input: UpdateUserInput!): User
+
+  <span class="comment">// 删除用户</span>
+  deleteUser(id: ID!): DeleteResult!
+
+  <span class="comment">// 登录</span>
+  login(email: String!, password: String!): AuthPayload!
+
+  <span class="comment">// 批量操作</span>
+  createUsers(inputs: [CreateUserInput!]!): [User!]!
+}
+
+<span class="comment">// 返回类型定义</span>
+<span class="keyword">type</span> DeleteResult {
+  success: Boolean!
+  message: String
+}
+
+<span class="keyword">type</span> AuthPayload {
+  token: String!
+  user: User!
+  expiresIn: Int!
+}
+
+<span class="comment">// Mutation 示例</span>
+mutation {
+  createUser(input: {
+    name: <span class="string">"张三"</span>
+    email: <span class="string">"zhangsan@example.com"</span>
+  }) {
+    id
+    name
+    email
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 订阅类型（Subscription）</h2>
+
+      <p>Subscription 类型定义了实时数据订阅操作。</p>
+
+      <div class="code-block">
+<span class="keyword">type</span> Subscription {
+  <span class="comment">// 用户创建事件</span>
+  userCreated: User!
+
+  <span class="comment">// 用户更新事件（带参数过滤）</span>
+  userUpdated(userId: ID): User!
+
+  <span class="comment">// 消息事件</span>
+  messageReceived(roomId: ID!): Message!
+
+  <span class="comment">// 计数器更新</span>
+  counterUpdated: Counter!
+}
+
+<span class="comment">// 订阅示例</span>
+subscription {
+  userCreated {
+    id
+    name
+    email
+  }
+}
+
+subscription {
+  messageReceived(roomId: <span class="string">"room-123"</span>) {
+    id
+    content
+    sender {
+      name
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 输入类型（Input）</h2>
+
+      <p>Input 类型用于 Mutation 参数，类似对象类型，但只能用于输入。</p>
+
+      <div class="code-block">
+<span class="comment">// 创建用户输入</span>
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+  age: Int
+  role: UserRole = USER
+}
+
+<span class="comment">// 更新用户输入</span>
+<span class="keyword">input</span> UpdateUserInput {
+  name: String
+  email: String
+  age: Int
+}
+
+<span class="comment">// 枚举类型</span>
+<span class="keyword">enum</span> UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+<span class="comment">// 过滤条件输入</span>
+<span class="keyword">input</span> UserFilter {
+  name: String
+  email: String
+  role: UserRole
+  isActive: Boolean
+}
+
+<span class="comment">// 排序输入</span>
+<span class="keyword">input</span> UserSort {
+  field: UserSortField!
+  order: SortOrder = ASC
+}
+
+<span class="keyword">enum</span> UserSortField {
+  NAME
+  EMAIL
+  CREATED_AT
+}
+
+<span class="keyword">enum</span> SortOrder {
+  ASC
+  DESC
+}
+
+<span class="comment">// 使用 Input 类型</span>
+<span class="keyword">type</span> Query {
+  users(filter: UserFilter, sort: UserSort, limit: Int): [User!]!
+}
+
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 接口类型（Interface）</h2>
+
+      <p>接口定义了一组通用字段，其他类型可以实现这些接口。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义接口</span>
+<span class="keyword">interface</span> Node {
+  id: ID!
+  createdAt: DateTime!
+}
+
+<span class="keyword">interface</span> Media {
+  id: ID!
+  url: String!
+  type: MediaType!
+}
+
+<span class="comment">// 实现接口</span>
+<span class="keyword">type</span> User <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  name: String!
+  email: String!
+}
+
+<span class="keyword">type</span> Post <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  title: String!
+  content: String
+}
+
+<span class="keyword">type</span> Image <span class="keyword">implements</span> Node & Media {
+  id: ID!
+  createdAt: DateTime!
+  url: String!
+  type: MediaType!
+  width: Int!
+  height: Int!
+}
+
+<span class="comment">// 查询返回接口类型</span>
+<span class="keyword">type</span> Query {
+  node(id: ID!): Node
+  searchMedia(query: String!): [Media!]!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 联合类型（Union）</h2>
+
+      <p>联合类型表示可以是多种类型之一。</p>
+
+      <div class="code-block">
+<span class="comment">// 定义联合类型</span>
+<span class="keyword">union</span> SearchResult = User | Post | Comment
+
+<span class="keyword">union</span> MediaContent = Image | Video | Audio
+
+<span class="comment">// 使用联合类型</span>
+<span class="keyword">type</span> Query {
+  search(query: String!): [SearchResult!]!
+}
+
+<span class="comment">// 查询时使用内联片段</span>
+query {
+  search(query: <span class="string">"test"</span>) {
+    ... <span class="keyword">on</span> User {
+      id
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      id
+      title
+      content
+    }
+    ... <span class="keyword">on</span> Comment {
+      id
+      content
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 完整 Schema 示例</h2>
+
+      <div class="code-block">
+<span class="comment"># 标量类型</span>
+<span class="keyword">scalar</span> DateTime
+
+<span class="comment"># 枚举类型</span>
+<span class="keyword">enum</span> UserRole {
+  USER
+  ADMIN
+}
+
+<span class="comment"># 输入类型</span>
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+}
+
+<span class="keyword">input</span> UpdateUserInput {
+  name: String
+  email: String
+}
+
+<span class="comment"># 对象类型</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  role: UserRole!
+  posts: [Post!]!
+  createdAt: DateTime!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!
+  comments: [Comment!]!
+  createdAt: DateTime!
+}
+
+<span class="keyword">type</span> Comment {
+  id: ID!
+  content: String!
+  author: User!
+  post: Post!
+  createdAt: DateTime!
+}
+
+<span class="comment"># 查询类型</span>
+<span class="keyword">type</span> Query {
+  me: User
+  user(id: ID!): User
+  users: [User!]!
+  post(id: ID!): Post
+  posts(limit: Int = <span class="number">10</span>): [Post!]!
+}
+
+<span class="comment"># 变更类型</span>
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User
+  deleteUser(id: ID!): Boolean!
+
+  createPost(title: String!, content: String): Post!
+}
+
+<span class="comment"># 订阅类型</span>
+<span class="keyword">type</span> Subscription {
+  userCreated: User!
+  postCreated: Post!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Schema 是 GraphQL API 的类型定义</li>
+        <li>标量类型是最基本的数据类型</li>
+        <li>对象类型定义复杂的业务实体</li>
+        <li>Query/Mutation/Subscription 是三个根类型</li>
+        <li>Input 类型用于 Mutation 参数</li>
+        <li>接口和联合类型提供类型抽象能力</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="59-2-GraphQL-vs-REST.html">← 上一节：GraphQL vs REST</a>
+      <a href="59-4-Query查询.html">下一节：Query 查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

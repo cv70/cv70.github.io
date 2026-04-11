@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>78.5 Zustand 状态管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="78-1-状态管理概述.html">第七十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>78.5 Zustand 状态管理</h1>
+      <p class="subtitle">轻量级状态管理方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Zustand 的设计理念</li>
+        <li>掌握创建和使用 store</li>
+        <li>学会 Zustand 的最佳实践</li>
+        <li>了解与其他方案的对比</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Zustand 基础</h2>
+      <div class="code-block">
+// 安装
+// npm install zustand
+
+// Zustand 特点
+// - 极简 API，学习成本低
+// - 无需 Provider 包裹
+// - 支持 TypeScript
+// - 支持中间件
+// - 细粒度订阅，性能优秀
+
+import { create } from 'zustand';
+
+// 创建 store
+interface CounterState {
+  count: number;
+  increment: () =&gt; void;
+  decrement: () =&gt; void;
+  incrementByAmount: (amount: number) =&gt; void;
+  reset: () =&gt; void;
+}
+
+const useCounterStore = create&lt;CounterState&gt;((set) =&gt; ({
+  count: 0,
+  increment: () =&gt; set((state) =&gt; ({ count: state.count + 1 })),
+  decrement: () =&gt; set((state) =&gt; ({ count: state.count - 1 })),
+  incrementByAmount: (amount) =&gt; set((state) =&gt; ({ count: state.count + amount })),
+  reset: () =&gt; set({ count: 0 }),
+}));
+
+// 使用 store
+function Counter() {
+  const count = useCounterStore((state) =&gt; state.count);
+  const increment = useCounterStore((state) =&gt; state.increment);
+  const decrement = useCounterStore((state) =&gt; state.decrement);
+
+  return (
+    &lt;div&gt;
+      &lt;p&gt;Count: {count}&lt;/p&gt;
+      &lt;button onClick={increment}&gt;+&lt;/button&gt;
+      &lt;button onClick={decrement}&gt;-&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}
+
+// 选择器优化性能
+function CountDisplay() {
+  // 只订阅 count，其他状态变化不会触发重渲染
+  const count = useCounterStore((state) =&gt; state.count);
+  return &lt;div&gt;{count}&lt;/div&gt;;
+}
+
+function IncrementButton() {
+  // 只订阅 increment 方法，count 变化不会触发重渲染
+  const increment = useCounterStore((state) =&gt; state.increment);
+  return &lt;button onClick={increment}&gt;+&lt;/button&gt;;
+}
+
+// 获取整个 store（不推荐，可能导致不必要的渲染）
+// const { count, increment } = useCounterStore();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整示例：Todo 应用</h2>
+      <div class="code-block">
+import { create } from 'zustand';
+import { persist, devtools } from 'zustand/middleware';
+
+interface Todo {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+interface TodoState {
+  todos: Todo[];
+  filter: 'all' | 'active' | 'completed';
+
+  // Actions
+  addTodo: (text: string) =&gt; void;
+  toggleTodo: (id: string) =&gt; void;
+  deleteTodo: (id: string) =&gt; void;
+  setFilter: (filter: 'all' | 'active' | 'completed') =&gt; void;
+  clearCompleted: () =&gt; void;
+
+  // Computed
+  getFilteredTodos: () =&gt; Todo[];
+}
+
+const useTodoStore = create&lt;TodoState&gt;()(
+  devtools(
+    persist(
+      (set, get) =&gt; ({
+        todos: [],
+        filter: 'all',
+
+        addTodo: (text) =&gt; set((state) =&gt; ({
+          todos: [
+            ...state.todos,
+            { id: crypto.randomUUID(), text, completed: false },
+          ],
+        })),
+
+        toggleTodo: (id) =&gt; set((state) =&gt; ({
+          todos: state.todos.map((todo) =&gt;
+            todo.id === id ? { ...todo, completed: !todo.completed } : todo
+          ),
+        })),
+
+        deleteTodo: (id) =&gt; set((state) =&gt; ({
+          todos: state.todos.filter((todo) =&gt; todo.id !== id),
+        })),
+
+        setFilter: (filter) =&gt; set({ filter }),
+
+        clearCompleted: () =&gt; set((state) =&gt; ({
+          todos: state.todos.filter((todo) =&gt; !todo.completed),
+        })),
+
+        getFilteredTodos: () =&gt; {
+          const { todos, filter } = get();
+          if (filter === 'active') return todos.filter((t) =&gt; !t.completed);
+          if (filter === 'completed') return todos.filter((t) =&gt; t.completed);
+          return todos;
+        },
+      }),
+      { name: 'todo-storage' }  // localStorage key
+    )
+  )
+);
+
+// 组件中使用
+function TodoList() {
+  const todos = useTodoStore((state) =&gt; state.getFilteredTodos());
+  const toggleTodo = useTodoStore((state) =&gt; state.toggleTodo);
+  const deleteTodo = useTodoStore((state) =&gt; state.deleteTodo);
+
+  return (
+    &lt;ul&gt;
+      {todos.map((todo) =&gt; (
+        &lt;li key={todo.id}&gt;
+          &lt;input
+            type="checkbox"
+            checked={todo.completed}
+            onChange={() =&gt; toggleTodo(todo.id)}
+          /&gt;
+          {todo.text}
+          &lt;button onClick={() =&gt; deleteTodo(todo.id)}&gt;Delete&lt;/button&gt;
+        &lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}
+
+function AddTodo() {
+  const addTodo = useTodoStore((state) =&gt; state.addTodo);
+  const [text, setText] = useState('');
+
+  const handleSubmit = (e) =&gt; {
+    e.preventDefault();
+    if (text.trim()) {
+      addTodo(text);
+      setText('');
+    }
+  };
+
+  return (
+    &lt;form onSubmit={handleSubmit}&gt;
+      &lt;input value={text} onChange={(e) =&gt; setText(e.target.value)} /&gt;
+      &lt;button type="submit"&gt;Add&lt;/button&gt;
+    &lt;/form&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Zustand 中间件</h2>
+      <div class="code-block">
+import { create } from 'zustand';
+import { persist, devtools, immer, subscribeWithSelector } from 'zustand/middleware';
+
+// 多个中间件组合
+const useStore = create&lt;State&gt;()(
+  devtools(
+    persist(
+      immer((set) =&gt; ({
+        // 使用 immer 可以直接修改 state
+        items: [],
+        addItem: (item) =&gt; set((state) =&gt; {
+          state.items.push(item);  // 直接 push，无需返回新对象
+        }),
+        updateItem: (id, updates) =&gt; set((state) =&gt; {
+          const item = state.items.find(i =&gt; i.id === id);
+          if (item) {
+            Object.assign(item, updates);  // 直接修改
+          }
+        }),
+      })),
+      { name: 'my-store' }
+    ),
+    { name: 'MyStore' }
+  )
+);
+
+// 中间件说明
+// - persist：持久化到 localStorage/sessionStorage
+// - devtools：Redux DevTools 集成
+// - immer：支持直接修改 state
+// - subscribeWithSelector：高级订阅功能
+
+// 在 React 组件外使用
+// 直接调用 store 方法
+useTodoStore.getState().addTodo('New todo');
+
+// 订阅变化
+const unsubscribe = useTodoStore.subscribe((state) =&gt; {
+  console.log('Todos changed:', state.todos);
+});
+
+// 取消订阅
+unsubscribe();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Zustand 极简、轻量、高性能</li>
+            <li>• 使用选择器进行细粒度订阅</li>
+            <li>• 中间件提供持久化、调试等功能</li>
+            <li>• 可在 React 组件外使用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="78-4-ReduxToolkit.html">← 上一节：Redux Toolkit</a>
+      <a href="../chapter79/79-1-组件类型定义.html">下一章：组件类型定义 →</a>
+    </div>
+  </div>
+</body>
+</html>

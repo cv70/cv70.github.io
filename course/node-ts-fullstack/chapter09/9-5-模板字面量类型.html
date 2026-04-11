@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.5 模板字面量类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="9-1-映射类型基础.html">第九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>9.5 模板字面量类型</h1>
+      <p class="subtitle">字符串类型的模式匹配</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解模板字面量类型的概念</li>
+        <li>掌握字符串模式匹配</li>
+        <li>学会内置字符串工具类型</li>
+        <li>了解实际应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本语法</h2>
+      <div class="code-block">
+// 模板字面量类型类似于 JavaScript 的模板字符串
+// 但用于类型层面
+
+type Greeting = `hello ${string}`;
+const a: Greeting = 'hello world';     // OK
+const b: Greeting = 'hello there';     // OK
+// const c: Greeting = 'hi world';     // Error
+
+// 联合类型展开
+type Color = 'red' | 'blue' | 'green';
+type Size = 'small' | 'medium' | 'large';
+
+type ColorSize = `${Color}-${Size}`;
+// 'red-small' | 'red-medium' | 'red-large' |
+// 'blue-small' | 'blue-medium' | 'blue-large' |
+// 'green-small' | 'green-medium' | 'green-large'
+
+// 数值类型
+type Pixel = `${number}px`;
+const width: Pixel = '100px';    // OK
+const height: Pixel = '200px';   // OK
+// const wrong: Pixel = '100em'; // Error
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">模板字面量类型</div>
+          <p>模板字面量类型在 TypeScript 4.1+ 中引入，允许在类型层面操作字符串类型。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内置字符串工具类型</h2>
+      <div class="code-block">
+// Uppercase - 转大写
+type Upper = Uppercase<'hello'>;  // 'HELLO'
+
+// Lowercase - 转小写
+type Lower = Lowercase<'HELLO'>;  // 'hello'
+
+// Capitalize - 首字母大写
+type Cap = Capitalize<'hello'>;   // 'Hello'
+
+// Uncapitalize - 首字母小写
+type Uncap = Uncapitalize<'Hello'>;  // 'hello'
+
+// 实际应用：创建常量
+type HttpMethod = 'get' | 'post' | 'put' | 'delete';
+type HttpMethodUpper = Uppercase<HttpMethod>;  // 'GET' | 'POST' | 'PUT' | 'DELETE'
+
+// 转换方法名
+type MethodName<T extends string> = `${Lowercase<T>}Request`;
+type GetRequest = MethodName<'GET'>;  // 'getRequest'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 字符串模式推断</h2>
+      <div class="code-block">
+// 使用 infer 在模板字面量中提取部分
+type GetPrefix<T extends string> =
+  T extends `${infer Prefix}_${string}` ? Prefix : never;
+
+type P1 = GetPrefix<'user_id'>;      // 'user'
+type P2 = GetPrefix<'order_total'>;  // 'order'
+
+// 提取多个部分
+type Split<S extends string, D extends string> =
+  S extends `${infer Head}${D}${infer Tail}`
+    ? [Head, ...Split<Tail, D>]
+    : S extends '' ? [] : [S];
+
+type Parts = Split<'a-b-c', '-'>;  // ['a', 'b', 'c']
+
+// 替换字符串
+type Replace<S extends string, From extends string, To extends string> =
+  S extends `${infer Before}${From}${infer After}`
+    ? `${Before}${To}${After}`
+    : S;
+
+type Replaced = Replace<'hello world', ' ', '-'>;  // 'hello-world'
+
+// 去除前缀
+type RemovePrefix<T extends string, P extends string> =
+  T extends `${P}${infer Rest}` ? Rest : T;
+
+type Without = RemovePrefix<'HelloWorld', 'Hello'>;  // 'World'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实际应用</h2>
+      <div class="code-block">
+// 类型安全的事件系统
+type EventName = 'click' | 'focus' | 'blur' | 'keydown';
+type EventHandler<T extends EventName> = `on${Capitalize<T>}`;
+
+type AllHandlers = {
+  [K in EventName as EventHandler<K>]: () => void;
+};
+// { onClick: () => void; onFocus: () => void; ... }
+
+// 路由类型
+type Route = '/users' | '/posts' | '/comments';
+type RouteParam<T extends string> = `${T}/:${string}`;
+
+type DynamicRoutes = RouteParam<Route>;
+// '/users/:id' | '/posts/:id' | '/comments/:id'
+
+// CSS 类名生成
+type ResponsivePrefix = 'sm' | 'md' | 'lg';
+type Property = 'hidden' | 'block' | 'flex';
+
+type ResponsiveClass = `${ResponsivePrefix}:${Property}`;
+// 'sm:hidden' | 'sm:block' | 'sm:flex' | 'md:hidden' | ...
+
+// 数据库查询类型
+type Operator = 'eq' | 'ne' | 'gt' | 'lt';
+type Field = 'id' | 'name' | 'age';
+
+type WhereClause = `${Field}_${Operator}`;
+// 'id_eq' | 'id_ne' | 'id_gt' | 'id_lt' | 'name_eq' | ...
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">性能注意</div>
+          <p>模板字面量类型可能导致编译时间增加，特别是当联合类型组合产生大量结果时。合理使用避免过度复杂。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 模板字面量类型用于字符串类型操作</li>
+            <li>• 联合类型会自动展开组合</li>
+            <li>• 内置 Uppercase/Lowercase 等工具</li>
+            <li>• infer 可用于提取字符串部分</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="9-4-键重映射.html">← 上一节：键重映射</a>
+      <a href="../chapter10/10-1-Partial和Required.html">下一章：Partial 和 Required →</a>
+    </div>
+  </div>
+</body>
+</html>

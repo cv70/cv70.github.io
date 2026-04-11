@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>113.5 SDK 开发 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="113-1-平台架构.html">第113章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>113.5 SDK 开发</h1>
+      <p class="subtitle">开发者工具包的设计与实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解SDK设计原则</li>
+        <li>掌握多语言SDK开发</li>
+        <li>学会错误处理设计</li>
+        <li>了解SDK文档编写</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> SDK设计原则</h2>
+      <div class="code-block">
+// SDK设计原则
+
+const principles = {
+  简单易用: '开箱即用，最小化配置',
+  类型安全: 'TypeScript类型定义完整',
+  错误处理: '清晰的错误信息和异常处理',
+  文档完善: '详细的API文档和示例',
+  版本管理: '语义化版本，向后兼容'
+};
+
+// SDK功能模块
+const modules = {
+  core: '核心模块 - 配置、HTTP客户端',
+  auth: '认证模块 - 签名、Token管理',
+  api: 'API模块 - 各业务API封装',
+  error: '错误模块 - 异常定义',
+  utils: '工具模块 - 辅助函数'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">SDK目标</div>
+          <p>降低集成难度、提升开发效率、减少错误。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Node.js SDK实现</h2>
+      <div class="code-block">
+// index.ts - SDK入口
+export { ApiClient } from './client';
+export { UserApi, OrderApi, PaymentApi } from './api';
+export * from './errors';
+
+// client.ts - 核心客户端
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+
+export interface ClientConfig {
+  appKey: string;
+  appSecret: string;
+  baseUrl?: string;
+  timeout?: number;
+}
+
+export class ApiClient {
+  private config: Required<ClientConfig>;
+  private httpClient: AxiosInstance;
+
+  constructor(config: ClientConfig) {
+    this.config = {
+      baseUrl: 'https://api.example.com',
+      timeout: 30000,
+      ...config,
+    };
+
+    this.httpClient = axios.create({
+      baseURL: this.config.baseUrl,
+      timeout: this.config.timeout,
+    });
+  }
+
+  // 通用请求方法
+  async request<T>(method: string, path: string, data?: any): Promise<T> {
+    const timestamp = Date.now().toString();
+    const nonce = uuidv4();
+
+    // 构造签名
+    const stringToSign = this.buildSignString(method, path, timestamp, nonce, data);
+    const signature = crypto
+      .createHmac('sha256', this.config.appSecret)
+      .update(stringToSign)
+      .digest('hex');
+
+    const config: AxiosRequestConfig = {
+      method,
+      url: path,
+      headers: {
+        'X-App-Key': this.config.appKey,
+        'X-Timestamp': timestamp,
+        'X-Nonce': nonce,
+        'X-Signature': signature,
+        'Content-Type': 'application/json',
+      },
+    };
+
+    if (method === 'GET') {
+      config.params = data;
+    } else {
+      config.data = data;
+    }
+
+    try {
+      const response = await this.httpClient.request<ApiResponse<T>>(config);
+
+      if (response.data.code !== 0) {
+        throw new ApiError(response.data.code, response.data.message);
+      }
+
+      return response.data.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new NetworkError(error.message);
+    }
+  }
+
+  private buildSignString(
+    method: string,
+    path: string,
+    timestamp: string,
+    nonce: string,
+    data: any
+  ): string {
+    const params = method === 'GET'
+      ? this.sortParams(data || {})
+      : JSON.stringify(data || {});
+
+    return `${method.toUpperCase()}\n${path}\n${timestamp}\n${nonce}\n${params}`;
+  }
+
+  private sortParams(params: Record<string, any>): string {
+    return Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key]}`)
+      .join('&');
+  }
+}
+
+// api/user.ts - 用户API
+export class UserApi {
+  constructor(private client: ApiClient) {}
+
+  async getUser(userId: string): Promise<User> {
+    return this.client.request<User>('GET', `/api/v1/users/${userId}`);
+  }
+
+  async listUsers(params: { page?: number; pageSize?: number }): Promise<PagedResult<User>> {
+    return this.client.request<PagedResult<User>>('GET', '/api/v1/users', params);
+  }
+
+  async createUser(data: CreateUserInput): Promise<User> {
+    return this.client.request<User>('POST', '/api/v1/users', data);
+  }
+}
+
+// errors.ts - 错误定义
+export class ApiError extends Error {
+  constructor(public code: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
+// 使用示例
+import { ApiClient, UserApi } from '@example/api-sdk';
+
+const client = new ApiClient({
+  appKey: 'your-app-key',
+  appSecret: 'your-app-secret',
+});
+
+const userApi = new UserApi(client);
+
+// 获取用户
+const user = await userApi.getUser('user-123');
+console.log(user.name);
+
+// 创建用户
+const newUser = await userApi.createUser({
+  name: 'John',
+  email: 'john@example.com',
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SDK封装复杂度，提供简洁API</li>
+            <li>• 自动处理签名和认证</li>
+            <li>• 清晰的错误类型便于处理</li>
+            <li>• 支持多语言SDK扩展</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="113-4-限流与计费.html">← 上一节：限流与计费</a>
+      <a href="../chapter114/114-1-单例模式.html">下一章：单例模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

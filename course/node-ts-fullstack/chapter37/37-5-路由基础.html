@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>37.5 路由基础 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="37-1-Koa简介.html">第三十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>37.5 路由基础</h1>
+      <p class="subtitle">使用 koa-router 构建路由系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会安装和配置 koa-router</li>
+        <li>掌握 RESTful 路由设计</li>
+        <li>理解路由参数和查询参数的区别</li>
+        <li>学会路由模块化组织</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装 koa-router</h2>
+      <div class="code-block">
+# 安装 koa-router
+npm install koa-router
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>Koa 本身不内置路由功能，需要使用 koa-router 或其他路由中间件。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 基本使用</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const Router = require('koa-router');
+
+const app = new Koa();
+const router = new Router();
+
+// 定义路由
+router.get('/', async ctx => {
+  ctx.body = 'Home Page';
+});
+
+router.get('/about', async ctx => {
+  ctx.body = 'About Page';
+});
+
+// 注册路由中间件
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> HTTP 方法路由</h2>
+      <div class="code-block">
+const router = new Router();
+
+// GET 请求
+router.get('/users', async ctx => {
+  ctx.body = 'Get all users';
+});
+
+// POST 请求
+router.post('/users', async ctx => {
+  ctx.body = 'Create user';
+});
+
+// PUT 请求 - 完整更新
+router.put('/users/:id', async ctx => {
+  ctx.body = `Update user ${ctx.params.id}`;
+});
+
+// PATCH 请求 - 部分更新
+router.patch('/users/:id', async ctx => {
+  ctx.body = `Patch user ${ctx.params.id}`;
+});
+
+// DELETE 请求
+router.delete('/users/:id', async ctx => {
+  ctx.body = `Delete user ${ctx.params.id}`;
+});
+
+// 支持多个 HTTP 方法
+router.all('/api', async ctx => {
+  ctx.body = `Method: ${ctx.method}`;
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 动态路由参数</h2>
+      <div class="code-block">
+// 单个参数
+router.get('/users/:id', async ctx => {
+  const { id } = ctx.params;
+  ctx.body = { userId: id };
+});
+
+// 多个参数
+router.get('/posts/:postId/comments/:commentId', async ctx => {
+  const { postId, commentId } = ctx.params;
+  ctx.body = { postId, commentId };
+});
+
+// 可选参数 (需要正则支持)
+router.get('/books/:id?', async ctx => {
+  const { id } = ctx.params;
+  if (id) {
+    ctx.body = { bookId: id };
+  } else {
+    ctx.body = { books: [] };
+  }
+});
+
+// 参数约束 (正则表达式)
+router.get('/users/:id(\\d+)', async ctx => {
+  // id 只匹配数字
+  ctx.body = { userId: ctx.params.id };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 路由模块化</h2>
+      <div class="code-block">
+// routes/userRoutes.js
+const Router = require('koa-router');
+const router = new Router({ prefix: '/api/users' });
+
+router.get('/', async ctx => {
+  ctx.body = { users: [] };
+});
+
+router.get('/:id', async ctx => {
+  ctx.body = { user: { id: ctx.params.id } };
+});
+
+router.post('/', async ctx => {
+  ctx.body = { message: 'User created' };
+});
+
+module.exports = router;
+      </div>
+
+      <div class="code-block">
+// app.js
+const Koa = require('koa');
+const userRoutes = require('./routes/userRoutes');
+const postRoutes = require('./routes/postRoutes');
+
+const app = new Koa();
+
+// 注册路由
+app.use(userRoutes.routes());
+app.use(postRoutes.routes());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 路由前缀</h2>
+      <div class="code-block">
+// 创建带前缀的路由器
+const router = new Router({
+  prefix: '/api/v1'
+});
+
+// 实际路径: /api/v1/users
+router.get('/users', async ctx => {
+  ctx.body = { users: [] };
+});
+
+// 实际路径: /api/v1/posts
+router.get('/posts', async ctx => {
+  ctx.body = { posts: [] };
+});
+      </div>
+
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <div class="title">API 版本管理</div>
+          <p>使用路由前缀可以方便地管理 API 版本，如 /api/v1, /api/v2。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 路由重定向</h2>
+      <div class="code-block">
+const router = new Router();
+
+// 路由重定向
+router.redirect('/old-path', '/new-path', 301);
+
+// 或者使用中间件方式
+router.get('/old-page', async ctx => {
+  ctx.redirect('/new-page');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 路由中间件</h2>
+      <div class="code-block">
+// 单个路由的中间件
+router.get('/protected', authMiddleware, async ctx => {
+  ctx.body = { message: 'Protected content' };
+});
+
+// 多个中间件
+router.get('/admin',
+  authMiddleware,
+  adminMiddleware,
+  async ctx => {
+    ctx.body = { message: 'Admin area' };
+  }
+);
+
+// 示例中间件
+async function authMiddleware(ctx, next) {
+  const token = ctx.headers.authorization;
+  if (!token) {
+    ctx.status = 401;
+    ctx.body = { error: 'Unauthorized' };
+    return;
+  }
+  await next();
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> RESTful API 设计规范</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>HTTP 方法</th>
+            <th>路径</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GET</td>
+            <td>/api/users</td>
+            <td>获取用户列表</td>
+          </tr>
+          <tr>
+            <td>GET</td>
+            <td>/api/users/:id</td>
+            <td>获取单个用户</td>
+          </tr>
+          <tr>
+            <td>POST</td>
+            <td>/api/users</td>
+            <td>创建用户</td>
+          </tr>
+          <tr>
+            <td>PUT</td>
+            <td>/api/users/:id</td>
+            <td>更新用户（完整）</td>
+          </tr>
+          <tr>
+            <td>PATCH</td>
+            <td>/api/users/:id</td>
+            <td>更新用户（部分）</td>
+          </tr>
+          <tr>
+            <td>DELETE</td>
+            <td>/api/users/:id</td>
+            <td>删除用户</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整示例</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const Router = require('koa-router');
+const bodyParser = require('koa-bodyparser');
+
+const app = new Koa();
+const router = new Router({ prefix: '/api' });
+
+app.use(bodyParser());
+
+// 模拟数据
+let users = [
+  { id: 1, name: 'Alice' },
+  { id: 2, name: 'Bob' }
+];
+
+// RESTful API
+router
+  .get('/users', async ctx => {
+    ctx.body = { success: true, data: users };
+  })
+  .get('/users/:id', async ctx => {
+    const user = users.find(u => u.id === +ctx.params.id);
+    if (!user) {
+      ctx.status = 404;
+      ctx.body = { success: false, message: 'User not found' };
+      return;
+    }
+    ctx.body = { success: true, data: user };
+  })
+  .post('/users', async ctx => {
+    const user = { id: Date.now(), ...ctx.request.body };
+    users.push(user);
+    ctx.status = 201;
+    ctx.body = { success: true, data: user };
+  })
+  .put('/users/:id', async ctx => {
+    const index = users.findIndex(u => u.id === +ctx.params.id);
+    if (index === -1) {
+      ctx.status = 404;
+      ctx.body = { success: false, message: 'User not found' };
+      return;
+    }
+    users[index] = { ...users[index], ...ctx.request.body };
+    ctx.body = { success: true, data: users[index] };
+  })
+  .delete('/users/:id', async ctx => {
+    const index = users.findIndex(u => u.id === +ctx.params.id);
+    if (index === -1) {
+      ctx.status = 404;
+      ctx.body = { success: false, message: 'User not found' };
+      return;
+    }
+    users.splice(index, 1);
+    ctx.body = { success: true, message: 'User deleted' };
+  });
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000, () => {
+  console.log('Server running at http://localhost:3000');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 koa-router 创建和管理路由</li>
+            <li>• 支持 GET、POST、PUT、PATCH、DELETE 等方法</li>
+            <li>• 使用 ctx.params 获取动态路由参数</li>
+            <li>• 使用 prefix 设置路由前缀，便于 API 版本管理</li>
+            <li>• 遵循 RESTful 规范设计 API</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="37-4-请求与响应.html">← 上一节：请求与响应</a>
+      <a href="../chapter38/38-1-中间件原理.html">下一章：Koa 中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

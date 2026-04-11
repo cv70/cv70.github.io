@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>35.4 模板变量传递 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter35.html">第35章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>35.4 模板变量传递</h1>
+      <p class="subtitle">学习向模板传递数据的各种方式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 res.render() 传递变量</li>
+        <li>理解 app.locals 和 res.locals</li>
+        <li>学会传递复杂数据结构</li>
+        <li>理解变量作用域和优先级</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> res.render() 直接传递</h2>
+
+      <div class="code-block">
+// 基本传递
+app.get('/', (req, res) => {
+  res.render('index', {
+    title: 'Home Page',
+    message: 'Welcome!'
+  });
+});
+
+// 传递复杂数据
+app.get('/user/:id', async (req, res) => {
+  const user = await User.findById(req.params.id);
+  const posts = await Post.findByUserId(req.params.id);
+
+  res.render('user/profile', {
+    title: `${user.name}'s Profile`,
+    user,
+    posts,
+    isOwner: req.user?.id === user.id
+  });
+});
+
+// 嵌套数据
+app.get('/dashboard', async (req, res) => {
+  res.render('dashboard', {
+    user: {
+      name: 'Alice',
+      email: 'alice@example.com',
+      stats: {
+        posts: 10,
+        followers: 100
+      }
+    }
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> app.locals 全局变量</h2>
+
+      <div class="code-block">
+// 设置全局变量（应用级别）
+app.locals.siteName = 'My Website';
+app.locals.version = '1.0.0';
+app.locals.env = process.env.NODE_ENV;
+
+// 辅助函数
+app.locals.formatDate = (date) => {
+  return new Date(date).toLocaleDateString('zh-CN');
+};
+
+app.locals.truncate = (str, length) => {
+  return str.length > length ? str.slice(0, length) + '...' : str;
+};
+
+// 所有模板都可以访问
+// &lt;%= siteName %&gt;
+// &lt;%= formatDate(post.createdAt) %&gt;</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">适用场景</div>
+          <p>app.locals 适合设置全站共享的数据，如网站名称、版本号、辅助函数等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> res.locals 请求级变量</h2>
+
+      <div class="code-block">
+// 中间件设置请求级变量
+app.use((req, res, next) => {
+  // 当前用户
+  res.locals.user = req.user;
+
+  // 当前路径
+  res.locals.currentPath = req.path;
+
+  // 当前时间
+  res.locals.now = new Date();
+
+  // Flash 消息
+  res.locals.message = req.flash('message');
+
+  next();
+});
+
+// 认证中间件
+app.use((req, res, next) => {
+  res.locals.isAuthenticated = !!req.user;
+  res.locals.isAdmin = req.user?.role === 'admin';
+  next();
+});
+
+// 使用
+app.get('/profile', (req, res) => {
+  res.render('profile', {
+    title: 'My Profile'
+    // 模板可访问: user, currentPath, isAuthenticated, isAdmin
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 变量优先级</h2>
+
+      <p>当同名变量存在于多个地方时，优先级如下：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>优先级</th>
+            <th>来源</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1（最高）</td>
+            <td>res.render() 传入</td>
+            <td>渲染时传递的变量</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>res.locals</td>
+            <td>请求级变量</td>
+          </tr>
+          <tr>
+            <td>3（最低）</td>
+            <td>app.locals</td>
+            <td>应用级变量</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// 优先级示例
+app.locals.title = 'Site Name';  // 全局 title
+
+app.use((req, res, next) => {
+  res.locals.title = 'Page Name';  // 请求级 title
+  next();
+});
+
+app.get('/special', (req, res) => {
+  res.render('page', {
+    title: 'Special Page'  // 渲染时传递 - 最高优先级
+  });
+  // 模板中 title = 'Special Page'
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 辅助函数</h2>
+
+      <div class="code-block">
+// 注册模板辅助函数
+app.locals.helpers = {
+  // 日期格式化
+  formatDate: (date, format = 'YYYY-MM-DD') => {
+    // 格式化逻辑
+    return formatted;
+  },
+
+  // 字符串截断
+  truncate: (str, length = 100) => {
+    if (!str) return '';
+    return str.length > length ? str.slice(0, length) + '...' : str;
+  },
+
+  // 条件类名
+  classIf: (condition, className) => {
+    return condition ? className : '';
+  },
+
+  // 安全 HTML
+  safe: (html) => {
+    // 返回原始 HTML（不转义）
+    return html;
+  },
+
+  // 调试
+  debug: (obj) => {
+    return JSON.stringify(obj, null, 2);
+  }
+};
+
+// 模板中使用
+/*
+<%= helpers.formatDate(post.createdAt) %>
+<%= helpers.truncate(post.content, 200) %>
+<div class="<%= helpers.classIf(isActive, 'active') %>">...</div>
+<pre><%= helpers.debug(user) %></pre>
+*/</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>res.render() 直接传递变量，优先级最高</li>
+            <li>app.locals 设置全局变量</li>
+            <li>res.locals 设置请求级变量</li>
+            <li>可以传递对象、数组、函数等复杂数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="35-3-Pug模板引擎.html">← 上一节：Pug 模板引擎</a>
+      <a href="35-5-模板继承与布局.html">下一节：模板继承与布局 →</a>
+    </div>
+  </div>
+</body>
+</html>

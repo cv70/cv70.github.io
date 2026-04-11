@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>64.2 命名空间 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="64-1-服务端初始化.html">第六十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>64.2 命名空间</h1>
+      <p class="subtitle">逻辑隔离通信频道</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解命名空间的概念和作用</li>
+        <li>掌握命名空间的创建和使用</li>
+        <li>学会在不同命名空间间隔离通信</li>
+        <li>了解命名空间的中间件机制</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是命名空间</h3>
+      <p class="card-text">
+        <strong>命名空间（Namespace）</strong> 是 Socket.IO 提供的一种逻辑隔离机制，允许在同一个连接上创建多个独立的通信频道。每个命名空间有独立的事件处理、房间和中间件。
+      </p>
+      <p class="card-text">
+        可以把命名空间理解为"频道"或"子系统"，不同命名空间之间的消息互不干扰。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏠</span> 默认命名空间</h2>
+      <p class="card-text">Socket.IO 默认创建一个主命名空间 <code>/</code>：</p>
+
+      <div class="code-block">
+// 服务端 - 默认命名空间
+io.on('connection', (socket) => {
+  console.log('连接到默认命名空间');
+});
+
+// 等同于
+io.of('/').on('connection', (socket) => {
+  console.log('连接到默认命名空间');
+});
+      </div>
+
+      <div class="code-block">
+// 客户端 - 连接默认命名空间
+const socket = io();
+// 或
+const socket = io('/');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🆕</span> 创建命名空间</h2>
+
+      <div class="card">
+        <h3 class="card-title">方式一：静态创建</h3>
+        <div class="code-block">
+// 创建聊天命名空间
+const chatNamespace = io.of('/chat');
+
+chatNamespace.on('connection', (socket) => {
+  console.log('用户连接到聊天频道');
+
+  socket.on('message', (data) => {
+    chatNamespace.emit('message', data);
+  });
+});
+
+// 创建通知命名空间
+const notificationNamespace = io.of('/notifications');
+
+notificationNamespace.on('connection', (socket) => {
+  console.log('用户连接到通知频道');
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式二：动态创建</h3>
+        <div class="code-block">
+// 动态创建命名空间（首次访问时创建）
+io.of((name, query, next) => {
+  // 验证命名空间是否允许
+  const allowedNamespaces = ['/chat', '/notifications', '/game'];
+
+  if (allowedNamespaces.includes(name)) {
+    next(null, true);  // 允许创建
+  } else {
+    next(new Error('命名空间不允许'), false);
+  }
+});
+
+// 或者监听新命名空间创建事件
+io.on('new_namespace', (namespace) => {
+  console.log('新命名空间创建:', namespace.name);
+
+  namespace.on('connection', (socket) => {
+    console.log(`连接到命名空间 ${namespace.name}`);
+  });
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 客户端连接命名空间</h2>
+
+      <div class="code-block">
+import { io } from 'socket.io-client';
+
+// 连接默认命名空间
+const mainSocket = io('http://localhost:3000');
+
+// 连接聊天命名空间
+const chatSocket = io('http://localhost:3000/chat');
+
+// 连接通知命名空间
+const notificationSocket = io('http://localhost:3000/notifications');
+
+// 带配置连接
+const gameSocket = io('http://localhost:3000/game', {
+  auth: { token: 'game-token' },
+  transports: ['websocket']
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">多命名空间连接优化</div>
+          <p>Socket.IO 默认会复用底层连接。当连接多个命名空间时，只建立一个物理连接，不同命名空间在同一个连接上多路复用，节省资源。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 命名空间中间件</h2>
+      <p class="card-text">每个命名空间可以有独立的中间件，用于认证、日志等：</p>
+
+      <div class="code-block">
+// 聊天命名空间中间件
+io.of('/chat').use((socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  if (!token) {
+    return next(new Error('聊天需要认证'));
+  }
+
+  // 验证 token
+  try {
+    const user = verifyToken(token);
+    socket.data.user = user;
+    next();
+  } catch (error) {
+    next(new Error('Token 无效'));
+  }
+});
+
+// 通知命名空间中间件
+io.of('/notifications').use((socket, next) => {
+  // 通知命名空间可以有不同的认证逻辑
+  const apiKey = socket.handshake.auth.apiKey;
+
+  if (apiKey === process.env.NOTIFICATION_API_KEY) {
+    next();
+  } else {
+    next(new Error('无效的 API Key'));
+  }
+});
+        </div>
+      </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 命名空间消息发送</h2>
+
+      <div class="code-block">
+// 向特定命名空间的所有客户端发送
+io.of('/chat').emit('announcement', '服务器维护通知');
+
+// 向特定命名空间的房间发送
+io.of('/chat').to('room1').emit('message', '房间消息');
+
+// 获取命名空间中的所有 socket
+const sockets = await io.of('/chat').fetchSockets();
+console.log(`聊天频道有 ${sockets.length} 个连接`);
+
+// 向多个房间发送（在同一命名空间）
+io.of('/chat').to('room1').to('room2').emit('message', '群发消息');
+
+// 获取命名空间中的房间列表
+const rooms = io.of('/chat').adapter.rooms;
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 实际应用示例</h2>
+
+      <div class="card">
+        <h3 class="card-title">多命名空间聊天应用</h3>
+        <div class="code-block">
+// ==================== 主命名空间 ====================
+io.on('connection', (socket) => {
+  socket.emit('welcome', {
+    message: '欢迎来到聊天平台',
+    namespaces: ['/chat', '/support', '/notifications']
+  });
+});
+
+// ==================== 聊天命名空间 ====================
+const chatNS = io.of('/chat');
+
+chatNS.use(authMiddleware);
+
+chatNS.on('connection', (socket) => {
+  const user = socket.data.user;
+
+  socket.on('join', (roomId) => {
+    socket.join(roomId);
+    chatNS.to(roomId).emit('user-joined', {
+      userId: user.id,
+      username: user.name
+    });
+  });
+
+  socket.on('message', (content) => {
+    const rooms = [...socket.rooms].filter(r => r !== socket.id);
+    rooms.forEach(room => {
+      chatNS.to(room).emit('message', {
+        user: user.name,
+        content,
+        timestamp: Date.now()
+      });
+    });
+  });
+});
+
+// ==================== 客服命名空间 ====================
+const supportNS = io.of('/support');
+
+supportNS.use((socket, next) => {
+  // 客服人员验证
+  const isAgent = socket.handshake.auth.role === 'agent';
+  if (isAgent || socket.handshake.auth.role === 'customer') {
+    next();
+  } else {
+    next(new Error('无效的角色'));
+  }
+});
+
+supportNS.on('connection', (socket) => {
+  const role = socket.handshake.auth.role;
+
+  if (role === 'agent') {
+    socket.join('agents');
+    // 客服加入专门的房间
+  } else {
+    // 客户连接逻辑
+    socket.emit('waiting', '正在为您分配客服...');
+  }
+});
+
+// ==================== 通知命名空间 ====================
+const notificationNS = io.of('/notifications');
+
+notificationNS.on('connection', (socket) => {
+  const userId = socket.handshake.query.userId;
+
+  // 加入用户专属房间
+  socket.join(`user:${userId}`);
+
+  socket.on('disconnect', () => {
+    console.log(`用户 ${userId} 断开通知连接`);
+  });
+});
+
+// 发送通知的辅助函数
+function sendNotification(userId, notification) {
+  notificationNS.to(`user:${userId}`).emit('notification', notification);
+}
+
+// 使用示例
+sendNotification('user123', {
+  type: 'message',
+  title: '新消息',
+  body: '您有一条新消息'
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 命名空间管理</h2>
+
+      <div class="code-block">
+// 获取所有命名空间
+const namespaces = io._nsps;  // Map&lt;string, Namespace&gt;
+
+// 遍历命名空间
+for (const [name, nsp] of namespaces) {
+  console.log(`命名空间: ${name}`);
+  console.log(`连接数: ${nsp.sockets.size}`);
+}
+
+// 删除命名空间
+io.of('/temp').adapter.close();
+
+// 检查命名空间是否存在
+if (io._nsps.has('/chat')) {
+  console.log('聊天命名空间存在');
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 命名空间提供逻辑隔离，不同频道独立通信</li>
+            <li>• 默认命名空间 <code>/</code> 自动创建</li>
+            <li>• 使用 <code>io.of('/namespace')</code> 创建/获取命名空间</li>
+            <li>• 每个命名空间可以有独立的中间件</li>
+            <li>• 多命名空间复用底层连接，资源高效</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="64-1-服务端初始化.html">← 上一节</a>
+      <a href="64-3-房间Room.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

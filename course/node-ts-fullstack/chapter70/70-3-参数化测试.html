@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>70.3 参数化测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="70-2-快照测试.html">上一节</a></li>
+      <li><a href="70-4-测试覆盖率.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>70.3 参数化测试</h1>
+      <p class="subtitle">第十部分：测试篇 - 使用参数化测试减少重复代码</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 参数化测试简介</h2>
+      <p>参数化测试允许使用不同的输入数据运行同一个测试用例，避免编写重复的测试代码。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">参数化测试的优势</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>减少代码重复</li>
+            <li>轻松添加新的测试用例</li>
+            <li>测试数据与测试逻辑分离</li>
+            <li>提高测试覆盖率</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> test.each 基础</h2>
+
+      <div class="code-block">// 基本语法
+test.each(table)(name, fn, timeout)
+
+// table: 测试数据数组
+// name: 测试名称，可以使用占位符
+// fn: 测试函数，接收 table 中的数据</div>
+
+      <h3>使用数组</h3>
+      <div class="code-block">describe('Calculator', () => {
+  // 数组形式
+  test.each([
+    [1, 1, 2],
+    [1, 2, 3],
+    [2, 3, 5],
+    [0, 0, 0],
+    [-1, 1, 0],
+  ])('.add(%i, %i) = %i', (a, b, expected) => {
+    expect(add(a, b)).toBe(expected);
+  });
+
+  test.each([
+    [10, 2, 5],
+    [9, 3, 3],
+    [100, 10, 10],
+  ])('.divide(%i, %i) = %i', (a, b, expected) => {
+    expect(divide(a, b)).toBe(expected);
+  });
+});</div>
+
+      <h3>输出结果</h3>
+      <div class="code-block">PASS  calculator.test.ts
+  Calculator
+    ✓ .add(1, 1) = 2
+    ✓ .add(1, 2) = 3
+    ✓ .add(2, 3) = 5
+    ✓ .add(0, 0) = 0
+    ✓ .add(-1, 1) = 0
+    ✓ .divide(10, 2) = 5
+    ✓ .divide(9, 3) = 3
+    ✓ .divide(100, 10) = 10</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 使用对象数组</h2>
+
+      <div class="code-block">describe('Validation', () => {
+  test.each([
+    { input: 'test@example.com', expected: true },
+    { input: 'invalid-email', expected: false },
+    { input: 'user@domain', expected: false },
+    { input: 'user.name@domain.com', expected: true },
+    { input: '', expected: false },
+  ])('validateEmail("$input") = $expected', ({ input, expected }) => {
+    expect(validateEmail(input)).toBe(expected);
+  });
+
+  test.each([
+    { password: 'Abc123!', valid: true, reason: 'meets all requirements' },
+    { password: 'abc123!', valid: false, reason: 'missing uppercase' },
+    { password: 'ABC123!', valid: false, reason: 'missing lowercase' },
+    { password: 'Abcdef!', valid: false, reason: 'missing number' },
+    { password: 'Abc1234', valid: false, reason: 'missing special char' },
+    { password: 'Ab1!', valid: false, reason: 'too short' },
+  ])('password "$password" is $valid because $reason', ({ password, valid }) => {
+    expect(validatePassword(password)).toBe(valid);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 模板字面量语法</h2>
+
+      <div class="code-block">// 使用模板字面量语法，更清晰
+describe('Math Operations', () => {
+  test.each`
+    a    | b    | expected
+    ${1} | ${1} | ${2}
+    ${1} | ${2} | ${3}
+    ${2} | ${3} | ${5}
+    ${0} | ${0} | ${0}
+    ${-1}| ${1} | ${0}
+  `('returns $expected when adding $a and $b', ({ a, b, expected }) => {
+    expect(add(a, b)).toBe(expected);
+  });
+
+  test.each`
+    value    | percentage | expected
+    ${50}    | ${100}     | ${50}
+    ${25}    | ${100}     | ${25}
+    ${1}     | ${3}       | ${33.33}
+    ${0}     | ${100}     | ${0}
+    ${100}   | ${0}       | ${0}
+  `('percentage($value, $percentage) = $expected', ({ value, percentage, expected }) => {
+    expect(percentage(value, percentage)).toBeCloseTo(expected, 1);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> describe.each</h2>
+
+      <div class="code-block">// 对测试套件进行参数化
+describe.each([
+  { name: 'USD', symbol: '$', rate: 1 },
+  { name: 'EUR', symbol: '€', rate: 0.85 },
+  { name: 'GBP', symbol: '£', rate: 0.73 },
+  { name: 'JPY', symbol: '¥', rate: 110.0 },
+])('Currency: $name', ({ name, symbol, rate }) => {
+  let currency: Currency;
+
+  beforeEach(() => {
+    currency = new Currency(name, symbol, rate);
+  });
+
+  test('has correct symbol', () => {
+    expect(currency.symbol).toBe(symbol);
+  });
+
+  test('converts from USD correctly', () => {
+    const amount = 100;
+    expect(currency.fromUSD(amount)).toBeCloseTo(amount * rate);
+  });
+
+  test('converts to USD correctly', () => {
+    const amount = 100;
+    expect(currency.toUSD(amount)).toBeCloseTo(amount / rate);
+  });
+});</div>
+
+      <h3>模板字面量形式</h3>
+      <div class="code-block">describe.each`
+  name    | symbol | rate
+  ${'USD'}| ${'$'} | ${1}
+  ${'EUR'}| ${'€'} | ${0.85}
+  ${'GBP'}| ${'£'} | ${0.73}
+`('Currency: $name', ({ name, symbol, rate }) => {
+  test('properties are correct', () => {
+    const currency = new Currency(name, symbol, rate);
+    expect(currency.name).toBe(name);
+    expect(currency.symbol).toBe(symbol);
+    expect(currency.rate).toBe(rate);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 异步参数化测试</h2>
+
+      <div class="code-block">describe('API Tests', () => {
+  test.each([
+    { userId: '1', expectedName: 'John' },
+    { userId: '2', expectedName: 'Jane' },
+    { userId: '3', expectedName: 'Bob' },
+  ])('getUser($userId) returns $expectedName', async ({ userId, expectedName }) => {
+    const user = await fetchUser(userId);
+    expect(user.name).toBe(expectedName);
+  });
+
+  // 使用模板字面量
+  test.each`
+    endpoint          | method       | status
+    ${'/users'}       | ${'GET'}     | ${200}
+    ${'/users'}       | ${'POST'}    | ${201}
+    ${'/users/1'}     | ${'GET'}     | ${200}
+    ${'/users/999'}   | ${'GET'}     | ${404}
+  `('$method $endpoint returns $status', async ({ endpoint, method, status }) => {
+    const response = await request(app)[method.toLowerCase()](endpoint);
+    expect(response.status).toBe(status);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 占位符说明</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>占位符</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>%s</td>
+            <td>字符串</td>
+            <td>"hello"</td>
+          </tr>
+          <tr>
+            <td>%d</td>
+            <td>数字</td>
+            <td>42</td>
+          </tr>
+          <tr>
+            <td>%i</td>
+            <td>整数</td>
+            <td>42</td>
+          </tr>
+          <tr>
+            <td>%f</td>
+            <td>浮点数</td>
+            <td>3.14</td>
+          </tr>
+          <tr>
+            <td>%j</td>
+            <td>JSON</td>
+            <td>{"a":1}</td>
+          </tr>
+          <tr>
+            <td>%o</td>
+            <td>对象</td>
+            <td>{ a: 1 }</td>
+          </tr>
+          <tr>
+            <td>%#</td>
+            <td>测试索引</td>
+            <td>0, 1, 2...</td>
+          </tr>
+          <tr>
+            <td>%%</td>
+            <td>百分号</td>
+            <td>%</td>
+          </tr>
+          <tr>
+            <td>%p</td>
+            <td>pretty-format</td>
+            <td>格式化输出</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">describe('Placeholder Examples', () => {
+  test.each([
+    ['string', 42, { a: 1 }],
+    ['another', 100, { b: 2 }],
+  ])('string: %s, number: %d, object: %j', (str, num, obj) => {
+    // string: string, number: 42, object: {"a":1}
+    // string: another, number: 100, object: {"b":2}
+  });
+
+  test.each([
+    [1, 2],
+    [3, 4],
+  ])('test index: %#', (a, b) => {
+    // test index: 0
+    // test index: 1
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 复杂场景示例</h2>
+
+      <div class="code-block">// 测试用户权限系统
+describe('Permission System', () => {
+  const permissions = [
+    { role: 'admin', action: 'create', resource: 'user', allowed: true },
+    { role: 'admin', action: 'delete', resource: 'user', allowed: true },
+    { role: 'editor', action: 'create', resource: 'post', allowed: true },
+    { role: 'editor', action: 'delete', resource: 'post', allowed: false },
+    { role: 'viewer', action: 'read', resource: 'post', allowed: true },
+    { role: 'viewer', action: 'create', resource: 'post', allowed: false },
+  ];
+
+  test.each(permissions)(
+    '$role can $action $resource: $allowed',
+    ({ role, action, resource, allowed }) => {
+      const hasPermission = checkPermission(role, action, resource);
+      expect(hasPermission).toBe(allowed);
+    }
+  );
+});
+
+// 测试边界情况
+describe('Edge Cases', () => {
+  test.each([
+    { input: null, description: 'null' },
+    { input: undefined, description: 'undefined' },
+    { input: '', description: 'empty string' },
+    { input: [], description: 'empty array' },
+    { input: {}, description: 'empty object' },
+    { input: 0, description: 'zero' },
+    { input: NaN, description: 'NaN' },
+  ])('handles $description correctly', ({ input }) => {
+    expect(() => processData(input)).not.toThrow();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>test.each 用于参数化单个测试</li>
+            <li>describe.each 用于参数化测试套件</li>
+            <li>支持数组、对象数组和模板字面量语法</li>
+            <li>占位符用于生成有意义的测试名称</li>
+            <li>参数化测试减少重复，提高可维护性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="70-2-快照测试.html">← 上一节：快照测试</a>
+      <a href="70-4-测试覆盖率.html">下一节：测试覆盖率 →</a>
+    </div>
+  </div>
+</body>
+</html>

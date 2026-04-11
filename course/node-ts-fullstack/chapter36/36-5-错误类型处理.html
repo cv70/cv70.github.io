@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.5 错误类型处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter36.html">第36章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>36.5 错误类型处理</h1>
+      <p class="subtitle">实现类型安全的错误处理机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会创建自定义错误类</li>
+        <li>掌握类型安全的错误处理中间件</li>
+        <li>理解错误类型断言</li>
+        <li>学会异步错误处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 自定义错误类</h2>
+
+      <div class="code-block">
+// src/utils/errors.ts
+
+// 基础应用错误
+export class AppError extends Error {
+  public readonly statusCode: number;
+  public readonly status: string;
+  public readonly isOperational: boolean;
+
+  constructor(message: string, statusCode: number = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+    this.isOperational = true;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// 404 错误
+export class NotFoundError extends AppError {
+  constructor(resource: string = 'Resource') {
+    super(`${resource} not found`, 404);
+  }
+}
+
+// 验证错误
+export class ValidationError extends AppError {
+  public readonly errors: Record<string, string>;
+
+  constructor(message: string, errors: Record<string, string> = {}) {
+    super(message, 400);
+    this.errors = errors;
+  }
+}
+
+// 认证错误
+export class AuthenticationError extends AppError {
+  constructor(message: string = 'Authentication failed') {
+    super(message, 401);
+  }
+}
+
+// 权限错误
+export class AuthorizationError extends AppError {
+  constructor(message: string = 'Access denied') {
+    super(message, 403);
+  }
+}
+
+// 冲突错误
+export class ConflictError extends AppError {
+  constructor(message: string = 'Resource conflict') {
+    super(message, 409);
+  }
+}
+
+// 类型守卫
+export const isAppError = (error: Error): error is AppError => {
+  return error instanceof AppError;
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 错误处理中间件</h2>
+
+      <div class="code-block">
+// src/middleware/errorHandler.ts
+import { Request, Response, NextFunction } from 'express';
+import { AppError, isAppError, ValidationError } from '../utils/errors';
+
+interface ErrorResponse {
+  success: false;
+  status: string;
+  message: string;
+  errors?: Record<string, string>;
+  stack?: string;
+}
+
+export const errorHandler = (
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // 开发环境详细错误
+  const sendErrorDev = (err: Error, res: Response) => {
+    const response: ErrorResponse = {
+      success: false,
+      status: 'error',
+      message: err.message,
+      stack: err.stack
+    };
+
+    if (err instanceof ValidationError) {
+      response.errors = err.errors;
+    }
+
+    res.status(isAppError(err) ? err.statusCode : 500).json(response);
+  };
+
+  // 生产环境简化错误
+  const sendErrorProd = (err: Error, res: Response) => {
+    if (isAppError(err)) {
+      const response: ErrorResponse = {
+        success: false,
+        status: err.status,
+        message: err.message
+      };
+
+      if (err instanceof ValidationError) {
+        response.errors = err.errors;
+      }
+
+      return res.status(err.statusCode).json(response);
+    }
+
+    // 未知错误，不暴露细节
+    res.status(500).json({
+      success: false,
+      status: 'error',
+      message: 'Something went wrong'
+    });
+  };
+
+  if (process.env.NODE_ENV === 'development') {
+    sendErrorDev(err, res);
+  } else {
+    sendErrorProd(err, res);
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 异步错误处理</h2>
+
+      <div class="code-block">
+// src/utils/asyncHandler.ts
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+
+// 类型安全的异步处理器
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+): RequestHandler => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+// 使用
+import { asyncHandler } from '../utils/asyncHandler';
+import { NotFoundError } from '../utils/errors';
+
+router.get('/:id', asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    throw new NotFoundError('User');
+  }
+
+  res.json(user);
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整错误处理示例</h2>
+
+      <div class="code-block">
+// src/controllers/userController.ts
+import { Request, Response, NextFunction } from 'express';
+import { NotFoundError, ValidationError, ConflictError } from '../utils/errors';
+
+export const getUser = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    res.json(user);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createUser = async (req: Request, res: Response, next: NextFunction) => {
+  const { name, email, password } = req.body;
+
+  // 验证
+  const errors: Record<string, string> = {};
+  if (!name) errors.name = 'Name is required';
+  if (!email) errors.email = 'Email is required';
+  if (!password) errors.password = 'Password is required';
+
+  if (Object.keys(errors).length > 0) {
+    throw new ValidationError('Validation failed', errors);
+  }
+
+  // 检查邮箱是否已存在
+  const existingUser = await User.findByEmail(email);
+  if (existingUser) {
+    throw new ConflictError('Email already exists');
+  }
+
+  const user = await User.create({ name, email, password });
+  res.status(201).json(user);
+};
+
+// app.ts - 注册错误处理中间件
+import { errorHandler } from './middleware/errorHandler';
+
+// ... 路由 ...
+
+// 404 处理
+app.use((req, res, next) => {
+  next(new NotFoundError('Route'));
+});
+
+// 错误处理（必须在最后）
+app.use(errorHandler);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>创建自定义错误类继承 Error</li>
+            <li>使用类型守卫判断错误类型</li>
+            <li>异步处理器捕获 Promise 错误</li>
+            <li>区分开发/生产环境的错误响应</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="36-4-路由类型安全.html">← 上一节：路由类型安全</a>
+      <a href="36-6-项目结构组织.html">下一节：项目结构组织 →</a>
+    </div>
+  </div>
+</body>
+</html>

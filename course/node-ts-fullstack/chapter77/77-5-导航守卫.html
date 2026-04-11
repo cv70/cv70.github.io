@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>77.5 导航守卫 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="77-1-ReactRouter基础.html">第七十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>77.5 导航守卫</h1>
+      <p class="subtitle">路由权限控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解导航守卫的概念</li>
+        <li>实现路由权限控制</li>
+        <li>掌握认证路由模式</li>
+        <li>了解路由加载器</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本认证路由</h2>
+      <div class="code-block">
+import { Navigate, useLocation } from 'react-router-dom';
+
+// 认证守卫组件
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+
+  // 加载中显示加载状态
+  if (isLoading) {
+    return &lt;div&gt;Loading...&lt;/div&gt;;
+  }
+
+  // 未认证则重定向到登录页
+  if (!isAuthenticated) {
+    // 保存当前路径，登录后跳转回来
+    return &lt;Navigate to="/login" state={{ from: location }} replace /&gt;;
+  }
+
+  return &lt;&gt;{children}&lt;/&gt;;
+}
+
+// 路由配置
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: &lt;Layout /&gt;,
+    children: [
+      { index: true, element: &lt;Home /&gt; },
+      { path: 'login', element: &lt;Login /&gt; },
+      {
+        path: 'dashboard',
+        element: (
+          &lt;ProtectedRoute&gt;
+            &lt;Dashboard /&gt;
+          &lt;/ProtectedRoute&gt;
+        ),
+      },
+      {
+        path: 'admin',
+        element: (
+          &lt;ProtectedRoute&gt;
+            &lt;AdminPanel /&gt;
+          &lt;/ProtectedRoute&gt;
+        ),
+      },
+    ],
+  },
+]);
+
+// 登录后跳转
+function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+
+  const from = location.state?.from?.pathname || '/';
+
+  const handleSubmit = async (credentials) =&gt; {
+    const success = await login(credentials);
+    if (success) {
+      navigate(from, { replace: true });
+    }
+  };
+
+  return &lt;LoginForm onSubmit={handleSubmit} /&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 角色权限控制</h2>
+      <div class="code-block">
+// 角色权限守卫
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  roles?: string[];  // 允许的角色
+}
+
+function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return &lt;LoadingSpinner /&gt;;
+  }
+
+  if (!isAuthenticated) {
+    return &lt;Navigate to="/login" state={{ from: location }} replace /&gt;;
+  }
+
+  // 检查角色权限
+  if (roles && !roles.some(role =&gt; user.roles.includes(role))) {
+    return &lt;Navigate to="/unauthorized" replace /&gt;;
+  }
+
+  return &lt;&gt;{children}&lt;/&gt;;
+}
+
+// 路由配置
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: &lt;Layout /&gt;,
+    children: [
+      { index: true, element: &lt;Home /&gt; },
+      {
+        path: 'dashboard',
+        element: (
+          &lt;ProtectedRoute&gt;
+            &lt;Dashboard /&gt;
+          &lt;/ProtectedRoute&gt;
+        ),
+      },
+      {
+        path: 'admin',
+        element: (
+          &lt;ProtectedRoute roles={['admin']}&gt;
+            &lt;AdminPanel /&gt;
+          &lt;/ProtectedRoute&gt;
+        ),
+      },
+      {
+        path: 'manager',
+        element: (
+          &lt;ProtectedRoute roles={['admin', 'manager']}&gt;
+            &lt;ManagerPanel /&gt;
+          &lt;/ProtectedRoute&gt;
+        ),
+      },
+      { path: 'unauthorized', element: &lt;Unauthorized /&gt; },
+    ],
+  },
+]);
+
+// 权限 Hook
+function usePermission(permission: string) {
+  const { user } = useAuth();
+  return user?.permissions.includes(permission);
+}
+
+function DeleteButton() {
+  const canDelete = usePermission('delete:posts');
+
+  if (!canDelete) {
+    return null;
+  }
+
+  return &lt;button onClick={handleDelete}&gt;Delete&lt;/button&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 路由加载器</h2>
+      <div class="code-block">
+import { useLoaderData, LoaderFunction } from 'react-router-dom';
+
+// 定义加载器
+export const userLoader: LoaderFunction = async ({ params }) =&gt; {
+  const user = await fetchUser(params.userId!);
+  if (!user) {
+    throw new Response('User not found', { status: 404 });
+  }
+  return user;
+};
+
+// 路由配置
+const router = createBrowserRouter([
+  {
+    path: '/users/:userId',
+    element: &lt;UserDetail /&gt;,
+    loader: userLoader,
+    errorElement: &lt;UserError /&gt;,
+  },
+]);
+
+// 组件中使用加载器数据
+function UserDetail() {
+  const user = useLoaderData() as User;
+
+  return (
+    &lt;div&gt;
+      &lt;h1&gt;{user.name}&lt;/h1&gt;
+      &lt;p&gt;{user.email}&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+// 使用 useRouteLoaderData 获取其他路由的数据
+function UserHeader() {
+  const user = useRouteLoaderData('user-detail') as User;
+
+  return &lt;h1&gt;{user.name}&lt;/h1&gt;;
+}
+
+// 需要在路由配置中添加 id
+const router = createBrowserRouter([
+  {
+    id: 'user-detail',
+    path: '/users/:userId',
+    element: &lt;UserDetail /&gt;,
+    loader: userLoader,
+  },
+]);
+
+// 权限检查加载器
+export const protectedLoader: LoaderFunction = async () =&gt; {
+  const user = await checkAuth();
+  if (!user) {
+    return redirect('/login');
+  }
+  return user;
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ProtectedRoute 实现路由保护</li>
+            <li>• 未认证时重定向到登录页</li>
+            <li>• 角色权限控制细化访问权限</li>
+            <li>• loader 在路由加载前获取数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="77-4-嵌套路由.html">← 上一节：嵌套路由</a>
+      <a href="../chapter78/78-1-状态管理概述.html">下一章：状态管理概述 →</a>
+    </div>
+  </div>
+</body>
+</html>

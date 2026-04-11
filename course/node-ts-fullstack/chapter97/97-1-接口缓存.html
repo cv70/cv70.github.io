@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>97.1 接口缓存 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="97-1-接口缓存.html">第九十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>97.1 接口缓存</h1>
+      <p class="subtitle">API 响应缓存策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 API 缓存的作用</li>
+        <li>掌握缓存策略设计</li>
+        <li>学会实现缓存中间件</li>
+        <li>了解缓存失效策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> API 缓存概述</h2>
+      <div class="code-block">
+# 为什么需要 API 缓存
+
+## 性能提升
+- 减少数据库查询
+- 降低响应延迟
+- 提高吞吐量
+
+## 成本节约
+- 减少服务器负载
+- 降低数据库资源消耗
+- 节省带宽
+
+# 缓存位置
+
+┌─────────────────────────────────────────────────────┐
+│                 浏览器缓存                           │
+│   Cache-Control, ETag                              │
+├─────────────────────────────────────────────────────┤
+│                 CDN 缓存                            │
+│   Cloudflare, CloudFront                           │
+├─────────────────────────────────────────────────────┤
+│                 应用缓存                            │
+│   内存缓存, Redis                                   │
+├─────────────────────────────────────────────────────┤
+│                 数据库缓存                          │
+│   Query Cache                                      │
+└─────────────────────────────────────────────────────┘
+
+# 缓存适用场景
+✅ 数据不频繁变化
+✅ 读取频率高
+✅ 计算成本高
+✅ 对实时性要求不高
+
+# 不适合缓存的场景
+❌ 实时数据
+❌ 用户特定数据（需注意）
+❌ 敏感数据
+❌ 频繁更新的数据
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 缓存中间件实现</h2>
+      <div class="code-block">
+# Express 缓存中间件
+
+import express from 'express';
+import Redis from 'ioredis';
+
+const app = express();
+const redis = new Redis();
+
+// 缓存中间件工厂
+function cacheMiddleware(ttl: number = 3600) {
+  return async (req: any, res: any, next: any) => {
+    // 只缓存 GET 请求
+    if (req.method !== 'GET') {
+      return next();
+    }
+
+    // 生成缓存键
+    const cacheKey = `api:${req.originalUrl}`;
+
+    try {
+      // 尝试从缓存获取
+      const cached = await redis.get(cacheKey);
+
+      if (cached) {
+        // 缓存命中
+        res.set('X-Cache', 'HIT');
+        return res.json(JSON.parse(cached));
+      }
+
+      // 缓存未命中，拦截响应
+      res.set('X-Cache', 'MISS');
+
+      const originalJson = res.json.bind(res);
+
+      res.json = (data: any) => {
+        // 异步写入缓存
+        redis.setex(cacheKey, ttl, JSON.stringify(data)).catch(console.error);
+        return originalJson(data);
+      };
+
+      next();
+    } catch (error) {
+      // 缓存出错，继续处理请求
+      console.error('Cache error:', error);
+      next();
+    }
+  };
+}
+
+// 使用缓存中间件
+app.get('/api/products', cacheMiddleware(600), async (req, res) => {
+  const products = await Product.findMany();
+  res.json(products);
+});
+
+# 带参数的缓存
+
+function cacheWithOptions(options: {
+  ttl?: number;
+  keyGenerator?: (req: any) => string;
+  condition?: (req: any) => boolean;
+}) {
+  const { ttl = 3600, keyGenerator, condition } = options;
+
+  return async (req: any, res: any, next: any) => {
+    // 检查条件
+    if (condition && !condition(req)) {
+      return next();
+    }
+
+    // 生成缓存键
+    const cacheKey = keyGenerator
+      ? keyGenerator(req)
+      : `api:${req.originalUrl}`;
+
+    // ... 其余逻辑
+  };
+}
+
+// 使用自定义键生成器
+app.get('/api/users/:id',
+  cacheWithOptions({
+    ttl: 300,
+    keyGenerator: (req) => `user:${req.params.id}`,
+    condition: (req) => !req.headers['authorization'],  // 未登录用户才缓存
+  }),
+  getUserHandler
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">缓存键设计</div>
+          <p>缓存键应该包含所有影响响应的因素：路径、查询参数、用户 ID（如果是用户特定数据）、版本号等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 缓存失效策略</h2>
+      <div class="code-block">
+# 1. 时间过期 (TTL)
+
+// 设置过期时间
+await redis.setex('api:products', 600, JSON.stringify(data));
+
+# 2. 主动失效
+
+// 数据更新时删除缓存
+app.put('/api/products/:id', async (req, res) => {
+  const product = await Product.update(req.params.id, req.body);
+
+  // 删除相关缓存
+  await redis.del(`api:products/${req.params.id}`);
+  await redis.del('api:products');  // 列表缓存
+
+  res.json(product);
+});
+
+# 3. 缓存预热
+
+// 应用启动时预加载热点数据
+async function warmupCache() {
+  const hotProducts = await Product.findHot();
+
+  for (const product of hotProducts) {
+    await redis.setex(
+      `api:products/${product.id}`,
+      3600,
+      JSON.stringify(product)
+    );
+  }
+}
+
+# 4. 缓存更新策略
+
+// Read-Through: 读取时更新缓存
+async function getProduct(id: string) {
+  const cacheKey = `product:${id}`;
+  const cached = await redis.get(cacheKey);
+
+  if (cached) {
+    return JSON.parse(cached);
+  }
+
+  const product = await Product.findById(id);
+  await redis.setex(cacheKey, 3600, JSON.stringify(product));
+
+  return product;
+}
+
+// Write-Through: 写入时更新缓存
+async function updateProduct(id: string, data: any) {
+  const product = await Product.update(id, data);
+
+  // 同时更新缓存
+  await redis.setex(`product:${id}`, 3600, JSON.stringify(product));
+
+  return product;
+}
+
+// Write-Behind: 异步更新缓存
+async function updateProduct(id: string, data: any) {
+  const product = await Product.update(id, data);
+
+  // 异步更新缓存
+  redis.setex(`product:${id}`, 3600, JSON.stringify(product)).catch(console.error);
+
+  return product;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> HTTP 缓存头</h2>
+      <div class="code-block">
+# Cache-Control 响应头
+
+// 设置缓存头中间件
+function cacheControl(maxAge: number, options: any = {}) {
+  return (req: any, res: any, next: any) => {
+    let value = `max-age=${maxAge}`;
+
+    if (options.public) value += ', public';
+    if (options.private) value += ', private';
+    if (options.noCache) value = 'no-cache';
+    if (options.noStore) value = 'no-store';
+    if (options.immutable) value += ', immutable';
+
+    res.set('Cache-Control', value);
+    next();
+  };
+}
+
+// 使用
+app.get('/api/static-data',
+  cacheControl(3600, { public: true }),
+  handler
+);
+
+app.get('/api/user-data',
+  cacheControl(300, { private: true }),
+  handler
+);
+
+app.get('/api/realtime',
+  cacheControl(0, { noStore: true }),
+  handler
+);
+
+# ETag 实现
+
+import crypto from 'crypto';
+
+app.get('/api/products', async (req, res) => {
+  const products = await Product.findMany();
+
+  // 生成 ETag
+  const etag = crypto
+    .createHash('md5')
+    .update(JSON.stringify(products))
+    .digest('hex');
+
+  // 检查客户端 ETag
+  if (req.headers['if-none-match'] === etag) {
+    return res.status(304).end();  // Not Modified
+  }
+
+  res.set('ETag', etag);
+  res.json(products);
+});
+
+# Last-Modified
+
+app.get('/api/articles/:id', async (req, res) => {
+  const article = await Article.findById(req.params.id);
+
+  const lastModified = article.updatedAt.toUTCString();
+
+  // 检查客户端缓存
+  if (req.headers['if-modified-since'] === lastModified) {
+    return res.status(304).end();
+  }
+
+  res.set('Last-Modified', lastModified);
+  res.json(article);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• API 缓存减少数据库压力，提高响应速度</li>
+            <li>• 设计合理的缓存键和失效策略</li>
+            <li>• 使用 HTTP 缓存头控制客户端缓存</li>
+            <li>• 数据更新时主动失效相关缓存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter96/96-5-分库分表.html">← 上一章：分库分表</a>
+      <a href="97-2-数据压缩.html">下一节：数据压缩 →</a>
+    </div>
+  </div>
+</body>
+</html>

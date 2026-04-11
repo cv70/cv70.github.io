@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>43.3 请求处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="43-1-控制器基础.html">第四十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>43.3 请求处理</h1>
+      <p class="subtitle">掌握获取请求数据的各种方式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握请求对象的使用</li>
+        <li>学会获取请求体数据</li>
+        <li>了解请求头和Cookie的处理</li>
+        <li>掌握文件上传处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 请求装饰器</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>装饰器</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>@Req()</td>
+            <td>请求对象</td>
+            <td>@Req() req: Request</td>
+          </tr>
+          <tr>
+            <td>@Body()</td>
+            <td>请求体</td>
+            <td>@Body() body: CreateUserDto</td>
+          </tr>
+          <tr>
+            <td>@Param()</td>
+            <td>路径参数</td>
+            <td>@Param('id') id: string</td>
+          </tr>
+          <tr>
+            <td>@Query()</td>
+            <td>查询参数</td>
+            <td>@Query('page') page: number</td>
+          </tr>
+          <tr>
+            <td>@Headers()</td>
+            <td>请求头</td>
+            <td>@Headers('authorization') token</td>
+          </tr>
+          <tr>
+            <td>@Ip()</td>
+            <td>客户端IP</td>
+            <td>@Ip() ip: string</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 请求体处理</h2>
+      <div class="code-block">
+import { Controller, Post, Body } from '@nestjs/common';
+
+class CreateUserDto {
+  name: string;
+  email: string;
+  password: string;
+}
+
+@Controller('users')
+export class UsersController {
+
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    console.log(createUserDto);
+    // { name: 'John', email: 'john@example.com', password: 'xxx' }
+    return { message: 'User created', data: createUserDto };
+  }
+
+  // 获取单个字段
+  @Post('login')
+  login(
+    @Body('email') email: string,
+    @Body('password') password: string
+  ) {
+    return { email };
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">DTO 模式</div>
+          <p>使用 DTO (Data Transfer Object) 定义请求体结构，可以配合 ValidationPipe 进行自动验证。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> Headers 和 Cookies</h2>
+      <div class="code-block">
+import { Controller, Get, Headers, Req, Res } from '@nestjs/common';
+import { Request, Response } from 'express';
+
+@Controller('auth')
+export class AuthController {
+
+  @Get('me')
+  getCurrentUser(
+    @Headers('authorization') authorization: string,
+    @Headers() headers: Record<string, string>
+  ) {
+    console.log(authorization);  // Bearer xxx
+    console.log(headers);        // { host: '...', ... }
+    return { token: authorization };
+  }
+
+  @Get('token')
+  getToken(@Req() req: Request) {
+    // Express Request 对象
+    console.log(req.cookies);     // Cookie 对象
+    console.log(req.signedCookies);  // 签名 Cookie
+    return { cookies: req.cookies };
+  }
+
+  @Get('set-cookie')
+  setCookie(@Res() res: Response) {
+    res.cookie('token', 'abc123', {
+      httpOnly: true,
+      maxAge: 3600000,
+    });
+    return res.json({ message: 'Cookie set' });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📎</span> 文件上传</h2>
+      <div class="code-block">
+import { Controller, Post, UseInterceptors, UploadedFile, UploadedFiles } from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+
+@Controller('upload')
+export class UploadController {
+
+  // 单文件上传
+  @Post('single')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadSingle(@UploadedFile() file: Express.Multer.File) {
+    console.log(file);
+    // {
+    //   fieldname: 'file',
+    //   originalname: 'image.jpg',
+    //   size: 12345,
+    //   mimetype: 'image/jpeg',
+    //   buffer: <Buffer ...>
+    // }
+    return { filename: file.originalname, size: file.size };
+  }
+
+  // 多文件上传
+  @Post('multiple')
+  @UseInterceptors(FilesInterceptor('files', 10))  // 最多10个
+  uploadMultiple(@UploadedFiles() files: Express.Multer.File[]) {
+    return { count: files.length };
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">文件上传配置</div>
+          <p>文件上传默认存储在内存中。可以通过配置 Multer 选项指定存储位置、文件大小限制、文件类型限制等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @Body() 获取请求体</li>
+            <li>• @Headers() 获取请求头</li>
+            <li>• @Req() 获取完整请求对象</li>
+            <li>• FileInterceptor 处理文件上传</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="43-2-路由定义.html">← 上一节：路由定义</a>
+      <a href="43-4-响应格式化.html">下一节：响应格式化 →</a>
+    </div>
+  </div>
+</body>
+</html>

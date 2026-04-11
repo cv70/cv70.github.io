@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.3 数据库设计 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="22-1-mysql安装配置.html">第二十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>22.3 数据库设计</h1>
+      <p class="subtitle">设计合理的数据库结构</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解数据库设计原则</li>
+        <li>掌握范式化设计方法</li>
+        <li>学会 ER 图绘制</li>
+        <li>了解反范式化的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 数据库设计流程</h2>
+      <div class="code-block">
+数据库设计流程：
+
+1. 需求分析
+   ├── 收集业务需求
+   ├── 确定数据实体
+   ├── 明确数据关系
+   └── 定义约束条件
+
+2. 概念设计
+   ├── 绘制 ER 图
+   ├── 确定实体和属性
+   └── 定义实体间关系
+
+3. 逻辑设计
+   ├── 转换为关系模式
+   ├── 应用范式规范
+   └── 确定主键和外键
+
+4. 物理设计
+   ├── 选择数据类型
+   ├── 设计索引策略
+   └── 考虑分区和分表
+
+5. 实施与维护
+   ├── 创建数据库对象
+   ├── 导入测试数据
+   └── 性能调优
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 数据库范式</h2>
+      <div class="code-block">
+第一范式（1NF）：字段不可再分
+┌────────────────────────────────────┐
+│ 不符合：address = "北京朝阳区xxx"    │
+│ 符合：province="北京", city="朝阳区" │
+└────────────────────────────────────┘
+
+第二范式（2NF）：消除部分依赖
+┌────────────────────────────────────┐
+│ 不符合：订单表中包含商品名称          │
+│ 符合：拆分为订单表和订单明细表        │
+└────────────────────────────────────┘
+
+第三范式（3NF）：消除传递依赖
+┌────────────────────────────────────┐
+│ 不符合：订单表中包含用户名、用户地址   │
+│ 符合：拆分为用户表，订单表存用户ID    │
+└────────────────────────────────────┘
+
+示例：电商系统设计
+
+-- 用户表
+CREATE TABLE users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(50) NOT NULL,
+  email VARCHAR(100) UNIQUE
+);
+
+-- 商品表
+CREATE TABLE products (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(200) NOT NULL,
+  price DECIMAL(10, 2) NOT NULL,
+  stock INT DEFAULT 0
+);
+
+-- 订单表
+CREATE TABLE orders (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  total_amount DECIMAL(10, 2),
+  status ENUM('pending', 'paid', 'shipped', 'completed'),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 订单明细表
+CREATE TABLE order_items (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  order_id INT NOT NULL,
+  product_id INT NOT NULL,
+  quantity INT NOT NULL,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">范式 vs 反范式</div>
+          <p>范式化减少冗余但查询时需要更多 JOIN；反范式化增加冗余但查询更快。实际项目中常在两者间权衡。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> ER 图示例</h2>
+      <div class="code-block">
+用户订单系统 ER 图：
+
+┌─────────┐         ┌─────────┐         ┌─────────┐
+│  users  │         │ orders  │         │products │
+├─────────┤         ├─────────┤         ├─────────┤
+│ id (PK) │◄────────│ user_id │         │ id (PK) │
+│ username│    1:N  │ id (PK) │────────►│ name    │
+│ email   │         │ total   │    N:M  │ price   │
+│ status  │         │ status  │         │ stock   │
+└─────────┘         └─────────┘         └─────────┘
+                         │
+                         │ 1:N
+                         ▼
+                    ┌────────────┐
+                    │order_items │
+                    ├────────────┤
+                    │ id (PK)    │
+                    │ order_id   │
+                    │ product_id │
+                    │ quantity   │
+                    │ unit_price │
+                    └────────────┘
+
+关系说明：
+├── 一个用户可以有多个订单（1:N）
+├── 一个订单可以有多个商品（通过 order_items）
+├── 一个商品可以出现在多个订单中（N:M）
+└── order_items 实现多对多关系的中间表
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 数据库设计需要经过需求分析、概念设计、逻辑设计和物理设计</li>
+            <li>• 范式化减少数据冗余，保持数据一致性</li>
+            <li>• ER 图帮助可视化实体关系</li>
+            <li>• 实际项目需在范式化和性能间权衡</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="22-2-sql基础语法.html">← 上一节：SQL 基础语法</a>
+      <a href="22-4-索引优化.html">下一节：索引优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

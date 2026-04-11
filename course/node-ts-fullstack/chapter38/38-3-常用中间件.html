@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.3 常用中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="38-1-中间件原理.html">第三十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>38.3 常用中间件</h1>
+      <p class="subtitle">Koa 生态中必备的中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握常用 Koa 中间件的安装和配置</li>
+        <li>学会使用路由、请求体解析等核心中间件</li>
+        <li>了解跨域、压缩、静态文件等实用中间件</li>
+        <li>掌握中间件的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 中间件一览</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>中间件</th>
+            <th>作用</th>
+            <th>安装命令</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>koa-router</td>
+            <td>路由管理</td>
+            <td>npm i koa-router</td>
+          </tr>
+          <tr>
+            <td>koa-bodyparser</td>
+            <td>请求体解析</td>
+            <td>npm i koa-bodyparser</td>
+          </tr>
+          <tr>
+            <td>koa-body</td>
+            <td>文件上传 + 请求体</td>
+            <td>npm i koa-body</td>
+          </tr>
+          <tr>
+            <td>koa-static</td>
+            <td>静态文件服务</td>
+            <td>npm i koa-static</td>
+          </tr>
+          <tr>
+            <td>koa-cors</td>
+            <td>跨域处理</td>
+            <td>npm i @koa/cors</td>
+          </tr>
+          <tr>
+            <td>koa-compress</td>
+            <td>响应压缩</td>
+            <td>npm i koa-compress</td>
+          </tr>
+          <tr>
+            <td>koa-logger</td>
+            <td>请求日志</td>
+            <td>npm i koa-logger</td>
+          </tr>
+          <tr>
+            <td>koa-session</td>
+            <td>Session 管理</td>
+            <td>npm i koa-session</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> koa-router 路由中间件</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const Router = require('koa-router');
+
+const app = new Koa();
+const router = new Router({ prefix: '/api' });
+
+// 定义路由
+router.get('/users', async ctx => {
+  ctx.body = { users: [] };
+});
+
+router.post('/users', async ctx => {
+  ctx.body = { message: 'Created' };
+});
+
+// 注册路由
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> koa-bodyparser 请求体解析</h2>
+      <div class="code-block">
+const bodyParser = require('koa-bodyparser');
+
+app.use(bodyParser({
+  enableTypes: ['json', 'form'],
+  jsonLimit: '1mb',
+  formLimit: '1mb'
+}));
+
+app.use(async ctx => {
+  const body = ctx.request.body;
+  ctx.body = { received: body };
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">支持的类型</div>
+          <p>koa-bodyparser 支持 JSON 和表单数据，不支持文件上传。如需文件上传，请使用 koa-body。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> koa-body 文件上传</h2>
+      <div class="code-block">
+const { koaBody } = require('koa-body');
+
+app.use(koaBody({
+  multipart: true,              // 支持文件上传
+  formidable: {
+    uploadDir: './uploads',     // 上传目录
+    keepExtensions: true,       // 保留文件扩展名
+    maxFileSize: 10 * 1024 * 1024, // 最大 10MB
+  }
+}));
+
+// 处理文件上传
+router.post('/upload', async ctx => {
+  const file = ctx.request.files.file;
+  ctx.body = {
+    message: 'File uploaded',
+    filename: file.newFilename,
+    path: file.filepath
+  };
+});
+
+// 处理表单数据
+router.post('/submit', async ctx => {
+  const { name, email } = ctx.request.body;
+  ctx.body = { name, email };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> @koa/cors 跨域处理</h2>
+      <div class="code-block">
+const cors = require('@koa/cors');
+
+// 简单使用
+app.use(cors());
+
+// 详细配置
+app.use(cors({
+  origin: 'https://example.com',  // 允许的源
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  exposeHeaders: ['X-Total-Count'],
+  credentials: true,              // 允许携带 cookie
+  maxAge: 86400                   // 预检请求缓存时间
+}));
+
+// 动态配置
+app.use(cors({
+  origin: ctx => {
+    const allowedOrigins = ['http://localhost:3000', 'https://example.com'];
+    const requestOrigin = ctx.get('Origin');
+    return allowedOrigins.includes(requestOrigin) ? requestOrigin : '';
+  }
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> koa-static 静态文件</h2>
+      <div class="code-block">
+const serve = require('koa-static');
+const path = require('path');
+
+// 提供静态文件服务
+app.use(serve(path.join(__dirname, 'public')));
+
+// 多个静态目录
+app.use(serve(path.join(__dirname, 'public')));
+app.use(serve(path.join(__dirname, 'uploads')));
+
+// 带配置项
+app.use(serve(path.join(__dirname, 'public'), {
+  maxage: 86400000,    // 缓存时间（毫秒）
+  gzip: true,          // 启用 gzip
+  index: 'index.html'  // 默认文件
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📉</span> koa-compress 响应压缩</h2>
+      <div class="code-block">
+const compress = require('koa-compress');
+
+app.use(compress({
+  filter: contentType => {
+    return /text|json|javascript|css/i.test(contentType);
+  },
+  threshold: 1024,  // 超过 1KB 才压缩
+  gzip: {
+    flush: require('zlib').constants.Z_SYNC_FLUSH
+  }
+}));
+      </div>
+
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <div class="title">压缩效果</div>
+          <p>对于大型 JSON 响应或文本内容，压缩可以显著减少传输数据量，提高响应速度。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> koa-logger 请求日志</h2>
+      <div class="code-block">
+const logger = require('koa-logger');
+
+// 使用默认日志
+app.use(logger());
+
+// 自定义日志格式
+app.use(logger({
+  transporter: (str, args) => {
+    // 发送到日志服务
+    console.log(str);
+  }
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> koa-session Session 管理</h2>
+      <div class="code-block">
+const session = require('koa-session');
+
+// 配置
+app.keys = ['secret-key', 'another-secret'];
+
+const CONFIG = {
+  key: 'koa:sess',      // cookie key
+  maxAge: 86400000,     // 过期时间（毫秒）
+  autoCommit: true,
+  overwrite: true,
+  httpOnly: true,
+  signed: true,
+  rolling: false,       // 每次请求更新过期时间
+  renew: false,
+};
+
+app.use(session(CONFIG, app));
+
+// 使用 session
+router.get('/login', async ctx => {
+  ctx.session.user = { id: 1, name: 'John' };
+  ctx.body = { message: 'Logged in' };
+});
+
+router.get('/profile', async ctx => {
+  const user = ctx.session.user;
+  if (!user) {
+    ctx.status = 401;
+    ctx.body = { error: 'Not logged in' };
+    return;
+  }
+  ctx.body = { user };
+});
+
+router.get('/logout', async ctx => {
+  ctx.session = null;
+  ctx.body = { message: 'Logged out' };
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整项目配置示例</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const Router = require('koa-router');
+const bodyParser = require('koa-bodyparser');
+const cors = require('@koa/cors');
+const compress = require('koa-compress');
+const logger = require('koa-logger');
+const serve = require('koa-static');
+const path = require('path');
+
+const app = new Koa();
+const router = new Router({ prefix: '/api' });
+
+// 1. 错误处理中间件（最外层）
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    ctx.status = err.status || 500;
+    ctx.body = { error: err.message };
+    ctx.app.emit('error', err, ctx);
+  }
+});
+
+// 2. 日志中间件
+app.use(logger());
+
+// 3. 压缩中间件
+app.use(compress());
+
+// 4. 跨域中间件
+app.use(cors({ origin: '*' }));
+
+// 5. 请求体解析中间件
+app.use(bodyParser());
+
+// 6. 静态文件服务
+app.use(serve(path.join(__dirname, 'public')));
+
+// 7. 路由
+router.get('/users', async ctx => {
+  ctx.body = { users: [] };
+});
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• koa-router 处理路由</li>
+            <li>• koa-bodyparser 解析请求体</li>
+            <li>• koa-body 支持文件上传</li>
+            <li>• @koa/cors 处理跨域请求</li>
+            <li>• koa-static 提供静态文件服务</li>
+            <li>• 注意中间件的注册顺序</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="38-2-洋葱模型.html">← 上一节：洋葱模型</a>
+      <a href="38-4-自定义中间件.html">下一节：自定义中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65.5 重连机制 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="65-1-浏览器客户端.html">第六十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>65.5 重连机制</h1>
+      <p class="subtitle">客户端自动重连策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Socket.IO 的默认重连机制</li>
+        <li>掌握重连配置选项</li>
+        <li>学会自定义重连策略</li>
+        <li>了解重连相关的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 默认重连机制</h2>
+
+      <div class="card">
+        <h3 class="card-title">默认配置</h3>
+        <p class="card-text">Socket.IO 默认启用自动重连，配置如下：</p>
+        <div class="code-block">
+const socket = io('http://localhost:3000', {
+  reconnection: true,              // 启用自动重连（默认 true）
+  reconnectionAttempts: Infinity,  // 无限次重连（默认）
+  reconnectionDelay: 1000,         // 初始延迟 1 秒（默认）
+  reconnectionDelayMax: 5000,      // 最大延迟 5 秒（默认）
+  randomizationFactor: 0.5,        // 随机化因子（默认 0.5）
+  timeout: 20000                   // 连接超时 20 秒（默认）
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">指数退避算法</h3>
+        <p class="card-text">重连延迟采用指数退避算法：</p>
+        <div class="code-block">
+// 计算公式
+delay = reconnectionDelay * Math.pow(2, attempt - 1)
+delay = delay * (1 + randomizationFactor * Math.random())
+delay = Math.min(delay, reconnectionDelayMax)
+
+// 示例（randomizationFactor = 0.5）
+// 第 1 次: ~1000ms
+// 第 2 次: ~1500ms (1000 * 1.5)
+// 第 3 次: ~3000ms (1500 * 2)
+// 第 4 次: ~5000ms (达到最大值)
+// 后续: ~5000ms
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 重连配置详解</h2>
+
+      <div class="card">
+        <h3 class="card-title">限制重连次数</h3>
+        <div class="code-block">
+const socket = io('http://localhost:3000', {
+  reconnectionAttempts: 10,  // 最多重连 10 次
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000
+});
+
+// 监听重连失败
+socket.on('reconnect_failed', () => {
+  console.log('重连失败，已达到最大次数');
+  showError('无法连接到服务器，请刷新页面重试');
+});
+
+// 监听重连尝试
+socket.on('reconnect_attempt', (attempt) => {
+  console.log(`第 ${attempt} 次重连尝试`);
+  updateReconnectStatus(attempt);
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">调整重连延迟</h3>
+        <div class="code-block">
+// 快速重连（适合对实时性要求高的场景）
+const fastReconnect = io('http://localhost:3000', {
+  reconnectionDelay: 100,
+  reconnectionDelayMax: 1000,
+  randomizationFactor: 0.2
+});
+
+// 慢速重连（适合节省资源）
+const slowReconnect = io('http://localhost:3000', {
+  reconnectionDelay: 5000,
+  reconnectionDelayMax: 60000,
+  randomizationFactor: 0.3
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">禁用自动重连</h3>
+        <div class="code-block">
+// 完全禁用自动重连
+const socket = io('http://localhost:3000', {
+  reconnection: false
+});
+
+// 断开后需手动重连
+socket.on('disconnect', () => {
+  // 显示重连按钮
+  showReconnectButton();
+});
+
+// 用户点击重连
+reconnectButton.onclick = () => {
+  socket.connect();
+};
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 自定义重连策略</h2>
+
+      <div class="card">
+        <h3 class="card-title">带 UI 提示的重连</h3>
+        <div class="code-block">
+class SocketReconnect {
+  private socket: Socket;
+  private attempts = 0;
+  private maxAttempts = 10;
+
+  constructor(url: string) {
+    this.socket = io(url, {
+      reconnection: false  // 禁用默认，自定义实现
+    });
+
+    this.setupEvents();
+  }
+
+  private setupEvents() {
+    this.socket.on('connect', () => {
+      this.attempts = 0;
+      this.hideReconnectUI();
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        // 服务端主动断开，不重连
+        this.showError('您已被服务器断开');
+      } else {
+        // 其他原因，尝试重连
+        this.attemptReconnect();
+      }
+    });
+  }
+
+  private attemptReconnect() {
+    if (this.attempts >= this.maxAttempts) {
+      this.showReconnectFailed();
+      return;
+    }
+
+    this.attempts++;
+    const delay = this.calculateDelay();
+
+    this.showReconnecting(this.attempts, delay);
+
+    setTimeout(() => {
+      this.socket.connect();
+    }, delay);
+  }
+
+  private calculateDelay(): number {
+    // 指数退避
+    const base = 1000;
+    const max = 30000;
+    const delay = Math.min(base * Math.pow(2, this.attempts - 1), max);
+
+    // 添加随机抖动
+    return delay * (1 + 0.5 * Math.random());
+  }
+
+  private showReconnecting(attempt: number, delay: number) {
+    const element = document.getElementById('reconnect-status');
+    if (element) {
+      element.innerHTML = `
+        正在重连... 第 ${attempt} 次
+        <br>将在 ${(delay / 1000).toFixed(1)} 秒后重试
+      `;
+      element.style.display = 'block';
+    }
+  }
+
+  private showReconnectFailed() {
+    const element = document.getElementById('reconnect-status');
+    if (element) {
+      element.innerHTML = `
+        重连失败
+        <button onclick="location.reload()">刷新页面</button>
+        <button onclick="socketManager.retry()">重试</button>
+      `;
+    }
+  }
+
+  private hideReconnectUI() {
+    const element = document.getElementById('reconnect-status');
+    if (element) {
+      element.style.display = 'none';
+    }
+  }
+
+  retry() {
+    this.attempts = 0;
+    this.attemptReconnect();
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">网络状态感知重连</h3>
+        <div class="code-block">
+class NetworkAwareSocket {
+  private socket: Socket;
+  private isOnline = navigator.onLine;
+  private pendingConnect = false;
+
+  constructor(url: string) {
+    this.socket = io(url, {
+      autoConnect: false
+    });
+
+    this.setupNetworkListeners();
+    this.setupSocketListeners();
+
+    // 初始连接
+    if (this.isOnline) {
+      this.socket.connect();
+    }
+  }
+
+  private setupNetworkListeners() {
+    window.addEventListener('online', () => {
+      console.log('网络已恢复');
+      this.isOnline = true;
+
+      if (this.pendingConnect) {
+        this.socket.connect();
+        this.pendingConnect = false;
+      }
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('网络已断开');
+      this.isOnline = false;
+      // Socket 会自动触发 disconnect 事件
+    });
+  }
+
+  private setupSocketListeners() {
+    this.socket.on('disconnect', (reason) => {
+      if (!this.isOnline) {
+        // 网络断开导致，等待网络恢复
+        console.log('等待网络恢复...');
+        this.pendingConnect = true;
+        this.showOfflineMessage();
+      } else {
+        // 网络正常但断开，尝试重连
+        this.scheduleReconnect();
+      }
+    });
+
+    this.socket.on('connect', () => {
+      this.hideOfflineMessage();
+    });
+  }
+
+  private scheduleReconnect() {
+    // 检查网络状态后再重连
+    if (!this.isOnline) {
+      this.pendingConnect = true;
+      return;
+    }
+
+    setTimeout(() => {
+      this.socket.connect();
+    }, 1000);
+  }
+
+  private showOfflineMessage() {
+    document.getElementById('offline-banner')!.style.display = 'block';
+  }
+
+  private hideOfflineMessage() {
+    document.getElementById('offline-banner')!.style.display = 'none';
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 重连事件</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>事件</th>
+            <th>参数</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>reconnect_attempt</code></td>
+            <td>attempt: number</td>
+            <td>重连尝试前触发</td>
+          </tr>
+          <tr>
+            <td><code>reconnecting</code></td>
+            <td>attempt: number</td>
+            <td>正在重连时触发</td>
+          </tr>
+          <tr>
+            <td><code>reconnect_error</code></td>
+            <td>error: Error</td>
+            <td>重连失败时触发</td>
+          </tr>
+          <tr>
+            <td><code>reconnect_failed</code></td>
+            <td>无</td>
+            <td>达到最大重连次数时触发</td>
+          </tr>
+          <tr>
+            <td><code>reconnect</code></td>
+            <td>attempt: number</td>
+            <td>重连成功时触发</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block" style="margin-top: 1rem;">
+// 完整的重连事件监听
+socket.io.on('reconnect_attempt', (attempt) => {
+  console.log(`准备第 ${attempt} 次重连`);
+});
+
+socket.io.on('reconnect', (attempt) => {
+  console.log(`重连成功，第 ${attempt} 次尝试`);
+});
+
+socket.io.on('reconnect_error', (error) => {
+  console.log('重连错误:', error.message);
+});
+
+socket.io.on('reconnect_failed', () => {
+  console.log('重连失败');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 重连优化技巧</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">状态恢复</h3>
+          <div class="code-block">
+// 重连后恢复之前的状态
+let currentRoom: string | null = null;
+
+socket.on('connect', () => {
+  // 重连后重新加入房间
+  if (currentRoom) {
+    socket.emit('join-room', currentRoom);
+  }
+});
+
+socket.on('disconnect', () => {
+  // 保持状态，等待重连
+  console.log('断开连接，等待重连');
+});
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">消息缓存</h3>
+          <div class="code-block">
+// 断开时缓存消息
+const messageQueue: any[] = [];
+
+function sendSafe(event: string, data: any) {
+  if (socket.connected) {
+    socket.emit(event, data);
+  } else {
+    messageQueue.push({ event, data });
+  }
+}
+
+socket.on('connect', () => {
+  // 发送缓存的消息
+  while (messageQueue.length > 0) {
+    const { event, data } = messageQueue.shift()!;
+    socket.emit(event, data);
+  }
+});
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 默认启用自动重连，使用指数退避算法</li>
+            <li>• <code>reconnectionAttempts</code> 限制重连次数</li>
+            <li>• <code>reconnectionDelay</code> 和 <code>reconnectionDelayMax</code> 控制延迟范围</li>
+            <li>• 监听 <code>reconnect_failed</code> 处理重连失败</li>
+            <li>• 结合网络状态实现更智能的重连</li>
+            <li>• 重连后需要恢复之前的订阅状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="65-4-错误处理.html">← 上一节</a>
+      <a href="../chapter66/66-1-实时聊天室.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

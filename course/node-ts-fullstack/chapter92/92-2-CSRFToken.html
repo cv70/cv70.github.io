@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>92.2 CSRF Token - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="92-1-CSRF攻击原理.html">第九十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>92.2 CSRF Token</h1>
+      <p class="subtitle">CSRF Token 防护机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 CSRF Token 的工作原理</li>
+        <li>掌握 Token 的生成和验证</li>
+        <li>学会在 Express 中实现 CSRF 防护</li>
+        <li>了解前后端配合方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> CSRF Token 原理</h2>
+      <div class="code-block">
+# CSRF Token 工作原理
+
+1. 用户访问网站，服务器生成 Token
+2. Token 存储在 Session 或 Cookie 中
+3. Token 发送给前端，嵌入表单或请求头
+4. 用户提交请求时携带 Token
+5. 服务器验证 Token 是否匹配
+6. 匹配则请求合法，否则拒绝
+
+# 为什么 CSRF Token 有效
+
+## 攻击者无法获取 Token
+- Token 存储在目标网站
+- 同源策略阻止跨域读取
+- 攻击者无法在请求中携带正确的 Token
+
+## Token 必须匹配
+- 服务器存储的 Token 与请求中的必须一致
+- 攻击者不知道正确的 Token 值
+
+# Token 的特点
+- 随机生成，不可预测
+- 每个用户独立的 Token
+- 可以定期更换
+- 与 Session 关联
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Express 实现</h2>
+      <div class="code-block">
+# 安装 csrf 中间件
+npm install csurf
+
+# 基本配置
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import csrf from 'csurf';
+
+const app = express();
+
+app.use(cookieParser());
+
+// CSRF 保护
+const csrfProtection = csrf({ cookie: true });
+
+// 获取 CSRF Token
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
+// 受保护的路由
+app.post('/api/transfer', csrfProtection, (req, res) => {
+  // 如果 CSRF Token 无效，会自动拒绝
+  const { to, amount } = req.body;
+  // 执行转账操作
+  res.json({ success: true });
+});
+
+# 使用 Session 存储 Token
+import session from 'express-session';
+
+app.use(session({
+  secret: 'your-secret',
+  resave: false,
+  saveUninitialized: false,
+}));
+
+const csrfProtection = csrf({ session: true });
+
+# 错误处理
+app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({
+      error: 'Invalid CSRF token',
+    });
+  }
+  next(err);
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Token 位置</div>
+          <p>Token 可以存储在 Session 或 Cookie 中。Cookie 方式不需要 Session 支持，但需要确保 Cookie 安全。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 前端集成</h2>
+      <div class="code-block">
+# 方式一：表单隐藏字段
+// 服务端渲染表单
+app.get('/form', csrfProtection, (req, res) => {
+  res.send(`
+    &lt;form action="/transfer" method="POST"&gt;
+      &lt;input type="hidden" name="_csrf" value="${req.csrfToken()}"&gt;
+      &lt;input name="to" placeholder="收款人"&gt;
+      &lt;input name="amount" placeholder="金额"&gt;
+      &lt;button&gt;转账&lt;/button&gt;
+    &lt;/form&gt;
+  `);
+});
+
+# 方式二：请求头
+// 前端获取 Token
+async function getCsrfToken() {
+  const response = await fetch('/api/csrf-token');
+  const data = await response.json();
+  return data.csrfToken;
+}
+
+// 发送请求时携带 Token
+async function transfer(to, amount) {
+  const csrfToken = await getCsrfToken();
+
+  const response = await fetch('/api/transfer', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken,  // 自定义请求头
+    },
+    body: JSON.stringify({ to, amount }),
+  });
+
+  return response.json();
+}
+
+# 方式三：axios 拦截器
+import axios from 'axios';
+
+// 创建 axios 实例
+const api = axios.create({
+  baseURL: '/api',
+});
+
+// 获取并存储 CSRF Token
+let csrfToken = '';
+
+async function initCsrfToken() {
+  const response = await api.get('/csrf-token');
+  csrfToken = response.data.csrfToken;
+}
+
+// 请求拦截器
+api.interceptors.request.use((config) => {
+  if (['post', 'put', 'delete', 'patch'].includes(config.method || '')) {
+    config.headers['X-CSRF-Token'] = csrfToken;
+  }
+  return config;
+});
+
+// 初始化
+initCsrfToken();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 自定义 Token 验证</h2>
+      <div class="code-block">
+# 手动实现 CSRF Token 验证
+import crypto from 'crypto';
+
+// 生成 Token
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// 中间件：设置 CSRF Token
+app.use((req, res, next) => {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = generateCsrfToken();
+  }
+  res.locals.csrfToken = req.session.csrfToken;
+  next();
+});
+
+// 中间件：验证 CSRF Token
+function validateCsrfToken(req, res, next) {
+  const token = req.body._csrf ||
+                req.headers['x-csrf-token'] ||
+                req.query._csrf;
+
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  next();
+}
+
+// 暴露 Token 接口
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.session.csrfToken });
+});
+
+// 保护路由
+app.post('/api/transfer', validateCsrfToken, (req, res) => {
+  // 执行操作
+});
+
+# Token 轮换（增强安全性）
+app.post('/api/transfer', validateCsrfToken, (req, res) => {
+  // 操作完成后轮换 Token
+  req.session.csrfToken = generateCsrfToken();
+
+  // 执行操作
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CSRF Token 是最有效的 CSRF 防护方式</li>
+            <li>• Token 存储在服务端，随请求发送</li>
+            <li>• 攻击者无法获取正确的 Token</li>
+            <li>• 可以通过表单字段或请求头传递</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="92-1-CSRF攻击原理.html">← 上一节：CSRF 攻击原理</a>
+      <a href="92-3-SameSiteCookie.html">下一节：SameSite Cookie →</a>
+    </div>
+  </div>
+</body>
+</html>

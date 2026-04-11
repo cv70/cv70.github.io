@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.3 Prisma Client - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="26-1-prisma简介.html">第二十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>26.3 Prisma Client</h1>
+      <p class="subtitle">类型安全的数据库查询</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Prisma Client 初始化</li>
+        <li>学会 CRUD 操作方法</li>
+        <li>理解查询选项和过滤条件</li>
+        <li>了解事务和批量操作</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 初始化客户端</h2>
+      <div class="code-block">
+import { PrismaClient } from '@prisma/client';
+
+// 创建实例
+const prisma = new PrismaClient();
+
+// 配置选项
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+  errorFormat: 'pretty',
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+});
+
+// 连接管理
+async function main() {
+  // 业务逻辑
+}
+
+main()
+  .catch(console.error)
+  .finally(async () => {
+    await prisma.$disconnect();  // 关闭连接
+  });
+
+// 单例模式（推荐用于生产环境）
+// lib/prisma.ts
+import { PrismaClient } from '@prisma/client';
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  });
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 创建数据</h2>
+      <div class="code-block">
+// 创建单条记录
+const user = await prisma.user.create({
+  data: {
+    email: 'alice@mail.com',
+    name: 'Alice',
+  },
+});
+
+// 创建并关联
+const post = await prisma.post.create({
+  data: {
+    title: 'My Post',
+    content: 'Hello World',
+    author: {
+      connect: { id: 1 },  // 连接已存在的用户
+    },
+  },
+});
+
+// 创建并嵌套创建用户
+const post = await prisma.post.create({
+  data: {
+    title: 'My Post',
+    author: {
+      create: {  // 同时创建用户
+        email: 'new@mail.com',
+        name: 'New User',
+      },
+    },
+  },
+});
+
+// 批量创建
+const users = await prisma.user.createMany({
+  data: [
+    { email: 'user1@mail.com', name: 'User 1' },
+    { email: 'user2@mail.com', name: 'User 2' },
+    { email: 'user3@mail.com', name: 'User 3' },
+  ],
+  skipDuplicates: true,  // 跳过重复记录
+});
+
+// 创建或连接
+const user = await prisma.user.upsert({
+  where: { email: 'alice@mail.com' },
+  update: { name: 'Updated Alice' },
+  create: {
+    email: 'alice@mail.com',
+    name: 'New Alice',
+  },
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">嵌套写入</div>
+          <p>Prisma 支持嵌套创建、更新、连接操作。在单个事务中完成多个关联实体的操作，保证数据一致性。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 查询数据</h2>
+      <div class="code-block">
+// 查询所有
+const users = await prisma.user.findMany();
+
+// 条件查询
+const user = await prisma.user.findFirst({
+  where: {
+    email: 'alice@mail.com',
+  },
+});
+
+// 查询单个（根据唯一字段）
+const user = await prisma.user.findUnique({
+  where: { id: 1 },
+});
+const user = await prisma.user.findUnique({
+  where: { email: 'alice@mail.com' },
+});
+
+// 查询或抛出错误
+const user = await prisma.user.findFirstOrThrow({
+  where: { id: 999 },
+});  // 找不到会抛出 PrismaClientKnownRequestError
+
+// 选择字段
+const user = await prisma.user.findUnique({
+  where: { id: 1 },
+  select: {
+    id: true,
+    email: true,
+    name: true,
+  },
+});
+
+// 关联查询
+const user = await prisma.user.findUnique({
+  where: { id: 1 },
+  include: {
+    posts: true,  // 包含所有文章
+    profile: true,
+  },
+});
+
+// 嵌套选择
+const user = await prisma.user.findUnique({
+  where: { id: 1 },
+  include: {
+    posts: {
+      select: {
+        id: true,
+        title: true,
+      },
+    },
+  },
+});
+
+// 排序
+const users = await prisma.user.findMany({
+  orderBy: {
+    createdAt: 'desc',
+  },
+});
+
+// 分页
+const users = await prisma.user.findMany({
+  skip: 0,
+  take: 10,
+});
+
+// 游标分页
+const users = await prisma.user.findMany({
+  take: 10,
+  cursor: {
+    id: 10,
+  },
+});
+
+// 计数
+const count = await prisma.user.count({
+  where: { status: 'active' },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 过滤条件</h2>
+      <div class="code-block">
+// 比较操作
+await prisma.user.findMany({
+  where: {
+    age: { equals: 25 },        // 等于
+    age: { not: 25 },           // 不等于
+    age: { gt: 20 },            // 大于
+    age: { gte: 20 },           // 大于等于
+    age: { lt: 30 },            // 小于
+    age: { lte: 30 },           // 小于等于
+  },
+});
+
+// 简写
+await prisma.user.findMany({
+  where: {
+    age: 25,           // equals
+    NOT: { age: 25 },  // not
+  },
+});
+
+// 范围和包含
+await prisma.user.findMany({
+  where: {
+    age: { in: [20, 25, 30] },       // 在列表中
+    age: { notIn: [15, 16, 17] },    // 不在列表中
+    createdAt: { lt: new Date() },
+  },
+});
+
+// 字符串匹配
+await prisma.user.findMany({
+  where: {
+    name: { contains: 'ali' },       // 包含（模糊）
+    name: { startsWith: 'al' },      // 以...开头
+    name: { endsWith: 'ce' },        // 以...结尾
+    name: { equals: 'alice' },       // 精确匹配
+    name: { mode: 'insensitive' },   // 不区分大小写
+  },
+});
+
+// 逻辑组合
+await prisma.user.findMany({
+  where: {
+    AND: [
+      { status: 'active' },
+      { age: { gte: 18 } },
+    ],
+  },
+});
+
+await prisma.user.findMany({
+  where: {
+    OR: [
+      { role: 'admin' },
+      { role: 'moderator' },
+    ],
+  },
+});
+
+await prisma.user.findMany({
+  where: {
+    NOT: {
+      status: 'banned',
+    },
+  },
+});
+
+// NULL 检查
+await prisma.user.findMany({
+  where: {
+    phone: null,      // IS NULL
+    phone: { not: null },  // IS NOT NULL
+  },
+});
+
+// 关联过滤
+await prisma.user.findMany({
+  where: {
+    posts: {
+      some: {
+        published: true,  // 有已发布的文章
+      },
+    },
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 更新和删除</h2>
+      <div class="code-block">
+// 更新单条
+const user = await prisma.user.update({
+  where: { id: 1 },
+  data: {
+    name: 'Updated Name',
+    age: { increment: 1 },  // 增量更新
+  },
+});
+
+// 更新多条
+const result = await prisma.user.updateMany({
+  where: { status: 'pending' },
+  data: { status: 'active' },
+});
+
+// 更新操作符
+await prisma.user.update({
+  where: { id: 1 },
+  data: {
+    score: { increment: 10 },   // 增加
+    score: { decrement: 5 },    // 减少
+    score: { multiply: 2 },     // 乘以
+    score: { divide: 2 },       // 除以
+    tags: { push: 'new-tag' },  // 数组添加元素
+    tags: { set: ['a', 'b'] },  // 数组替换
+  },
+});
+
+// 删除单条
+const user = await prisma.user.delete({
+  where: { id: 1 },
+});
+
+// 删除多条
+const result = await prisma.user.deleteMany({
+  where: { status: 'inactive' },
+});
+
+// 删除所有
+const result = await prisma.user.deleteMany();
+
+// 软删除（需要自己实现）
+await prisma.user.update({
+  where: { id: 1 },
+  data: { deletedAt: new Date() },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Prisma Client 提供直观的查询 API</li>
+            <li>• 支持嵌套创建和关联操作</li>
+            <li>• 丰富的过滤条件和逻辑组合</li>
+            <li>• 支持增量更新和数组操作</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="26-2-schema定义.html">← 上一节：Schema 定义</a>
+      <a href="26-4-迁移管理.html">下一节：迁移管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

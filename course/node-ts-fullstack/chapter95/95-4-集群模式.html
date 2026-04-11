@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>95.4 集群模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="95-1-性能分析方法.html">第九十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>95.4 集群模式</h1>
+      <p class="subtitle">利用多核 CPU 提升性能</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Node.js 单线程局限性</li>
+        <li>掌握 Cluster 模块使用</li>
+        <li>学会 PM2 集群部署</li>
+        <li>了解进程间通信</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 为什么需要集群</h2>
+      <div class="code-block">
+# Node.js 单线程限制
+
+## 问题
+- 单线程只能利用一个 CPU 核心
+- 现代 CPU 通常有 4-16+ 核心
+- 单进程无法充分利用硬件资源
+
+## 解决方案
+- 运行多个进程实例
+- 负载均衡分发请求
+- 每个进程独立事件循环
+
+# 集群架构
+
+                    负载均衡
+                       │
+    ┌──────────────────┼──────────────────┐
+    │                  │                  │
+┌───┴───┐         ┌───┴───┐         ┌───┴───┐
+│Worker1│         │Worker2│         │Worker3│
+│Port   │         │Port   │         │Port   │
+│ 3000  │         │ 3000  │         │ 3000  │
+└───────┘         └───────┘         └───────┘
+
+# 集群优势
+- 利用多核 CPU
+- 提高吞吐量
+- 容错能力（进程崩溃不影响其他）
+- 零停机重启
+
+# 集群注意事项
+- 内存不共享，各自独立
+- 需要处理进程间通信
+- Session 需要外部存储
+- 文件锁需要处理
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Cluster 模块</h2>
+      <div class="code-block">
+# 使用 Node.js Cluster 模块
+
+import cluster from 'cluster';
+import os from 'os';
+import http from 'http';
+
+const numCPUs = os.cpus().length;
+
+if (cluster.isPrimary) {
+  console.log(`Primary ${process.pid} is running`);
+
+  // Fork workers
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+
+  // Worker 退出时重启
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`Worker ${worker.process.pid} died`);
+    cluster.fork();  // 启动新 worker
+  });
+
+} else {
+  // Worker 进程创建 HTTP 服务器
+  http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('Hello from worker ' + process.pid);
+  }).listen(3000);
+
+  console.log(`Worker ${process.pid} started`);
+}
+
+# 更完整的实现
+
+import cluster from 'cluster';
+import os from 'os';
+
+interface WorkerEnv {
+  PORT: string;
+  NODE_ENV: string;
+}
+
+const setupWorkerProcesses = () => {
+  const numCores = os.cpus().length;
+
+  for (let i = 0; i < numCores; i++) {
+    cluster.fork();
+  }
+
+  cluster.on('online', (worker) => {
+    console.log(`Worker ${worker.process.pid} is online`);
+  });
+
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`Worker ${worker.process.pid} died with code ${code}`);
+    console.log('Starting new worker...');
+    cluster.fork();
+  });
+};
+
+if (cluster.isPrimary) {
+  setupWorkerProcesses();
+} else {
+  require('./app');  // 启动应用
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">负载均衡</div>
+          <p>Node.js 集群使用 round-robin 算法分发请求，确保每个 worker 均匀处理请求。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> PM2 集群模式</h2>
+      <div class="code-block">
+# 安装 PM2
+npm install -g pm2
+
+# 启动集群模式
+pm2 start app.js -i max     # 使用所有 CPU 核心
+pm2 start app.js -i 4       # 启动 4 个实例
+pm2 start app.js -i 0       # 自动检测 CPU 核心数
+
+# PM2 配置文件
+
+// ecosystem.config.js
+module.exports = {
+  apps: [{
+    name: 'my-app',
+    script: 'dist/index.js',
+    instances: 'max',
+    exec_mode: 'cluster',
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000,
+    },
+    env_development: {
+      NODE_ENV: 'development',
+    },
+  }],
+};
+
+# PM2 常用命令
+pm2 start                    # 启动应用
+pm2 stop all                 # 停止所有
+pm2 restart all              # 重启所有
+pm2 reload all               # 无停机重启
+pm2 delete all               # 删除所有
+pm2 list                     # 列出所有进程
+pm2 monit                    # 监控面板
+pm2 logs                     # 查看日志
+pm2 show &lt;app-name&gt;          # 查看详情
+
+# 零停机重启
+pm2 reload all
+
+# 监控
+pm2 monit
+# 或使用 PM2 Plus
+# https://app.pm2.io
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 进程间通信</h2>
+      <div class="code-block">
+# Cluster 进程间通信
+
+// 主进程
+if (cluster.isPrimary) {
+  const worker = cluster.fork();
+
+  // 发送消息给 worker
+  worker.send({ type: 'config', data: { port: 3000 } });
+
+  // 接收 worker 消息
+  worker.on('message', (msg) => {
+    console.log('Message from worker:', msg);
+  });
+}
+
+// Worker 进程
+if (cluster.isWorker) {
+  process.on('message', (msg) => {
+    console.log('Message from primary:', msg);
+
+    // 回复主进程
+    process.send({ type: 'ready', pid: process.pid });
+  });
+}
+
+# 使用 Redis 共享数据
+
+import Redis from 'ioredis';
+
+const redis = new Redis();
+
+// 存储 Session
+async function setSession(sessionId: string, data: object) {
+  await redis.set(`session:${sessionId}`, JSON.stringify(data), 'EX', 3600);
+}
+
+async function getSession(sessionId: string) {
+  const data = await redis.get(`session:${sessionId}`);
+  return data ? JSON.parse(data) : null;
+}
+
+# 共享状态解决方案
+
+┌─────────────────────────────────────────────────────┐
+│                  Redis / Memcached                  │
+│                 (外部共享存储)                       │
+└─────────────────────────────────────────────────────┘
+          ▲              ▲              ▲
+          │              │              │
+    ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
+    │  Worker1  │  │  Worker2  │  │  Worker3  │
+    └───────────┘  └───────────┘  └───────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 集群模式利用多核 CPU 提升性能</li>
+            <li>• 使用 Cluster 模块或 PM2 实现</li>
+            <li>• Session 等共享状态需要外部存储</li>
+            <li>• PM2 提供零停机重启和监控功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="95-3-事件循环优化.html">← 上一节：事件循环优化</a>
+      <a href="95-5-缓存策略.html">下一节：缓存策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

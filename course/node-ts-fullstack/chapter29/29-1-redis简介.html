@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.1 Redis 简介 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-redis简介.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.1 Redis 简介</h1>
+      <p class="subtitle">高性能内存数据库入门</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Redis 的特点和优势</li>
+        <li>掌握安装和基本配置</li>
+        <li>学会使用 Node.js 连接 Redis</li>
+        <li>了解 Redis 的典型应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Redis 特点</h2>
+      <p>Redis（Remote Dictionary Server）是一个开源的内存数据结构存储系统，可用作数据库、缓存和消息代理。</p>
+
+      <div class="code-block">
+Redis 核心特点：
+
+1. 高性能
+   ├── 基于内存操作
+   ├── 单线程处理请求
+   ├── QPS 可达 10 万+
+   └── 平均响应时间 < 1ms
+
+2. 丰富的数据类型
+   ├── String  - 字符串
+   ├── Hash    - 哈希表
+   ├── List    - 列表
+   ├── Set     - 集合
+   ├── ZSet    - 有序集合
+   ├── Bitmap  - 位图
+   ├── HyperLogLog - 基数统计
+   └── Stream  - 流
+
+3. 持久化支持
+   ├── RDB - 快照
+   └── AOF - 追加日志
+
+4. 高可用特性
+   ├── 主从复制
+   ├── 哨兵模式
+   └── 集群模式
+
+Redis vs Memcached：
+┌─────────────┬──────────────┬───────────────┐
+│ 特性        │ Redis        │ Memcached     │
+├─────────────┼──────────────┼───────────────┤
+│ 数据类型    │ 多种         │ 仅字符串      │
+│ 持久化      │ 支持         │ 不支持        │
+│ 集群        │ 支持         │ 不支持        │
+│ 事务        │ 支持         │ 不支持        │
+│ 性能        │ 高           │ 高            │
+│ 内存管理    │ 更高效       │ 预分配        │
+└─────────────┴──────────────┴───────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 安装部署</h2>
+      <div class="code-block">
+# 方式一：Docker 部署（推荐）
+docker run -d \
+  --name redis \
+  -p 6379:6379 \
+  -v redis_data:/data \
+  redis:7-alpine
+
+# Docker Compose
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+
+# Windows 安装
+# 1. 下载 Redis for Windows
+#    https://github.com/microsoftarchive/redis/releases
+
+# 2. 解压后运行
+redis-server.exe
+
+# 3. 使用客户端连接
+redis-cli.exe
+
+# 连接 Redis
+redis-cli
+redis-cli -h localhost -p 6379
+
+# 带密码连接
+redis-cli -h localhost -p 6379 -a your_password
+
+# 测试连接
+127.0.0.1:6379> PING
+PONG
+
+# 基本配置（redis.conf）
+# 绑定地址
+bind 0.0.0.0
+
+# 端口
+port 6379
+
+# 密码
+requirepass your_password
+
+# 持久化
+appendonly yes
+appendfsync everysec
+
+# 最大内存
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">生产环境配置</div>
+          <p>生产环境建议设置密码、限制最大内存、启用持久化。使用 Redis Sentinel 或 Cluster 实现高可用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Node.js 连接</h2>
+      <div class="code-block">
+# 安装依赖
+npm install ioredis
+# 或
+npm install redis
+
+// 使用 ioredis（推荐）
+import Redis from 'ioredis';
+
+// 基本连接
+const redis = new Redis({
+  host: 'localhost',
+  port: 6379,
+  password: 'your_password',
+  db: 0,  // 数据库编号 0-15
+});
+
+// 连接 URL
+const redis = new Redis('redis://:password@localhost:6379/0');
+
+// 基本操作
+await redis.set('name', 'Alice');
+const name = await redis.get('name');
+console.log(name);  // 'Alice'
+
+await redis.del('name');
+
+// 设置过期时间
+await redis.set('key', 'value', 'EX', 60);  // 60 秒后过期
+
+// 批量操作
+await redis.mset('key1', 'value1', 'key2', 'value2');
+const values = await redis.mget('key1', 'key2');
+
+// 检查 key 是否存在
+const exists = await redis.exists('key');
+
+// 设置过期时间
+await redis.expire('key', 3600);  // 1 小时后过期
+
+// 获取剩余过期时间
+const ttl = await redis.ttl('key');
+
+// 事件监听
+redis.on('connect', () => {
+  console.log('Redis connected');
+});
+
+redis.on('error', (error) => {
+  console.error('Redis error:', error);
+});
+
+// 使用官方 redis 包
+import { createClient } from 'redis';
+
+const client = createClient({
+  url: 'redis://localhost:6379',
+});
+
+await client.connect();
+
+await client.set('key', 'value');
+const value = await client.get('key');
+
+await client.disconnect();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 典型应用场景</h2>
+      <div class="code-block">
+1. 缓存
+   ├── 热点数据缓存
+   ├── 会话存储
+   ├── 页面缓存
+   └── 查询结果缓存
+
+2. 计数器
+   ├── 文章阅读量
+   ├── 用户积分
+   ├── 点赞数
+   └── 在线人数
+
+3. 排行榜
+   ├── 游戏排行榜
+   ├── 热门内容
+   └── 积分排名
+
+4. 消息队列
+   ├── 简单队列
+   ├── 延迟队列
+   └── 发布订阅
+
+5. 分布式锁
+   ├── 防止重复操作
+   ├── 库存扣减
+   └── 定时任务互斥
+
+6. 社交功能
+   ├── 好友关系
+   ├── 时间线
+   └── 点赞/关注
+
+7. 地理位置
+   ├── 附近的人
+   ├── 商家搜索
+   └── 轨迹追踪
+
+选择 Redis 的依据：
+├── 需要极快的读写速度
+├── 数据可以容忍部分丢失
+├── 需要丰富的数据结构
+├── 需要原子操作
+└── 需要过期自动清理
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Redis 是高性能内存数据库</li>
+            <li>• 支持多种数据类型和持久化</li>
+            <li>• 使用 ioredis 或 redis 包连接</li>
+            <li>• 常用于缓存、计数器、排行榜等场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter28/28-4-虚拟字段.html">← 上一章：虚拟字段</a>
+      <a href="29-2-数据类型.html">下一节：数据类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

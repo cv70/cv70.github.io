@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>107.4 Nacos - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="107-1-服务发现原理.html">第107章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>107.4 Nacos</h1>
+      <p class="subtitle">阿里开源的服务发现与配置管理平台</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Nacos的核心功能</li>
+        <li>掌握服务注册与发现</li>
+        <li>学会配置管理功能</li>
+        <li>了解Nacos的部署模式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Nacos概述</h2>
+      <div class="code-block">
+// Nacos = Dynamic Naming and Configuration Service
+
+const features = {
+  serviceDiscovery: '服务发现，支持DNS和RPC',
+  configurationManagement: '动态配置管理',
+  dynamicDNS: '动态DNS服务',
+  healthCheck: '多种健康检查模式'
+};
+
+// Nacos架构
+const architecture = `
+┌────────────────────────────────────────┐
+│            Nacos Console               │
+├────────────────────────────────────────┤
+│                                       │
+│  ┌─────────────┐  ┌─────────────┐    │
+│  │ Config      │  │ Naming      │    │
+│  │ Service     │  │ Service     │    │
+│  └─────────────┘  └─────────────┘    │
+│                                       │
+│  ┌─────────────────────────────────┐  │
+│  │      Consistency Protocol       │  │
+│  │         (Raft/Distro)           │  │
+│  └─────────────────────────────────┘  │
+└────────────────────────────────────────┘
+`;
+
+// Nacos特点
+const advantages = [
+  '服务发现+配置管理二合一',
+  '支持AP和CP模式切换',
+  '中文社区活跃，文档完善',
+  'Spring Cloud Alibaba默认集成',
+  '可视化控制台'
+];
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Nacos优势</div>
+          <p>一站式服务发现和配置管理，Spring Cloud生态集成度高，国内使用广泛。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 服务注册与发现</h2>
+      <div class="code-block">
+// Nacos Node.js SDK
+
+import { NacosNamingClient } from 'nacos';
+
+// 创建命名客户端
+const namingClient = new NacosNamingClient({
+  serverList: '127.0.0.1:8848',
+  namespace: 'public',
+  logger: console
+});
+
+await namingClient.ready();
+
+// ==================== 服务注册 ====================
+
+// 注册服务实例
+await namingClient.registerInstance('user-service', {
+  ip: '192.168.1.100',
+  port: 3001,
+  weight: 1,
+  metadata: {
+    version: 'v1',
+    region: 'cn-east'
+  }
+});
+
+// 注册临时实例（心跳保活）
+await namingClient.registerInstance('order-service', {
+  ip: '192.168.1.101',
+  port: 3002,
+  weight: 1,
+  ephemeral: true  // 临时实例，需要心跳
+}, 'DEFAULT_GROUP');
+
+// 注销服务
+await namingClient.deregisterInstance('user-service', {
+  ip: '192.168.1.100',
+  port: 3001
+});
+
+// ==================== 服务发现 ====================
+
+// 获取服务实例列表
+const instances = await namingClient.getAllInstances('user-service');
+console.log('Available instances:', instances);
+
+// 选择一个健康实例
+const healthyInstances = instances.filter(i => i.healthy);
+const instance = healthyInstances[Math.floor(Math.random() * healthyInstances.length)];
+console.log(`Selected: ${instance.ip}:${instance.port}`);
+
+// 订阅服务变化
+namingClient.subscribe('user-service', (instances) => {
+  console.log('Service instances updated:', instances.length);
+  // 更新本地缓存
+  updateLocalCache(instances);
+});
+
+// 取消订阅
+namingClient.unsubscribe('user-service', handler);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 配置管理</h2>
+      <div class="code-block">
+import { NacosConfigClient } from 'nacos';
+
+// 创建配置客户端
+const configClient = new NacosConfigClient({
+  serverAddr: '127.0.0.1:8848',
+  namespace: 'public'
+});
+
+// ==================== 配置操作 ====================
+
+// 发布配置
+await configClient.publishSingle({
+  dataId: 'database.yaml',
+  group: 'DEFAULT_GROUP',
+  content: `
+host: localhost
+port: 3306
+database: myapp
+username: root
+password: secret
+`
+});
+
+// 获取配置
+const config = await configClient.getConfig(
+  'database.yaml',
+  'DEFAULT_GROUP'
+);
+console.log('Config:', config);
+
+// 删除配置
+await configClient.remove({
+  dataId: 'database.yaml',
+  group: 'DEFAULT_GROUP'
+});
+
+// ==================== 配置监听 ====================
+
+// 监听配置变化
+configClient.subscribe({
+  dataId: 'database.yaml',
+  group: 'DEFAULT_GROUP'
+}, (content) => {
+  console.log('Config changed:', content);
+
+  // 解析新配置
+  const newConfig = yaml.parse(content);
+
+  // 重新加载配置
+  reloadDatabaseConfig(newConfig);
+});
+
+// 取消监听
+configClient.removeListener({
+  dataId: 'database.yaml',
+  group: 'DEFAULT_GROUP'
+}, listener);
+
+// ==================== 配置中心集成 ====================
+
+class NacosConfigManager {
+  private client: NacosConfigClient;
+  private cache: Map<string, any> = new Map();
+
+  constructor(serverAddr: string) {
+    this.client = new NacosConfigClient({ serverAddr });
+  }
+
+  // 获取配置（带缓存）
+  async getConfig<T>(dataId: string, parse: (content: string) => T): Promise<T> {
+    const cacheKey = dataId;
+
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    const content = await this.client.getConfig(dataId, 'DEFAULT_GROUP');
+    const config = parse(content);
+    this.cache.set(cacheKey, config);
+
+    return config;
+  }
+
+  // 监听配置变化
+  async watchConfig<T>(
+    dataId: string,
+    parse: (content: string) => T,
+    onChange: (config: T) => void
+  ) {
+    // 初始加载
+    const config = await this.getConfig(dataId, parse);
+    onChange(config);
+
+    // 监听变化
+    this.client.subscribe({ dataId, group: 'DEFAULT_GROUP' }, (content) => {
+      const newConfig = parse(content);
+      this.cache.set(dataId, newConfig);
+      onChange(newConfig);
+    });
+  }
+}
+
+// 使用示例
+const configManager = new NacosConfigManager('127.0.0.1:8848');
+
+await configManager.watchConfig(
+  'app-config.yaml',
+  (content) => yaml.parse(content),
+  (config) => {
+    console.log('App config updated:', config);
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Nacos集服务发现和配置管理于一体</li>
+            <li>• 支持AP和CP模式切换</li>
+            <li>• Spring Cloud Alibaba默认集成</li>
+            <li>• 配置变更实时推送</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="107-3-Etcd.html">← 上一节：Etcd</a>
+      <a href="107-5-健康检查.html">下一节：健康检查 →</a>
+    </div>
+  </div>
+</body>
+</html>

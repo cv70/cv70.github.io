@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.2 URL 构造 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="19-1-URL解析.html">第十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>19.2 URL 构造</h1>
+      <p class="subtitle">动态构建 URL 地址</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 URL 构造方法</li>
+        <li>学会构建带参数的 URL</li>
+        <li>理解 URL 规范化</li>
+        <li>掌握 URL 工具函数</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本构造</h2>
+      <div class="code-block">
+// 方式一：直接传入完整 URL
+const url1 = new URL('https://example.com/api/users');
+
+// 方式二：逐步设置属性
+const url2 = new URL('https://example.com');
+url2.pathname = '/api/users';
+url2.port = '3000';
+url2.searchParams.set('page', '1');
+
+console.log(url2.href);  // https://example.com:3000/api/users?page=1
+
+// 方式三：从对象构建
+function buildUrl(baseUrl, options = {}) {
+  const url = new URL(baseUrl);
+
+  if (options.path) url.pathname = options.path;
+  if (options.port) url.port = options.port;
+  if (options.hash) url.hash = options.hash;
+
+  if (options.query) {
+    Object.entries(options.query).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+  }
+
+  return url.href;
+}
+
+const apiUrl = buildUrl('https://api.example.com', {
+  path: '/v1/users',
+  port: '443',
+  query: { limit: 10, offset: 0 }
+});
+console.log(apiUrl);  // https://api.example.com:443/v1/users?limit=10&offset=0
+
+// 方式四：拼接路径
+const base = 'https://example.com/api';
+const endpoint = '/users';
+const fullUrl = new URL(endpoint, base);
+console.log(fullUrl.href);  // https://example.com/api/users
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 构建带参数的 URL</h2>
+      <div class="code-block">
+// 构建查询字符串
+function buildQueryString(params) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach(v => searchParams.append(key, v));
+    } else if (value !== undefined && value !== null) {
+      searchParams.set(key, value);
+    }
+  });
+
+  return searchParams.toString();
+}
+
+const query = buildQueryString({
+  name: 'Alice',
+  tags: ['js', 'node'],
+  page: 1,
+  active: true
+});
+console.log(query);  // name=Alice&tags=js&tags=node&page=1&active=true
+
+// 构建完整 URL
+function buildApiUrl(baseUrl, endpoint, params = {}) {
+  const url = new URL(endpoint, baseUrl);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.set(key, String(value));
+    }
+  });
+
+  return url.href;
+}
+
+const apiUrl = buildApiUrl('https://api.example.com', '/users', {
+  page: 1,
+  limit: 20,
+  sort: 'created_at'
+});
+console.log(apiUrl);  // https://api.example.com/users?page=1&limit=20&sort=created_at
+
+// 路径参数替换
+function buildPathUrl(template, params) {
+  return template.replace(/:(\w+)/g, (match, key) => {
+    return params[key] !== undefined ? params[key] : match;
+  });
+}
+
+const pathUrl = buildPathUrl('/users/:userId/posts/:postId', {
+  userId: '123',
+  postId: '456'
+});
+console.log(pathUrl);  // /users/123/posts/456
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> URL 规范化</h2>
+      <div class="code-block">
+// URL 自动规范化
+const url = new URL('https://example.com/../a/./b/../c');
+console.log(url.pathname);  // /a/c
+
+// 编码解码
+const encodedUrl = new URL('https://example.com/search?q=你好世界');
+console.log(encodedUrl.search);  // ?q=%E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C
+
+// 手动编码
+const query = encodeURIComponent('你好世界');
+const url2 = new URL(`https://example.com/search?q=${query}`);
+console.log(url2.searchParams.get('q'));  // 你好世界
+
+// URL 编码函数
+function encodeUrlParams(params) {
+  const result = {};
+  for (const [key, value] of Object.entries(params)) {
+    result[key] = encodeURIComponent(String(value));
+  }
+  return result;
+}
+
+// 规范化路径
+function normalizePath(path) {
+  const url = new URL(path, 'http://dummy.com');
+  return url.pathname;
+}
+
+console.log(normalizePath('/a/../b/./c'));  // /b/c
+
+// 比较两个 URL 是否相同
+function areSameUrl(url1, url2) {
+  const u1 = new URL(url1);
+  const u2 = new URL(url2);
+  return u1.href === u2.href;
+}
+
+console.log(areSameUrl(
+  'https://example.com/?a=1&b=2',
+  'https://example.com/?b=2&a=1'
+));  // false（参数顺序不同）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实用工具函数</h2>
+      <div class="code-block">
+// URL 工具类
+class UrlBuilder {
+  constructor(baseUrl) {
+    this.url = new URL(baseUrl);
+  }
+
+  path(pathname) {
+    this.url.pathname = pathname;
+    return this;
+  }
+
+  param(key, value) {
+    this.url.searchParams.set(key, value);
+    return this;
+  }
+
+  params(obj) {
+    Object.entries(obj).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) {
+        this.url.searchParams.set(k, String(v));
+      }
+    });
+    return this;
+  }
+
+  hash(hash) {
+    this.url.hash = hash;
+    return this;
+  }
+
+  port(port) {
+    this.url.port = port;
+    return this;
+  }
+
+  build() {
+    return this.url.href;
+  }
+}
+
+// 使用
+const url = new UrlBuilder('https://api.example.com')
+  .path('/users')
+  .params({ page: 1, limit: 10 })
+  .hash('results')
+  .build();
+
+console.log(url);  // https://api.example.com/users?page=1&limit=10#results
+
+// 解析并重建 URL
+function rebuildUrl(urlString, changes = {}) {
+  const url = new URL(urlString);
+
+  if (changes.protocol) url.protocol = changes.protocol;
+  if (changes.hostname) url.hostname = changes.hostname;
+  if (changes.port) url.port = changes.port;
+  if (changes.pathname) url.pathname = changes.pathname;
+  if (changes.hash) url.hash = changes.hash;
+
+  if (changes.addParams) {
+    Object.entries(changes.addParams).forEach(([k, v]) => {
+      url.searchParams.set(k, v);
+    });
+  }
+
+  if (changes.removeParams) {
+    changes.removeParams.forEach(k => url.searchParams.delete(k));
+  }
+
+  return url.href;
+}
+
+const newUrl = rebuildUrl('https://example.com/api?page=1', {
+  hostname: 'api.example.com',
+  addParams: { limit: 10 },
+  removeParams: ['page']
+});
+console.log(newUrl);  // https://api.example.com/api?limit=10
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 URL 对象逐步构建 URL</li>
+            <li>• searchParams 处理查询参数</li>
+            <li>• URL 自动规范化路径和编码</li>
+            <li>• 封装工具函数简化 URL 构建</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="19-1-URL解析.html">← 上一节：URL 解析</a>
+      <a href="19-3-QueryString解析.html">下一节：Query String 解析 →</a>
+    </div>
+  </div>
+</body>
+</html>

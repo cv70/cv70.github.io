@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>67.2 网关实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="67-1-WebSocketGateway装饰器.html">第六十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>67.2 网关实现</h1>
+      <p class="subtitle">NestJS WebSocket 网关完整实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 NestJS Gateway 的完整实现</li>
+        <li>学会使用 @SubscribeMessage 处理事件</li>
+        <li>理解 WebSocket 和 HTTP 的混合使用</li>
+        <li>了解房间管理和服务注入</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 完整聊天网关示例</h2>
+
+      <div class="code-block">
+// chat/chat.gateway.ts
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  ConnectedSocket,
+  MessageBody
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { ChatService } from './chat.service';
+import { Logger, UseFilters, UsePipes, UseGuards } from '@nestjs/common';
+
+// 类型定义
+interface JoinRoomDto {
+  roomId: string;
+}
+
+interface SendMessageDto {
+  roomId: string;
+  content: string;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  senderName: string;
+  roomId: string;
+  timestamp: Date;
+}
+
+@WebSocketGateway({
+  namespace: 'chat',
+  cors: {
+    origin: ['http://localhost:3000'],
+    credentials: true
+  }
+})
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
+
+  private logger = new Logger(ChatGateway.name);
+
+  constructor(private readonly chatService: ChatService) {}
+
+  // 连接处理
+  handleConnection(client: Socket) {
+    const userId = client.handshake.auth.userId;
+    const username = client.handshake.auth.username;
+
+    if (!userId || !username) {
+      this.logger.warn(`客户端缺少认证信息: ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    // 存储用户信息
+    client.data.userId = userId;
+    client.data.username = username;
+
+    this.logger.log(`用户连接: ${username} (${client.id})`);
+
+    // 通知所有客户端用户上线
+    this.server.emit('user:online', {
+      userId,
+      username,
+      onlineCount: this.getOnlineCount()
+    });
+  }
+
+  // 断开处理
+  handleDisconnect(client: Socket) {
+    const userId = client.data.userId;
+    const username = client.data.username;
+
+    this.logger.log(`用户断开: ${username} (${client.id})`);
+
+    // 通知所有客户端用户下线
+    this.server.emit('user:offline', {
+      userId,
+      username,
+      onlineCount: this.getOnlineCount()
+    });
+  }
+
+  // 加入房间
+  @SubscribeMessage('room:join')
+  async handleJoinRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: JoinRoomDto
+  ) {
+    const { roomId } = data;
+    const { userId, username } = client.data;
+
+    // 加入房间
+    client.join(roomId);
+
+    // 获取房间消息历史
+    const messages = await this.chatService.getRoomMessages(roomId);
+
+    // 发送房间信息给加入者
+    client.emit('room:joined', {
+      roomId,
+      messages,
+      users: this.getRoomUsers(roomId)
+    });
+
+    // 通知房间其他人
+    client.to(roomId).emit('room:user-joined', {
+      userId,
+      username,
+      timestamp: new Date()
+    });
+
+    this.logger.log(`${username} 加入房间 ${roomId}`);
+  }
+
+  // 离开房间
+  @SubscribeMessage('room:leave')
+  handleLeaveRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: JoinRoomDto
+  ) {
+    const { roomId } = data;
+    const { userId, username } = client.data;
+
+    client.leave(roomId);
+
+    // 通知房间其他人
+    client.to(roomId).emit('room:user-left', {
+      userId,
+      username,
+      timestamp: new Date()
+    });
+
+    this.logger.log(`${username} 离开房间 ${roomId}`);
+  }
+
+  // 发送消息
+  @SubscribeMessage('message:send')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: SendMessageDto
+  ): Promise&lt;Message&gt; {
+    const { roomId, content } = data;
+    const { userId, username } = client.data;
+
+    // 创建消息
+    const message: Message = {
+      id: this.generateId(),
+      content,
+      senderId: userId,
+      senderName: username,
+      roomId,
+      timestamp: new Date()
+    };
+
+    // 保存消息
+    await this.chatService.saveMessage(message);
+
+    // 广播给房间所有人
+    this.server.to(roomId).emit('message:new', message);
+
+    this.logger.log(`消息 [${roomId}]: ${username}: ${content}`);
+
+    return message;
+  }
+
+  // 输入状态
+  @SubscribeMessage('typing:start')
+  handleTypingStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() roomId: string
+  ) {
+    const { userId, username } = client.data;
+
+    client.to(roomId).emit('user:typing', {
+      userId,
+      username,
+      isTyping: true
+    });
+  }
+
+  @SubscribeMessage('typing:stop')
+  handleTypingStop(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() roomId: string
+  ) {
+    const { userId } = client.data;
+
+    client.to(roomId).emit('user:typing', {
+      userId,
+      isTyping: false
+    });
+  }
+
+  // 私有方法
+  private getOnlineCount(): number {
+    return this.server.sockets.sockets.size;
+  }
+
+  private getRoomUsers(roomId: string): Array&lt;{ userId: string; username: string }&gt; {
+    const room = this.server.sockets.adapter.rooms.get(roomId);
+    if (!room) return [];
+
+    const users: Array&lt;{ userId: string; username: string }&gt; = [];
+    room.forEach(socketId => {
+      const socket = this.server.sockets.sockets.get(socketId);
+      if (socket) {
+        users.push({
+          userId: socket.data.userId,
+          username: socket.data.username
+        });
+      }
+    });
+
+    return users;
+  }
+
+  private generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 装饰器详解</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>装饰器</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@WebSocketServer()</code></td>
+            <td>注入 Socket.IO Server 实例</td>
+          </tr>
+          <tr>
+            <td><code>@SubscribeMessage('event')</code></td>
+            <td>订阅指定事件</td>
+          </tr>
+          <tr>
+            <td><code>@ConnectedSocket()</code></td>
+            <td>注入当前连接的 Socket 实例</td>
+          </tr>
+          <tr>
+            <td><code>@MessageBody()</code></td>
+            <td>获取消息体数据</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block" style="margin-top: 1rem;">
+// 装饰器使用示例
+@SubscribeMessage('event-name')
+handleEvent(
+  @ConnectedSocket() client: Socket,    // Socket 实例
+  @MessageBody() data: any,              // 整个消息体
+  @MessageBody('field') field: string    // 消息体的特定字段
+) {
+  // ...
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 服务注入</h2>
+
+      <div class="card">
+        <h3 class="card-title">Chat Service</h3>
+        <div class="code-block">
+// chat/chat.service.ts
+import { Injectable, Logger } from '@nestjs/common';
+import { Message } from './interfaces/message.interface';
+
+@Injectable()
+export class ChatService {
+  private messages: Message[] = [];
+  private logger = new Logger(ChatService.name);
+
+  async saveMessage(message: Message): Promise&lt;void&gt; {
+    this.messages.push(message);
+    this.logger.log(`消息已保存: ${message.id}`);
+
+    // 实际项目中应该保存到数据库
+  }
+
+  async getRoomMessages(roomId: string, limit: number = 50): Promise&lt;Message[]&gt; {
+    return this.messages
+      .filter(m => m.roomId === roomId)
+      .slice(-limit);
+  }
+
+  async getUserMessages(userId: string): Promise&lt;Message[]&gt; {
+    return this.messages.filter(m => m.senderId === userId);
+  }
+}
+
+// chat/chat.module.ts
+import { Module } from '@nestjs/common';
+import { ChatGateway } from './chat.gateway';
+import { ChatService } from './chat.service';
+
+@Module({
+  providers: [ChatGateway, ChatService],
+  exports: [ChatService]
+})
+export class ChatModule {}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> WebSocket 与 HTTP 混合</h2>
+
+      <div class="card">
+        <h3 class="card-title">同时提供 HTTP 和 WebSocket</h3>
+        <div class="code-block">
+// chat/chat.controller.ts
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { ChatService } from './chat.service';
+
+@Controller('chat')
+export class ChatController {
+  constructor(private readonly chatService: ChatService) {}
+
+  @Get('rooms/:roomId/messages')
+  async getMessages(@Param('roomId') roomId: string) {
+    return this.chatService.getRoomMessages(roomId);
+  }
+
+  @Get('users/:userId/messages')
+  async getUserMessages(@Param('userId') userId: string) {
+    return this.chatService.getUserMessages(userId);
+  }
+}
+
+// chat.module.ts
+@Module({
+  controllers: [ChatController],
+  providers: [ChatGateway, ChatService],
+  exports: [ChatService]
+})
+export class ChatModule {}
+        </div>
+      </div>
+
+      <div class="tip-box info" style="margin-top: 1rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">最佳实践</div>
+          <p>将业务逻辑放在 Service 中，Gateway 只负责处理 WebSocket 事件和消息转发。这样可以在 HTTP Controller 中复用相同的业务逻辑。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @SubscribeMessage 装饰器订阅客户端事件</li>
+            <li>• @ConnectedSocket 注入 Socket 实例</li>
+            <li>• @MessageBody 获取消息数据</li>
+            <li>• Gateway 可以注入 Service 实现业务逻辑</li>
+            <li>• WebSocket 和 HTTP 可以共享同一个 Service</li>
+            <li>• 使用 Logger 记录日志便于调试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="67-1-WebSocketGateway装饰器.html">← 上一节</a>
+      <a href="67-3-消息处理.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

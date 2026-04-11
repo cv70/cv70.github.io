@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>113.4 限流与计费 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="113-1-平台架构.html">第113章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>113.4 限流与计费</h1>
+      <p class="subtitle">API调用的控制与商业化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握限流策略设计</li>
+        <li>学会配额管理实现</li>
+        <li>理解计费模式设计</li>
+        <li>了解用量统计实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 限流策略</h2>
+      <div class="code-block">
+// 限流策略设计
+
+const rateLimitStrategies = {
+  // 多维度限流
+  dimensions: {
+    app: '按应用限流',
+    api: '按API限流',
+    ip: '按IP限流',
+    user: '按用户限流'
+  },
+
+  // 套餐等级
+  tiers: {
+    free: {
+      name: '免费版',
+      dailyQuota: 1000,
+      rateLimit: 10,      // 每秒10次
+      apis: ['basic']
+    },
+    basic: {
+      name: '基础版',
+      dailyQuota: 10000,
+      rateLimit: 50,
+      price: 99  // 月费
+    },
+    pro: {
+      name: '专业版',
+      dailyQuota: 100000,
+      rateLimit: 200,
+      price: 299
+    },
+    enterprise: {
+      name: '企业版',
+      dailyQuota: -1,      // 无限制
+      rateLimit: 1000,
+      price: '定制'
+    }
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">限流实现</div>
+          <p>使用Redis实现分布式限流，支持滑动窗口和令牌桶算法。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 限流与计费实现</h2>
+      <div class="code-block">
+// rate-limiter.service.ts
+@Injectable()
+export class RateLimiterService {
+  constructor(private redis: Redis) {}
+
+  // 检查限流
+  async checkRateLimit(
+    appId: string,
+    apiId: string,
+    limit: number
+  ): Promise<{ allowed: boolean; remaining: number }> {
+    const key = `ratelimit:${appId}:${apiId}:${Math.floor(Date.now() / 1000)}`;
+
+    const current = await this.redis.incr(key);
+
+    if (current === 1) {
+      await this.redis.expire(key, 1);  // 1秒过期
+    }
+
+    return {
+      allowed: current <= limit,
+      remaining: Math.max(0, limit - current),
+    };
+  }
+
+  // 检查日配额
+  async checkDailyQuota(
+    appId: string,
+    quota: number
+  ): Promise<{ allowed: boolean; remaining: number }> {
+    const today = format(new Date(), 'yyyyMMdd');
+    const key = `quota:${appId}:${today}`;
+
+    const current = await this.redis.incr(key);
+
+    if (current === 1) {
+      await this.redis.expire(key, 86400);  // 24小时过期
+    }
+
+    return {
+      allowed: current <= quota,
+      remaining: Math.max(0, quota - current),
+    };
+  }
+}
+
+// billing.service.ts
+@Injectable()
+export class BillingService {
+  constructor(
+    @InjectRepository(UsageRecord) private usageRepo: Repository<UsageRecord>,
+    @InjectRepository(BillingRecord) private billingRepo: Repository<BillingRecord>,
+  ) {}
+
+  // 记录API调用
+  async recordUsage(appId: string, apiId: string, success: boolean) {
+    const record = this.usageRepo.create({
+      appId,
+      apiId,
+      success,
+      timestamp: new Date(),
+    });
+
+    await this.usageRepo.save(record);
+  }
+
+  // 计算账单
+  async calculateBill(appId: string, month: string): Promise<BillingRecord> {
+    const startDate = startOfMonth(parse(month, 'yyyyMM', new Date()));
+    const endDate = endOfMonth(startDate);
+
+    // 统计调用量
+    const usage = await this.usageRepo
+      .createQueryBuilder('record')
+      .select('apiId', 'api')
+      .addSelect('COUNT(*)', 'count')
+      .where('record.appId = :appId', { appId })
+      .andWhere('record.timestamp BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .groupBy('record.apiId')
+      .getRawMany();
+
+    // 获取定价
+    const pricing = await this.getPricing(appId);
+
+    // 计算费用
+    let totalAmount = 0;
+    const details = usage.map(u => {
+      const price = pricing[u.api] || 0;
+      const amount = u.count * price;
+      totalAmount += amount;
+      return {
+        api: u.api,
+        count: parseInt(u.count),
+        price,
+        amount,
+      };
+    });
+
+    // 创建账单
+    const bill = this.billingRepo.create({
+      appId,
+      month,
+      details,
+      totalAmount,
+      status: 'pending',
+    });
+
+    return this.billingRepo.save(bill);
+  }
+}
+
+// 计费模式
+const billingModels = {
+  // 按量计费
+  payAsYouGo: {
+    description: '按实际调用次数计费',
+    pricing: {
+      '/api/v1/user/info': 0.001,      // 每次调用0.001元
+      '/api/v1/order/list': 0.005,
+      '/api/v1/payment/create': 0.01,
+    }
+  },
+
+  // 套餐计费
+  package: {
+    description: '购买套餐，超出部分按量计费',
+    packages: [
+      { name: '基础包', price: 99, calls: 10000 },
+      { name: '专业包', price: 299, calls: 50000 },
+    ]
+  },
+
+  // 混合计费
+  hybrid: {
+    description: '月费+按量',
+    monthly: 99,
+    includedCalls: 10000,
+    overageRate: 0.001
+  }
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 多维度限流保障服务稳定</li>
+            <li>• 配额管理控制资源使用</li>
+            <li>• 多种计费模式适应不同场景</li>
+            <li>• 用量统计支撑计费结算</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="113-3-开发者管理.html">← 上一节：开发者管理</a>
+      <a href="113-5-SDK开发.html">下一节：SDK 开发 →</a>
+    </div>
+  </div>
+</body>
+</html>

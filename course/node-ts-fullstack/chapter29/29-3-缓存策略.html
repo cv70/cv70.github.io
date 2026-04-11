@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.3 缓存策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-redis简介.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.3 缓存策略</h1>
+      <p class="subtitle">设计高效的缓存方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解常见缓存模式</li>
+        <li>掌握缓存穿透、击穿、雪崩解决方案</li>
+        <li>学会缓存更新策略</li>
+        <li>了解缓存预热和清理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 缓存模式</h2>
+      <div class="code-block">
+常见缓存模式：
+
+1. Cache-Aside（旁路缓存）
+   最常用的模式，由应用代码控制缓存
+
+   读流程：
+   ├── 先查缓存
+   ├── 缓存命中：直接返回
+   └── 缓存未命中：查数据库，写入缓存
+
+   写流程：
+   ├── 更新数据库
+   └── 删除缓存
+
+   代码实现：
+   async function getUser(id) {
+     // 先查缓存
+     let user = await redis.get(`user:${id}`);
+     if (user) {
+       return JSON.parse(user);
+     }
+
+     // 查数据库
+     user = await User.findById(id);
+     if (user) {
+       await redis.set(`user:${id}`, JSON.stringify(user), 'EX', 3600);
+     }
+
+     return user;
+   }
+
+   async function updateUser(id, data) {
+     // 更新数据库
+     const user = await User.findByIdAndUpdate(id, data, { new: true });
+
+     // 删除缓存
+     await redis.del(`user:${id}`);
+
+     return user;
+   }
+
+2. Read-Through / Write-Through
+   由缓存层自动管理数据同步
+   应用只与缓存交互，缓存负责数据库读写
+
+3. Write-Behind
+   写操作先写缓存，异步写入数据库
+   提高写入性能，但可能丢失数据
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">更新策略选择</div>
+          <p>更新数据库后，建议删除缓存而非更新缓存。删除更简单，避免并发写导致的数据不一致。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 缓存问题与解决</h2>
+      <div class="code-block">
+// 1. 缓存穿透：查询不存在的数据，绕过缓存直接查数据库
+
+// 解决方案一：缓存空值
+async function getUser(id) {
+  const key = `user:${id}`;
+  let user = await redis.get(key);
+
+  if (user !== null) {
+    if (user === 'null') return null;  // 空值标记
+    return JSON.parse(user);
+  }
+
+  user = await User.findById(id);
+  if (user) {
+    await redis.set(key, JSON.stringify(user), 'EX', 3600);
+  } else {
+    // 缓存空值，设置较短过期时间
+    await redis.set(key, 'null', 'EX', 60);
+  }
+
+  return user;
+}
+
+// 解决方案二：布隆过滤器
+const bloomFilter = new BloomFilter();
+
+// 初始化时加载所有 ID
+const allIds = await User.distinct('_id');
+allIds.forEach(id => bloomFilter.add(id.toString()));
+
+async function getUser(id) {
+  // 先检查布隆过滤器
+  if (!bloomFilter.mightContain(id)) {
+    return null;  // 一定不存在
+  }
+
+  // 正常查询流程
+  // ...
+}
+
+// 2. 缓存击穿：热点 key 过期，大量请求直接打到数据库
+
+// 解决方案：互斥锁
+async function getUserWithLock(id) {
+  const key = `user:${id}`;
+  const lockKey = `lock:user:${id}`;
+
+  let user = await redis.get(key);
+  if (user) return JSON.parse(user);
+
+  // 获取锁
+  const locked = await redis.set(lockKey, '1', 'NX', 'EX', 10);
+
+  if (locked) {
+    try {
+      // 再次检查缓存
+      user = await redis.get(key);
+      if (user) return JSON.parse(user);
+
+      // 查数据库
+      user = await User.findById(id);
+      if (user) {
+        await redis.set(key, JSON.stringify(user), 'EX', 3600);
+      }
+      return user;
+    } finally {
+      await redis.del(lockKey);
+    }
+  } else {
+    // 等待并重试
+    await sleep(100);
+    return getUserWithLock(id);
+  }
+}
+
+// 3. 缓存雪崩：大量 key 同时过期
+
+// 解决方案：随机过期时间
+const baseExpire = 3600;
+const randomExpire = Math.random() * 300;  // 0-300 秒随机
+await redis.set(key, value, 'EX', baseExpire + randomExpire);
+
+// 解决方案：永不过期 + 后台更新
+await redis.set(key, JSON.stringify(data));  // 不设置过期
+// 后台任务定期更新缓存
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 缓存更新策略</h2>
+      <div class="code-block">
+// 1. 定时更新
+setInterval(async () => {
+  const hotUsers = await User.find({ status: 'active' }).limit(100);
+  await redis.set('hot_users', JSON.stringify(hotUsers), 'EX', 300);
+}, 60000);  // 每分钟更新
+
+// 2. 写时更新（Cache-Aside 模式）
+async function updateUser(id, data) {
+  const user = await User.findByIdAndUpdate(id, data, { new: true });
+  await redis.del(`user:${id}`);
+  return user;
+}
+
+// 3. 读时更新（Lazy Loading）
+async function getUser(id) {
+  let user = await redis.get(`user:${id}`);
+  if (!user) {
+    user = await User.findById(id);
+    if (user) {
+      await redis.set(`user:${id}`, JSON.stringify(user), 'EX', 3600);
+    }
+  }
+  return user ? JSON.parse(user) : null;
+}
+
+// 4. 双写一致性（延迟双删）
+async function updateUser(id, data) {
+  // 1. 先删除缓存
+  await redis.del(`user:${id}`);
+
+  // 2. 更新数据库
+  await User.findByIdAndUpdate(id, data);
+
+  // 3. 延迟后再次删除缓存
+  setTimeout(async () => {
+    await redis.del(`user:${id}`);
+  }, 500);
+}
+
+// 5. 订阅数据库变更（CDC）
+// 使用数据库 binlog 或 change stream 同步缓存
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 缓存封装实践</h2>
+      <div class="code-block">
+// 通用缓存工具类
+class CacheService {
+  constructor(private redis: Redis) {}
+
+  async getOrSet<T>(
+    key: string,
+    fetcher: () => Promise<T>,
+    ttl: number = 3600
+  ): Promise<T> {
+    // 查缓存
+    const cached = await this.redis.get(key);
+    if (cached !== null) {
+      if (cached === 'null') return null as T;
+      return JSON.parse(cached);
+    }
+
+    // 查数据源
+    const data = await fetcher();
+
+    // 写缓存
+    if (data) {
+      await this.redis.set(key, JSON.stringify(data), 'EX', ttl);
+    } else {
+      await this.redis.set(key, 'null', 'EX', 60);  // 空值短缓存
+    }
+
+    return data;
+  }
+
+  async invalidate(key: string): Promise<void> {
+    await this.redis.del(key);
+  }
+
+  async invalidatePattern(pattern: string): Promise<void> {
+    const keys = await this.redis.keys(pattern);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
+  }
+}
+
+// 使用
+const cacheService = new CacheService(redis);
+
+const user = await cacheService.getOrSet(
+  `user:${id}`,
+  () => User.findById(id),
+  3600
+);
+
+// 更新后失效缓存
+await cacheService.invalidate(`user:${id}`);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Cache-Aside 是最常用的缓存模式</li>
+            <li>• 缓存穿透用布隆过滤器或空值缓存</li>
+            <li>• 缓存击穿用互斥锁解决</li>
+            <li>• 缓存雪崩用随机过期时间解决</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-2-数据类型.html">← 上一节：数据类型</a>
+      <a href="29-4-分布式锁.html">下一节：分布式锁 →</a>
+    </div>
+  </div>
+</body>
+</html>

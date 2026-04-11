@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60.4 联合类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="60-1-类型系统.html">第60章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>60.4 联合类型</h1>
+      <p class="subtitle">GraphQL 联合类型详解</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 联合类型概述</h2>
+      <p>联合类型（Union Type）表示可以是多种类型之一的值。与接口不同，联合类型中的成员类型不需要共享字段。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">联合类型 vs 接口</div>
+          <ul>
+            <li>接口：成员类型必须共享字段</li>
+            <li>联合：成员类型可以完全不同</li>
+            <li>两者可以结合使用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 定义联合类型</h2>
+
+      <div class="code-block">
+<span class="comment">// 定义对象类型</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!
+}
+
+<span class="keyword">type</span> Comment {
+  id: ID!
+  content: String!
+  author: User!
+}
+
+<span class="keyword">type</span> Tag {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
+<span class="comment">// 定义联合类型</span>
+<span class="keyword">union</span> SearchResult = User | Post | Comment
+
+<span class="keyword">union</span> MediaContent = Image | Video | Audio
+
+<span class="keyword">union</span> TimelineItem = Post | Photo | CheckIn | Event
+
+<span class="comment">// 联合类型作为返回类型</span>
+<span class="keyword">type</span> Query {
+  search(query: String!): [SearchResult!]!
+  getMedia(id: ID!): MediaContent
+  timeline(userId: ID!): [TimelineItem!]!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 查询联合类型</h2>
+
+      <p>由于联合类型的成员没有共同字段，必须使用内联片段来查询。</p>
+
+      <div class="code-block">
+<span class="comment">// 搜索查询</span>
+query Search($query: String!) {
+  search(query: $query) {
+    ... <span class="keyword">on</span> User {
+      id
+      name
+      email
+      avatar
+    }
+    ... <span class="keyword">on</span> Post {
+      id
+      title
+      excerpt
+      author {
+        name
+      }
+    }
+    ... <span class="keyword">on</span> Comment {
+      id
+      content
+      author {
+        name
+      }
+    }
+  }
+}
+
+<span class="comment">// 响应示例</span>
+{
+  <span class="string">"data"</span>: {
+    <span class="string">"search"</span>: [
+      {
+        <span class="string">"id"</span>: <span class="string">"user-1"</span>,
+        <span class="string">"name"</span>: <span class="string">"张三"</span>,
+        <span class="string">"email"</span>: <span class="string">"zhang@example.com"</span>,
+        <span class="string">"avatar"</span>: <span class="string">"https://..."</span>
+      },
+      {
+        <span class="string">"id"</span>: <span class="string">"post-1"</span>,
+        <span class="string">"title"</span>: <span class="string">"GraphQL 入门"</span>,
+        <span class="string">"excerpt"</span>: <span class="string">"..."</span>,
+        <span class="string">"author"</span>: { <span class="string">"name"</span>: <span class="string">"李四"</span> }
+      },
+      {
+        <span class="string">"id"</span>: <span class="string">"comment-1"</span>,
+        <span class="string">"content"</span>: <span class="string">"很棒的文章！"</span>,
+        <span class="string">"author"</span>: { <span class="string">"name"</span>: <span class="string">"王五"</span> }
+      }
+    ]
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 解析联合类型</h2>
+
+      <div class="code-block">
+<span class="keyword">const</span> resolvers = {
+  <span class="comment">// 联合类型解析器</span>
+  SearchResult: {
+    __resolveType(obj: <span class="keyword">any</span>, context: <span class="keyword">any</span>, info: <span class="keyword">any</span>) {
+      <span class="comment">// 根据对象属性判断类型</span>
+      <span class="keyword">if</span> (obj.email) {
+        <span class="keyword">return</span> <span class="string">'User'</span>;
+      }
+      <span class="keyword">if</span> (obj.title) {
+        <span class="keyword">return</span> <span class="string">'Post'</span>;
+      }
+      <span class="keyword">if</span> (obj.content && !obj.title) {
+        <span class="keyword">return</span> <span class="string">'Comment'</span>;
+      }
+      <span class="keyword">return null</span>;  <span class="comment">// 或抛出错误</span>
+    },
+  },
+
+  MediaContent: {
+    __resolveType(obj: <span class="keyword">any</span>) {
+      <span class="comment">// 根据类型字段判断</span>
+      <span class="keyword">switch</span> (obj.type) {
+        <span class="keyword">case</span> <span class="string">'image'</span>:
+          <span class="keyword">return</span> <span class="string">'Image'</span>;
+        <span class="keyword">case</span> <span class="string">'video'</span>:
+          <span class="keyword">return</span> <span class="string">'Video'</span>;
+        <span class="keyword">case</span> <span class="string">'audio'</span>:
+          <span class="keyword">return</span> <span class="string">'Audio'</span>;
+        <span class="keyword">default</span>:
+          <span class="keyword">return null</span>;
+      }
+    },
+  },
+
+  Query: {
+    search: <span class="keyword">async</span> (_: <span class="keyword">any</span>, { query }: { query: <span class="keyword">string</span> }, context) => {
+      <span class="comment">// 返回混合类型的数组</span>
+      <span class="keyword">const</span> results = <span class="keyword">await</span> context.dataSources.searchApi.search(query);
+      <span class="keyword">return</span> results;
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 联合类型与接口结合</h2>
+
+      <div class="code-block">
+<span class="comment">// 定义接口</span>
+<span class="keyword">interface</span> Node {
+  id: ID!
+}
+
+<span class="keyword">interface</span> Media {
+  url: String!
+  type: MediaType!
+}
+
+<span class="comment">// 实现接口的对象类型</span>
+<span class="keyword">type</span> Image <span class="keyword">implements</span> Node & Media {
+  id: ID!
+  url: String!
+  type: MediaType!
+  width: Int!
+  height: Int!
+}
+
+<span class="keyword">type</span> Video <span class="keyword">implements</span> Node & Media {
+  id: ID!
+  url: String!
+  type: MediaType!
+  duration: Int!
+  thumbnail: String
+}
+
+<span class="keyword">type</span> Audio <span class="keyword">implements</span> Node & Media {
+  id: ID!
+  url: String!
+  type: MediaType!
+  duration: Int!
+  artist: String
+}
+
+<span class="comment">// 联合类型</span>
+<span class="keyword">union</span> MediaContent = Image | Video | Audio
+
+<span class="comment">// 查询时可以先查询接口字段</span>
+query GetMedia($id: ID!) {
+  getMedia(id: $id) {
+    <span class="comment">// 接口共享字段可以直接查询</span>
+    ... <span class="keyword">on</span> Node {
+      id
+    }
+    ... <span class="keyword">on</span> Media {
+      url
+      type
+    }
+    <span class="comment">// 具体类型字段</span>
+    ... <span class="keyword">on</span> Image {
+      width
+      height
+    }
+    ... <span class="keyword">on</span> Video {
+      duration
+      thumbnail
+    }
+    ... <span class="keyword">on</span> Audio {
+      duration
+      artist
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 实战案例</h2>
+
+      <h3>搜索结果联合类型</h3>
+      <div class="code-block">
+<span class="keyword">union</span> SearchResult = UserResult | PostResult | TagResult | Error
+
+<span class="keyword">type</span> UserResult {
+  user: User!
+  score: Float!
+}
+
+<span class="keyword">type</span> PostResult {
+  post: Post!
+  score: Float!
+  highlights: [String!]!
+}
+
+<span class="keyword">type</span> TagResult {
+  tag: Tag!
+  postCount: Int!
+}
+
+<span class="keyword">type</span> Error {
+  message: String!
+  code: String!
+}
+
+<span class="keyword">type</span> Query {
+  search(query: String!, types: [SearchType!]): [SearchResult!]!
+}
+
+<span class="keyword">enum</span> SearchType {
+  USER
+  POST
+  TAG
+}
+
+<span class="comment">// Resolver</span>
+<span class="keyword">const</span> resolvers = {
+  SearchResult: {
+    __resolveType(obj: <span class="keyword">any</span>) {
+      <span class="keyword">if</span> (obj.user) <span class="keyword">return</span> <span class="string">'UserResult'</span>;
+      <span class="keyword">if</span> (obj.post) <span class="keyword">return</span> <span class="string">'PostResult'</span>;
+      <span class="keyword">if</span> (obj.tag) <span class="keyword">return</span> <span class="string">'TagResult'</span>;
+      <span class="keyword">if</span> (obj.message) <span class="keyword">return</span> <span class="string">'Error'</span>;
+      <span class="keyword">return null</span>;
+    },
+  },
+};
+      </div>
+
+      <h3>Mutation 结果联合类型</h3>
+      <div class="code-block">
+<span class="keyword">union</span> CreateUserResult = UserCreated | ValidationError | PermissionDenied
+
+<span class="keyword">type</span> UserCreated {
+  user: User!
+  token: String!
+}
+
+<span class="keyword">type</span> ValidationError {
+  field: String!
+  message: String!
+}
+
+<span class="keyword">type</span> PermissionDenied {
+  reason: String!
+  requiredRole: UserRole!
+}
+
+<span class="keyword">type</span> Mutation {
+  createUser(input: CreateUserInput!): CreateUserResult!
+}
+
+<span class="comment">// 查询</span>
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    ... <span class="keyword">on</span> UserCreated {
+      user { id name email }
+      token
+    }
+    ... <span class="keyword">on</span> ValidationError {
+      field
+      message
+    }
+    ... <span class="keyword">on</span> PermissionDenied {
+      reason
+      requiredRole
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 最佳实践</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>推荐类型</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>共享字段的多态</td>
+            <td>接口</td>
+            <td>有共同字段可复用</td>
+          </tr>
+          <tr>
+            <td>完全不同的类型</td>
+            <td>联合类型</td>
+            <td>无共同字段</td>
+          </tr>
+          <tr>
+            <td>搜索结果</td>
+            <td>联合类型</td>
+            <td>结果类型各异</td>
+          </tr>
+          <tr>
+            <td>Mutation 结果</td>
+            <td>联合类型</td>
+            <td>成功/失败返回不同结构</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>联合类型表示可以是多种类型之一</li>
+        <li>成员类型不需要共享字段</li>
+        <li>查询时必须使用内联片段</li>
+        <li>使用 __resolveType 解析具体类型</li>
+        <li>可以与接口结合使用</li>
+        <li>适用于搜索结果、Mutation 结果等场景</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="60-3-枚举与接口.html">← 上一节：枚举与接口</a>
+      <a href="60-5-输入类型.html">下一节：输入类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

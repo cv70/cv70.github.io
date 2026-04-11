@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>61.2 数据关联查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="61-1-Resolver编写.html">第61章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>61.2 数据关联查询</h1>
+      <p class="subtitle">GraphQL 关联数据查询实现</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 关联查询概述</h2>
+      <p>GraphQL 的强大之处在于可以一次性获取多层关联数据。通过 Resolver 链，可以灵活地处理一对一、一对多、多对多等各种关联关系。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">关联类型</div>
+          <ul>
+            <li>一对一：用户-个人资料</li>
+            <li>一对多：用户-文章</li>
+            <li>多对多：文章-标签</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👤</span> 一对一关联</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  profile: Profile    <span class="comment">// 用户有一个个人资料</span>
+}
+
+<span class="keyword">type</span> Profile {
+  id: ID!
+  bio: String
+  avatar: String
+  website: String
+  user: User!         <span class="comment">// 个人资料属于一个用户</span>
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    profile: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.profile.findUnique({
+        where: { userId: parent.id },
+      });
+    },
+  },
+  Profile: {
+    user: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parent.userId },
+      });
+    },
+  },
+};
+
+<span class="comment">// 查询示例</span>
+query {
+  user(id: <span class="string">"1"</span>) {
+    name
+    profile {
+      bio
+      avatar
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 一对多关联</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  posts: [Post!]!          <span class="comment">// 用户有多篇文章</span>
+  postsCount: Int!
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  author: User!            <span class="comment">// 文章属于一个作者</span>
+  comments: [Comment!]!    <span class="comment">// 文章有多条评论</span>
+}
+
+<span class="keyword">type</span> Comment {
+  id: ID!
+  content: String!
+  author: User!            <span class="comment">// 评论属于一个作者</span>
+  post: Post!              <span class="comment">// 评论属于一篇文章</span>
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    posts: <span class="keyword">async</span> (parent, { limit, offset }, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: { authorId: parent.id },
+        take: limit,
+        skip: offset,
+      });
+    },
+    postsCount: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.post.count({
+        where: { authorId: parent.id },
+      });
+    },
+  },
+  Post: {
+    author: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parent.authorId },
+      });
+    },
+    comments: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.comment.findMany({
+        where: { postId: parent.id },
+      });
+    },
+  },
+  Comment: {
+    author: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parent.authorId },
+      });
+    },
+    post: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.post.findUnique({
+        where: { id: parent.postId },
+      });
+    },
+  },
+};
+
+<span class="comment">// 查询示例</span>
+query {
+  user(id: <span class="string">"1"</span>) {
+    name
+    posts(limit: <span class="number">5</span>) {
+      title
+      comments {
+        content
+        author {
+          name
+        }
+      }
+    }
+    postsCount
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> 多对多关联</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema</span>
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  content: String
+  tags: [Tag!]!    <span class="comment">// 文章有多个标签</span>
+}
+
+<span class="keyword">type</span> Tag {
+  id: ID!
+  name: String!
+  slug: String!
+  posts: [Post!]!  <span class="comment">// 标签下有多篇文章</span>
+}
+
+<span class="comment">// 数据库中间表 _PostToTag</span>
+<span class="comment">// post_id | tag_id</span>
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  Post: {
+    tags: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="comment">// 通过中间表查询</span>
+      <span class="keyword">return</span> context.prisma.tag.findMany({
+        where: {
+          posts: {
+            some: { id: parent.id },
+          },
+        },
+      });
+    },
+  },
+  Tag: {
+    posts: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.post.findMany({
+        where: {
+          tags: {
+            some: { id: parent.id },
+          },
+        },
+      });
+    },
+  },
+};
+
+<span class="comment">// Prisma Schema 定义</span>
+<span class="keyword">model</span> Post {
+  id      Int     @id @default(autoincrement())
+  title   String
+  content String?
+  tags    Tag[]   @relation(<span class="string">"PostTags"</span>)
+}
+
+<span class="keyword">model</span> Tag {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  slug  String  @unique
+  posts Post[]  @relation(<span class="string">"PostTags"</span>)
+}
+
+<span class="comment">// 查询示例</span>
+query {
+  post(id: <span class="string">"1"</span>) {
+    title
+    tags {
+      name
+      posts {
+        title
+      }
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 自引用关联</h2>
+
+      <div class="code-block">
+<span class="comment">// Schema - 分类树结构</span>
+<span class="keyword">type</span> Category {
+  id: ID!
+  name: String!
+  parent: Category       <span class="comment">// 父分类</span>
+  children: [Category!]! <span class="comment">// 子分类</span>
+  level: Int!
+}
+
+<span class="comment">// Schema - 用户关注关系</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  followers: [User!]!    <span class="comment">// 关注者</span>
+  following: [User!]!    <span class="comment">// 正在关注的人</span>
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  Category: {
+    parent: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">if</span> (!parent.parentId) <span class="keyword">return null</span>;
+      <span class="keyword">return</span> context.prisma.category.findUnique({
+        where: { id: parent.parentId },
+      });
+    },
+    children: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.category.findMany({
+        where: { parentId: parent.id },
+      });
+    },
+    level: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">let</span> level = <span class="number">0</span>;
+      <span class="keyword">let</span> current = parent;
+      <span class="keyword">while</span> (current.parentId) {
+        level++;
+        current = <span class="keyword">await</span> context.prisma.category.findUnique({
+          where: { id: current.parentId },
+        });
+      }
+      <span class="keyword">return</span> level;
+    },
+  },
+  User: {
+    followers: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findMany({
+        where: {
+          following: {
+            some: { id: parent.id },
+          },
+        },
+      });
+    },
+    following: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.prisma.user.findMany({
+        where: {
+          followers: {
+            some: { id: parent.id },
+          },
+        },
+      });
+    },
+  },
+};
+
+<span class="comment">// 查询分类树</span>
+query {
+  category(id: <span class="string">"1"</span>) {
+    name
+    parent {
+      name
+    }
+    children {
+      name
+      children {
+        name
+      }
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 使用 Include 优化</h2>
+
+      <div class="code-block">
+<span class="comment">// 避免多次查询，使用 include 预加载</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    user: <span class="keyword">async</span> (_, { id }, context) => {
+      <span class="comment">// 一次查询获取用户和文章</span>
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          posts: {
+            include: {
+              comments: {
+                include: {
+                  author: <span class="keyword">true</span>,
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+  },
+};
+
+<span class="comment">// 使用 info 参数动态 include</span>
+<span class="keyword">import</span> { fieldSelection } <span class="keyword">from</span> <span class="string">'graphql-parse-fields'</span>;
+
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    user: <span class="keyword">async</span> (_, { id }, context, info) => {
+      <span class="keyword">const</span> selections = fieldSelection(info);
+
+      <span class="keyword">const</span> include = {};
+      <span class="keyword">if</span> (selections.posts) {
+        include.posts = <span class="keyword">true</span>;
+      }
+      <span class="keyword">if</span> (selections.profile) {
+        include.profile = <span class="keyword">true</span>;
+      }
+
+      <span class="keyword">return</span> context.prisma.user.findUnique({
+        where: { id: parseInt(id) },
+        include: Object.keys(include).length > <span class="number">0</span> ? include : undefined,
+      });
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>一对一关联使用 findUnique 查询</li>
+        <li>一对多关联使用 findMany 查询</li>
+        <li>多对多通过中间表关联</li>
+        <li>自引用处理树形结构</li>
+        <li>使用 include 预加载优化性能</li>
+        <li>动态 include 减少不必要的查询</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="61-1-Resolver编写.html">← 上一节：Resolver 编写</a>
+      <a href="61-3-分页实现.html">下一节：分页实现 →</a>
+    </div>
+  </div>
+</body>
+</html>

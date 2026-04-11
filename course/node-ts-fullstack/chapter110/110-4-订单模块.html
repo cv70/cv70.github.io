@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>110.4 订单模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="110-1-需求分析.html">第110章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>110.4 订单模块</h1>
+      <p class="subtitle">订单核心流程与状态管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握订单状态机设计</li>
+        <li>学会库存预占与扣减</li>
+        <li>理解分布式事务处理</li>
+        <li>了解订单幂等性设计</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 订单实体设计</h2>
+      <div class="code-block">
+// order.entity.ts
+@Entity('orders')
+export class Order {
+  @PrimaryColumn()
+  id: string;  // 订单号
+
+  @Column()
+  userId: string;
+
+  @Column()
+  status: OrderStatus;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  totalAmount: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  payAmount: number;  // 实付金额
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  discountAmount: number;  // 优惠金额
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  freightAmount: number;  // 运费
+
+  @Column({ type: 'json' })
+  address: AddressInfo;
+
+  @Column({ nullable: true })
+  paymentId: string;
+
+  @Column({ nullable: true })
+  paymentMethod: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  paidAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  shippedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt: Date;
+
+  @OneToMany(() => OrderItem, item => item.order)
+  items: OrderItem[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+// order-item.entity.ts
+@Entity('order_items')
+export class OrderItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  orderId: string;
+
+  @ManyToOne(() => Order, order => order.items)
+  order: Order;
+
+  @Column()
+  skuId: string;
+
+  @Column()
+  skuName: string;
+
+  @Column({ type: 'json' })
+  specs: Record<string, string>;
+
+  @Column()
+  quantity: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  price: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  amount: number;  // price * quantity
+}
+
+// 订单状态枚举
+enum OrderStatus {
+  PENDING = 'pending',       // 待支付
+  PAID = 'paid',             // 已支付
+  SHIPPED = 'shipped',       // 已发货
+  DELIVERED = 'delivered',   // 已送达
+  COMPLETED = 'completed',   // 已完成
+  CANCELLED = 'cancelled',   // 已取消
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 订单创建流程</h2>
+      <div class="code-block">
+// order.service.ts
+@Injectable()
+export class OrderService {
+  constructor(
+    @InjectRepository(Order) private orderRepo: Repository<Order>,
+    private inventoryService: InventoryService,
+    private eventBus: EventBus,
+  ) {}
+
+  // 创建订单
+  async createOrder(userId: string, dto: CreateOrderDto): Promise<Order> {
+    // 1. 生成订单号（幂等键）
+    const orderId = await this.generateOrderId();
+
+    // 2. 检查幂等性
+    const existingOrder = await this.orderRepo.findOne({
+      where: { id: orderId }
+    });
+
+    if (existingOrder) {
+      return existingOrder;
+    }
+
+    // 3. 预占库存
+    const stockResult = await this.inventoryService.reserveStock(
+      dto.items.map(item => ({
+        skuId: item.skuId,
+        quantity: item.quantity,
+      })),
+      orderId
+    );
+
+    if (!stockResult.success) {
+      throw new BadRequestException('库存不足');
+    }
+
+    // 4. 计算价格
+    const { totalAmount, discountAmount, payAmount } =
+      await this.calculatePrice(dto.items, dto.couponId);
+
+    // 5. 创建订单
+    const order = this.orderRepo.create({
+      id: orderId,
+      userId,
+      status: OrderStatus.PENDING,
+      totalAmount,
+      discountAmount,
+      payAmount,
+      freightAmount: this.calculateFreight(dto.address),
+      address: dto.address,
+      items: dto.items.map(item => ({
+        skuId: item.skuId,
+        skuName: item.skuName,
+        specs: item.specs,
+        quantity: item.quantity,
+        price: item.price,
+        amount: item.price * item.quantity,
+      })),
+    });
+
+    await this.orderRepo.save(order);
+
+    // 6. 发布订单创建事件
+    await this.eventBus.publish('order.created', {
+      orderId: order.id,
+      userId,
+      amount: payAmount,
+    });
+
+    // 7. 设置订单超时任务
+    await this.scheduleOrderTimeout(order.id);
+
+    return order;
+  }
+
+  // 支付成功处理
+  async handlePaymentSuccess(paymentId: string, orderId: string) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+
+    if (!order || order.status !== OrderStatus.PENDING) {
+      return;
+    }
+
+    // 更新订单状态
+    order.status = OrderStatus.PAID;
+    order.paymentId = paymentId;
+    order.paidAt = new Date();
+
+    await this.orderRepo.save(order);
+
+    // 扣减库存（从预占转为实际扣减）
+    await this.inventoryService.confirmStock(order.id);
+
+    // 发布支付成功事件
+    await this.eventBus.publish('order.paid', { orderId: order.id });
+  }
+
+  // 取消订单
+  async cancelOrder(orderId: string, userId: string) {
+    const order = await this.orderRepo.findOne({
+      where: { id: orderId, userId }
+    });
+
+    if (!order) {
+      throw new NotFoundException('订单不存在');
+    }
+
+    // 检查是否可取消
+    if (![OrderStatus.PENDING, OrderStatus.PAID].includes(order.status)) {
+      throw new BadRequestException('订单状态不允许取消');
+    }
+
+    // 释放库存
+    await this.inventoryService.releaseStock(orderId);
+
+    // 更新订单状态
+    order.status = OrderStatus.CANCELLED;
+    await this.orderRepo.save(order);
+
+    // 发布订单取消事件
+    await this.eventBus.publish('order.cancelled', { orderId: order.id });
+  }
+
+  // 生成订单号
+  private async generateOrderId(): Promise<string> {
+    const date = new Date();
+    const dateStr = format(date, 'yyyyMMddHHmmss');
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `${dateStr}${random}`;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 订单状态机控制状态流转</li>
+            <li>• 创建订单时预占库存</li>
+            <li>• 支付成功后扣减库存</li>
+            <li>• 幂等性设计防止重复下单</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="110-3-商品模块.html">← 上一节：商品模块</a>
+      <a href="110-5-支付集成.html">下一节：支付集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.3 Pick 和 Omit - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.3 Pick 和 Omit</h1>
+      <p class="subtitle">选择和排除属性</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Pick 的实现原理</li>
+        <li>掌握 Omit 的使用场景</li>
+        <li>学会组合 Pick 和 Omit</li>
+        <li>了解实际项目中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Pick 深入</h2>
+      <div class="code-block">
+// Pick 从类型中选取部分属性
+// 内置实现：
+type MyPick<T, K extends keyof T> = {
+  [P in K]: T[P];
+};
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+  role: 'admin' | 'user';
+  createdAt: Date;
+}
+
+// 只选取公开属性
+type PublicUser = Pick<User, 'id' | 'name' | 'email'>;
+// { id: number; name: string; email: string; }
+
+// API 返回用户信息时排除敏感字段
+function getUser(): PublicUser {
+  const user: User = {
+    id: 1,
+    name: 'Alice',
+    email: 'alice@example.com',
+    password: 'secret',
+    role: 'admin',
+    createdAt: new Date()
+  };
+  const { id, name, email } = user;
+  return { id, name, email };
+}
+
+// 选取特定类型的属性
+type PickByType<T, U> = {
+  [K in keyof T as T[K] extends U ? K : never]: T[K];
+};
+
+type StringProps = PickByType<User, string>;
+// { name: string; email: string; password: string; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Omit 深入</h2>
+      <div class="code-block">
+// Omit 从类型中排除部分属性
+// 内置实现：
+type MyOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
+
+// 排除敏感属性
+type SafeUser = Omit<User, 'password'>;
+// { id: number; name: string; email: string; role: 'admin' | 'user'; createdAt: Date; }
+
+// 排除多个属性
+type UserPreview = Omit<User, 'password' | 'role' | 'createdAt'>;
+// { id: number; name: string; email: string; }
+
+// 创建更新类型
+type UserUpdate = Omit<User, 'id' | 'createdAt'>;
+// { name: string; email: string; password: string; role: 'admin' | 'user'; }
+
+// 排除特定类型的属性
+type OmitByType<T, U> = {
+  [K in keyof T as T[K] extends U ? never : K]: T[K];
+};
+
+type NonStringProps = OmitByType<User, string>;
+// { id: number; role: 'admin' | 'user'; createdAt: Date; }
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Pick vs Omit</div>
+          <p>Pick 选择需要的属性（白名单），Omit 排除不需要的属性（黑名单）。根据具体场景选择更直观的方式。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 组合应用</h2>
+      <div class="code-block">
+// 创建表单数据类型
+interface Entity {
+  id: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface Product extends Entity {
+  name: string;
+  price: number;
+  description: string;
+  inStock: boolean;
+}
+
+// 创建表单（不包含自动生成的字段）
+type ProductForm = Omit<Product, keyof Entity>;
+// { name: string; price: number; description: string; inStock: boolean; }
+
+// 更新表单（所有字段可选）
+type ProductUpdate = Partial<Omit<Product, keyof Entity>>;
+// { name?: string; price?: number; description?: string; inStock?: boolean; }
+
+// 列表项（精简版）
+type ProductListItem = Pick<Product, 'id' | 'name' | 'price'>;
+// { id: number; name: string; price: number; }
+
+// 详情页（排除敏感信息）
+type ProductDetail = Omit<Product, never>;  // 此例无敏感信息
+
+// 组合多个类型
+interface Author {
+  authorId: number;
+  authorName: string;
+}
+
+type ProductWithAuthor = Pick<Product, 'id' | 'name' | 'price'> & Author;
+// { id: number; name: string; price: number; authorId: number; authorName: string; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实际应用</h2>
+      <div class="code-block">
+// API 响应类型
+interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message: string;
+  timestamp: Date;
+}
+
+// 只需要数据
+type ApiData<T> = Pick<ApiResponse<T>, 'data'>;
+// { data: T }
+
+// 分页响应
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// 列表视图
+type ListView<T> = Pick<PaginatedResponse<T>, 'items' | 'total'>;
+// { items: T[]; total: number; }
+
+// 权限控制
+interface AdminUser extends User {
+  permissions: string[];
+  lastLogin: Date;
+}
+
+type NormalUserView = Omit<AdminUser, 'permissions'>;
+// 普通用户看不到权限信息
+
+// 版本控制
+interface VersionedEntity {
+  id: number;
+  version: number;
+  createdBy: string;
+  updatedBy: string;
+}
+
+type CreateInput<T> = Omit<T, 'id' | 'version' | 'createdBy' | 'updatedBy'>;
+type UpdateInput<T> = Partial<Omit<T, 'id' | 'createdBy'>>;
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>Omit 的第二个参数可以接受任何 string，不会检查是否为 T 的键。使用时确保拼写正确。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Pick 选择需要的属性</li>
+            <li>• Omit 排除不需要的属性</li>
+            <li>• 可以组合使用实现复杂类型</li>
+            <li>• 常用于创建表单和 API 类型</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-2-Readonly和Mutable.html">← 上一节：Readonly 和 Mutable</a>
+      <a href="10-4-Record和ReturnType.html">下一节：Record 和 ReturnType →</a>
+    </div>
+  </div>
+</body>
+</html>

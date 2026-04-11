@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>55.1 RBAC 模型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="55-1-RBAC模型.html">第五十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>55.1 RBAC 模型</h1>
+      <p class="subtitle">基于角色的访问控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 RBAC 的核心概念</li>
+        <li>掌握角色与权限的设计</li>
+        <li>学会设计权限数据模型</li>
+        <li>理解 RBAC 的优缺点</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> RBAC 概述</h2>
+      <div class="code-block">
+/*
+RBAC (Role-Based Access Control) 基于角色的访问控制
+
+核心概念：
+1. 用户 (User)：系统的使用者
+2. 角色 (Role)：权限的集合，如管理员、编辑、用户
+3. 权限 (Permission)：对资源的操作能力
+4. 资源 (Resource)：被保护的对象，如文章、用户
+
+关系：
+用户 -> 角色 -> 权限 -> 资源
+
+RBAC 模型层级：
+RBAC0：基本模型（用户-角色-权限）
+RBAC1：角色继承（角色可以有父子关系）
+RBAC2：角色约束（互斥、基数约束）
+RBAC3：RBAC1 + RBAC2
+*/
+
+// RBAC 模型示意
+/*
+┌─────────────────────────────────────────────────────────────┐
+│                      RBAC 模型                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌──────┐         ┌──────┐         ┌──────────┐           │
+│   │ User │ ──────> │ Role │ ──────> │Permission│           │
+│   └──────┘         └──────┘         └──────────┘           │
+│       │                │                  │                 │
+│       │                │                  ↓                 │
+│       │                │           ┌───────────┐           │
+│       │                │           │ Resource  │           │
+│       │                │           │  + Action │           │
+│       │                │           └───────────┘           │
+│       │                │                                    │
+│       ↓                ↓                                    │
+│   张三 ──────>    admin ──────>  [user:create,             │
+│                                 user:delete,                │
+│                                 article:*]                  │
+│                                                             │
+│   李四 ──────>    editor ─────> [article:create,            │
+│                                 article:edit,               │
+│                                 article:publish]            │
+│                                                             │
+│   王五 ──────>    user ──────> [article:read,               │
+│                                 comment:create]             │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+*/
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">RBAC 优势</div>
+          <p>RBAC将权限授予角色而非直接授予用户，简化权限管理。用户只需分配角色即可获得相应权限，便于维护和扩展。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 数据模型设计</h2>
+      <div class="code-block">
+// src/models/user.model.ts
+import mongoose, { Document, Schema } from 'mongoose';
+
+interface IUser extends Document {
+  username: string;
+  email: string;
+  password: string;
+  roles: mongoose.Types.ObjectId[];  // 用户拥有的角色
+  isActive: boolean;
+}
+
+const UserSchema = new Schema<IUser>({
+  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true, select: false },
+  roles: [{ type: Schema.Types.ObjectId, ref: 'Role' }],
+  isActive: { type: Boolean, default: true },
+}, { timestamps: true });
+
+export const User = mongoose.model<IUser>('User', UserSchema);
+
+// src/models/role.model.ts
+interface IRole extends Document {
+  name: string;           // 角色名称：admin, editor, user
+  description: string;    // 角色描述
+  permissions: mongoose.Types.ObjectId[];  // 角色拥有的权限
+  inherits?: mongoose.Types.ObjectId[];    // 继承的角色
+  isSystem: boolean;      // 是否系统角色（不可删除）
+}
+
+const RoleSchema = new Schema<IRole>({
+  name: { type: String, required: true, unique: true },
+  description: { type: String },
+  permissions: [{ type: Schema.Types.ObjectId, ref: 'Permission' }],
+  inherits: [{ type: Schema.Types.ObjectId, ref: 'Role' }],
+  isSystem: { type: Boolean, default: false },
+});
+
+export const Role = mongoose.model<IRole>('Role', RoleSchema);
+
+// src/models/permission.model.ts
+interface IPermission extends Document {
+  name: string;           // 权限名称：user:create, article:edit
+  resource: string;       // 资源：user, article, comment
+  action: string;         // 操作：create, read, update, delete
+  description: string;
+}
+
+const PermissionSchema = new Schema<IPermission>({
+  name: { type: String, required: true, unique: true },
+  resource: { type: String, required: true },
+  action: { type: String, required: true },
+  description: { type: String },
+});
+
+// 复合索引
+PermissionSchema.index({ resource: 1, action: 1 }, { unique: true });
+
+export const Permission = mongoose.model<IPermission>('Permission', PermissionSchema);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 初始化权限数据</h2>
+      <div class="code-block">
+// src/scripts/init-rbac.ts
+import { Permission, Role, User } from '../models';
+
+// 定义权限
+const permissions = [
+  // 用户管理
+  { name: 'user:create', resource: 'user', action: 'create', description: '创建用户' },
+  { name: 'user:read', resource: 'user', action: 'read', description: '查看用户' },
+  { name: 'user:update', resource: 'user', action: 'update', description: '更新用户' },
+  { name: 'user:delete', resource: 'user', action: 'delete', description: '删除用户' },
+
+  // 文章管理
+  { name: 'article:create', resource: 'article', action: 'create', description: '创建文章' },
+  { name: 'article:read', resource: 'article', action: 'read', description: '查看文章' },
+  { name: 'article:update', resource: 'article', action: 'update', description: '更新文章' },
+  { name: 'article:delete', resource: 'article', action: 'delete', description: '删除文章' },
+  { name: 'article:publish', resource: 'article', action: 'publish', description: '发布文章' },
+
+  // 评论管理
+  { name: 'comment:create', resource: 'comment', action: 'create', description: '创建评论' },
+  { name: 'comment:delete', resource: 'comment', action: 'delete', description: '删除评论' },
+];
+
+// 定义角色及其权限
+const roles = [
+  {
+    name: 'admin',
+    description: '系统管理员',
+    permissions: ['user:*', 'article:*', 'comment:*'], // 所有权限
+    isSystem: true,
+  },
+  {
+    name: 'editor',
+    description: '编辑',
+    permissions: ['article:create', 'article:read', 'article:update', 'article:publish'],
+    isSystem: true,
+  },
+  {
+    name: 'author',
+    description: '作者',
+    permissions: ['article:create', 'article:read', 'article:update', 'comment:create'],
+    isSystem: true,
+  },
+  {
+    name: 'user',
+    description: '普通用户',
+    permissions: ['article:read', 'comment:create'],
+    isSystem: true,
+  },
+];
+
+async function initRBAC() {
+  // 创建权限
+  for (const perm of permissions) {
+    await Permission.findOneAndUpdate(
+      { name: perm.name },
+      perm,
+      { upsert: true, new: true }
+    );
+  }
+
+  // 创建角色
+  for (const role of roles) {
+    const permissionDocs = await Permission.find({
+      name: { $in: role.permissions },
+    });
+
+    await Role.findOneAndUpdate(
+      { name: role.name },
+      {
+        name: role.name,
+        description: role.description,
+        permissions: permissionDocs.map(p => p._id),
+        isSystem: role.isSystem,
+      },
+      { upsert: true, new: true }
+    );
+  }
+
+  console.log('RBAC 初始化完成');
+}
+
+initRBAC();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 权限检查流程</h2>
+      <div class="code-block">
+// src/services/rbac.service.ts
+import { User, Role, Permission } from '../models';
+import { Types } from 'mongoose';
+
+export class RBACService {
+  /**
+   * 检查用户是否有指定权限
+   */
+  static async hasPermission(
+    userId: Types.ObjectId,
+    permissionName: string
+  ): Promise<boolean> {
+    // 获取用户及其角色
+    const user = await User.findById(userId)
+      .populate({
+        path: 'roles',
+        populate: { path: 'permissions' },
+      });
+
+    if (!user || !user.isActive) {
+      return false;
+    }
+
+    // 收集所有权限
+    const permissions = new Set<string>();
+
+    for (const role of user.roles as any[]) {
+      // 检查角色权限
+      for (const perm of role.permissions as any[]) {
+        permissions.add(perm.name);
+
+        // 支持通配符匹配
+        const [resource] = perm.name.split(':');
+        permissions.add(`${resource}:*`);
+      }
+    }
+
+    // 检查权限
+    const [resource, action] = permissionName.split(':');
+
+    return (
+      permissions.has(permissionName) ||
+      permissions.has(`${resource}:*`) ||
+      permissions.has('*:*')
+    );
+  }
+
+  /**
+   * 获取用户所有权限
+   */
+  static async getUserPermissions(userId: Types.ObjectId): Promise<string[]> {
+    const user = await User.findById(userId)
+      .populate({
+        path: 'roles',
+        populate: { path: 'permissions' },
+      });
+
+    if (!user) return [];
+
+    const permissions = new Set<string>();
+
+    for (const role of user.roles as any[]) {
+      for (const perm of role.permissions as any[]) {
+        permissions.add(perm.name);
+      }
+    }
+
+    return Array.from(permissions);
+  }
+
+  /**
+   * 为用户分配角色
+   */
+  static async assignRole(userId: Types.ObjectId, roleName: string): Promise<void> {
+    const role = await Role.findOne({ name: roleName });
+    if (!role) throw new Error('角色不存在');
+
+    await User.findByIdAndUpdate(userId, {
+      $addToSet: { roles: role._id },
+    });
+  }
+
+  /**
+   * 移除用户角色
+   */
+  static async removeRole(userId: Types.ObjectId, roleName: string): Promise<void> {
+    const role = await Role.findOne({ name: roleName });
+    if (!role) return;
+
+    await User.findByIdAndUpdate(userId, {
+      $pull: { roles: role._id },
+    });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• RBAC 核心概念：用户-角色-权限</li>
+            <li>• 权限格式：resource:action（如 article:create）</li>
+            <li>• 支持通配符：article:* 表示所有文章权限</li>
+            <li>• 用户通过角色间接获得权限</li>
+            <li>• 系统角色不可删除，保证系统稳定</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter54/54-4-OAuth集成.html">← 上一章：OAuth 集成</a>
+      <a href="55-2-权限中间件.html">下一节：权限中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

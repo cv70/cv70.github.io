@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>83.4 Actions - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>83.4 Actions</h1>
+      <p class="subtitle">Pinia 中的业务逻辑处理</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>Actions 相当于组件中的方法，用于处理业务逻辑。与 Vuex 不同，Pinia 的 Actions 支持异步操作，可以替代 Vuex 中的 mutations 和 actions。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Actions 的定义方式</li>
+        <li>学会异步 Actions 的处理</li>
+        <li>理解 Actions 之间的调用</li>
+        <li>掌握 Actions 的订阅</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义 Actions</h2>
+
+      <h3>Options Store</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  state: () => ({
+    user: <span class="keyword">null</span> <span class="keyword">as</span> User | <span class="keyword">null</span>,
+    token: <span class="keyword">null</span> <span class="keyword">as</span> <span class="keyword">string</span> | <span class="keyword">null</span>,
+    loading: <span class="keyword">false</span>,
+    error: <span class="keyword">null</span> <span class="keyword">as</span> <span class="keyword">string</span> | <span class="keyword">null</span>
+  }),
+
+  actions: {
+    <span class="comment">// 同步 Action</span>
+    <span class="function">setUser</span>(user: User) {
+      <span class="keyword">this</span>.user = user;
+    },
+
+    <span class="function">setToken</span>(token: <span class="keyword">string</span>) {
+      <span class="keyword">this</span>.token = token;
+    },
+
+    <span class="function">clearError</span>() {
+      <span class="keyword">this</span>.error = <span class="keyword">null</span>;
+    },
+
+    <span class="comment">// 异步 Action</span>
+    <span class="keyword">async</span> <span class="function">login</span>(credentials: LoginCredentials) {
+      <span class="keyword">this</span>.loading = <span class="keyword">true</span>;
+      <span class="keyword">this</span>.error = <span class="keyword">null</span>;
+
+      <span class="keyword">try</span> {
+        <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+        <span class="keyword">this</span>.setUser(response.user);
+        <span class="keyword">this</span>.setToken(response.token);
+        <span class="keyword">return</span> response;
+      } <span class="keyword">catch</span> (error) {
+        <span class="keyword">this</span>.error = error.message;
+        <span class="keyword">throw</span> error;
+      } <span class="keyword">finally</span> {
+        <span class="keyword">this</span>.loading = <span class="keyword">false</span>;
+      }
+    },
+
+    <span class="keyword">async</span> <span class="function">logout</span>() {
+      <span class="keyword">try</span> {
+        <span class="keyword">await</span> api.logout();
+      } <span class="keyword">finally</span> {
+        <span class="keyword">this</span>.user = <span class="keyword">null</span>;
+        <span class="keyword">this</span>.token = <span class="keyword">null</span>;
+      }
+    },
+
+    <span class="comment">// 调用其他 Action</span>
+    <span class="keyword">async</span> <span class="function">fetchUser</span>() {
+      <span class="keyword">const</span> user = <span class="keyword">await</span> api.getCurrentUser();
+      <span class="keyword">this</span>.setUser(user);
+    }
+  }
+});</div>
+
+      <h3>Setup Store</h3>
+      <div class="code-block"><span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">const</span> user = ref&lt;User | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> token = ref&lt;<span class="keyword">string</span> | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> loading = ref(<span class="keyword">false</span>);
+  <span class="keyword">const</span> error = ref&lt;<span class="keyword">string</span> | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+  <span class="comment">// 同步 Action</span>
+  <span class="keyword">function</span> <span class="function">setUser</span>(newUser: User) {
+    user.value = newUser;
+  }
+
+  <span class="keyword">function</span> <span class="function">setToken</span>(newToken: <span class="keyword">string</span>) {
+    token.value = newToken;
+  }
+
+  <span class="keyword">function</span> <span class="function">clearError</span>() {
+    error.value = <span class="keyword">null</span>;
+  }
+
+  <span class="comment">// 异步 Action</span>
+  <span class="keyword">async function</span> <span class="function">login</span>(credentials: LoginCredentials) {
+    loading.value = <span class="keyword">true</span>;
+    error.value = <span class="keyword">null</span>;
+
+    <span class="keyword">try</span> {
+      <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+      setUser(response.user);
+      setToken(response.token);
+      <span class="keyword">return</span> response;
+    } <span class="keyword">catch</span> (e) {
+      error.value = e.message;
+      <span class="keyword">throw</span> e;
+    } <span class="keyword">finally</span> {
+      loading.value = <span class="keyword">false</span>;
+    }
+  }
+
+  <span class="keyword">return</span> {
+    user,
+    token,
+    loading,
+    error,
+    setUser,
+    setToken,
+    clearError,
+    login
+  };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 调用 Actions</h2>
+      <div class="code-block">&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { useUserStore } <span class="keyword">from</span> <span class="string">'@/stores/user'</span>;
+
+<span class="keyword">const</span> userStore = useUserStore();
+
+<span class="comment">// 调用同步 Action</span>
+userStore.setUser({ id: <span class="number">1</span>, name: <span class="string">'John'</span> });
+
+<span class="comment">// 调用异步 Action</span>
+<span class="keyword">const</span> handleLogin = <span class="keyword">async</span> () => {
+  <span class="keyword">try</span> {
+    <span class="keyword">await</span> userStore.login({
+      email: <span class="string">'user@example.com'</span>,
+      password: <span class="string">'password'</span>
+    });
+    <span class="comment">// 登录成功</span>
+  } <span class="keyword">catch</span> (error) {
+    <span class="comment">// 处理错误</span>
+  }
+};
+
+<span class="comment">// 解构 Actions（不需要 storeToRefs）</span>
+<span class="keyword">const</span> { login, logout } = userStore;
+&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> Actions 间调用</h2>
+
+      <h3>同一 Store 内调用</h3>
+      <div class="code-block"><span class="comment">// Options Store</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  actions: {
+    <span class="keyword">async</span> <span class="function">login</span>(credentials) {
+      <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+      <span class="keyword">this</span>.setToken(response.token); <span class="comment">// 调用其他 action</span>
+      <span class="keyword">await this</span>.fetchUser(); <span class="comment">// 调用异步 action</span>
+    },
+
+    <span class="function">setToken</span>(token) {
+      <span class="keyword">this</span>.token = token;
+    },
+
+    <span class="keyword">async</span> <span class="function">fetchUser</span>() {
+      <span class="keyword">const</span> user = <span class="keyword">await</span> api.getCurrentUser();
+      <span class="keyword">this</span>.user = user;
+    }
+  }
+});
+
+<span class="comment">// Setup Store</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="keyword">async function</span> <span class="function">login</span>(credentials) {
+    <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+    setToken(response.token);
+    <span class="keyword">await</span> fetchUser();
+  }
+
+  <span class="keyword">function</span> <span class="function">setToken</span>(token) { /* ... */ }
+  <span class="keyword">async function</span> <span class="function">fetchUser</span>() { /* ... */ }
+
+  <span class="keyword">return</span> { login, setToken, fetchUser };
+});</div>
+
+      <h3>跨 Store 调用</h3>
+      <div class="code-block"><span class="comment">// stores/cart.ts</span>
+<span class="keyword">import</span> { useUserStore } <span class="keyword">from</span> <span class="string">'./user'</span>;
+<span class="keyword">import</span> { useProductsStore } <span class="keyword">from</span> <span class="string">'./products'</span>;
+
+<span class="keyword">export const</span> useCartStore = defineStore(<span class="string">'cart'</span>, () => {
+  <span class="keyword">const</span> items = ref&lt;CartItem[]&gt;([]);
+
+  <span class="keyword">async function</span> <span class="function">checkout</span>() {
+    <span class="comment">// 使用其他 store</span>
+    <span class="keyword">const</span> userStore = useUserStore();
+    <span class="keyword">const</span> productsStore = useProductsStore();
+
+    <span class="keyword">if</span> (!userStore.isLoggedIn) {
+      <span class="keyword">throw new</span> Error(<span class="string">'Please login first'</span>);
+    }
+
+    <span class="keyword">const</span> orderItems = items.value.map(item => ({
+      ...item,
+      product: productsStore.getById(item.productId)
+    }));
+
+    <span class="keyword">const</span> order = <span class="keyword">await</span> api.createOrder({
+      userId: userStore.user!.id,
+      items: orderItems
+    });
+
+    items.value = [];
+    <span class="keyword">return</span> order;
+  }
+
+  <span class="keyword">return</span> { items, checkout };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👂</span> 订阅 Actions</h2>
+      <div class="code-block"><span class="keyword">const</span> userStore = useUserStore();
+
+<span class="comment">// 订阅所有 action 调用</span>
+userStore.$onAction(({ name, args, after, onError }) => {
+  console.log(<span class="string">`Action ${name} called with args:`</span>, args);
+
+  <span class="comment">// action 成功完成后调用</span>
+  after(<span class="function">result</span> => {
+    console.log(<span class="string">`Action ${name} finished with result:`</span>, result);
+  });
+
+  <span class="comment">// action 抛出错误时调用</span>
+  onError(<span class="function">error</span> => {
+    console.error(<span class="string">`Action ${name} failed:`</span>, error);
+  });
+});
+
+<span class="comment">// 清除订阅</span>
+<span class="keyword">const</span> unsubscribe = userStore.$onAction(<span class="function">callback</span>);
+unsubscribe(); <span class="comment">// 取消订阅</span></div>
+
+      <h3>实际应用示例</h3>
+      <div class="code-block"><span class="comment">// 全局错误处理</span>
+<span class="keyword">const</span> userStore = useUserStore();
+
+userStore.$onAction(({ name, onError }) => {
+  onError(<span class="function">error</span> => {
+    <span class="keyword">if</span> (error.code === <span class="string">'UNAUTHORIZED'</span>) {
+      userStore.logout();
+      router.push(<span class="string">'/login'</span>);
+    }
+
+    <span class="comment">// 显示错误提示</span>
+    toast.error(error.message);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 最佳实践</h2>
+      <div class="code-block"><span class="comment">// 1. 将复杂逻辑放在 Actions 中</span>
+<span class="keyword">export const</span> useCartStore = defineStore(<span class="string">'cart'</span>, () => {
+  <span class="comment">// 好的做法：将业务逻辑封装在 action 中</span>
+  <span class="keyword">async function</span> <span class="function">addToCart</span>(productId: <span class="keyword">number</span>, quantity: <span class="keyword">number</span> = <span class="number">1</span>) {
+    <span class="keyword">const</span> existingItem = items.value.find(item => item.productId === productId);
+
+    <span class="keyword">if</span> (existingItem) {
+      existingItem.quantity += quantity;
+    } <span class="keyword">else</span> {
+      items.value.push({ productId, quantity });
+    }
+
+    <span class="comment">// 同步到服务器</span>
+    <span class="keyword">await</span> api.syncCart(items.value);
+  }
+
+  <span class="keyword">return</span> { items, addToCart };
+});
+
+<span class="comment">// 2. 使用 TypeScript 类型约束</span>
+<span class="keyword">interface</span> LoginCredentials {
+  email: <span class="keyword">string</span>;
+  password: <span class="keyword">string</span>;
+  remember?: <span class="keyword">boolean</span>;
+}
+
+<span class="keyword">async function</span> <span class="function">login</span>(credentials: LoginCredentials) {
+  <span class="comment">// 类型安全的调用</span>
+}
+
+<span class="comment">// 3. 处理加载状态和错误</span>
+<span class="keyword">async function</span> <span class="function">fetchData</span>() {
+  loading.value = <span class="keyword">true</span>;
+  error.value = <span class="keyword">null</span>;
+
+  <span class="keyword">try</span> {
+    <span class="keyword">const</span> data = <span class="keyword">await</span> api.getData();
+    <span class="keyword">this</span>.data = data;
+  } <span class="keyword">catch</span> (e) {
+    error.value = e.message;
+    <span class="keyword">throw</span> e;
+  } <span class="keyword">finally</span> {
+    loading.value = <span class="keyword">false</span>;
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>Actions 用于处理业务逻辑，支持异步操作</li>
+        <li>可以使用 this 或直接调用访问 state 和其他 actions</li>
+        <li>可以跨 Store 调用其他 Store 的 actions</li>
+        <li>$onAction 可以订阅 actions 的调用</li>
+        <li>推荐将复杂逻辑封装在 actions 中</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="83-3-State与Getter.html">← 上一节：State 与 Getter</a>
+      <a href="83-5-持久化存储.html">下一节：持久化存储 →</a>
+    </div>
+  </div>
+</body>
+</html>

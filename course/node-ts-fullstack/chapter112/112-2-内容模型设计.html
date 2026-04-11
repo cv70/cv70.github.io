@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>112.2 内容模型设计 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="112-1-需求分析.html">第112章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>112.2 内容模型设计</h1>
+      <p class="subtitle">动态内容类型的建模与实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握内容模型的数据库设计</li>
+        <li>学会动态字段存储</li>
+        <li>理解关联关系实现</li>
+        <li>了解模型验证机制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 模型实体设计</h2>
+      <div class="code-block">
+// content-model.entity.ts
+@Entity('content_models')
+export class ContentModel {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ unique: true })
+  name: string;
+
+  @Column({ unique: true })
+  slug: string;
+
+  @Column({ nullable: true })
+  description: string;
+
+  @OneToMany(() => ContentField, field => field.model, { cascade: true })
+  fields: ContentField[];
+
+  @Column({ type: 'json', nullable: true })
+  permissions: string[];
+
+  @Column({ default: true })
+  active: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+// content-field.entity.ts
+@Entity('content_fields')
+export class ContentField {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column()
+  label: string;
+
+  @Column()
+  type: FieldType;
+
+  @Column({ default: false })
+  required: boolean;
+
+  @Column({ type: 'json', nullable: true })
+  validation: {
+    min?: number;
+    max?: number;
+    pattern?: string;
+    message?: string;
+  };
+
+  @Column({ type: 'json', nullable: true })
+  options: {
+    multiple?: boolean;
+    relationTo?: string;
+    choices?: { label: string; value: string }[];
+    default?: any;
+  };
+
+  @Column()
+  order: number;
+
+  @ManyToOne(() => ContentModel, model => model.fields)
+  model: ContentModel;
+
+  @Column()
+  modelId: string;
+}
+
+// content.entity.ts
+@Entity('contents')
+export class Content {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  modelId: string;
+
+  @ManyToOne(() => ContentModel)
+  model: ContentModel;
+
+  @Column({ type: 'jsonb' })
+  data: Record<string, any>;  // 动态字段值
+
+  @Column({ default: 'draft' })
+  status: ContentStatus;
+
+  @Column()
+  createdBy: string;
+
+  @Column({ nullable: true })
+  updatedBy: string;
+
+  @Column({ nullable: true })
+  publishedAt: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+enum ContentStatus {
+  DRAFT = 'draft',
+  PENDING = 'pending',
+  PUBLISHED = 'published',
+  ARCHIVED = 'archived'
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 模型服务实现</h2>
+      <div class="code-block">
+// content-model.service.ts
+@Injectable()
+export class ContentModelService {
+  constructor(
+    @InjectRepository(ContentModel) private modelRepo: Repository<ContentModel>,
+    @InjectRepository(ContentField) private fieldRepo: Repository<ContentField>,
+  ) {}
+
+  // 创建内容模型
+  async createModel(dto: CreateModelDto): Promise<ContentModel> {
+    const model = this.modelRepo.create({
+      name: dto.name,
+      slug: dto.slug,
+      description: dto.description,
+      permissions: dto.permissions,
+    });
+
+    // 创建字段
+    model.fields = dto.fields.map((fieldDto, index) =>
+      this.fieldRepo.create({
+        ...fieldDto,
+        order: index,
+        modelId: model.id,
+      })
+    );
+
+    return this.modelRepo.save(model);
+  }
+
+  // 获取模型及其字段
+  async getModelWithFields(slug: string): Promise<ContentModel> {
+    return this.modelRepo.findOne({
+      where: { slug },
+      relations: ['fields'],
+      order: { fields: { order: 'ASC' } },
+    });
+  }
+
+  // 验证内容数据
+  async validateContent(modelSlug: string, data: Record<string, any>): Promise<string[]> {
+    const model = await this.getModelWithFields(modelSlug);
+    const errors: string[] = [];
+
+    for (const field of model.fields) {
+      const value = data[field.name];
+
+      // 必填验证
+      if (field.required && (value === undefined || value === null || value === '')) {
+        errors.push(`${field.label} is required`);
+        continue;
+      }
+
+      // 类型验证
+      if (value !== undefined) {
+        switch (field.type) {
+          case FieldType.NUMBER:
+            if (typeof value !== 'number') {
+              errors.push(`${field.label} must be a number`);
+            } else if (field.validation) {
+              if (field.validation.min !== undefined && value < field.validation.min) {
+                errors.push(`${field.label} must be at least ${field.validation.min}`);
+              }
+              if (field.validation.max !== undefined && value > field.validation.max) {
+                errors.push(`${field.label} must be at most ${field.validation.max}`);
+              }
+            }
+            break;
+
+          case FieldType.TEXT:
+            if (typeof value !== 'string') {
+              errors.push(`${field.label} must be a string`);
+            } else if (field.validation?.pattern) {
+              const regex = new RegExp(field.validation.pattern);
+              if (!regex.test(value)) {
+                errors.push(field.validation.message || `${field.label} format is invalid`);
+              }
+            }
+            break;
+        }
+      }
+    }
+
+    return errors;
+  }
+}
+
+// content.service.ts
+@Injectable()
+export class ContentService {
+  constructor(
+    @InjectRepository(Content) private contentRepo: Repository<Content>,
+    private modelService: ContentModelService,
+  ) {}
+
+  // 创建内容
+  async createContent(modelSlug: string, dto: CreateContentDto, userId: string): Promise<Content> {
+    // 验证数据
+    const errors = await this.modelService.validateContent(modelSlug, dto.data);
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+
+    const model = await this.modelService.getModelWithFields(modelSlug);
+
+    const content = this.contentRepo.create({
+      modelId: model.id,
+      data: dto.data,
+      status: ContentStatus.DRAFT,
+      createdBy: userId,
+    });
+
+    return this.contentRepo.save(content);
+  }
+
+  // 查询内容
+  async getContents(modelSlug: string, options: {
+    page: number;
+    limit: number;
+    status?: ContentStatus;
+    filters?: Record<string, any>;
+  }) {
+    const model = await this.modelService.getModelWithFields(modelSlug);
+
+    const query = this.contentRepo.createQueryBuilder('content')
+      .where('content.modelId = :modelId', { modelId: model.id });
+
+    if (options.status) {
+      query.andWhere('content.status = :status', { status: options.status });
+    }
+
+    // 动态过滤
+    if (options.filters) {
+      for (const [key, value] of Object.entries(options.filters)) {
+        query.andWhere(`content.data->>'${key}' = :${key}`, { [key]: value });
+      }
+    }
+
+    return query
+      .skip((options.page - 1) * options.limit)
+      .take(options.limit)
+      .getManyAndCount();
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用JSON字段存储动态内容</li>
+            <li>• 字段定义独立存储便于扩展</li>
+            <li>• 动态验证确保数据完整性</li>
+            <li>• PostgreSQL JSONB支持高效查询</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="112-1-需求分析.html">← 上一节：需求分析</a>
+      <a href="112-3-权限管理.html">下一节：权限管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>72.3 控制器测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="72-2-服务测试.html">上一节</a></li>
+      <li><a href="72-4-E2E测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>72.3 控制器测试</h1>
+      <p class="subtitle">第十部分：测试篇 - NestJS 控制器层测试</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 控制器测试概述</h2>
+      <p>控制器测试主要验证 HTTP 请求处理逻辑，包括参数验证、响应格式、服务调用等。</p>
+
+      <div class="code-block">// src/users/users.controller.ts
+import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Get(':id')
+  findById(@Param('id') id: string) {
+    return this.usersService.findById(id);
+  }
+
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.usersService.delete(id);
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 单元测试控制器</h2>
+
+      <div class="code-block">// src/users/users.controller.spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { UsersController } from './users.controller';
+import { UsersService } from './users.service';
+import { NotFoundException } from '@nestjs/common';
+
+describe('UsersController', () => {
+  let controller: UsersController;
+  let service: jest.Mocked&lt;UsersService&gt;;
+
+  const mockUser = {
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com'
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [UsersController],
+      providers: [
+        {
+          provide: UsersService,
+          useValue: {
+            findAll: jest.fn(),
+            findById: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn()
+          }
+        }
+      ]
+    }).compile();
+
+    controller = module.get&lt;UsersController&gt;(UsersController);
+    service = module.get(UsersService);
+  });
+
+  describe('findAll', () => {
+    it('should return an array of users', async () => {
+      service.findAll.mockResolvedValue([mockUser]);
+
+      const result = await controller.findAll();
+
+      expect(result).toEqual([mockUser]);
+      expect(service.findAll).toHaveBeenCalled();
+    });
+  });
+
+  describe('findById', () => {
+    it('should return a user', async () => {
+      service.findById.mockResolvedValue(mockUser);
+
+      const result = await controller.findById('1');
+
+      expect(result).toEqual(mockUser);
+      expect(service.findById).toHaveBeenCalledWith('1');
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      service.findById.mockResolvedValue(null);
+
+      await expect(controller.findById('999')).rejects.toThrow();
+    });
+  });
+
+  describe('create', () => {
+    it('should create a new user', async () => {
+      const createDto = { name: 'John', email: 'john@example.com' };
+      service.create.mockResolvedValue(mockUser);
+
+      const result = await controller.create(createDto);
+
+      expect(result).toEqual(mockUser);
+      expect(service.create).toHaveBeenCalledWith(createDto);
+    });
+  });
+
+  describe('update', () => {
+    it('should update user', async () => {
+      const updateDto = { name: 'Updated' };
+      const updatedUser = { ...mockUser, name: 'Updated' };
+      service.update.mockResolvedValue(updatedUser);
+
+      const result = await controller.update('1', updateDto);
+
+      expect(result.name).toBe('Updated');
+      expect(service.update).toHaveBeenCalledWith('1', updateDto);
+    });
+  });
+
+  describe('remove', () => {
+    it('should delete user', async () => {
+      service.delete.mockResolvedValue(undefined);
+
+      await controller.remove('1');
+
+      expect(service.delete).toHaveBeenCalledWith('1');
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 测试装饰器</h2>
+
+      <div class="code-block">// 测试守卫
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from './roles.guard';
+
+describe('RolesGuard', () => {
+  let guard: RolesGuard;
+  let reflector: Reflector;
+
+  beforeEach(() => {
+    reflector = new Reflector();
+    guard = new RolesGuard(reflector);
+  });
+
+  it('should allow access when no roles required', () => {
+    const context = createMockExecutionContext();
+
+    jest.spyOn(reflector, 'get').mockReturnValue(undefined);
+
+    expect(guard.canActivate(context)).toBe(true);
+  });
+
+  it('should allow access when user has required role', () => {
+    const context = createMockExecutionContext();
+    context.switchToHttp().getRequest().user = { role: 'admin' };
+
+    jest.spyOn(reflector, 'get').mockReturnValue(['admin']);
+
+    expect(guard.canActivate(context)).toBe(true);
+  });
+
+  it('should deny access when user lacks role', () => {
+    const context = createMockExecutionContext();
+    context.switchToHttp().getRequest().user = { role: 'user' };
+
+    jest.spyOn(reflector, 'get').mockReturnValue(['admin']);
+
+    expect(guard.canActivate(context)).toBe(false);
+  });
+});
+
+function createMockExecutionContext(): ExecutionContext {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => ({
+        user: null
+      }),
+      getResponse: () => ({})
+    }),
+    getHandler: jest.fn(),
+    getClass: jest.fn()
+  } as any;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 测试拦截器</h2>
+
+      <div class="code-block">import { TransformInterceptor } from './transform.interceptor';
+import { of } from 'rxjs';
+
+describe('TransformInterceptor', () => {
+  let interceptor: TransformInterceptor&lt;any&gt;;
+
+  beforeEach(() => {
+    interceptor = new TransformInterceptor();
+  });
+
+  it('should transform response', (done) => {
+    const context = createMockExecutionContext();
+    const next = {
+      handle: () => of({ name: 'John' })
+    };
+
+    interceptor.intercept(context, next as any).subscribe({
+      next: (result) => {
+        expect(result).toEqual({
+          success: true,
+          data: { name: 'John' }
+        });
+        done();
+      }
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 测试管道</h2>
+
+      <div class="code-block">import { ValidationPipe } from '@nestjs/common';
+import { ArgumentMetadata } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+
+describe('ValidationPipe', () => {
+  let pipe: ValidationPipe;
+
+  beforeEach(() => {
+    pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true
+    });
+  });
+
+  it('should pass valid data', async () => {
+    const dto = new CreateUserDto();
+    dto.name = 'John';
+    dto.email = 'john@example.com';
+
+    const metadata: ArgumentMetadata = {
+      type: 'body',
+      metatype: CreateUserDto
+    };
+
+    const result = await pipe.transform(dto, metadata);
+    expect(result).toEqual(dto);
+  });
+
+  it('should throw on invalid data', async () => {
+    const invalidDto = { name: '' };
+
+    const metadata: ArgumentMetadata = {
+      type: 'body',
+      metatype: CreateUserDto
+    };
+
+    await expect(pipe.transform(invalidDto, metadata))
+      .rejects.toThrow();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试异常过滤器</h2>
+
+      <div class="code-block">import { HttpException, ArgumentsHost } from '@nestjs/common';
+import { AllExceptionsFilter } from './all-exceptions.filter';
+
+describe('AllExceptionsFilter', () => {
+  let filter: AllExceptionsFilter;
+  let mockHost: ArgumentsHost;
+  let mockResponse: any;
+  let mockRequest: any;
+
+  beforeEach(() => {
+    filter = new AllExceptionsFilter();
+
+    mockResponse = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+
+    mockRequest = {
+      url: '/test'
+    };
+
+    mockHost = {
+      switchToHttp: () => ({
+        getResponse: () => mockResponse,
+        getRequest: () => mockRequest
+      })
+    } as any;
+  });
+
+  it('should handle HTTP exception', () => {
+    const exception = new HttpException('Not Found', 404);
+
+    filter.catch(exception, mockHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(404);
+    expect(mockResponse.json).toHaveBeenCalledWith({
+      statusCode: 404,
+      message: 'Not Found',
+      timestamp: expect.any(String),
+      path: '/test'
+    });
+  });
+
+  it('should handle unknown exception', () => {
+    const exception = new Error('Unknown error');
+
+    filter.catch(exception, mockHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(500);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Mock 服务层依赖进行控制器隔离测试</li>
+            <li>测试守卫需要模拟 ExecutionContext</li>
+            <li>测试拦截器需要使用 RxJS 的 Observable</li>
+            <li>测试管道验证输入转换逻辑</li>
+            <li>测试异常过滤器验证错误响应格式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="72-2-服务测试.html">← 上一节：服务测试</a>
+      <a href="72-4-E2E测试.html">下一节：E2E 测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

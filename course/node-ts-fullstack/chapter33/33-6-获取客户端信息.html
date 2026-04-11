@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.6 获取客户端信息 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter33.html">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.6 获取客户端信息</h1>
+      <p class="subtitle">学习获取客户端 IP、设备信息等常用方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握获取客户端 IP 地址的方法</li>
+        <li>学会识别客户端设备和浏览器</li>
+        <li>理解反向代理下的 IP 获取</li>
+        <li>了解客户端信息的隐私考虑</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 获取客户端 IP</h2>
+
+      <h3>基本方法</h3>
+      <div class="code-block">
+app.get('/ip', (req, res) => {
+  // 直接连接的 IP
+  const socketIP = req.socket.remoteAddress;
+
+  // Express 提供的属性
+  const ip = req.ip;
+
+  // 连接对象上的 IP
+  const connectionIP = req.connection?.remoteAddress;
+
+  res.json({
+    ip,
+    socketIP,
+    connectionIP
+  });
+});</div>
+
+      <h3>处理 IPv6 格式</h3>
+      <div class="code-block">
+// IPv6 映射的 IPv4 地址
+// ::ffff:127.0.0.1 -> 127.0.0.1
+
+function normalizeIP(ip) {
+  if (!ip) return null;
+
+  // 处理 IPv6 映射的 IPv4
+  if (ip.startsWith('::ffff:')) {
+    return ip.substring(7);
+  }
+
+  // 本地 IPv6
+  if (ip === '::1') {
+    return '127.0.0.1';
+  }
+
+  return ip;
+}</div>
+
+      <h3>反向代理环境</h3>
+      <div class="code-block">
+// 启用信任代理
+app.set('trust proxy', true);
+
+// 此时 req.ip 会自动获取真实 IP
+app.get('/real-ip', (req, res) => {
+  res.json({
+    ip: req.ip,            // 真实客户端 IP
+    ips: req.ips           // X-Forwarded-For 数组
+  });
+});
+
+// 手动解析 X-Forwarded-For
+function getClientIP(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+
+  if (forwarded) {
+    // 取第一个 IP（原始客户端）
+    return forwarded.split(',')[0].trim();
+  }
+
+  // 没有代理头，使用直接连接的 IP
+  return req.socket.remoteAddress;
+}
+
+// 信任特定代理
+app.set('trust proxy', (ip) => {
+  // 只信任这些 IP 的代理头
+  const trustedProxies = ['10.0.0.1', '10.0.0.2'];
+  return trustedProxies.includes(ip);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 获取设备信息</h2>
+
+      <h3>解析 User-Agent</h3>
+      <div class="code-block">
+// 安装 ua-parser-js
+// npm install ua-parser-js
+
+const UAParser = require('ua-parser-js');
+
+function getClientInfo(req) {
+  const parser = new UAParser();
+  parser.setUA(req.headers['user-agent']);
+
+  const result = parser.getResult();
+
+  return {
+    browser: {
+      name: result.browser.name,
+      version: result.browser.version
+    },
+    os: {
+      name: result.os.name,
+      version: result.os.version
+    },
+    device: {
+      type: result.device.type || 'desktop',
+      vendor: result.device.vendor,
+      model: result.device.model
+    },
+    engine: result.engine,
+    cpu: result.cpu
+  };
+}
+
+app.get('/client-info', (req, res) => {
+  const info = getClientInfo(req);
+  res.json(info);
+});</div>
+
+      <h3>简单设备检测</h3>
+      <div class="code-block">
+function detectDevice(userAgent) {
+  if (!userAgent) return 'unknown';
+
+  const ua = userAgent.toLowerCase();
+
+  // 移动设备
+  if (/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+    return 'mobile';
+  }
+
+  // 平板
+  if (/tablet|ipad|playbook|silk/i.test(ua)) {
+    return 'tablet';
+  }
+
+  // 桌面
+  return 'desktop';
+}
+
+// 机器人检测
+function isBot(userAgent) {
+  if (!userAgent) return false;
+
+  const bots = [
+    'googlebot', 'bingbot', 'slurp', 'duckduckbot',
+    'baiduspider', 'yandexbot', 'sogou', 'exabot',
+    'facebot', 'facebookexternalhit', 'twitterbot',
+    'linkedinbot', 'embedly', 'quora link preview'
+  ];
+
+  const ua = userAgent.toLowerCase();
+  return bots.some(bot => ua.includes(bot));
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌍</span> 获取地理位置</h2>
+
+      <h3>使用 IP 定位服务</h3>
+      <div class="code-block">
+const axios = require('axios');
+
+async function getLocationByIP(ip) {
+  try {
+    // 使用免费 IP 地理位置 API
+    const response = await axios.get(`http://ip-api.com/json/${ip}`);
+
+    return {
+      country: response.data.country,
+      countryCode: response.data.countryCode,
+      region: response.data.regionName,
+      city: response.data.city,
+      lat: response.data.lat,
+      lon: response.data.lon,
+      timezone: response.data.timezone,
+      isp: response.data.isp
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+app.get('/location', async (req, res) => {
+  const ip = req.ip;
+  const location = await getLocationByIP(ip);
+
+  res.json({
+    ip,
+    location
+  });
+});</div>
+
+      <h3>使用本地数据库</h3>
+      <div class="code-block">
+// 使用 MaxMind GeoIP2 数据库
+// npm install @maxmind/geoip2-node
+
+const { Reader } = require('@maxmind/geoip2-node');
+
+let geoIPReader;
+
+async function initGeoIP() {
+  geoIPReader = await Reader.open('./GeoLite2-City.mmdb');
+}
+
+function getLocation(ip) {
+  try {
+    const response = geoIPReader.city(ip);
+
+    return {
+      country: response.country?.names?.en,
+      countryCode: response.country?.isoCode,
+      region: response.subdivisions?.[0]?.names?.en,
+      city: response.city?.names?.en,
+      location: response.location
+    };
+  } catch (error) {
+    return null;
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 客户端信息中间件</h2>
+
+      <div class="code-block">
+// 客户端信息收集中间件
+const clientInfoMiddleware = (req, res, next) => {
+  const parser = new UAParser();
+  parser.setUA(req.headers['user-agent']);
+  const ua = parser.getResult();
+
+  req.clientInfo = {
+    ip: req.ip,
+    ips: req.ips,
+    userAgent: req.headers['user-agent'],
+    browser: {
+      name: ua.browser.name,
+      version: ua.browser.version
+    },
+    os: {
+      name: ua.os.name,
+      version: ua.os.version
+    },
+    device: {
+      type: ua.device.type || 'desktop',
+      vendor: ua.device.vendor,
+      model: ua.device.model
+    },
+    referer: req.headers.referer || req.headers.referrer,
+    language: req.headers['accept-language']?.split(',')[0],
+    isBot: isBot(req.headers['user-agent']),
+    timestamp: new Date().toISOString()
+  };
+
+  next();
+};
+
+// 使用中间件
+app.use(clientInfoMiddleware);
+
+// 在路由中使用
+app.get('/info', (req, res) => {
+  res.json(req.clientInfo);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 隐私和安全考虑</h2>
+
+      <div class="code-block">
+// 1. IP 地址隐私处理
+function anonymizeIP(ip) {
+  if (!ip) return null;
+
+  // IPv4: 最后一段置 0
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    parts[3] = '0';
+    return parts.join('.');
+  }
+
+  // IPv6: 保留前 64 位
+  if (ip.includes(':')) {
+    const parts = ip.split(':').slice(0, 4);
+    return parts.join(':') + '::';
+  }
+
+  return ip;
+}
+
+// 2. 日志记录时的隐私保护
+function logClientInfo(req) {
+  console.log({
+    ip: anonymizeIP(req.ip),
+    device: req.clientInfo?.device?.type,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// 3. GDPR 合规
+// - 告知用户数据收集行为
+// - 获取用户同意
+// - 提供数据删除选项
+// - 仅收集必要信息</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 实战示例：访问统计</h2>
+
+      <div class="code-block">
+const express = require('express');
+const UAParser = require('ua-parser-js');
+
+const app = express();
+app.set('trust proxy', true);
+
+// 访问统计
+const stats = {
+  total: 0,
+  byDevice: { mobile: 0, tablet: 0, desktop: 0 },
+  byBrowser: {},
+  byCountry: {},
+  uniqueIPs: new Set()
+};
+
+// 统计中间件
+function statsMiddleware(req, res, next) {
+  stats.total++;
+
+  // 设备统计
+  const parser = new UAParser();
+  parser.setUA(req.headers['user-agent']);
+  const ua = parser.getResult();
+
+  const deviceType = ua.device.type || 'desktop';
+  stats.byDevice[deviceType] = (stats.byDevice[deviceType] || 0) + 1;
+
+  // 浏览器统计
+  const browser = ua.browser.name || 'Unknown';
+  stats.byBrowser[browser] = (stats.byBrowser[browser] || 0) + 1;
+
+  // IP 统计
+  stats.uniqueIPs.add(req.ip);
+
+  next();
+}
+
+app.use(statsMiddleware);
+
+// 获取统计信息
+app.get('/stats', (req, res) => {
+  res.json({
+    total: stats.total,
+    uniqueVisitors: stats.uniqueIPs.size,
+    byDevice: stats.byDevice,
+    byBrowser: stats.byBrowser
+  });
+});
+
+// 重置统计
+app.post('/stats/reset', (req, res) => {
+  stats.total = 0;
+  stats.byDevice = { mobile: 0, tablet: 0, desktop: 0 };
+  stats.byBrowser = {};
+  stats.uniqueIPs.clear();
+
+  res.json({ message: 'Stats reset' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 req.ip 获取客户端 IP，反向代理需设置 trust proxy</li>
+            <li>使用 ua-parser-js 解析 User-Agent 获取设备信息</li>
+            <li>IP 定位可使用在线服务或本地数据库</li>
+            <li>收集客户端信息需注意隐私法规合规</li>
+            <li>可创建中间件统一收集客户端信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-5-请求头处理.html">← 上一节：请求头处理</a>
+      <a href="../chapter34/34-1-发送响应.html">下一章：响应处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

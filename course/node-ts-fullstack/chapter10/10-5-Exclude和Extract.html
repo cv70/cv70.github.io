@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.5 Exclude 和 Extract - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="10-1-Partial和Required.html">第十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>10.5 Exclude 和 Extract</h1>
+      <p class="subtitle">过滤联合类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Exclude 的实现原理</li>
+        <li>掌握 Extract 的使用场景</li>
+        <li>学会 NonNullable 的用法</li>
+        <li>了解实际项目中的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Exclude 深入</h2>
+      <div class="code-block">
+// Exclude 从联合类型中排除类型
+// 内置实现：
+type MyExclude<T, U> = T extends U ? never : T;
+
+// 基本用法
+type AllTypes = 'a' | 'b' | 'c' | 'd';
+type WithoutA = Exclude<AllTypes, 'a'>;  // 'b' | 'c' | 'd'
+type WithoutAB = Exclude<AllTypes, 'a' | 'b'>;  // 'c' | 'd'
+
+// 排除多种类型
+type Mixed = string | number | boolean | null | undefined;
+type OnlyStrings = Exclude<Mixed, number | boolean | null | undefined>;
+// string
+
+// 实际应用：从接口键中排除
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+  createdAt: Date;
+}
+
+type UserKeys = keyof User;
+// 'id' | 'name' | 'email' | 'password' | 'createdAt'
+
+type EditableKeys = Exclude<UserKeys, 'id' | 'createdAt'>;
+// 'name' | 'email' | 'password'
+
+type EditableUser = Pick<User, EditableKeys>;
+// { name: string; email: string; password: string; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Extract 深入</h2>
+      <div class="code-block">
+// Extract 从联合类型中提取类型
+// 内置实现：
+type MyExtract<T, U> = T extends U ? T : never;
+
+// 基本用法
+type Values = 'click' | 'focus' | 'blur' | 'keydown' | 'keyup';
+type KeyboardEvents = Extract<Values, `key${string}`>;
+// 'keydown' | 'keyup'
+
+// 提取特定类型
+type Primitive = string | number | boolean | object | Function;
+type OnlyFunctions = Extract<Primitive, Function>;
+// Function
+
+// 提取接口实现
+interface Animal {
+  name: string;
+}
+
+interface Dog extends Animal {
+  breed: string;
+}
+
+interface Cat extends Animal {
+  color: string;
+}
+
+type Pet = Dog | Cat | string;
+
+type OnlyAnimals = Extract<Pet, Animal>;
+// Dog | Cat
+
+// 提取有特定属性的类型
+type HasId = { id: number };
+type Entity1 = HasId & { name: string };
+type Entity2 = { code: string };
+type MixedEntities = Entity1 | Entity2;
+
+type WithId = Extract<MixedEntities, HasId>;
+// Entity1
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Exclude vs Extract</div>
+          <p>Exclude 排除匹配的类型，Extract 提取匹配的类型。它们互补，一个相当于"差集"，一个相当于"交集"。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> NonNullable</h2>
+      <div class="code-block">
+// NonNullable 排除 null 和 undefined
+// 内置实现：
+type MyNonNullable<T> = Exclude<T, null | undefined>;
+
+// 基本用法
+type MaybeString = string | null | undefined;
+type DefiniteString = NonNullable<MaybeString>;
+// string
+
+// 实际应用：处理 API 响应
+interface ApiResponse<T> {
+  data: T | null;
+  error: string | null;
+}
+
+function getData<T>(response: ApiResponse<T>): NonNullable<T> {
+  if (response.data === null) {
+    throw new Error(response.error ?? 'Unknown error');
+  }
+  return response.data;
+}
+
+// 数组过滤
+type ArrayValue<T> = T extends (infer U)[] ? NonNullable<U> : never;
+
+type CleanArray = ArrayValue<(string | null)[]>;
+// string
+
+// 对象属性非空化
+type NonNullableProps<T> = {
+  [K in keyof T]: NonNullable<T[K]>;
+};
+
+interface OptionalUser {
+  name: string | null;
+  email: string | undefined;
+}
+
+type RequiredUser = NonNullableProps<OptionalUser>;
+// { name: string; email: string; }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 实际应用</h2>
+      <div class="code-block">
+// 状态管理
+type Status = 'idle' | 'loading' | 'success' | 'error';
+type ActiveStatus = Exclude<Status, 'idle'>;
+// 'loading' | 'success' | 'error'
+
+// 事件处理
+type AllEvents = 'click' | 'dblclick' | 'mousedown' | 'mouseup' | 'keydown' | 'keyup';
+type MouseEvents = Exclude<AllEvents, `key${string}`>;
+// 'click' | 'dblclick' | 'mousedown' | 'mouseup'
+
+// 权限过滤
+type Permission = 'read' | 'write' | 'delete' | 'admin';
+type UserPermission = Exclude<Permission, 'admin'>;
+// 'read' | 'write' | 'delete'
+
+// 路由守卫
+type PublicRoute = '/' | '/login' | '/register';
+type ProtectedRoute = '/dashboard' | '/profile' | '/settings';
+type AllRoutes = PublicRoute | ProtectedRoute;
+
+type OnlyProtected = Extract<AllRoutes, ProtectedRoute>;
+// '/dashboard' | '/profile' | '/settings'
+
+// API 方法过滤
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+type ReadOnlyMethod = Extract<HttpMethod, 'GET'>;
+type WriteMethod = Exclude<HttpMethod, 'GET'>;
+// 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Exclude 从联合类型中排除类型</li>
+            <li>• Extract 从联合类型中提取类型</li>
+            <li>• NonNullable 排除 null 和 undefined</li>
+            <li>• 常用于事件、权限、状态类型过滤</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-4-Record和ReturnType.html">← 上一节：Record 和 ReturnType</a>
+      <a href="10-6-自定义工具类型.html">下一节：自定义工具类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

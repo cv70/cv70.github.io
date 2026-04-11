@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.6 Express 中间件概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter30.html">第30章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>30.6 Express 中间件概念</h1>
+      <p class="subtitle">理解 Express 核心设计理念 - 中间件架构</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中间件的概念和工作原理</li>
+        <li>掌握中间件的分类和使用场景</li>
+        <li>学会编写自定义中间件</li>
+        <li>理解中间件的执行顺序和 next() 的作用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 什么是中间件</h2>
+      <p>中间件（Middleware）是 Express 的核心概念。简单来说，中间件是一个函数，它可以访问请求对象（req）、响应对象（res）和应用程序请求-响应循环中的下一个中间件函数（next）。</p>
+
+      <h3>中间件函数签名</h3>
+      <div class="code-block">
+// 中间件基本结构
+function middleware(req, res, next) {
+  // req: 请求对象
+  // res: 响应对象
+  // next: 下一个中间件函数
+
+  // 执行代码...
+
+  // 调用 next() 将控制权传递给下一个中间件
+  next();
+}</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">核心理念</div>
+          <p>Express 应用本质上就是一系列中间件函数的调用。每个请求都会依次经过这些中间件，形成一条处理链。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 中间件工作流程</h2>
+      <p>请求处理的流程可以形象地比喻为"洋葱模型"：</p>
+
+      <div class="image-container" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 1rem;">
+        <div style="text-align: center; color: white; font-size: 1.2rem;">
+          <pre style="font-family: monospace; line-height: 1.6;">
+    ┌─────────────────────────────────────┐
+    │          HTTP Request               │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 1 (进入)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 2 (进入)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 3 (进入)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Route Handler (处理)           │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 3 (返回)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 2 (返回)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │       Middleware 1 (返回)            │
+    └──────────────────┬──────────────────┘
+                       ▼
+    ┌─────────────────────────────────────┐
+    │          HTTP Response              │
+    └─────────────────────────────────────┘
+          </pre>
+        </div>
+      </div>
+
+      <h3>中间件可以做什么</h3>
+      <ul class="feature-list">
+        <li>执行任何代码</li>
+        <li>修改请求和响应对象</li>
+        <li>结束请求-响应循环</li>
+        <li>调用下一个中间件（通过 next()）</li>
+      </ul>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">重要规则</div>
+          <p>如果当前中间件没有结束请求-响应循环，必须调用 next() 将控制权传递给下一个中间件，否则请求会被挂起。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> 中间件分类</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">应用级中间件</h3>
+          <p class="card-text">使用 app.use() 或 app.METHOD() 绑定到 app 对象的中间件，处理所有或特定路由的请求。</p>
+          <div class="code-block" style="margin-top: 1rem;">
+app.use((req, res, next) => {
+  console.log('All requests');
+  next();
+});</div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">路由级中间件</h3>
+          <p class="card-text">使用 router.use() 绑定到 express.Router() 实例的中间件，只处理特定路由的请求。</p>
+          <div class="code-block" style="margin-top: 1rem;">
+router.use((req, res, next) => {
+  console.log('Router middleware');
+  next();
+});</div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">错误处理中间件</h3>
+          <p class="card-text">有四个参数的中间件，专门用于捕获和处理错误。</p>
+          <div class="code-block" style="margin-top: 1rem;">
+app.use((err, req, res, next) => {
+  res.status(500).send('Error');
+});</div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">内置中间件</h3>
+          <p class="card-text">Express 内置的中间件，如 express.json()、express.static() 等。</p>
+          <div class="code-block" style="margin-top: 1rem;">
+app.use(express.json());
+app.use(express.static('public'));</div>
+        </div>
+      </div>
+
+      <h3>第三方中间件</h3>
+      <p>由社区开发的中间件，通过 npm 安装：</p>
+      <div class="code-block">
+// 安装常用中间件
+npm install cors helmet morgan compression
+
+// 使用示例
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+
+app.use(cors());           // 跨域处理
+app.use(helmet());         // 安全头设置
+app.use(morgan('dev'));    // 日志记录
+app.use(compression());    // Gzip 压缩</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 编写自定义中间件</h2>
+
+      <h3>1. 简单的日志中间件</h3>
+      <div class="code-block">
+// 日志中间件
+const logger = (req, res, next) => {
+  const start = Date.now();
+  const timestamp = new Date().toISOString();
+
+  console.log(`[${timestamp}] ${req.method} ${req.url}`);
+
+  // 监听响应完成事件
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`  -> Status: ${res.statusCode}, Duration: ${duration}ms`);
+  });
+
+  next();
+};
+
+// 使用中间件
+app.use(logger);</div>
+
+      <h3>2. 请求认证中间件</h3>
+      <div class="code-block">
+// 认证中间件
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'No token provided'
+    });
+  }
+
+  // 验证 token（简化示例）
+  if (token !== 'Bearer valid-token') {
+    return res.status(403).json({
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+
+  // 将用户信息附加到请求对象
+  req.user = { id: 1, name: 'Admin' };
+  next();
+};
+
+// 应用到特定路由
+app.get('/protected', authMiddleware, (req, res) => {
+  res.json({
+    message: 'Protected content',
+    user: req.user
+  });
+});</div>
+
+      <h3>3. 请求数据验证中间件</h3>
+      <div class="code-block">
+// 验证中间件工厂函数
+const validateBody = (schema) => {
+  return (req, res, next) => {
+    const { error } = validate(req.body, schema);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: error.details
+      });
+    }
+
+    next();
+  };
+};
+
+// 使用验证中间件
+const userSchema = {
+  name: { type: 'string', required: true, minLength: 2 },
+  email: { type: 'string', required: true, format: 'email' },
+  age: { type: 'number', min: 0, max: 150 }
+};
+
+app.post('/users', validateBody(userSchema), (req, res) => {
+  // 如果执行到这里，说明验证通过
+  res.json({ message: 'User created', data: req.body });
+});</div>
+
+      <h3>4. 异步中间件包装器</h3>
+      <div class="code-block">
+// 异步中间件包装器，自动捕获错误
+const asyncHandler = (fn) => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+// 使用异步中间件
+app.get('/async-route', asyncHandler(async (req, res) => {
+  const data = await fetchDataFromDatabase();
+  res.json(data);
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 中间件执行顺序</h2>
+      <p>中间件按照定义的顺序执行，理解这一点非常重要：</p>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 中间件 1
+app.use((req, res, next) => {
+  console.log('Middleware 1 - Start');
+  next();
+  console.log('Middleware 1 - End');
+});
+
+// 中间件 2
+app.use((req, res, next) => {
+  console.log('Middleware 2 - Start');
+  next();
+  console.log('Middleware 2 - End');
+});
+
+// 路由处理
+app.get('/', (req, res) => {
+  console.log('Route Handler');
+  res.send('Hello');
+});
+
+// 执行顺序输出：
+// Middleware 1 - Start
+// Middleware 2 - Start
+// Route Handler
+// Middleware 2 - End
+// Middleware 1 - End</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">next() 前后的代码</div>
+          <p>next() 之前的代码按顺序执行，next() 之后的代码在后续中间件完成后逆序执行。这就是"洋葱模型"的体现。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚫</span> 结束响应</h2>
+      <p>中间件可以结束请求-响应循环，此时不会继续调用后续中间件：</p>
+
+      <div class="code-block">
+// 访问控制中间件
+const accessControl = (req, res, next) => {
+  const allowedIPs = ['127.0.0.1', '::1'];
+  const clientIP = req.ip;
+
+  if (!allowedIPs.includes(clientIP)) {
+    // 结束响应，不调用 next()
+    return res.status(403).send('Access Denied');
+  }
+
+  // 允许继续
+  next();
+};
+
+app.use(accessControl);
+
+// 只有通过访问控制的请求才会到达这里
+app.get('/', (req, res) => {
+  res.send('Welcome!');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 中间件组织方式</h2>
+      <p>在实际项目中，推荐将中间件组织到单独的文件中：</p>
+
+      <div class="code-block">
+// middleware/index.js
+const logger = require('./logger');
+const auth = require('./auth');
+const errorHandler = require('./errorHandler');
+const validate = require('./validate');
+
+module.exports = {
+  logger,
+  auth,
+  errorHandler,
+  validate
+};
+
+// app.js
+const { logger, auth, errorHandler } = require('./middleware');
+
+// 应用中间件
+app.use(logger);
+app.use('/api', auth);
+app.use(errorHandler);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>中间件是 Express 的核心，每个请求都会经过中间件链</li>
+            <li>中间件可以访问 req、res、next 三个参数</li>
+            <li>必须调用 next() 或结束响应，否则请求会挂起</li>
+            <li>中间件分五类：应用级、路由级、错误处理、内置、第三方</li>
+            <li>中间件按定义顺序执行，遵循"洋葱模型"</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>编写一个记录请求方法、路径、状态码和响应时间的日志中间件</li>
+        <li>创建一个 IP 黑名单中间件，拒绝特定 IP 的访问</li>
+        <li>实现一个请求限流中间件，限制每分钟最多 100 次请求</li>
+        <li>编写一个异步错误处理包装器，统一处理异步错误</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="30-5-请求与响应对象.html">← 上一节：请求与响应对象</a>
+      <a href="../chapter31/31-1-路由方法.html">下一章：Express 路由进阶 →</a>
+    </div>
+  </div>
+</body>
+</html>

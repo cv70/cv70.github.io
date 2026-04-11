@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>105.2 RabbitMQ - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="105-1-消息队列概述.html">第105章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>105.2 RabbitMQ</h1>
+      <p class="subtitle">功能强大的消息代理系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解RabbitMQ核心概念</li>
+        <li>掌握Exchange类型</li>
+        <li>学会使用amqplib操作RabbitMQ</li>
+        <li>了解消息确认机制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> RabbitMQ核心概念</h2>
+      <div class="code-block">
+// RabbitMQ 核心组件
+
+const concepts = {
+  Producer: '消息生产者，发送消息的应用',
+  Consumer: '消息消费者，接收消息的应用',
+  Exchange: '交换机，接收生产者发送的消息',
+  Queue: '队列，存储消息直到被消费',
+  Binding: '绑定，交换机和队列之间的关系',
+  RoutingKey: '路由键，交换机根据它路由消息',
+  VirtualHost: '虚拟主机，隔离不同环境的消息'
+};
+
+// 消息流转过程
+const flow = `
+Producer → Exchange → Queue → Consumer
+
+1. Producer 发送消息到 Exchange
+2. Exchange 根据 RoutingKey 和 Binding 规则路由消息
+3. 消息到达对应的 Queue
+4. Consumer 从 Queue 获取并处理消息
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">RabbitMQ特点</div>
+          <p>支持多种消息协议、消息确认、持久化、灵活路由、可视化管理界面。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Exchange类型</h2>
+      <div class="code-block">
+import * as amqp from 'amqplib';
+
+// 1. Direct Exchange - 直连交换机
+// 根据RoutingKey精确匹配
+async function directExchangeExample() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  // 声明交换机
+  await channel.assertExchange('direct_logs', 'direct', { durable: false });
+
+  // 声明队列
+  const q = await channel.assertQueue('', { exclusive: true });
+
+  // 绑定队列到交换机，指定routing key
+  await channel.bindQueue(q.queue, 'direct_logs', 'error');
+  await channel.bindQueue(q.queue, 'direct_logs', 'warning');
+
+  // 发送消息
+  channel.publish('direct_logs', 'error', Buffer.from('Error message'));
+  channel.publish('direct_logs', 'info', Buffer.from('Info message')); // 不会被消费
+}
+
+// 2. Fanout Exchange - 扇出交换机
+// 广播消息到所有绑定队列
+async function fanoutExchangeExample() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  await channel.assertExchange('logs', 'fanout', { durable: false });
+
+  // 广播消息到所有绑定的队列
+  channel.publish('logs', '', Buffer.from('Broadcast message'));
+}
+
+// 3. Topic Exchange - 主题交换机
+// 使用通配符匹配routing key
+async function topicExchangeExample() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  await channel.assertExchange('topic_logs', 'topic', { durable: false });
+
+  const q = await channel.assertQueue('', { exclusive: true });
+
+  // * 匹配一个单词，# 匹配多个单词
+  await channel.bindQueue(q.queue, 'topic_logs', 'user.*.error');
+  await channel.bindQueue(q.queue, 'topic_logs', 'order.#');
+
+  // 发送消息
+  channel.publish('topic_logs', 'user.login.error', Buffer.from('Login error'));
+  channel.publish('topic_logs', 'order.create.success', Buffer.from('Order created'));
+}
+
+// 4. Headers Exchange - 头部交换机
+// 根据消息头属性匹配
+async function headersExchangeExample() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  await channel.assertExchange('headers_logs', 'headers', { durable: false });
+
+  channel.publish('headers_logs', '', Buffer.from('Message'), {
+    headers: { type: 'error', service: 'user' }
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 消息确认与持久化</h2>
+      <div class="code-block">
+// 消息确认机制
+async function consumerWithAck() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  const queue = 'task_queue';
+  await channel.assertQueue(queue, { durable: true });
+
+  // 预取数量，控制并发
+  channel.prefetch(1);
+
+  channel.consume(queue, async (msg) => {
+    if (!msg) return;
+
+    try {
+      // 处理消息
+      const content = msg.content.toString();
+      console.log('Processing:', content);
+
+      // 模拟处理
+      await processMessage(content);
+
+      // 确认消息处理成功
+      channel.ack(msg);
+    } catch (error) {
+      // 处理失败，拒绝消息，重新入队
+      channel.nack(msg, false, true);
+    }
+  });
+}
+
+// 消息持久化
+async function producerWithPersistence() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createChannel();
+
+  const queue = 'task_queue';
+
+  // 队列持久化
+  await channel.assertQueue(queue, { durable: true });
+
+  // 发送持久化消息
+  channel.sendToQueue(queue, Buffer.from('Persistent message'), {
+    persistent: true,  // 消息持久化
+    deliveryMode: 2    // 持久化投递模式
+  });
+}
+
+// 发布确认
+async function publisherConfirm() {
+  const conn = await amqp.connect('amqp://localhost');
+  const channel = await conn.createConfirmChannel();
+
+  channel.sendToQueue('queue', Buffer.from('message'), {}, (err, ok) => {
+    if (err) {
+      console.error('Message not confirmed');
+    } else {
+      console.log('Message confirmed');
+    }
+  });
+
+  // 等待所有消息确认
+  await channel.waitForConfirms();
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Exchange路由消息到Queue</li>
+            <li>• 四种Exchange类型适应不同场景</li>
+            <li>• 消息确认保证消息不丢失</li>
+            <li>• 持久化保证消息和队列在重启后不丢失</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="105-1-消息队列概述.html">← 上一节：消息队列概述</a>
+      <a href="105-3-Kafka.html">下一节：Kafka →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.6 项目结构组织 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter36.html">第36章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>36.6 项目结构组织</h1>
+      <p class="subtitle">学习 Express + TypeScript 项目的最佳结构组织</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解良好的项目结构的重要性</li>
+        <li>掌握分层架构设计</li>
+        <li>学会模块化组织代码</li>
+        <li>理解配置和环境管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 推荐项目结构</h2>
+
+      <div class="code-block">
+express-ts-api/
+├── src/
+│   ├── config/                 # 配置文件
+│   │   ├── index.ts
+│   │   ├── database.ts
+│   │   └── logger.ts
+│   │
+│   ├── controllers/            # 控制器
+│   │   ├── index.ts
+│   │   ├── authController.ts
+│   │   └── userController.ts
+│   │
+│   ├── middleware/             # 中间件
+│   │   ├── index.ts
+│   │   ├── auth.ts
+│   │   ├── validate.ts
+│   │   └── errorHandler.ts
+│   │
+│   ├── models/                 # 数据模型
+│   │   ├── index.ts
+│   │   ├── User.ts
+│   │   └── Post.ts
+│   │
+│   ├── routes/                 # 路由
+│   │   ├── index.ts
+│   │   ├── authRoutes.ts
+│   │   └── userRoutes.ts
+│   │
+│   ├── services/               # 业务逻辑
+│   │   ├── index.ts
+│   │   ├── authService.ts
+│   │   └── userService.ts
+│   │
+│   ├── repositories/           # 数据访问
+│   │   ├── index.ts
+│   │   ├── userRepository.ts
+│   │   └── postRepository.ts
+│   │
+│   ├── types/                  # 类型定义
+│   │   ├── index.ts
+│   │   ├── express.d.ts
+│   │   └── api.ts
+│   │
+│   ├── utils/                  # 工具函数
+│   │   ├── index.ts
+│   │   ├── errors.ts
+│   │   └── helpers.ts
+│   │
+│   ├── validators/             # 验证器
+│   │   ├── index.ts
+│   │   └── userValidator.ts
+│   │
+│   ├── app.ts                  # Express 应用
+│   └── server.ts               # 入口文件
+│
+├── tests/                      # 测试文件
+│   ├── unit/
+│   └── integration/
+│
+├── prisma/                     # Prisma schema（可选）
+│   └── schema.prisma
+│
+├── public/                     # 静态文件
+│
+├── .env                        # 环境变量
+├── .env.example
+├── .gitignore
+├── nodemon.json
+├── tsconfig.json
+├── package.json
+└── README.md</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 分层架构</h2>
+
+      <div class="code-block">
+┌─────────────────────────────────────┐
+│            Routes                    │  路由层
+├─────────────────────────────────────┤
+│          Controllers                 │  控制器层
+├─────────────────────────────────────┤
+│           Services                   │  服务层（业务逻辑）
+├─────────────────────────────────────┤
+│         Repositories                 │  数据访问层
+├─────────────────────────────────────┤
+│           Models                     │  数据模型层
+└─────────────────────────────────────┘
+
+// 数据流向：
+// Request -> Route -> Controller -> Service -> Repository -> Model -> Database
+// Response <- Route <- Controller <- Service <- Repository <- Model</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> 核心文件示例</h2>
+
+      <h3>app.ts - Express 应用配置</h3>
+      <div class="code-block">
+// src/app.ts
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import { errorHandler } from './middleware/errorHandler';
+import routes from './routes';
+
+const app = express();
+
+// 安全中间件
+app.use(helmet());
+app.use(cors());
+
+// 解析中间件
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 压缩
+app.use(compression());
+
+// 静态文件
+app.use('/static', express.static('public'));
+
+// API 路由
+app.use('/api', routes);
+
+// 404 处理
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+// 错误处理
+app.use(errorHandler);
+
+export default app;</div>
+
+      <h3>server.ts - 入口文件</h3>
+      <div class="code-block">
+// src/server.ts
+import 'dotenv/config';
+import app from './app';
+import { connectDatabase } from './config/database';
+import logger from './config/logger';
+
+const PORT = process.env.PORT || 3000;
+
+async function startServer() {
+  try {
+    // 连接数据库
+    await connectDatabase();
+
+    // 启动服务器
+    app.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV}`);
+    });
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();</div>
+
+      <h3>路由汇总</h3>
+      <div class="code-block">
+// src/routes/index.ts
+import { Router } from 'express';
+import authRoutes from './authRoutes';
+import userRoutes from './userRoutes';
+import postRoutes from './postRoutes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/posts', postRoutes);
+
+// 健康检查
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+export default router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置管理</h2>
+
+      <div class="code-block">
+// src/config/index.ts
+import 'dotenv/config';
+
+interface Config {
+  port: number;
+  env: string;
+  database: {
+    url: string;
+  };
+  jwt: {
+    secret: string;
+    expiresIn: string;
+  };
+  cors: {
+    origin: string | string[];
+  };
+}
+
+const config: Config = {
+  port: parseInt(process.env.PORT || '3000', 10),
+  env: process.env.NODE_ENV || 'development',
+  database: {
+    url: process.env.DATABASE_URL || ''
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'secret',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  },
+  cors: {
+    origin: process.env.CORS_ORIGIN?.split(',') || '*'
+  }
+};
+
+export default config;
+
+// .env.example
+PORT=3000
+NODE_ENV=development
+DATABASE_URL=mongodb://localhost:27017/myapp
+JWT_SECRET=your-secret-key
+JWT_EXPIRES_IN=7d
+CORS_ORIGIN=http://localhost:3000</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整分层示例</h2>
+
+      <div class="code-block">
+// src/repositories/userRepository.ts
+import { User, CreateUserInput, UpdateUserInput } from '../types';
+import User from '../models/User';
+
+export class UserRepository {
+  async findAll(page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      User.find().skip(skip).limit(limit),
+      User.countDocuments()
+    ]);
+    return { users, total };
+  }
+
+  async findById(id: string) {
+    return User.findById(id);
+  }
+
+  async create(data: CreateUserInput) {
+    return User.create(data);
+  }
+
+  async update(id: string, data: UpdateUserInput) {
+    return User.findByIdAndUpdate(id, data, { new: true });
+  }
+
+  async delete(id: string) {
+    return User.findByIdAndDelete(id);
+  }
+}
+
+export default new UserRepository();
+
+// src/services/userService.ts
+import userRepository from '../repositories/userRepository';
+import { NotFoundError, ConflictError } from '../utils/errors';
+
+export class UserService {
+  async getUsers(page: number, limit: number) {
+    return userRepository.findAll(page, limit);
+  }
+
+  async getUserById(id: string) {
+    const user = await userRepository.findById(id);
+    if (!user) throw new NotFoundError('User');
+    return user;
+  }
+
+  async createUser(data: CreateUserInput) {
+    const existing = await User.findOne({ email: data.email });
+    if (existing) throw new ConflictError('Email already exists');
+    return userRepository.create(data);
+  }
+
+  async updateUser(id: string, data: UpdateUserInput) {
+    const user = await userRepository.update(id, data);
+    if (!user) throw new NotFoundError('User');
+    return user;
+  }
+
+  async deleteUser(id: string) {
+    const user = await userRepository.delete(id);
+    if (!user) throw new NotFoundError('User');
+    return true;
+  }
+}
+
+export default new UserService();
+
+// src/controllers/userController.ts
+import { Request, Response, NextFunction } from 'express';
+import userService from '../services/userService';
+import { asyncHandler } from '../utils/asyncHandler';
+
+export const getUsers = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const result = await userService.getUsers(Number(page), Number(limit));
+  res.json(result);
+});
+
+export const getUser = asyncHandler(async (req, res) => {
+  const user = await userService.getUserById(req.params.id);
+  res.json(user);
+});
+
+export const createUser = asyncHandler(async (req, res) => {
+  const user = await userService.createUser(req.body);
+  res.status(201).json(user);
+});
+
+export const updateUser = asyncHandler(async (req, res) => {
+  const user = await userService.updateUser(req.params.id, req.body);
+  res.json(user);
+});
+
+export const deleteUser = asyncHandler(async (req, res) => {
+  await userService.deleteUser(req.params.id);
+  res.status(204).send();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>分层架构：Routes -> Controllers -> Services -> Repositories -> Models</li>
+            <li>配置集中管理，使用环境变量</li>
+            <li>类型定义放在 types 目录</li>
+            <li>中间件、验证器、工具函数分模块组织</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="36-5-错误类型处理.html">← 上一节：错误类型处理</a>
+      <a href="../chapter37/37-1-Koa基础.html">下一章：Koa 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

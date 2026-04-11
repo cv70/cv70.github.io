@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.1 Schema 定义 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-schema定义.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.1 Schema 定义</h1>
+      <p class="subtitle">使用 Mongoose 定义文档结构</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Mongoose Schema 的作用</li>
+        <li>掌握字段类型定义</li>
+        <li>学会验证规则配置</li>
+        <li>了解 Schema 选项设置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Mongoose 简介</h2>
+      <p>Mongoose 是 MongoDB 的对象数据建模（ODM）库，为 Node.js 应用提供类型安全的 Schema 定义、数据验证、查询构建等功能。</p>
+
+      <div class="code-block">
+// 安装 Mongoose
+npm install mongoose
+
+// 核心概念：
+// Schema   - 定义文档结构和验证规则
+// Model    - Schema 的编译版本，用于操作数据库
+// Document - Model 的实例，代表一个文档
+
+// 基本使用流程
+// 1. 定义 Schema
+// 2. 创建 Model
+// 3. 使用 Model 进行 CRUD 操作
+
+// Mongoose vs 原生 MongoDB 驱动
+├── Schema 强类型定义
+├── 内置数据验证
+├── 中间件支持
+├── 关联查询简化
+└── 更好的 TypeScript 支持
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义 Schema</h2>
+      <div class="code-block">
+import mongoose from 'mongoose';
+
+// 基本定义
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  age: Number,
+});
+
+// 详细定义
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    minlength: 2,
+    maxlength: 50,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  },
+  age: {
+    type: Number,
+    min: 0,
+    max: 150,
+    default: 0,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'banned'],
+    default: 'active',
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+// 创建 Model
+const User = mongoose.model('User', userSchema);
+
+// TypeScript 类型定义
+interface IUser {
+  name: string;
+  email: string;
+  age?: number;
+  status?: 'active' | 'inactive' | 'banned';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 带类型的 Schema
+const userSchema = new mongoose.Schema<IUser>({
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  age: { type: Number },
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'banned'] as const,
+    default: 'active',
+  },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const User = mongoose.model<IUser>('User', userSchema);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Schema vs Model</div>
+          <p>Schema 定义文档的结构和验证规则，Model 是 Schema 的编译版本，用于操作数据库。一个 Schema 可以创建多个 Model。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 字段类型</h2>
+      <div class="code-block">
+// 支持的字段类型
+String      - 字符串
+Number      - 数字
+Boolean     - 布尔值
+Date        - 日期
+ObjectId    - MongoDB ObjectId
+Array       - 数组
+Map         - Map 类型
+Buffer      - 二进制数据
+Decimal128  - 高精度小数
+Mixed       - 任意类型
+
+// 示例
+const schema = new mongoose.Schema({
+  name: String,
+  age: Number,
+  active: Boolean,
+  birthday: Date,
+  avatar: Buffer,
+  tags: [String],           // 字符串数组
+  scores: [Number],         // 数字数组
+  metadata: mongoose.Schema.Types.Mixed,  // 任意类型
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+    },
+    coordinates: [Number],
+  },
+});
+
+// 嵌套 Schema
+const addressSchema = new mongoose.Schema({
+  city: String,
+  street: String,
+  zip: String,
+});
+
+const userSchema = new mongoose.Schema({
+  name: String,
+  address: addressSchema,  // 嵌套 Schema
+});
+
+// 数组嵌套对象
+const orderSchema = new mongoose.Schema({
+  items: [{
+    product: String,
+    quantity: Number,
+    price: Number,
+  }],
+});
+
+// ObjectId 引用
+const postSchema = new mongoose.Schema({
+  title: String,
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',  // 引用 User Model
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 验证规则</h2>
+      <div class="code-block">
+// 字符串验证
+{
+  name: {
+    type: String,
+    required: [true, '姓名必填'],  // 自定义错误信息
+    minlength: [2, '姓名至少 2 个字符'],
+    maxlength: [50, '姓名最多 50 个字符'],
+    trim: true,      // 去除首尾空格
+    lowercase: true, // 转小写
+    uppercase: true, // 转大写
+    match: [/^[a-zA-Z]+$/, '只能包含字母'],
+    enum: {
+      values: ['admin', 'user', 'guest'],
+      message: '{VALUE} 不是有效的角色',
+    },
+  }
+}
+
+// 数字验证
+{
+  age: {
+    type: Number,
+    min: [0, '年龄不能小于 0'],
+    max: [150, '年龄不能超过 150'],
+  },
+  price: {
+    type: Number,
+    min: 0,
+    validate: {
+      validator: function(v: number) {
+        return v >= 0 && v <= 1000000;
+      },
+      message: '价格必须在 0 到 1000000 之间',
+    },
+  }
+}
+
+// 自定义验证器
+const userSchema = new mongoose.Schema({
+  phone: {
+    type: String,
+    validate: {
+      validator: function(v: string) {
+        return /^1[3-9]\d{9}$/.test(v);  // 中国手机号
+      },
+      message: props => `${props.value} 不是有效的手机号`,
+    },
+  },
+  confirmPassword: {
+    type: String,
+    validate: {
+      validator: function(this: any, v: string) {
+        return v === this.password;
+      },
+      message: '两次密码不一致',
+    },
+  },
+});
+
+// 异步验证
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    validate: {
+      validator: async function(v: string) {
+        const user = await User.findOne({ email: v });
+        return !user;  // 邮箱不存在时验证通过
+      },
+      message: '邮箱已被使用',
+    },
+  },
+});
+
+// 条件必填
+{
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
+  adminKey: {
+    type: String,
+    required: function(this: any) {
+      return this.role === 'admin';  // admin 角色时必填
+    },
+  },
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Schema 定义文档结构和验证规则</li>
+            <li>• Model 是 Schema 的编译版本</li>
+            <li>• 支持丰富的字段类型和验证规则</li>
+            <li>• 自定义验证器可实现复杂验证逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter27/27-4-聚合管道.html">← 上一章：聚合管道</a>
+      <a href="28-2-model操作.html">下一节：Model 操作 →</a>
+    </div>
+  </div>
+</body>
+</html>

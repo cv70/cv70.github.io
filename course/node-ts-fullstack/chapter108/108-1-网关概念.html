@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>108.1 网关概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="108-1-网关概念.html">第108章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>108.1 网关概念</h1>
+      <p class="subtitle">API网关的核心功能与价值</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解API网关的定义和作用</li>
+        <li>掌握网关的核心功能</li>
+        <li>了解网关的应用场景</li>
+        <li>认识常见的网关产品</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是API网关？</h2>
+      <div class="code-block">
+// API网关是系统的统一入口
+
+// 没有网关的架构
+/*
+Client -----> User Service (3001)
+Client -----> Order Service (3002)
+Client -----> Product Service (3003)
+
+问题：
+1. 客户端需要知道所有服务地址
+2. 跨域问题
+3. 认证需要在每个服务重复实现
+4. 限流、监控分散
+*/
+
+// 有网关的架构
+/*
+Client -----> API Gateway -----> User Service
+                           -----> Order Service
+                           -----> Product Service
+
+优势：
+1. 统一入口，简化客户端
+2. 统一认证授权
+3. 统一限流熔断
+4. 统一监控日志
+*/
+
+// 网关核心功能
+const coreFeatures = {
+  routing: '请求路由，根据路径转发到不同服务',
+  loadBalancing: '负载均衡，分发请求到多个实例',
+  authentication: '认证授权，统一鉴权入口',
+  rateLimiting: '限流控制，保护后端服务',
+  circuitBreaking: '熔断降级，防止雪崩',
+  caching: '缓存响应，提升性能',
+  logging: '日志记录，统一收集',
+  monitoring: '监控统计，性能分析'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">网关价值</div>
+          <p>统一入口、简化客户端、集中治理、安全防护、性能优化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 网关核心功能详解</h2>
+      <div class="code-block">
+// 1. 请求路由
+const routingConfig = {
+  routes: [
+    {
+      path: '/api/users/*',
+      service: 'user-service',
+      rewrite: '/users/$1'
+    },
+    {
+      path: '/api/orders/*',
+      service: 'order-service'
+    },
+    {
+      path: '/api/products/*',
+      service: 'product-service'
+    }
+  ]
+};
+
+// 2. 负载均衡
+const loadBalancing = {
+  algorithms: {
+    roundRobin: '轮询，依次分配',
+    weightedRoundRobin: '加权轮询，根据权重分配',
+    leastConnections: '最少连接，分配给连接最少的服务',
+    ipHash: 'IP哈希，同一IP分配到同一服务'
+  }
+};
+
+// 3. 认证授权
+async function authenticationMiddleware(req, res, next) {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const user = await verifyToken(token);
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// 4. 限流控制
+class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+
+  async check(key: string, limit: number, window: number): Promise<boolean> {
+    const now = Date.now();
+    const requests = this.requests.get(key) || [];
+
+    // 过滤窗口外的请求
+    const validRequests = requests.filter(t => now - t < window);
+
+    if (validRequests.length >= limit) {
+      return false;  // 超过限制
+    }
+
+    validRequests.push(now);
+    this.requests.set(key, validRequests);
+
+    return true;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 常见网关产品</h2>
+      <div class="code-block">
+// 主流API网关对比
+
+const gateways = {
+  Kong: {
+    language: 'Lua (基于Nginx)',
+    features: ['插件丰富', '高性能', '云原生', '易于扩展'],
+    deployment: 'Docker, Kubernetes',
+    ui: '有管理界面'
+  },
+  APISIX: {
+    language: 'Lua (基于Nginx/OpenResty)',
+    features: ['动态路由', '插件热加载', '性能优秀'],
+    deployment: 'Docker, Kubernetes',
+    company: 'Apache'
+  },
+  Nginx: {
+    language: 'C',
+    features: ['高性能', '配置简单', '广泛使用'],
+    deployment: '任意环境',
+    ui: '无（需第三方管理工具）'
+  },
+  Spring Cloud Gateway: {
+    language: 'Java',
+    features: ['Spring生态集成', '响应式编程'],
+    deployment: 'JVM应用',
+    ui: '无'
+  },
+  Express Gateway: {
+    language: 'Node.js',
+    features: ['JavaScript生态', '易于定制'],
+    deployment: 'Node.js应用',
+    ui: '有管理界面'
+  }
+};
+
+// 选择建议
+const selectionGuide = {
+  性能优先: 'Kong, APISIX, Nginx',
+  Java生态: 'Spring Cloud Gateway',
+  Node生态: 'Express Gateway',
+  云原生: 'Kong, APISIX',
+  国产化: 'APISIX'
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 网关是系统的统一入口</li>
+            <li>• 提供路由、认证、限流等核心功能</li>
+            <li>• 简化客户端，集中服务治理</li>
+            <li>• Kong、APISIX是主流选择</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter107/107-5-健康检查.html">← 上一章：健康检查</a>
+      <a href="108-2-Kong网关.html">下一节：Kong 网关 →</a>
+    </div>
+  </div>
+</body>
+</html>

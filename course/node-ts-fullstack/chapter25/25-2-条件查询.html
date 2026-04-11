@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.2 条件查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="25-1-querybuilder.html">第二十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>25.2 条件查询</h1>
+      <p class="subtitle">构建灵活的查询条件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握各种条件表达式</li>
+        <li>学会动态条件构建</li>
+        <li>了解 FindOptions 查询方式</li>
+        <li>熟悉条件运算符的使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基础条件操作符</h2>
+      <div class="code-block">
+import { FindOperator, Equal, Not, In, Like, Between, IsNull } from 'typeorm';
+
+// 使用 FindOptions 方式
+const users = await userRepository.find({
+  where: {
+    // 等于
+    status: Equal('active'),
+
+    // 不等于
+    status: Not('banned'),
+
+    // IN 查询
+    id: In([1, 2, 3]),
+
+    // LIKE 查询
+    username: Like('%alice%'),
+
+    // BETWEEN 范围
+    age: Between(18, 30),
+
+    // IS NULL
+    deletedAt: IsNull(),
+
+    // 大于/小于
+    age: MoreThan(18),
+    age: MoreThanOrEqual(18),
+    age: LessThan(30),
+    age: LessThanOrEqual(30),
+
+    // 模糊匹配（不区分大小写）
+    username: ILike('%alice%'),
+  },
+});
+
+// 简写形式
+const users = await userRepository.find({
+  where: {
+    status: 'active',           // 自动转为 Equal
+    age: MoreThan(18),
+    id: In([1, 2, 3]),
+  },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> QueryBuilder 条件</h2>
+      <div class="code-block">
+// 基础 WHERE
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .getMany();
+
+// AND 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .andWhere('user.age >= :minAge', { minAge: 18 })
+  .getMany();
+
+// OR 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .orWhere('user.role = :role', { role: 'admin' })
+  .getMany();
+
+// EXISTS 子查询
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where((qb) => {
+    const subQuery = qb
+      .subQuery()
+      .select('order.user_id')
+      .from(Order, 'order')
+      .where('order.amount > :amount')
+      .getQuery();
+    return 'user.id IN ' + subQuery;
+  })
+  .setParameter('amount', 1000)
+  .getMany();
+
+// IN 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.id IN (:...ids)', { ids: [1, 2, 3] })
+  .getMany();
+
+// BETWEEN 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.age BETWEEN :min AND :max', { min: 18, max: 30 })
+  .getMany();
+
+// LIKE 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.username LIKE :keyword', { keyword: '%alice%' })
+  .getMany();
+
+// IS NULL / IS NOT NULL
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.deletedAt IS NULL')
+  .getMany();
+
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.phone IS NOT NULL')
+  .getMany();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 动态条件构建</h2>
+      <div class="code-block">
+// 根据参数动态添加条件
+interface UserQuery {
+  status?: string;
+  minAge?: number;
+  maxAge?: number;
+  keyword?: string;
+}
+
+async function searchUsers(query: UserQuery) {
+  const qb = userRepository.createQueryBuilder('user');
+
+  if (query.status) {
+    qb.andWhere('user.status = :status', { status: query.status });
+  }
+
+  if (query.minAge !== undefined) {
+    qb.andWhere('user.age >= :minAge', { minAge: query.minAge });
+  }
+
+  if (query.maxAge !== undefined) {
+    qb.andWhere('user.age <= :maxAge', { maxAge: query.maxAge });
+  }
+
+  if (query.keyword) {
+    qb.andWhere(
+      '(user.username LIKE :keyword OR user.email LIKE :keyword)',
+      { keyword: `%${query.keyword}%` }
+    );
+  }
+
+  return qb.getMany();
+}
+
+// 使用 Brackets 构建复杂动态条件
+import { Brackets } from 'typeorm';
+
+async function searchUsersAdvanced(filters: any) {
+  const qb = userRepository.createQueryBuilder('user');
+
+  // 根据条件添加 OR 块
+  if (filters.searchBy === 'name') {
+    qb.andWhere(
+      new Brackets((subQb) => {
+        subQb
+          .where('user.firstName LIKE :keyword', { keyword: `%${filters.keyword}%` })
+          .orWhere('user.lastName LIKE :keyword', { keyword: `%${filters.keyword}%` });
+      })
+    );
+  }
+
+  if (filters.searchBy === 'email') {
+    qb.andWhere('user.email LIKE :keyword', { keyword: `%${filters.keyword}%` });
+  }
+
+  return qb.getMany();
+}
+
+// 使用条件对象
+const where: any = {};
+
+if (status) {
+  where.status = status;
+}
+
+if (minAge || maxAge) {
+  where.age = Between(minAge || 0, maxAge || 100);
+}
+
+const users = await userRepository.find({ where });
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">动态条件最佳实践</div>
+          <p>对于简单条件，使用 FindOptions 更简洁；对于复杂动态条件，QueryBuilder 更灵活。使用参数绑定而非字符串拼接，防止 SQL 注入。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 多条件组合</h2>
+      <div class="code-block">
+// AND 组合 - FindOptions
+const users = await userRepository.find({
+  where: {
+    status: 'active',
+    age: MoreThan(18),
+  },
+});
+
+// OR 组合 - FindOptions（多个 where 对象）
+const users = await userRepository.find({
+  where: [
+    { status: 'active' },
+    { role: 'admin' },
+  ],
+});
+
+// 生成的 SQL
+// SELECT * FROM users WHERE status = 'active' OR role = 'admin'
+
+// 复杂组合 - QueryBuilder
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where(
+    new Brackets((qb) => {
+      qb.where('user.status = :status', { status: 'active' })
+        .andWhere('user.age >= :age', { age: 18 });
+    })
+  )
+  .orWhere(
+    new Brackets((qb) => {
+      qb.where('user.role = :role', { role: 'admin' })
+        .andWhere('user.verified = :verified', { verified: true });
+    })
+  )
+  .getMany();
+
+// 生成的 SQL
+// WHERE (user.status = 'active' AND user.age >= 18)
+//    OR (user.role = 'admin' AND user.verified = true)
+
+// NOT 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status != :status', { status: 'banned' })
+  .andWhere('NOT user.email IS NULL')
+  .getMany();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• FindOperator 提供丰富的条件操作符</li>
+            <li>• FindOptions 适合简单查询条件</li>
+            <li>• QueryBuilder 适合复杂动态条件</li>
+            <li>• 使用 Brackets 构建复杂组合条件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="25-1-querybuilder.html">← 上一节：QueryBuilder</a>
+      <a href="25-3-分页查询.html">下一节：分页查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

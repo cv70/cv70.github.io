@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>96.3 连接池配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="96-1-索引优化.html">第九十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>96.3 连接池配置</h1>
+      <p class="subtitle">数据库连接池优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解连接池的作用</li>
+        <li>掌握连接池配置参数</li>
+        <li>学会监控和调优</li>
+        <li>了解常见问题与解决</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 连接池概述</h2>
+      <div class="code-block">
+# 为什么需要连接池
+
+## 没有连接池时
+每个请求都要创建新连接
+├── TCP 三次握手
+├── 认证授权
+└── 建立会话
+耗时：几十到几百毫秒
+
+## 使用连接池
+连接预先创建并复用
+├── 连接创建一次
+├── 请求复用连接
+└── 连接保持活跃
+耗时：几乎为零
+
+# 连接池工作原理
+
+                    应用请求
+                       │
+                       ▼
+┌─────────────────────────────────────┐
+│            Connection Pool          │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐  │
+│  │ C1  │ │ C2  │ │ C3  │ │ C4  │  │
+│  └─────┘ └─────┘ └─────┘ └─────┘  │
+│      ↑       ↑       ↑      ↑     │
+│   idle   active  active  idle     │
+└─────────────────────────────────────┘
+                       │
+                       ▼
+                    数据库
+
+# 连接池优势
+- 减少连接创建开销
+- 控制连接数量
+- 复用连接资源
+- 提高响应速度
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 连接池配置</h2>
+      <div class="code-block">
+# MySQL 连接池配置
+
+import mysql from 'mysql2/promise';
+
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  password: 'password',
+  database: 'mydb',
+
+  // 连接池大小
+  connectionLimit: 20,      // 最大连接数
+  waitForConnections: true, // 连接用尽时是否等待
+
+  // 连接超时
+  connectTimeout: 10000,    // 连接超时 10s
+  acquireTimeout: 30000,    // 获取连接超时 30s
+
+  // 连接维护
+  queueLimit: 0,            // 等待队列长度（0 = 无限）
+  idleTimeout: 60000,       // 空闲连接超时
+
+  // 连接测试
+  testOnBorrow: true,       // 获取时测试连接
+});
+
+# PostgreSQL 连接池配置
+
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  host: 'localhost',
+  user: 'postgres',
+  password: 'password',
+  database: 'mydb',
+
+  // 连接池大小
+  max: 20,                  // 最大连接数
+  min: 2,                   // 最小连接数
+
+  // 超时设置
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+
+  // 连接测试
+  allowExitOnIdle: false,
+});
+
+# Prisma 连接池配置
+
+// schema.prisma
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// DATABASE_URL 格式
+DATABASE_URL="mysql://user:password@localhost:3306/mydb?connection_limit=20&pool_timeout=30"
+
+// 代码中配置
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+});
+
+# TypeORM 连接池配置
+
+import { createConnection } from 'typeorm';
+
+createConnection({
+  type: 'mysql',
+  host: 'localhost',
+  username: 'root',
+  password: 'password',
+  database: 'mydb',
+
+  // 连接池配置
+  connectionLimit: 20,
+  poolSize: 20,
+
+  // 连接管理
+  extra: {
+    connectionLimit: 20,
+    waitForConnections: true,
+    queueLimit: 0,
+  },
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">连接数计算</div>
+          <p>最大连接数 = (数据库最大连接数 - 预留连接) / 应用实例数。例如数据库最大 100 连接，预留 10，应用 4 实例，每个实例最大 (100-10)/4 ≈ 22。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 连接池监控</h2>
+      <div class="code-block">
+# 监控连接池状态
+
+// MySQL2 连接池状态
+const pool = mysql.createPool({ /* ... */ });
+
+setInterval(() => {
+  // 获取连接池状态
+  console.log({
+    totalConnections: pool.pool._allConnections.length,
+    freeConnections: pool.pool._freeConnections.length,
+    queuedRequests: pool.pool._connectionQueue.length,
+  });
+}, 60000);
+
+// PostgreSQL 连接池状态
+const pgPool = new Pool({ /* ... */ });
+
+setInterval(() => {
+  console.log({
+    totalCount: pgPool.totalCount,      // 总连接数
+    idleCount: pgPool.idleCount,        // 空闲连接数
+    waitingCount: pgPool.waitingCount,  // 等待获取连接的请求数
+  });
+}, 60000);
+
+# 连接池事件监听
+
+pgPool.on('connect', (client) => {
+  console.log('New client connected');
+});
+
+pgPool.on('acquire', (client) => {
+  console.log('Client acquired from pool');
+});
+
+pgPool.on('release', (client) => {
+  console.log('Client released back to pool');
+});
+
+pgPool.on('remove', (client) => {
+  console.log('Client removed from pool');
+});
+
+pgPool.on('error', (err, client) => {
+  console.error('Pool error:', err);
+});
+
+# 数据库服务端监控
+
+-- MySQL 查看连接数
+SHOW STATUS LIKE 'Threads_connected';
+SHOW STATUS LIKE 'Max_used_connections';
+SHOW VARIABLES LIKE 'max_connections';
+
+-- 查看当前连接
+SHOW PROCESSLIST;
+
+-- PostgreSQL
+SELECT count(*) FROM pg_stat_activity;
+SELECT * FROM pg_stat_activity;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 常见问题与解决</h2>
+      <div class="code-block">
+# 1. 连接泄漏
+
+// 问题：获取连接后没有释放
+const conn = await pool.getConnection();
+// 使用连接...
+// 忘记 release()
+
+// 解决：使用 try-finally
+const conn = await pool.getConnection();
+try {
+  await conn.query('SELECT ...');
+} finally {
+  conn.release();  // 确保释放
+}
+
+// 或使用 with 模式（自动释放）
+const result = await pool.execute(async (conn) => {
+  return await conn.query('SELECT ...');
+});
+
+# 2. 连接池耗尽
+
+// 问题：并发高峰期连接不够
+Error: Too many connections
+
+// 解决方案
+1. 增加连接池大小
+2. 优化查询，减少连接占用时间
+3. 实现请求排队等待
+4. 增加数据库服务器
+
+# 3. 连接超时
+
+// 问题：连接空闲过久被断开
+Error: Connection lost
+
+// 解决方案
+// 定期发送保活查询
+setInterval(async () => {
+  await pool.query('SELECT 1');
+}, 30000);
+
+// 或配置连接测试
+const pool = mysql.createPool({
+  // ...
+  testOnBorrow: true,
+});
+
+# 4. 连接重置
+
+// 应用启动时清理旧连接
+async function initPool() {
+  await pool.end();  // 关闭旧连接池
+
+  // 创建新连接池
+  const newPool = mysql.createPool({ /* ... */ });
+
+  return newPool;
+}
+
+// 优雅关闭
+process.on('SIGTERM', async () => {
+  await pool.end();
+  process.exit(0);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 连接池复用连接，减少创建开销</li>
+            <li>• 合理配置连接池大小</li>
+            <li>• 监控连接池状态及时发现问题</li>
+            <li>• 确保连接正确释放</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="96-2-查询优化.html">← 上一节：查询优化</a>
+      <a href="96-4-读写分离.html">下一节：读写分离 →</a>
+    </div>
+  </div>
+</body>
+</html>

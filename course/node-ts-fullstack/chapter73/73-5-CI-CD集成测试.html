@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>73.5 CI/CD 集成测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="73-4-测试数据管理.html">上一节</a></li>
+      <li><a href="../index.html">返回课程首页</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>73.5 CI/CD 集成测试</h1>
+      <p class="subtitle">第十部分：测试篇 - 将测试集成到持续集成流程</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> CI/CD 测试概述</h2>
+      <p>将测试集成到 CI/CD 流水线中，确保每次代码提交都经过自动化测试验证。</p>
+
+      <div class="image-container">
+        <div style="background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%); padding: 2rem; text-align: center;">
+          <div style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div style="padding: 1rem 2rem; background: #3b82f6; color: white; border-radius: 0.5rem; font-weight: bold;">代码提交</div>
+            <div style="font-size: 1.5rem;">→</div>
+            <div style="padding: 1rem 2rem; background: #10b981; color: white; border-radius: 0.5rem; font-weight: bold;">运行测试</div>
+            <div style="font-size: 1.5rem;">→</div>
+            <div style="padding: 1rem 2rem; background: #f59e0b; color: white; border-radius: 0.5rem; font-weight: bold;">生成报告</div>
+            <div style="font-size: 1.5rem;">→</div>
+            <div style="padding: 1rem 2rem; background: #8b5cf6; color: white; border-radius: 0.5rem; font-weight: bold;">部署</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> GitHub Actions 配置</h2>
+
+      <div class="code-block"># .github/workflows/test.yml
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test -- --coverage
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Jest CI 配置</h2>
+
+      <div class="code-block">// jest.config.ts
+export default {
+  // CI 环境下优化
+  maxWorkers: process.env.CI ? 2 : '50%',
+
+  // 在 CI 中启用覆盖率
+  collectCoverage: process.env.CI === 'true',
+
+  // 失败时立即退出
+  bail: process.env.CI ? 1 : 0,
+
+  // 静默输出（CI 中减少日志）
+  silent: process.env.CI === 'true',
+
+  // 详细输出
+  verbose: process.env.CI !== 'true',
+
+  // 报告格式
+  reporters: process.env.CI
+    ? ['default', ['jest-junit', { outputDirectory: './reports' }]]
+    : ['default']
+};</div>
+
+      <h3>package.json scripts</h3>
+      <div class="code-block">{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "test:e2e": "jest --config ./test/jest-e2e.json"
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> Docker 测试环境</h2>
+
+      <div class="code-block"># Dockerfile.test
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+CMD ["npm", "run", "test:ci"]</div>
+
+      <div class="code-block"># docker-compose.test.yml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      - db
+      - redis
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=postgresql://test:test@db:5432/test_db
+      - REDIS_URL=redis://redis:6379
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+      - POSTGRES_DB=test_db
+
+  redis:
+    image: redis:7</div>
+
+      <div class="code-block"># 运行测试
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from app</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 测试报告</h2>
+
+      <div class="code-block">// 安装报告工具
+npm install --save-dev jest-junit jest-html-reporter
+
+// jest.config.ts
+export default {
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: './reports/junit',
+      outputName: 'junit.xml'
+    }],
+    ['jest-html-reporter', {
+      pageTitle: 'Test Report',
+      outputPath: './reports/test-report.html',
+      includeFailureMsg: true
+    }]
+  ]
+};</div>
+
+      <h3>GitHub Actions 上传报告</h3>
+      <div class="code-block">- name: Upload test results
+  uses: actions/upload-artifact@v3
+  if: always()
+  with:
+    name: test-results
+    path: |
+      reports/
+      coverage/</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 覆盖率检查</h2>
+
+      <div class="code-block">{
+  "jest": {
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    }
+  }
+}</div>
+
+      <h3>Codecov 集成</h3>
+      <div class="code-block"># .github/workflows/test.yml
+- name: Upload to Codecov
+  uses: codecov/codecov-action@v3
+  with:
+    token: ${{ secrets.CODECOV_TOKEN }}
+    files: ./coverage/lcov.info
+    flags: unittests
+    name: codecov-umbrella
+    fail_ci_if_error: true</div>
+
+      <div class="code-block">[![codecov](https://codecov.io/gh/user/repo/branch/main/graph/badge.svg)](https://codecov.io/gh/user/repo)</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 测试最佳实践清单</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">CI 配置</h3>
+          <ul class="feature-list">
+            <li>使用矩阵测试多版本</li>
+            <li>缓存依赖加速构建</li>
+            <li>并行运行测试</li>
+            <li>生成和上传报告</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">测试编写</h3>
+          <ul class="feature-list">
+            <li>测试应该快速执行</li>
+            <li>避免测试间的依赖</li>
+            <li>使用环境变量配置</li>
+            <li>合理的超时设置</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 完整 CI 配置示例</h2>
+
+      <div class="code-block"># .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  test-unit:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:ci
+      - uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:e2e
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-e2e]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to production
+        run: echo "Deploying to production..."</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 GitHub Actions 自动化测试流程</li>
+            <li>配置服务容器提供数据库等依赖</li>
+            <li>使用矩阵策略测试多个 Node.js 版本</li>
+            <li>生成测试报告和覆盖率报告</li>
+            <li>集成 Codecov 等工具追踪覆盖率变化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="73-4-测试数据管理.html">← 上一节：测试数据管理</a>
+      <a href="../index.html">返回课程首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65.2 连接管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="65-1-浏览器客户端.html">第六十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>65.2 连接管理</h1>
+      <p class="subtitle">客户端连接状态与生命周期</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Socket.IO 客户端的连接生命周期</li>
+        <li>掌握手动连接和断开的方法</li>
+        <li>学会管理多个命名空间连接</li>
+        <li>了解连接状态监控技巧</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 连接生命周期</h2>
+
+      <div class="steps">
+        <div class="step active">
+          <div class="step-number">1</div>
+          <div class="step-label">创建实例</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">2</div>
+          <div class="step-label">建立连接</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">3</div>
+          <div class="step-label">通信阶段</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">4</div>
+          <div class="step-label">断开连接</div>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top: 2rem;">
+// 生命周期事件
+socket.on('connect', () => {
+  console.log('连接成功');
+  console.log('Socket ID:', socket.id);
+});
+
+socket.on('connect_error', (error) => {
+  console.error('连接错误:', error.message);
+});
+
+socket.on('disconnect', (reason) => {
+  console.log('断开连接:', reason);
+});
+
+socket.on('reconnect_attempt', (attempt) => {
+  console.log('重连尝试:', attempt);
+});
+
+socket.on('reconnect', (attempt) => {
+  console.log('重连成功:', attempt);
+});
+
+socket.on('reconnect_error', (error) => {
+  console.error('重连错误:', error);
+});
+
+socket.on('reconnect_failed', () => {
+  console.error('重连失败，已达最大次数');
+});
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 手动连接控制</h2>
+
+      <div class="card">
+        <h3 class="card-title">延迟连接</h3>
+        <div class="code-block">
+// 禁用自动连接
+const socket = io('http://localhost:3000', {
+  autoConnect: false
+});
+
+// 在需要时手动连接
+document.getElementById('connectBtn').addEventListener('click', () => {
+  socket.connect();
+});
+
+// 断开连接
+document.getElementById('disconnectBtn').addEventListener('click', () => {
+  socket.disconnect();
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">条件连接</h3>
+        <div class="code-block">
+// 等待用户登录后再连接
+const socket = io('http://localhost:3000', {
+  autoConnect: false
+});
+
+async function login(username: string, password: string) {
+  const response = await fetch('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password })
+  });
+
+  const { token } = await response.json();
+
+  // 设置认证信息后连接
+  socket.auth = { token };
+  socket.connect();
+
+  localStorage.setItem('token', token);
+}
+
+// 页面刷新时自动连接
+const savedToken = localStorage.getItem('token');
+if (savedToken) {
+  socket.auth = { token: savedToken };
+  socket.connect();
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔁</span> 重连机制</h2>
+
+      <div class="card">
+        <h3 class="card-title">重连配置</h3>
+        <div class="code-block">
+const socket = io('http://localhost:3000', {
+  // 重连配置
+  reconnection: true,              // 启用自动重连
+  reconnectionAttempts: 10,        // 最大重连次数
+  reconnectionDelay: 1000,         // 初始重连延迟
+  reconnectionDelayMax: 5000,      // 最大重连延迟
+  randomizationFactor: 0.5,        // 随机化因子（避免同时重连）
+
+  // 指数退避重连
+  // 第1次: 1000ms
+  // 第2次: 1000 * (1 + 0.5) = 1500ms
+  // 第3次: 1500 * (1 + 0.5) = 2250ms
+  // ...直到达到 reconnectionDelayMax
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">自定义重连逻辑</h3>
+        <div class="code-block">
+const socket = io('http://localhost:3000', {
+  reconnection: false  // 禁用默认重连
+});
+
+let reconnectAttempts = 0;
+const maxAttempts = 5;
+const baseDelay = 1000;
+
+function attemptReconnect() {
+  if (reconnectAttempts >= maxAttempts) {
+    console.error('重连失败');
+    showOfflineMessage();
+    return;
+  }
+
+  reconnectAttempts++;
+  const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts - 1), 30000);
+
+  console.log(`将在 ${delay}ms 后重连 (第 ${reconnectAttempts} 次)`);
+
+  setTimeout(() => {
+    socket.connect();
+  }, delay);
+}
+
+socket.on('disconnect', (reason) => {
+  if (reason === 'io server disconnect') {
+    // 服务端主动断开，不重连
+    console.log('服务端断开连接');
+  } else {
+    // 其他原因断开，尝试重连
+    attemptReconnect();
+  }
+});
+
+socket.on('connect', () => {
+  reconnectAttempts = 0;  // 重置计数
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 多命名空间连接</h2>
+
+      <div class="card">
+        <h3 class="card-title">连接多个命名空间</h3>
+        <div class="code-block">
+// 连接多个命名空间（共享底层连接）
+const mainSocket = io('http://localhost:3000');
+const chatSocket = io('http://localhost:3000/chat');
+const notificationSocket = io('http://localhost:3000/notifications');
+
+// 各命名空间独立管理
+mainSocket.on('connect', () => {
+  console.log('主命名空间已连接');
+});
+
+chatSocket.on('connect', () => {
+  console.log('聊天命名空间已连接');
+});
+
+notificationSocket.on('connect', () => {
+  console.log('通知命名空间已连接');
+});
+
+// 断开特定命名空间
+chatSocket.disconnect();
+
+// 断开所有连接
+mainSocket.disconnect();
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">动态命名空间</h3>
+        <div class="code-block">
+// 动态创建命名空间连接
+function createNamespaceConnection(namespace: string) {
+  const socket = io(`http://localhost:3000${namespace}`, {
+    autoConnect: false
+  });
+
+  socket.on('connect', () => {
+    console.log(`已连接到 ${namespace}`);
+  });
+
+  return socket;
+}
+
+// 按需连接
+let gameSocket: Socket | null = null;
+
+function joinGame(roomId: string) {
+  gameSocket = createNamespaceConnection('/game');
+  gameSocket.auth = { roomId };
+  gameSocket.connect();
+}
+
+function leaveGame() {
+  gameSocket?.disconnect();
+  gameSocket = null;
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 连接状态监控</h2>
+
+      <div class="card">
+        <h3 class="card-title">状态检查</h3>
+        <div class="code-block">
+// 检查连接状态
+if (socket.connected) {
+  console.log('已连接');
+  socket.emit('event', data);
+} else {
+  console.log('未连接，消息已缓存');
+  messageQueue.push(data);
+}
+
+// 连接后发送缓存消息
+socket.on('connect', () => {
+  while (messageQueue.length > 0) {
+    const msg = messageQueue.shift();
+    socket.emit('event', msg);
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">连接状态 Hook（React）</h3>
+        <div class="code-block">
+import { useState, useEffect, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface ConnectionState {
+  socket: Socket | null;
+  isConnected: boolean;
+  isReconnecting: boolean;
+  reconnectAttempts: number;
+  error: Error | null;
+}
+
+export function useConnection(url: string) {
+  const [state, setState] = useState&lt;ConnectionState&gt;({
+    socket: null,
+    isConnected: false,
+    isReconnecting: false,
+    reconnectAttempts: 0,
+    error: null
+  });
+
+  useEffect(() => {
+    const socket = io(url, { autoConnect: false });
+
+    socket.on('connect', () => {
+      setState(prev => ({
+        ...prev,
+        socket,
+        isConnected: true,
+        isReconnecting: false,
+        reconnectAttempts: 0,
+        error: null
+      }));
+    });
+
+    socket.on('disconnect', () => {
+      setState(prev => ({
+        ...prev,
+        isConnected: false
+      }));
+    });
+
+    socket.on('connect_error', (error) => {
+      setState(prev => ({
+        ...prev,
+        error,
+        isReconnecting: true,
+        reconnectAttempts: prev.reconnectAttempts + 1
+      }));
+    });
+
+    socket.on('reconnect_failed', () => {
+      setState(prev => ({
+        ...prev,
+        isReconnecting: false,
+        error: new Error('重连失败')
+      }));
+    });
+
+    socket.connect();
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [url]);
+
+  const reconnect = useCallback(() => {
+    state.socket?.connect();
+  }, [state.socket]);
+
+  const disconnect = useCallback(() => {
+    state.socket?.disconnect();
+  }, [state.socket]);
+
+  return { ...state, reconnect, disconnect };
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 断开原因详解</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>原因</th>
+            <th>说明</th>
+            <th>处理建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>io server disconnect</code></td>
+            <td>服务端主动断开</td>
+            <td>不自动重连，需用户操作</td>
+          </tr>
+          <tr>
+            <td><code>io client disconnect</code></td>
+            <td>客户端主动断开</td>
+            <td>正常行为，无需处理</td>
+          </tr>
+          <tr>
+            <td><code>ping timeout</code></td>
+            <td>心跳超时</td>
+            <td>自动重连</td>
+          </tr>
+          <tr>
+            <td><code>transport close</code></td>
+            <td>传输层关闭</td>
+            <td>自动重连</td>
+          </tr>
+          <tr>
+            <td><code>transport error</code></td>
+            <td>传输层错误</td>
+            <td>自动重连</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 <code>autoConnect: false</code> 手动控制连接时机</li>
+            <li>• <code>socket.connect()</code> 连接，<code>socket.disconnect()</code> 断开</li>
+            <li>• 重连采用指数退避策略，可自定义</li>
+            <li>• 多命名空间共享底层连接</li>
+            <li>• 通过 <code>connected</code> 属性检查连接状态</li>
+            <li>• 不同断开原因需要不同处理策略</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="65-1-浏览器客户端.html">← 上一节</a>
+      <a href="65-3-事件监听与触发.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

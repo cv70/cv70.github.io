@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.1 管道概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="46-1-管道概念.html">第四十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>46.1 管道概念</h1>
+      <p class="subtitle">理解 NestJS 管道的作用和原理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解管道的概念和作用</li>
+        <li>掌握管道的执行时机</li>
+        <li>了解管道的两种类型</li>
+        <li>理解管道与其他组件的区别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是管道？</h2>
+      <p>管道是用 @Injectable() 装饰器注解的类，实现 PipeTransform 接口。管道在路由参数被路由处理程序处理之前运行，用于数据验证和转换。</p>
+
+      <div class="code-block">
+请求处理流程：
+
+客户端请求
+    ↓
+┌─────────────────┐
+│   中间件        │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   守卫          │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   拦截器(前)    │
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   管道          │  ← 在这里验证和转换参数
+└─────────────────┘
+    ↓
+┌─────────────────┐
+│   路由处理器    │
+└─────────────────┘
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">管道特点</div>
+          <p>管道接收输入数据，可以返回修改后的数据或抛出异常。如果验证失败，管道抛出异常，请求不会到达路由处理器。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 管道的两种用途</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>验证</td>
+            <td>评估输入数据，有效则放行，无效则抛出异常</td>
+            <td>ValidationPipe, ParseIntPipe</td>
+          </tr>
+          <tr>
+            <td>转换</td>
+            <td>将输入数据转换为期望的格式</td>
+            <td>ParseIntPipe, ParseBoolPipe</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// 管道可以同时做验证和转换
+@Get(':id')
+findOne(@Param('id', ParseIntPipe) id: number) {
+  // ParseIntPipe:
+  // 1. 验证：确保 id 是有效整数
+  // 2. 转换：将字符串转换为数字
+  return this.usersService.findOne(id);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 管道接口</h2>
+      <div class="code-block">
+import { PipeTransform, Injectable, ArgumentMetadata } from '@nestjs/common';
+
+@Injectable()
+export class CustomPipe implements PipeTransform {
+  // value: 输入值
+  // metadata: 参数元数据
+  transform(value: any, metadata: ArgumentMetadata) {
+    console.log('Metadata:', metadata);
+    // {
+    //   type: 'param' | 'query' | 'body' | 'custom',
+    //   metatype: 类型构造函数,
+    //   data: 参数名称
+    // }
+
+    // 返回转换后的值
+    return value;
+
+    // 或抛出异常表示验证失败
+    // throw new BadRequestException('Validation failed');
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 管道的作用范围</h2>
+      <div class="code-block">
+// 1. 参数级 - 只作用于特定参数
+@Get(':id')
+findOne(@Param('id', ParseIntPipe) id: number) {}
+
+// 2. 方法级 - 作用于整个方法
+@Post()
+@UsePipes(ValidationPipe)
+create(@Body() createUserDto: CreateUserDto) {}
+
+// 3. 控制器级 - 作用于控制器所有方法
+@Controller('users')
+@UsePipes(ValidationPipe)
+export class UsersController {}
+
+// 4. 全局级 - 作用于所有路由
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe());
+  await app.listen(3000);
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">管道执行顺序</div>
+          <p>管道按照参数顺序执行。全局管道 -> 控制器管道 -> 方法管道 -> 参数管道。如果某个管道抛出异常，后续管道不会执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 管道用于验证和转换路由参数</li>
+            <li>• 实现 PipeTransform 接口</li>
+            <li>• 验证失败抛出异常阻止请求</li>
+            <li>• 支持参数级、方法级、控制器级、全局级</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter45/45-5-第三方中间件.html">← 上一章：第三方中间件</a>
+      <a href="46-2-内置管道.html">下一节：内置管道 →</a>
+    </div>
+  </div>
+</body>
+</html>

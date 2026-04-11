@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>111.5 消息推送 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="111-1-需求分析.html">第111章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>111.5 消息推送</h1>
+      <p class="subtitle">离线消息与多端推送策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解消息推送策略</li>
+        <li>掌握离线消息处理</li>
+        <li>学会移动端推送集成</li>
+        <li>了解推送可靠性保障</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 推送策略</h2>
+      <div class="code-block">
+// 消息推送场景
+
+const pushScenarios = {
+  在线推送: {
+    condition: '用户在线',
+    method: 'WebSocket实时推送',
+    guarantee: '立即送达'
+  },
+  离线推送: {
+    condition: '用户离线',
+    method: '移动推送（APNs/FCM）',
+    guarantee: '设备唤醒后送达'
+  },
+  多端同步: {
+    condition: '用户多设备在线',
+    method: '推送到所有设备',
+    guarantee: '多端一致性'
+  }
+};
+
+// 推送架构
+const architecture = `
+                      ┌─────────────┐
+                      │  Message    │
+                      │  Service    │
+                      └──────┬──────┘
+                             │
+                    ┌────────┴────────┐
+                    │  Push Service   │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+   ┌───────────┐       ┌───────────┐       ┌───────────┐
+   │ WebSocket │       │   APNs    │       │   FCM     │
+   │  (Web)    │       │  (iOS)    │       │ (Android) │
+   └───────────┘       └───────────┘       └───────────┘
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">推送可靠性</div>
+          <p>消息确认机制、重试策略、离线消息存储、消息去重。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 推送服务实现</h2>
+      <div class="code-block">
+// push.service.ts
+@Injectable()
+export class PushService {
+  constructor(
+    private presenceService: PresenceService,
+    private messageService: MessageService,
+    @InjectRepository(PushToken) private tokenRepo: Repository<PushToken>,
+  ) {}
+
+  // 推送消息
+  async pushMessage(message: Message) {
+    const receiverId = message.receiverId;
+
+    // 1. 获取用户所有在线连接
+    const onlineSockets = await this.getOnlineSockets(receiverId);
+
+    if (onlineSockets.length > 0) {
+      // 在线推送
+      await this.pushToOnlineUsers(message, onlineSockets);
+    } else {
+      // 离线推送
+      await this.pushToOfflineUser(message, receiverId);
+    }
+  }
+
+  // 推送给在线用户
+  private async pushToOnlineUsers(message: Message, socketIds: string[]) {
+    // 通过WebSocket推送
+    socketIds.forEach(socketId => {
+      this.io.to(socketId).emit('message:receive', message);
+    });
+
+    // 存储消息
+    await this.messageService.save(message);
+  }
+
+  // 推送给离线用户
+  private async pushToOfflineUser(message: Message, userId: string) {
+    // 存储消息（用户上线后拉取）
+    await this.messageService.save(message);
+
+    // 获取用户的设备推送Token
+    const tokens = await this.tokenRepo.find({ where: { userId } });
+
+    if (tokens.length === 0) return;
+
+    // 分组推送
+    const iosTokens = tokens.filter(t => t.platform === 'ios');
+    const androidTokens = tokens.filter(t => t.platform === 'android');
+
+    // iOS APNs推送
+    if (iosTokens.length > 0) {
+      await this.pushToAPNs(
+        iosTokens.map(t => t.token),
+        {
+          title: '新消息',
+          body: message.content,
+          data: { messageId: message.id }
+        }
+      );
+    }
+
+    // Android FCM推送
+    if (androidTokens.length > 0) {
+      await this.pushToFCM(
+        androidTokens.map(t => t.token),
+        {
+          title: '新消息',
+          body: message.content,
+          data: { messageId: message.id }
+        }
+      );
+    }
+  }
+
+  // APNs推送
+  private async pushToAPNs(tokens: string[], payload: PushPayload) {
+    // 使用apn库
+    const apn = require('apn');
+
+    const notification = new apn.Notification();
+    notification.alert = {
+      title: payload.title,
+      body: payload.body,
+    };
+    notification.payload = payload.data;
+    notification.topic = process.env.APNS_BUNDLE_ID;
+
+    // 发送推送
+    for (const token of tokens) {
+      try {
+        await this.apnProvider.send(notification, token);
+      } catch (error) {
+        // 处理无效Token
+        if (error.status === 410) {
+          await this.tokenRepo.delete({ token });
+        }
+      }
+    }
+  }
+
+  // FCM推送
+  private async pushToFCM(tokens: string[], payload: PushPayload) {
+    const admin = require('firebase-admin');
+
+    const message = {
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      data: payload.data,
+      tokens: tokens,
+    };
+
+    const response = await admin.messaging().sendMulticast(message);
+
+    // 处理无效Token
+    response.responses.forEach((resp, idx) => {
+      if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+        this.tokenRepo.delete({ token: tokens[idx] });
+      }
+    });
+  }
+}
+
+// 离线消息拉取
+@Injectable()
+export class OfflineMessageService {
+  constructor(
+    @InjectRepository(Message) private messageRepo: Repository<Message>,
+  ) {}
+
+  // 用户上线后拉取离线消息
+  async pullOfflineMessages(userId: string, lastMessageId?: string): Promise<Message[]> {
+    const query = this.messageRepo.createQueryBuilder('message')
+      .where('message.receiverId = :userId', { userId })
+      .andWhere('message.createdAt > :lastSync', {
+        lastSync: new Date(lastMessageId ? parseInt(lastMessageId.split('-')[0]) : 0)
+      })
+      .orderBy('message.createdAt', 'ASC')
+      .limit(100);
+
+    return query.getMany();
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 在线用户通过WebSocket推送</li>
+            <li>• 离线用户通过APNs/FCM推送</li>
+            <li>• 离线消息存储等待用户上线拉取</li>
+            <li>• 多端同步保证消息一致性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="111-4-在线状态管理.html">← 上一节：在线状态管理</a>
+      <a href="../chapter112/112-1-需求分析.html">下一章：CMS 内容管理实战 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.1 创建 HTTP 服务器 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-创建HTTP服务器.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.1 创建 HTTP 服务器</h1>
+      <p class="subtitle">使用 http 模块构建 Web 服务器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 http.createServer 方法</li>
+        <li>理解请求和响应对象</li>
+        <li>学会监听端口</li>
+        <li>了解服务器事件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本服务器</h2>
+      <div class="code-block">
+const http = require('http');
+
+// 创建 HTTP 服务器
+const server = http.createServer((req, res) => {
+  // req: 请求对象 (IncomingMessage)
+  // res: 响应对象 (ServerResponse)
+
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Hello World!\n');
+});
+
+// 监听端口
+server.listen(3000, () => {
+  console.log('服务器运行在 http://localhost:3000');
+});
+
+// 指定主机
+server.listen(3000, '127.0.0.1', () => {
+  console.log('服务器运行在 http://127.0.0.1:3000');
+});
+
+// 使用选项对象
+server.listen({
+  port: 3000,
+  host: 'localhost',
+  exclusive: true  // 独占端口
+}, () => {
+  console.log('服务器启动');
+});
+
+// 查看服务器地址
+const address = server.address();
+console.log(address);
+// { address: '127.0.0.1', family: 'IPv4', port: 3000 }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 请求对象</h2>
+      <div class="code-block">
+const server = http.createServer((req, res) => {
+  // 请求方法
+  console.log('方法:', req.method);  // GET, POST, PUT, DELETE...
+
+  // 请求 URL
+  console.log('URL:', req.url);  // /path?query=value
+
+  // HTTP 版本
+  console.log('HTTP 版本:', req.httpVersion);  // 1.1
+
+  // 请求头
+  console.log('Headers:', req.headers);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('User-Agent:', req.headers['user-agent']);
+
+  // 获取请求体（流）
+  let body = '';
+  req.on('data', (chunk) => {
+    body += chunk;
+  });
+  req.on('end', () => {
+    console.log('请求体:', body);
+    res.end('收到请求');
+  });
+
+  // 解析查询参数
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  console.log('路径:', url.pathname);
+  console.log('查询参数:', url.searchParams);
+  console.log('参数 name:', url.searchParams.get('name'));
+
+  // 客户端信息
+  console.log('远程地址:', req.socket.remoteAddress);
+  console.log('远程端口:', req.socket.remotePort);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 响应对象</h2>
+      <div class="code-block">
+const server = http.createServer((req, res) => {
+  // 设置状态码
+  res.statusCode = 200;
+
+  // 设置响应头
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('X-Custom-Header', 'value');
+
+  // 写入响应头
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  // 写入响应体
+  res.write('Hello ');
+  res.write('World');
+
+  // 结束响应
+  res.end('!');
+
+  // 一步完成
+  res.end('Hello World');
+
+  // 发送 JSON
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ message: 'Hello' }));
+
+  // 发送 HTML
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end('<h1>你好世界</h1>');
+
+  // 重定向
+  res.writeHead(302, { 'Location': '/new-path' });
+  res.end();
+
+  // 404 响应
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not Found');
+
+  // 获取已设置的头
+  console.log(res.getHeader('Content-Type'));
+  console.log(res.getHeaders());
+
+  // 移除头
+  res.removeHeader('X-Custom-Header');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 服务器事件</h2>
+      <div class="code-block">
+const http = require('http');
+const server = http.createServer();
+
+// request 事件
+server.on('request', (req, res) => {
+  console.log('收到请求');
+  res.end('OK');
+});
+
+// connection 事件
+server.on('connection', (socket) => {
+  console.log('新连接:', socket.remoteAddress);
+});
+
+// close 事件
+server.on('close', () => {
+  console.log('服务器关闭');
+});
+
+// error 事件
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('端口已被占用');
+  } else {
+    console.error('服务器错误:', err);
+  }
+});
+
+// listening 事件
+server.on('listening', () => {
+  console.log('服务器正在监听');
+});
+
+server.listen(3000);
+
+// 关闭服务器
+setTimeout(() => {
+  server.close(() => {
+    console.log('服务器已关闭');
+  });
+}, 10000);
+
+// 设置超时
+server.timeout = 120000;  // 2 分钟
+server.keepAliveTimeout = 65000;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• http.createServer() 创建服务器</li>
+            <li>• req 对象包含请求信息</li>
+            <li>• res 对象用于发送响应</li>
+            <li>• server.listen() 监听端口</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter17/17-5-管道操作.html">← 上一章：管道操作</a>
+      <a href="18-2-处理请求与响应.html">下一节：处理请求与响应 →</a>
+    </div>
+  </div>
+</body>
+</html>

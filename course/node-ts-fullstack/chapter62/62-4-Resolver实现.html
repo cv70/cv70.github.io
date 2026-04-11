@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>62.4 Resolver 实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="62-1-GraphQL模块配置.html">第62章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>62.4 Resolver 实现</h1>
+      <p class="subtitle">NestJS GraphQL Resolver 完整实现</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Resolver 结构</h2>
+      <p>在 NestJS 中，Resolver 是处理 GraphQL 查询和变更的类，类似于 REST 中的 Controller。</p>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Resolver, Query, Mutation, Args, ResolveField, Parent } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { UseGuards, Context } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> { GqlAuthGuard } <span class="keyword">from</span> <span class="string">'../auth/guards/gql-auth.guard'</span>;
+<span class="keyword">import</span> { User } <span class="keyword">from</span> <span class="string">'./entities/user.entity'</span>;
+<span class="keyword">import</span> { UserService } <span class="keyword">from</span> <span class="string">'./user.service'</span>;
+<span class="keyword">import</span> { CreateUserInput } <span class="keyword">from</span> <span class="string">'./dto/create-user.input'</span>;
+
+<span class="keyword">@Resolver</span>(() => User)
+<span class="keyword">export class</span> <span class="function">UserResolver</span> {
+  <span class="keyword">constructor</span>(<span class="keyword">private readonly</span> userService: UserService) {}
+
+  <span class="comment">// Query 定义</span>
+  <span class="keyword">@Query</span>(() => [User], { name: <span class="string">'users'</span> })
+  <span class="keyword">async</span> <span class="function">findAll</span>(): Promise<User[]> {
+    <span class="keyword">return this</span>.userService.findAll();
+  }
+
+  <span class="comment">// Mutation 定义</span>
+  <span class="keyword">@Mutation</span>(() => User)
+  <span class="keyword">async</span> <span class="function">createUser</span>(
+    <span class="keyword">@Args</span>(<span class="string">'input'</span>) input: CreateUserInput,
+  ): Promise<User> {
+    <span class="keyword">return this</span>.userService.create(input);
+  }
+
+  <span class="comment">// 字段 Resolver</span>
+  <span class="keyword">@ResolveField</span>(() => [Post])
+  <span class="keyword">async</span> <span class="function">posts</span>(<span class="keyword">@Parent</span> user: User): Promise<Post[]> {
+    <span class="keyword">return this</span>.userService.getUserPosts(user.id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 认证守卫</h2>
+
+      <div class="code-block">
+<span class="comment">// GQL 认证守卫</span>
+<span class="keyword">import</span> { CanActivate, ExecutionContext, Injectable } <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> { GqlExecutionContext } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+
+<span class="keyword">@Injectable</span>()
+<span class="keyword">export class</span> <span class="function">GqlAuthGuard</span> <span class="keyword">implements</span> CanActivate {
+  <span class="function">canActivate</span>(context: ExecutionContext): <span class="keyword">boolean</span> {
+    <span class="keyword">const</span> ctx = GqlExecutionContext.create(context);
+    <span class="keyword">const</span> request = ctx.getContext().req;
+    <span class="keyword">return</span> request.user != <span class="keyword">null</span>;
+  }
+}
+
+<span class="comment">// 使用守卫</span>
+<span class="keyword">@Resolver</span>(() => User)
+<span class="keyword">@UseGuards</span>(GqlAuthGuard)
+<span class="keyword">export class</span> <span class="function">UserResolver</span> {
+  <span class="keyword">@Query</span>(() => User, { name: <span class="string">'me'</span> })
+  <span class="keyword">async</span> <span class="function">getCurrentUser</span>(<span class="keyword">@Context</span>() context) {
+    <span class="keyword">return</span> context.req.user;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Resolver 类似 REST 的 Controller</li>
+        <li>使用 @Query 和 @Mutation 定义操作</li>
+        <li>使用 @ResolveField 定义关联字段</li>
+        <li>支持 NestJS 守卫和拦截器</li>
+        <li>通过 @Context 获取请求上下文</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="62-3-Schema优先模式.html">← 上一节：Schema 优先模式</a>
+      <a href="62-5-与TypeORM集成.html">下一节：与 TypeORM 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

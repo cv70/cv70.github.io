@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>107.1 服务发现原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="107-1-服务发现原理.html">第107章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>107.1 服务发现原理</h1>
+      <p class="subtitle">动态服务定位的核心机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解服务发现的概念和作用</li>
+        <li>掌握客户端发现模式</li>
+        <li>掌握服务端发现模式</li>
+        <li>了解服务注册中心的作用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是服务发现？</h2>
+      <div class="code-block">
+// 服务发现解决的问题
+
+// 传统方式：硬编码服务地址
+const userServiceUrl = 'http://192.168.1.100:3001';
+const orderServiceUrl = 'http://192.168.1.101:3002';
+
+// 问题：
+// 1. IP地址变化时需要修改配置
+// 2. 无法动态扩缩容
+// 3. 无法自动处理故障节点
+// 4. 负载均衡需要额外配置
+
+// 服务发现方式：动态获取服务地址
+const userServiceUrl = await serviceDiscovery.getService('user-service');
+// 返回: http://10.0.0.5:3001（动态地址）
+
+// 服务发现核心概念
+const concepts = {
+  serviceRegistry: '服务注册中心，存储服务实例信息',
+  serviceRegistration: '服务注册，服务启动时注册到注册中心',
+  serviceDiscovery: '服务发现，从注册中心获取服务地址',
+  healthCheck: '健康检查，定期检查服务是否存活'
+};
+
+// 服务发现流程
+const flow = `
+1. 服务启动 → 向注册中心注册
+2. 注册中心存储服务信息（IP、端口、健康状态）
+3. 消费者需要调用服务 → 向注册中心查询
+4. 注册中心返回可用服务实例列表
+5. 消费者选择一个实例发起调用
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">服务发现价值</div>
+          <p>动态扩缩容、故障自动摘除、负载均衡、统一配置管理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 客户端发现模式</h2>
+      <div class="code-block">
+// 客户端直接查询注册中心，自己做负载均衡
+
+// 架构
+/*
+   Client -----> Service Registry
+     |              |
+     |--获取实例列表--|
+     |              |
+     |--选择实例调用--> Service Instance
+*/
+
+// 实现示例
+class ServiceDiscoveryClient {
+  private registry: ServiceRegistry;
+  private cache: Map<string, ServiceInstance[]> = new Map();
+
+  // 获取服务实例
+  async getService(serviceName: string): Promise<string> {
+    // 1. 从缓存或注册中心获取实例列表
+    let instances = this.cache.get(serviceName);
+
+    if (!instances) {
+      instances = await this.registry.getInstances(serviceName);
+      this.cache.set(serviceName, instances);
+    }
+
+    // 2. 负载均衡选择实例
+    const instance = this.loadBalancer.select(instances);
+
+    // 3. 返回服务地址
+    return `http://${instance.host}:${instance.port}`;
+  }
+
+  // 定期刷新缓存
+  startRefreshTask() {
+    setInterval(async () => {
+      for (const [serviceName] of this.cache) {
+        const instances = await this.registry.getInstances(serviceName);
+        this.cache.set(serviceName, instances);
+      }
+    }, 30000); // 30秒刷新一次
+  }
+}
+
+// 服务注册
+class ServiceRegistrar {
+  private registry: ServiceRegistry;
+  private serviceName: string;
+  private instance: ServiceInstance;
+
+  constructor(serviceName: string, port: number) {
+    this.serviceName = serviceName;
+    this.instance = {
+      id: uuidv4(),
+      host: os.hostname(),
+      port,
+      metadata: {}
+    };
+  }
+
+  // 注册服务
+  async register() {
+    await this.registry.register(this.serviceName, this.instance);
+  }
+
+  // 心跳保活
+  async startHeartbeat() {
+    setInterval(async () => {
+      await this.registry.heartbeat(this.serviceName, this.instance.id);
+    }, 10000); // 10秒发送心跳
+  }
+
+  // 注销服务
+  async deregister() {
+    await this.registry.deregister(this.serviceName, this.instance.id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 服务端发现模式</h2>
+      <div class="code-block">
+// 通过负载均衡器或API网关访问服务
+
+// 架构
+/*
+   Client -----> Load Balancer/API Gateway -----> Service Registry
+                    |                                    |
+                    |<------获取实例列表------------------|
+                    |
+                    |-----> Service Instance
+*/
+
+// 客户端使用（更简单）
+class ServiceClient {
+  private gatewayUrl = 'http://api-gateway:8080';
+
+  async callUserService(path: string, data: any) {
+    // 直接调用网关，网关负责服务发现和负载均衡
+    const response = await fetch(`${this.gatewayUrl}/user-service${path}`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return response.json();
+  }
+}
+
+// API网关实现
+class ApiGateway {
+  private registry: ServiceRegistry;
+
+  async handleRequest(req: Request, res: Response) {
+    const serviceName = this.extractServiceName(req.path);
+    const instances = await this.registry.getInstances(serviceName);
+
+    if (instances.length === 0) {
+      return res.status(503).json({ error: 'Service unavailable' });
+    }
+
+    // 负载均衡选择实例
+    const instance = this.loadBalancer.select(instances);
+
+    // 转发请求
+    const response = await this.forwardRequest(instance, req);
+
+    return response;
+  }
+}
+
+// 模式对比
+const comparison = {
+  clientDiscovery: {
+    优点: ['无单点故障', '减少网络跳转', '灵活的负载均衡策略'],
+    缺点: ['客户端复杂', '多语言客户端开发', '缓存一致性问题'],
+    代表: 'Eureka、Consul'
+  },
+  serverDiscovery: {
+    优点: ['客户端简单', '语言无关', '统一治理'],
+    缺点: ['额外组件', '多一次网络跳转', '网关成为瓶颈'],
+    代表: 'Kubernetes Service、Nginx'
+  }
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 服务发现解决动态服务定位问题</li>
+            <li>• 客户端发现：客户端直接查询注册中心</li>
+            <li>• 服务端发现：通过网关或负载均衡器</li>
+            <li>• 注册中心是服务发现的核心组件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter106/106-5-NestJS-gRPC.html">← 上一章：NestJS gRPC</a>
+      <a href="107-2-Consul.html">下一节：Consul →</a>
+    </div>
+  </div>
+</body>
+</html>

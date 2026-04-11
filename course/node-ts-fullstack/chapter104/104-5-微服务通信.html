@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>104.5 微服务通信 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="104-1-微服务概念.html">第104章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>104.5 微服务通信</h1>
+      <p class="subtitle">服务间的通信模式与实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解同步通信模式</li>
+        <li>理解异步通信模式</li>
+        <li>掌握API设计最佳实践</li>
+        <li>了解事件驱动架构</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 同步通信</h2>
+      <div class="code-block">
+// HTTP/REST 同步通信
+
+import axios from 'axios';
+
+class OrderService {
+  private userServiceUrl = 'http://user-service:3001';
+  private productServiceUrl = 'http://product-service:3002';
+
+  async createOrder(userId: string, productIds: string[]) {
+    // 同步调用用户服务
+    const user = await axios.get(`${this.userServiceUrl}/users/${userId}`);
+
+    // 同步调用商品服务
+    const products = await Promise.all(
+      productIds.map(id =>
+        axios.get(`${this.productServiceUrl}/products/${id}`)
+      )
+    );
+
+    // 创建订单
+    return this.orderRepository.create({
+      userId: user.data.id,
+      products: products.map(p => p.data),
+      total: products.reduce((sum, p) => sum + p.data.price, 0)
+    });
+  }
+}
+
+// 使用服务客户端封装
+class UserServiceClient {
+  private baseUrl: string;
+  private httpClient: HttpClient;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+    this.httpClient = new HttpClient({
+      timeout: 5000,
+      retries: 3
+    });
+  }
+
+  async getUser(id: string): Promise<User> {
+    return this.httpClient.get(`/users/${id}`);
+  }
+
+  async validateToken(token: string): Promise<User> {
+    return this.httpClient.post('/auth/validate', { token });
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">同步通信特点</div>
+          <p>简单直接，易于理解调试。但存在耦合性高、故障传播、性能瓶颈等问题。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 异步通信</h2>
+      <div class="code-block">
+// 消息队列异步通信
+
+import { RabbitMQClient } from './mq-client';
+
+class OrderService {
+  private messageQueue: RabbitMQClient;
+
+  constructor() {
+    this.messageQueue = new RabbitMQClient('amqp://localhost');
+  }
+
+  async createOrder(orderData: CreateOrderDto) {
+    // 创建订单
+    const order = await this.orderRepository.create(orderData);
+
+    // 发布事件，不等待响应
+    await this.messageQueue.publish('order.created', {
+      orderId: order.id,
+      userId: order.userId,
+      items: order.items,
+      total: order.total,
+      createdAt: order.createdAt
+    });
+
+    return order;
+  }
+}
+
+// 其他服务订阅事件
+class InventoryService {
+  constructor(messageQueue: RabbitMQClient) {
+    // 订阅订单创建事件
+    messageQueue.subscribe('order.created', async (event) => {
+      // 异步处理库存扣减
+      await this.reserveInventory(event.items);
+    });
+  }
+}
+
+class NotificationService {
+  constructor(messageQueue: RabbitMQClient) {
+    // 订阅订单创建事件
+    messageQueue.subscribe('order.created', async (event) => {
+      // 异步发送通知
+      await this.sendOrderConfirmation(event.userId, event.orderId);
+    });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 事件驱动架构</h2>
+      <div class="code-block">
+// 事件驱动：发布-订阅模式
+
+// 定义事件类型
+interface OrderCreatedEvent {
+  type: 'order.created';
+  data: {
+    orderId: string;
+    userId: string;
+    items: OrderItem[];
+    total: number;
+  };
+  metadata: {
+    timestamp: Date;
+    source: string;
+    correlationId: string;
+  };
+}
+
+// 事件总线实现
+class EventBus {
+  private handlers: Map<string, EventHandler[]> = new Map();
+
+  subscribe<T>(eventType: string, handler: EventHandler<T>) {
+    if (!this.handlers.has(eventType)) {
+      this.handlers.set(eventType, []);
+    }
+    this.handlers.get(eventType)!.push(handler);
+  }
+
+  async publish<T>(event: Event<T>) {
+    const handlers = this.handlers.get(event.type) || [];
+
+    await Promise.all(
+      handlers.map(handler => handler(event))
+    );
+  }
+}
+
+// 使用事件溯源（Event Sourcing）
+class OrderAggregate {
+  private events: OrderEvent[] = [];
+  private state: OrderState;
+
+  // 应用事件改变状态
+  apply(event: OrderEvent) {
+    switch (event.type) {
+      case 'order.created':
+        this.state = {
+          id: event.data.orderId,
+          status: 'created',
+          items: event.data.items
+        };
+        break;
+      case 'order.paid':
+        this.state.status = 'paid';
+        break;
+      case 'order.shipped':
+        this.state.status = 'shipped';
+        break;
+    }
+    this.events.push(event);
+  }
+
+  // 从事件重建状态
+  static fromEvents(events: OrderEvent[]): OrderAggregate {
+    const order = new OrderAggregate();
+    events.forEach(event => order.apply(event));
+    return order;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 同步通信简单但有耦合风险</li>
+            <li>• 异步通信解耦但增加复杂性</li>
+            <li>• 根据场景选择合适的通信模式</li>
+            <li>• 事件驱动架构适合复杂业务场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="104-4-服务拆分策略.html">← 上一节：服务拆分策略</a>
+      <a href="../chapter105/105-1-消息队列概述.html">下一章：消息队列概述 →</a>
+    </div>
+  </div>
+</body>
+</html>

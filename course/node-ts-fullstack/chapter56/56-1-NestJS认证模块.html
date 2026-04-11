@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>56.1 NestJS 认证模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="56-1-NestJS认证模块.html">第五十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>56.1 NestJS 认证模块</h1>
+      <p class="subtitle">构建 NestJS 认证系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 NestJS 认证架构</li>
+        <li>掌握模块化设计思想</li>
+        <li>学会用户认证服务实现</li>
+        <li>理解依赖注入的应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> NestJS 认证架构</h2>
+      <div class="code-block">
+/*
+NestJS 认证模块架构
+
+┌─────────────────────────────────────────────────────────────┐
+│                    Auth Module                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   AuthController        AuthService        JwtService        │
+│   ┌──────────────┐     ┌──────────────┐   ┌──────────────┐  │
+│   │ POST /login  │────>│ validateUser │──>│ signToken    │  │
+│   │ POST /register│    │ createUser   │   │ verifyToken  │  │
+│   │ POST /refresh│     │ hashPassword │   │ decodeToken  │  │
+│   └──────────────┘     └──────────────┘   └──────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+*/
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">NestJS 优势</div>
+          <p>NestJS提供了模块化架构、依赖注入、装饰器等特性，使得认证系统更加清晰、可测试和可维护。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装依赖</h2>
+      <div class="code-block">
+# 安装认证相关依赖
+npm install @nestjs/jwt @nestjs/passport passport passport-jwt passport-local
+npm install bcrypt class-validator class-transformer
+
+# 安装类型定义
+npm install -D @types/passport-jwt @types/passport-local @types/bcrypt
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 模块结构</h2>
+      <div class="code-block">
+src/
+├── auth/
+│   ├── auth.module.ts          # 认证模块
+│   ├── auth.controller.ts      # 认证控制器
+│   ├── auth.service.ts         # 认证服务
+│   ├── constants.ts            # 常量定义
+│   ├── decorators/
+│   │   └── current-user.decorator.ts  # 当前用户装饰器
+│   ├── guards/
+│   │   ├── jwt-auth.guard.ts   # JWT 守卫
+│   │   └── local-auth.guard.ts # 本地认证守卫
+│   └── strategies/
+│       ├── jwt.strategy.ts     # JWT 策略
+│       └── local.strategy.ts   # 本地策略
+├── users/
+│   ├── users.module.ts
+│   ├── users.service.ts
+│   └── users.entity.ts
+└── app.module.ts
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 认证模块实现</h2>
+      <div class="code-block">
+// src/auth/auth.module.ts
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { LocalStrategy } from './strategies/local.strategy';
+import { UsersModule } from '../users/users.module';
+
+@Module({
+  imports: [
+    UsersModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'secret-key',
+      signOptions: { expiresIn: '1h' },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, LocalStrategy],
+  exports: [AuthService, JwtModule],
+})
+export class AuthModule {}
+
+// src/auth/auth.service.ts
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../users/users.service';
+import * as bcrypt from 'bcrypt';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private usersService: UsersService,
+    private jwtService: JwtService,
+  ) {}
+
+  // 验证用户
+  async validateUser(email: string, password: string): Promise<any> {
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('密码错误');
+    }
+
+    const { password: _, ...result } = user;
+    return result;
+  }
+
+  // 登录
+  async login(user: any) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      token_type: 'Bearer',
+      expires_in: 3600,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+      },
+    };
+  }
+
+  // 注册
+  async register(email: string, username: string, password: string) {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await this.usersService.create({
+      email,
+      username,
+      password: hashedPassword,
+    });
+
+    return this.login(user);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎮</span> 认证控制器</h2>
+      <div class="code-block">
+// src/auth/auth.controller.ts
+import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus, Get } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { LocalAuthGuard } from './guards/local-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private authService: AuthService) {}
+
+  @UseGuards(LocalAuthGuard)
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Req() req) {
+    return this.authService.login(req.user);
+  }
+
+  @Post('register')
+  async register(
+    @Body('email') email: string,
+    @Body('username') username: string,
+    @Body('password') password: string,
+  ) {
+    return this.authService.register(email, username, password);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  getProfile(@CurrentUser() user: any) {
+    return user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout() {
+    return { message: '登出成功' };
+  }
+}
+
+// src/auth/decorators/current-user.decorator.ts
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export const CurrentUser = createParamDecorator(
+  (data: string, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user;
+    return data ? user?.[data] : user;
+  },
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• NestJS 使用模块化架构组织认证代码</li>
+            <li>• AuthService 封装认证核心逻辑</li>
+            <li>• AuthController 处理认证相关请求</li>
+            <li>• @CurrentUser 装饰器获取当前登录用户</li>
+            <li>• 使用依赖注入管理服务依赖</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter55/55-4-动态权限.html">← 上一章：动态权限</a>
+      <a href="56-2-Passport集成.html">下一节：Passport 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

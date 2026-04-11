@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>73.4 测试数据管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="73-3-测试隔离.html">上一节</a></li>
+      <li><a href="73-5-CI-CD集成测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>73.4 测试数据管理</h1>
+      <p class="subtitle">第十部分：测试篇 - 高效管理测试数据</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 测试数据的重要性</h2>
+      <p>良好的测试数据管理可以提高测试的可读性、可维护性和可靠性。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">常见问题</h3>
+          <ul class="feature-list">
+            <li>测试数据散落各处</li>
+            <li>硬编码的魔法值</li>
+            <li>重复创建相同数据</li>
+            <li>数据难以理解和维护</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">解决思路</h3>
+          <ul class="feature-list">
+            <li>集中管理测试数据</li>
+            <li>使用工厂模式创建</li>
+            <li>使用 Fixture 文件</li>
+            <li>参数化生成数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 测试数据工厂</h2>
+
+      <div class="code-block">// tests/factories/user.factory.ts
+import { User } from '@/entities/user.entity';
+
+type UserOverrides = Partial&lt;User&gt;;
+
+export function createUser(overrides: UserOverrides = {}): User {
+  return {
+    id: generateId(),
+    name: 'Test User',
+    email: `test${Date.now()}@example.com`,
+    password: 'hashedPassword',
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides
+  };
+}
+
+export function createAdminUser(overrides: UserOverrides = {}): User {
+  return createUser({
+    role: 'admin',
+    ...overrides
+  });
+}
+
+// tests/factories/post.factory.ts
+export function createPost(overrides: Partial&lt;Post&gt; = {}): Post {
+  return {
+    id: generateId(),
+    title: 'Test Post',
+    content: 'Test content',
+    authorId: '1',
+    status: 'published',
+    createdAt: new Date(),
+    ...overrides
+  };
+}</div>
+
+      <h3>使用工厂</h3>
+      <div class="code-block">import { createUser, createAdminUser } from '../factories/user.factory';
+
+describe('UserService', () => {
+  it('should activate user', () => {
+    const inactiveUser = createUser({ isActive: false });
+
+    const result = service.activate(inactiveUser);
+
+    expect(result.isActive).toBe(true);
+  });
+
+  it('should allow admin to delete', () => {
+    const admin = createAdminUser();
+
+    expect(service.canDelete(admin)).toBe(true);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Fixture 文件</h2>
+
+      <div class="code-block">// tests/fixtures/users.json
+{
+  "admin": {
+    "id": "admin-1",
+    "name": "Admin User",
+    "email": "admin@example.com",
+    "role": "admin"
+  },
+  "regularUser": {
+    "id": "user-1",
+    "name": "Regular User",
+    "email": "user@example.com",
+    "role": "user"
+  },
+  "inactiveUser": {
+    "id": "user-2",
+    "name": "Inactive User",
+    "email": "inactive@example.com",
+    "isActive": false
+  }
+}</div>
+
+      <div class="code-block">// 使用 Fixture
+import users from '../fixtures/users.json';
+
+describe('Permissions', () => {
+  it('admin can access all resources', () => {
+    const admin = users.admin;
+
+    expect(hasAccess(admin, '/admin')).toBe(true);
+  });
+
+  it('regular user cannot access admin', () => {
+    const user = users.regularUser;
+
+    expect(hasAccess(user, '/admin')).toBe(false);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 数据库数据管理</h2>
+
+      <div class="code-block">// tests/helpers/database-helpers.ts
+import { Connection } from 'typeorm';
+import { User } from '@/entities/user.entity';
+
+export class DatabaseHelper {
+  constructor(private connection: Connection) {}
+
+  async createUser(overrides: Partial&lt;User&gt; = {}): Promise&lt;User&gt; {
+    const repo = this.connection.getRepository(User);
+    const user = repo.create({
+      name: 'Test User',
+      email: `test${Date.now()}@example.com`,
+      ...overrides
+    });
+    return repo.save(user);
+  }
+
+  async createUsers(count: number): Promise&lt;User[]&gt; {
+    const users: User[] = [];
+    for (let i = 0; i &lt; count; i++) {
+      users.push(await this.createUser({ name: `User ${i}` }));
+    }
+    return users;
+  }
+
+  async clearUsers(): Promise&lt;void&gt; {
+    await this.connection.getRepository(User).clear();
+  }
+
+  async clearAll(): Promise&lt;void&gt; {
+    const entities = this.connection.entityMetadatas;
+    for (const entity of entities) {
+      await this.connection.getRepository(entity.name).clear();
+    }
+  }
+}</div>
+
+      <h3>使用数据库辅助函数</h3>
+      <div class="code-block">describe('UserRepository', () => {
+  let dbHelper: DatabaseHelper;
+
+  beforeEach(async () => {
+    const connection = await createTestConnection();
+    dbHelper = new DatabaseHelper(connection);
+  });
+
+  afterEach(async () => {
+    await dbHelper.clearAll();
+  });
+
+  it('should find user by email', async () => {
+    const user = await dbHelper.createUser({
+      email: 'findme@example.com'
+    });
+
+    const found = await repository.findByEmail('findme@example.com');
+
+    expect(found.id).toBe(user.id);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 使用 Faker 生成数据</h2>
+
+      <div class="code-block">import { faker } from '@faker-js/faker';
+
+describe('With Faker', () => {
+  it('should create user with realistic data', async () => {
+    const userData = {
+      name: faker.person.fullName(),
+      email: faker.internet.email(),
+      phone: faker.phone.number(),
+      address: {
+        street: faker.location.streetAddress(),
+        city: faker.location.city(),
+        country: faker.location.country()
+      }
+    };
+
+    const user = await service.create(userData);
+
+    expect(user.email).toMatch(/@/);
+  });
+
+  it('should handle various names', () => {
+    const names = Array.from({ length: 10 }, () => faker.person.fullName());
+
+    names.forEach(name => {
+      expect(validateName(name)).toBe(true);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试数据最佳实践</h2>
+
+      <div class="code-block">// ✅ 好的做法：使用有意义的变量名
+it('should calculate discount for premium user', () => {
+  const premiumUser = createUser({ level: 'premium' });
+  const regularUser = createUser({ level: 'regular' });
+
+  expect(calculateDiscount(premiumUser)).toBe(0.2);
+  expect(calculateDiscount(regularUser)).toBe(0.1);
+});
+
+// ❌ 不好的做法：使用魔法值
+it('should calculate discount', () => {
+  const u1 = { id: '1', level: 'premium' };
+  const u2 = { id: '2', level: 'regular' };
+
+  expect(calculateDiscount(u1)).toBe(0.2);
+  expect(calculateDiscount(u2)).toBe(0.1);
+});
+
+// ✅ 好的做法：只在必要时覆盖
+it('should validate email format', () => {
+  const user = createUser({ email: 'invalid-email' });
+
+  expect(validateEmail(user)).toBe(false);
+});
+
+// ❌ 不好的做法：重复定义
+it('should validate email', () => {
+  const user = {
+    id: '1',
+    name: 'Test User',
+    email: 'invalid-email',
+    // ... 重复所有字段
+  };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用工厂函数创建测试数据</li>
+            <li>使用 Fixture 文件管理静态数据</li>
+            <li>创建数据库辅助函数简化操作</li>
+            <li>使用 Faker 生成真实感的随机数据</li>
+            <li>使用有意义的变量名提高可读性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="73-3-测试隔离.html">← 上一节：测试隔离</a>
+      <a href="73-5-CI-CD集成测试.html">下一节：CI/CD 集成测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

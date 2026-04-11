@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.2 path.join 与 path.resolve - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="14-1-path基础方法.html">第十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>14.2 path.join 与 path.resolve</h1>
+      <p class="subtitle">路径拼接的核心方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 path.join 的用法</li>
+        <li>掌握 path.resolve 的用法</li>
+        <li>理解两者的区别</li>
+        <li>学会选择合适的方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> path.join</h2>
+      <div class="code-block">
+const path = require('path');
+
+// 拼接路径片段，规范化结果
+// 不会生成绝对路径（除非以根路径开头）
+
+// 基本用法
+console.log(path.join('/user', 'docs', 'app.js'));
+// '/user/docs/app.js'
+
+// 自动处理分隔符
+console.log(path.join('/user/', '/docs/', 'app.js'));
+// '/user/docs/app.js'
+
+// 处理 .. 和 .
+console.log(path.join('/user/docs', '../data', './file.txt'));
+// '/user/data/file.txt'
+
+console.log(path.join('/user/docs', '../../data'));
+// '/data'
+
+// 相对路径
+console.log(path.join('src', 'components', 'Button.js'));
+// 'src/components/Button.js'
+
+// 空参数被忽略
+console.log(path.join('/user', '', 'docs'));
+// '/user/docs'
+
+// 如果结果是空字符串，返回 '.'
+console.log(path.join('.', '.'));
+// '.'
+
+// 传入绝对路径会覆盖前面的路径
+console.log(path.join('/user', '/docs', '/app.js'));
+// '/user/docs/app.js'（不是 '/app.js'！）
+// 注意：join 会规范化，不会像 resolve 那样覆盖
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> path.resolve</h2>
+      <div class="code-block">
+const path = require('path');
+
+// 从右到左处理路径，直到生成绝对路径
+// 如果没有绝对路径，使用当前工作目录
+
+// 假设当前工作目录是 /home/user/project
+
+// 无参数返回当前目录
+console.log(path.resolve());
+// '/home/user/project'
+
+// 单个参数
+console.log(path.resolve('app.js'));
+// '/home/user/project/app.js'
+
+console.log(path.resolve('/user/docs'));
+// '/user/docs'（绝对路径直接返回）
+
+// 多个参数 - 从右到左拼接
+console.log(path.resolve('/user', 'docs', 'app.js'));
+// '/user/docs/app.js'
+
+// 遇到绝对路径停止
+console.log(path.resolve('/user', '/docs', 'app.js'));
+// '/docs/app.js'（/docs 是绝对路径，覆盖前面的 /user）
+
+console.log(path.resolve('src', '/public', 'index.html'));
+// '/public/index.html'
+
+// 处理 .. 和 .
+console.log(path.resolve('/user/docs/../data', './file.txt'));
+// '/user/data/file.txt'
+
+// 常用场景：获取文件绝对路径
+console.log(path.resolve(__dirname, 'config.json'));
+// '/home/user/project/config.json'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚔️</span> join vs resolve 对比</h2>
+      <div class="code-block">
+// 关键区别
+
+// 1. path.join 只是拼接和规范化，不一定返回绝对路径
+console.log(path.join('src', 'app.js'));  // 'src/app.js'
+
+// path.resolve 总是返回绝对路径
+console.log(path.resolve('src', 'app.js')); // '/home/user/project/src/app.js'
+
+// 2. 绝对路径处理不同
+// join 不会覆盖
+console.log(path.join('/a', '/b', 'c'));  // '/a/b/c'
+
+// resolve 会覆盖（从右到左遇到绝对路径停止）
+console.log(path.resolve('/a', '/b', 'c'));  // '/b/c'
+
+// 3. 空参数处理
+console.log(path.join());  // '.'
+console.log(path.resolve());  // 当前工作目录的绝对路径
+
+// 4. 典型使用场景
+// join: 构建相对路径、URL 路径、资源路径
+const resourcePath = path.join('assets', 'images', 'logo.png');
+
+// resolve: 获取绝对路径、定位文件
+const configPath = path.resolve(__dirname, '../config/app.json');
+const outputPath = path.resolve('./dist/bundle.js');
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">选择建议</div>
+          <p>需要绝对路径用 resolve，需要拼接路径用 join。读取文件时推荐使用 resolve + __dirname。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 实际应用示例</h2>
+      <div class="code-block">
+const path = require('path');
+const fs = require('fs');
+
+// 1. 构建项目路径
+const projectRoot = path.resolve(__dirname, '..');
+const srcDir = path.join(projectRoot, 'src');
+const distDir = path.join(projectRoot, 'dist');
+const configPath = path.resolve(projectRoot, 'config.json');
+
+console.log('项目根目录:', projectRoot);
+console.log('源码目录:', srcDir);
+console.log('输出目录:', distDir);
+console.log('配置文件:', configPath);
+
+// 2. 读取相对路径的文件
+const dataPath = path.resolve(__dirname, 'data', 'users.json');
+const data = fs.readFileSync(dataPath, 'utf8');
+
+// 3. 构建静态资源路径
+function getAssetPath(filename) {
+  return path.join('/static', 'assets', filename);
+}
+console.log(getAssetPath('logo.png'));  // '/static/assets/logo.png'
+
+// 4. 解析用户输入的路径
+function resolveUserPath(userPath) {
+  // 如果是相对路径，基于工作目录
+  // 如果是绝对路径，直接返回
+  return path.resolve(userPath);
+}
+
+// 5. 在 Express 中设置静态目录
+const express = require('express');
+const app = express();
+app.use('/static', express.static(path.join(__dirname, 'public')));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• path.join 拼接路径，返回规范化结果</li>
+            <li>• path.resolve 返回绝对路径</li>
+            <li>• resolve 从右到左处理，遇到绝对路径停止</li>
+            <li>• 推荐使用 resolve + __dirname 定位文件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-1-path基础方法.html">← 上一节：path 基础方法</a>
+      <a href="14-3-路径解析.html">下一节：路径解析 →</a>
+    </div>
+  </div>
+</body>
+</html>

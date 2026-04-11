@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>114.5 装饰器模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="114-1-单例模式.html">第114章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>114.5 装饰器模式</h1>
+      <p class="subtitle">动态添加对象功能</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解装饰器模式的定义</li>
+        <li>掌握类装饰器实现</li>
+        <li>学会TypeScript装饰器语法</li>
+        <li>了解装饰器的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 模式定义</h2>
+      <div class="code-block">
+// 装饰器模式：动态地给对象添加额外职责，比生成子类更灵活
+
+// 应用场景
+const useCases = [
+  '日志记录',
+  '缓存',
+  '权限验证',
+  '性能监控',
+  '事务管理'
+];
+
+// 经典装饰器实现
+interface Coffee {
+  cost(): number;
+  description(): string;
+}
+
+class SimpleCoffee implements Coffee {
+  cost(): number { return 10; }
+  description(): string { return 'Simple Coffee'; }
+}
+
+class MilkDecorator implements Coffee {
+  constructor(private coffee: Coffee) {}
+
+  cost(): number { return this.coffee.cost() + 2; }
+  description(): string { return this.coffee.description() + ', Milk'; }
+}
+
+class SugarDecorator implements Coffee {
+  constructor(private coffee: Coffee) {}
+
+  cost(): number { return this.coffee.cost() + 1; }
+  description(): string { return this.coffee.description() + ', Sugar'; }
+}
+
+// 使用
+let coffee: Coffee = new SimpleCoffee();
+console.log(coffee.description(), coffee.cost());
+// Simple Coffee 10
+
+coffee = new MilkDecorator(coffee);
+console.log(coffee.description(), coffee.cost());
+// Simple Coffee, Milk 12
+
+coffee = new SugarDecorator(coffee);
+console.log(coffee.description(), coffee.cost());
+// Simple Coffee, Milk, Sugar 13
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">装饰器优点</div>
+          <p>比继承更灵活、可动态组合、单一职责原则。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeScript装饰器</h2>
+      <div class="code-block">
+// 方法装饰器：日志
+function Log(
+  target: any,
+  propertyKey: string,
+  descriptor: PropertyDescriptor
+) {
+  const original = descriptor.value;
+
+  descriptor.value = async function (...args: any[]) {
+    console.log(`Calling ${propertyKey} with args:`, args);
+    const start = Date.now();
+
+    try {
+      const result = await original.apply(this, args);
+      console.log(`${propertyKey} returned:`, result);
+      return result;
+    } catch (error) {
+      console.error(`${propertyKey} threw:`, error);
+      throw error;
+    } finally {
+      console.log(`${propertyKey} took ${Date.now() - start}ms`);
+    }
+  };
+
+  return descriptor;
+}
+
+// 方法装饰器：缓存
+function Cache(ttl: number = 60000) {
+  const cache = new Map<string, { value: any; expire: number }>();
+
+  return function (
+    target: any,
+    propertyKey: string,
+    descriptor: PropertyDescriptor
+  ) {
+    const original = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      const key = JSON.stringify(args);
+      const cached = cache.get(key);
+
+      if (cached && cached.expire > Date.now()) {
+        console.log(`Cache hit for ${propertyKey}`);
+        return cached.value;
+      }
+
+      const result = await original.apply(this, args);
+      cache.set(key, { value: result, expire: Date.now() + ttl });
+
+      return result;
+    };
+
+    return descriptor;
+  };
+}
+
+// 使用装饰器
+class UserService {
+  @Log
+  @Cache(30000)  // 缓存30秒
+  async getUser(id: string) {
+    // 模拟数据库查询
+    await new Promise(r => setTimeout(r, 100));
+    return { id, name: 'User ' + id };
+  }
+
+  @Log
+  async createUser(data: any) {
+    return { id: 'new', ...data };
+  }
+}
+
+// 类装饰器
+function Singleton<T extends { new (...args: any[]): {} }>(constructor: T) {
+  let instance: any;
+
+  return class extends constructor {
+    constructor(...args: any[]) {
+      if (instance) {
+        return instance;
+      }
+      super(...args);
+      instance = this;
+    }
+  };
+}
+
+@Singleton
+class Database {
+  constructor(public url: string) {}
+}
+
+const db1 = new Database('url1');
+const db2 = new Database('url2');
+console.log(db1 === db2);  // true
+
+// 参数装饰器
+function Required(target: any, propertyKey: string, parameterIndex: number) {
+  const existingRequired: number[] = Reflect.getOwnMetadata('required', target, propertyKey) || [];
+  existingRequired.push(parameterIndex);
+  Reflect.defineMetadata('required', existingRequired, target, propertyKey);
+}
+
+function Validate(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  const original = descriptor.value;
+  const requiredParams = Reflect.getOwnMetadata('required', target, propertyKey) || [];
+
+  descriptor.value = function (...args: any[]) {
+    requiredParams.forEach((index: number) => {
+      if (args[index] === undefined || args[index] === null) {
+        throw new Error(`Parameter at index ${index} is required`);
+      }
+    });
+
+    return original.apply(this, args);
+  };
+
+  return descriptor;
+}
+
+class OrderService {
+  @Validate
+  createOrder(@Required productId: string, @Required quantity: number) {
+    console.log(`Creating order: ${productId} x ${quantity}`);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 装饰器动态添加功能</li>
+            <li>• TypeScript支持多种装饰器</li>
+            <li>• 方法装饰器最常用</li>
+            <li>• NestJS大量使用装饰器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="114-4-策略模式.html">← 上一节：策略模式</a>
+      <a href="../chapter115/115-1-函数式概念.html">下一章：函数式概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

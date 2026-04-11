@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.5 管道操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="17-1-流的概念.html">第十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>17.5 管道操作</h1>
+      <p class="subtitle">连接流的管道方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 pipe() 方法的使用</li>
+        <li>理解管道的链式调用</li>
+        <li>学会 pipeline() 方法</li>
+        <li>掌握管道错误处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> pipe() 方法</h2>
+      <div class="code-block">
+const fs = require('fs');
+const zlib = require('zlib');
+
+// pipe() 将可读流连接到可写流
+// 自动管理数据流和背压
+
+// 基本用法
+const readable = fs.createReadStream('source.txt');
+const writable = fs.createWriteStream('dest.txt');
+
+readable.pipe(writable);
+
+// pipe() 返回目标流，支持链式调用
+fs.createReadStream('source.txt')
+  .pipe(zlib.createGzip())
+  .pipe(fs.createWriteStream('source.txt.gz'));
+
+// 多级管道
+fs.createReadStream('access.log')
+  .pipe(zlib.createGunzip())
+  .pipe(fs.createWriteStream('access.log'));
+
+// 返回值用于链式调用
+const result = readable.pipe(writable);
+console.log(result === writable);  // true
+
+// 管道自动处理：
+// 1. 数据流动
+// 2. 背压管理
+// 3. 流关闭
+// 4. 错误传递（部分）
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">pipe() 的优势</div>
+          <p>pipe() 自动处理数据传输、背压和流关闭，比手动监听事件更简洁可靠。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 链式管道</h2>
+      <div class="code-block">
+const fs = require('fs');
+const zlib = require('zlib');
+const crypto = require('crypto');
+
+// 加密并压缩
+fs.createReadStream('secret.txt')
+  .pipe(crypto.createCipher('aes192', 'password'))
+  .pipe(zlib.createGzip())
+  .pipe(fs.createWriteStream('secret.txt.gz'));
+
+// 解压并解密
+fs.createReadStream('secret.txt.gz')
+  .pipe(zlib.createGunzip())
+  .pipe(crypto.createDecipher('aes192', 'password'))
+  .pipe(fs.createWriteStream('secret-copy.txt'));
+
+// HTTP 响应管道
+const http = require('http');
+http.createServer((req, res) => {
+  fs.createReadStream('video.mp4')
+    .pipe(res);
+}).listen(3000);
+
+// 压缩响应
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Encoding': 'gzip' });
+  fs.createReadStream('large.json')
+    .pipe(zlib.createGzip())
+    .pipe(res);
+}).listen(3001);
+
+// 标准输入输出
+process.stdin
+  .pipe(require('through2')(function (chunk, enc, cb) {
+    this.push(chunk.toString().toUpperCase());
+    cb();
+  }))
+  .pipe(process.stdout);
+
+// unpipe() 断开管道
+const readable = fs.createReadStream('file.txt');
+const writable = fs.createWriteStream('output.txt');
+
+readable.pipe(writable);
+// 稍后断开
+readable.unpipe(writable);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> pipeline() 方法</h2>
+      <div class="code-block">
+const { pipeline } = require('stream');
+const fs = require('fs');
+const zlib = require('zlib');
+
+// pipeline() 比 pipe() 更好地处理错误
+pipeline(
+  fs.createReadStream('source.txt'),
+  zlib.createGzip(),
+  fs.createWriteStream('dest.txt.gz'),
+  (err) => {
+    if (err) {
+      console.error('管道失败:', err);
+    } else {
+      console.log('管道成功');
+    }
+  }
+);
+
+// 多个转换流
+pipeline(
+  fs.createReadStream('input.txt'),
+  async function* (source) {
+    for await (const chunk of source) {
+      yield chunk.toString().toUpperCase();
+    }
+  },
+  fs.createWriteStream('output.txt'),
+  (err) => {
+    if (err) console.error(err);
+    else console.log('完成');
+  }
+);
+
+// 使用 Promise
+const { pipeline } = require('stream/promises');
+
+async function compressFile() {
+  await pipeline(
+    fs.createReadStream('source.txt'),
+    zlib.createGzip(),
+    fs.createWriteStream('source.txt.gz')
+  );
+  console.log('压缩完成');
+}
+
+compressFile().catch(console.error);
+
+// 多文件处理
+async function processFiles() {
+  await Promise.all([
+    pipeline(
+      fs.createReadStream('a.txt'),
+      zlib.createGzip(),
+      fs.createWriteStream('a.txt.gz')
+    ),
+    pipeline(
+      fs.createReadStream('b.txt'),
+      zlib.createGzip(),
+      fs.createWriteStream('b.txt.gz')
+    )
+  ]);
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 错误处理</h2>
+      <div class="code-block">
+const fs = require('fs');
+const { pipeline } = require('stream');
+
+// pipe() 的错误处理问题
+const readable = fs.createReadStream('nonexistent.txt');
+const writable = fs.createWriteStream('output.txt');
+
+// pipe() 不会自动传递错误
+readable.on('error', (err) => {
+  console.error('读取错误:', err);
+});
+writable.on('error', (err) => {
+  console.error('写入错误:', err);
+});
+
+readable.pipe(writable);
+
+// 使用 pipeline() 更安全
+pipeline(
+  fs.createReadStream('nonexistent.txt'),
+  fs.createWriteStream('output.txt'),
+  (err) => {
+    if (err) {
+      console.error('捕获到错误:', err);
+    }
+  }
+);
+
+// 手动处理所有错误
+function safePipe(source, dest) {
+  source.on('error', (err) => {
+    dest.emit('error', err);
+  });
+  return source.pipe(dest);
+}
+
+// 完整错误处理示例
+const { PassThrough } = require('stream');
+
+const stream = new PassThrough();
+
+stream.on('error', (err) => {
+  console.error('流错误:', err);
+});
+
+process.stdin
+  .on('error', (err) => stream.emit('error', err))
+  .pipe(stream)
+  .on('error', (err) => process.stderr.emit('error', err))
+  .pipe(process.stdout);
+
+process.on('uncaughtException', (err) => {
+  console.error('未捕获错误:', err);
+  process.exit(1);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• pipe() 连接可读流和可写流</li>
+            <li>• 支持链式调用实现多级管道</li>
+            <li>• pipeline() 提供更好的错误处理</li>
+            <li>• 生产环境推荐使用 pipeline()</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="17-4-双工流.html">← 上一节：双工流</a>
+      <a href="../chapter18/18-1-创建HTTP服务器.html">下一章：创建 HTTP 服务器 →</a>
+    </div>
+  </div>
+</body>
+</html>

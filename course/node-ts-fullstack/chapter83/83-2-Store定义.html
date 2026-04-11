@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>83.2 Store 定义 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>83.2 Store 定义</h1>
+      <p class="subtitle">两种定义 Store 的方式</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>Pinia 提供了两种定义 Store 的方式：Options API 风格和 Composition API 风格（Setup Store）。两种风格功能相同，可以根据个人偏好选择。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Options Store 的定义方式</li>
+        <li>掌握 Setup Store 的定义方式</li>
+        <li>理解两种风格的区别和选择</li>
+        <li>学会在不同场景下使用合适的风格</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> Options Store</h2>
+      <p>Options Store 类似于 Vue 的 Options API，通过 state、getters、actions 三个选项来定义 Store。</p>
+      <div class="code-block"><span class="comment">// stores/user.ts</span>
+<span class="keyword">import</span> { defineStore } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+
+<span class="keyword">interface</span> User {
+  id: <span class="keyword">number</span>;
+  name: <span class="keyword">string</span>;
+  email: <span class="keyword">string</span>;
+  role: <span class="string">'admin'</span> | <span class="string">'user'</span>;
+}
+
+<span class="keyword">interface</span> UserState {
+  user: User | <span class="keyword">null</span>;
+  token: <span class="keyword">string</span> | <span class="keyword">null</span>;
+  loading: <span class="keyword">boolean</span>;
+}
+
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, {
+  <span class="comment">// State - 必须是返回初始状态的函数</span>
+  state: (): UserState => ({
+    user: <span class="keyword">null</span>,
+    token: <span class="keyword">null</span>,
+    loading: <span class="keyword">false</span>
+  }),
+
+  <span class="comment">// Getters - 类似计算属性</span>
+  getters: {
+    <span class="comment">// 简单 getter</span>
+    <span class="function">isLoggedIn</span>(state): <span class="keyword">boolean</span> {
+      <span class="keyword">return</span> !!state.token;
+    },
+
+    <span class="comment">// 使用 this 访问其他 getter</span>
+    <span class="function">isAdmin</span>(): <span class="keyword">boolean</span> {
+      <span class="keyword">return this</span>.isLoggedIn &amp;&amp; <span class="keyword">this</span>.user?.role === <span class="string">'admin'</span>;
+    },
+
+    <span class="comment">// 带参数的 getter（返回函数）</span>
+    <span class="function">hasPermission</span>: (state) => {
+      <span class="keyword">return</span> (permission: <span class="keyword">string</span>) => {
+        <span class="keyword">return</span> state.user?.role === <span class="string">'admin'</span>;
+      };
+    }
+  },
+
+  <span class="comment">// Actions - 类似方法，可以是异步的</span>
+  actions: {
+    <span class="comment">// 同步 action</span>
+    <span class="function">setUser</span>(user: User) {
+      <span class="keyword">this</span>.user = user;
+    },
+
+    <span class="function">setToken</span>(token: <span class="keyword">string</span>) {
+      <span class="keyword">this</span>.token = token;
+    },
+
+    <span class="function">logout</span>() {
+      <span class="keyword">this</span>.user = <span class="keyword">null</span>;
+      <span class="keyword">this</span>.token = <span class="keyword">null</span>;
+    },
+
+    <span class="comment">// 异步 action</span>
+    <span class="keyword">async</span> <span class="function">login</span>(credentials: { email: <span class="keyword">string</span>; password: <span class="keyword">string</span> }) {
+      <span class="keyword">this</span>.loading = <span class="keyword">true</span>;
+      <span class="keyword">try</span> {
+        <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+        <span class="keyword">this</span>.setUser(response.user);
+        <span class="keyword">this</span>.setToken(response.token);
+      } <span class="keyword">finally</span> {
+        <span class="keyword">this</span>.loading = <span class="keyword">false</span>;
+      }
+    }
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> Setup Store</h2>
+      <p>Setup Store 类似于 Vue 的 Composition API，使用 ref、reactive、computed 和普通函数来定义。</p>
+      <div class="code-block"><span class="comment">// stores/user.ts</span>
+<span class="keyword">import</span> { defineStore } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+<span class="keyword">import</span> { ref, computed } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => {
+  <span class="comment">// State - 使用 ref 或 reactive</span>
+  <span class="keyword">const</span> user = ref&lt;User | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> token = ref&lt;<span class="keyword">string</span> | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+  <span class="keyword">const</span> loading = ref(<span class="keyword">false</span>);
+
+  <span class="comment">// Getters - 使用 computed</span>
+  <span class="keyword">const</span> isLoggedIn = computed(() => !!token.value);
+
+  <span class="keyword">const</span> isAdmin = computed(() => {
+    <span class="keyword">return</span> isLoggedIn.value &amp;&amp; user.value?.role === <span class="string">'admin'</span>;
+  });
+
+  <span class="comment">// 带参数的 getter（普通函数）</span>
+  <span class="keyword">function</span> <span class="function">hasPermission</span>(permission: <span class="keyword">string</span>): <span class="keyword">boolean</span> {
+    <span class="keyword">return</span> user.value?.role === <span class="string">'admin'</span>;
+  }
+
+  <span class="comment">// Actions - 普通函数</span>
+  <span class="keyword">function</span> <span class="function">setUser</span>(newUser: User) {
+    user.value = newUser;
+  }
+
+  <span class="keyword">function</span> <span class="function">setToken</span>(newToken: <span class="keyword">string</span>) {
+    token.value = newToken;
+  }
+
+  <span class="keyword">function</span> <span class="function">logout</span>() {
+    user.value = <span class="keyword">null</span>;
+    token.value = <span class="keyword">null</span>;
+  }
+
+  <span class="keyword">async function</span> <span class="function">login</span>(credentials: { email: <span class="keyword">string</span>; password: <span class="keyword">string</span> }) {
+    loading.value = <span class="keyword">true</span>;
+    <span class="keyword">try</span> {
+      <span class="keyword">const</span> response = <span class="keyword">await</span> api.login(credentials);
+      setUser(response.user);
+      setToken(response.token);
+    } <span class="keyword">finally</span> {
+      loading.value = <span class="keyword">false</span>;
+    }
+  }
+
+  <span class="comment">// 必须返回所有需要暴露的内容</span>
+  <span class="keyword">return</span> {
+    <span class="comment">// State</span>
+    user,
+    token,
+    loading,
+    <span class="comment">// Getters</span>
+    isLoggedIn,
+    isAdmin,
+    hasPermission,
+    <span class="comment">// Actions</span>
+    setUser,
+    setToken,
+    logout,
+    login
+  };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 两种风格对比</h2>
+      <table>
+        <tr>
+          <th>特性</th>
+          <th>Options Store</th>
+          <th>Setup Store</th>
+        </tr>
+        <tr>
+          <td>State 定义</td>
+          <td>state() 函数返回对象</td>
+          <td>ref() / reactive()</td>
+        </tr>
+        <tr>
+          <td>Getters 定义</td>
+          <td>getters 对象</td>
+          <td>computed()</td>
+        </tr>
+        <tr>
+          <td>Actions 定义</td>
+          <td>actions 对象</td>
+          <td>普通函数</td>
+        </tr>
+        <tr>
+          <td>类型推断</td>
+          <td>需要显式类型</td>
+          <td>自动推断</td>
+        </tr>
+        <tr>
+          <td>this 指向</td>
+          <td>store 实例</td>
+          <td>不使用 this</td>
+        </tr>
+        <tr>
+          <td>适用场景</td>
+          <td>熟悉 Options API</td>
+          <td>熟悉 Composition API</td>
+        </tr>
+      </table>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">推荐选择</div>
+          <p>推荐使用 Setup Store 风格，它与 Vue 3 的 Composition API 风格一致，类型推断更好，灵活性更高。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 使用其他 Store</h2>
+      <div class="code-block"><span class="comment">// stores/cart.ts</span>
+<span class="keyword">import</span> { defineStore } <span class="keyword">from</span> <span class="string">'pinia'</span>;
+<span class="keyword">import</span> { useUserStore } <span class="keyword">from</span> <span class="string">'./user'</span>;
+<span class="keyword">import</span> { useProductsStore } <span class="keyword">from</span> <span class="string">'./products'</span>;
+
+<span class="keyword">export const</span> useCartStore = defineStore(<span class="string">'cart'</span>, () => {
+  <span class="keyword">const</span> items = ref&lt;CartItem[]&gt;([]);
+
+  <span class="comment">// 使用其他 store</span>
+  <span class="keyword">const</span> userStore = useUserStore();
+  <span class="keyword">const</span> productsStore = useProductsStore();
+
+  <span class="keyword">const</span> total = computed(() => {
+    <span class="keyword">return</span> items.value.reduce((sum, item) => {
+      <span class="keyword">const</span> product = productsStore.getProduct(item.productId);
+      <span class="keyword">return</span> sum + product.price * item.quantity;
+    }, <span class="number">0</span>);
+  });
+
+  <span class="keyword">async function</span> <span class="function">checkout</span>() {
+    <span class="keyword">if</span> (!userStore.isLoggedIn) {
+      <span class="keyword">throw new</span> Error(<span class="string">'Please login first'</span>);
+    }
+
+    <span class="keyword">const</span> response = <span class="keyword">await</span> api.checkout({
+      items: items.value,
+      userId: userStore.user!.id
+    });
+
+    items.value = [];
+    <span class="keyword">return</span> response;
+  }
+
+  <span class="keyword">return</span> { items, total, checkout };
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> Store 命名约定</h2>
+      <div class="code-block"><span class="comment">// 推荐：useXxxStore 命名</span>
+<span class="keyword">export const</span> useUserStore = defineStore(<span class="string">'user'</span>, () => { /* ... */ });
+<span class="keyword">export const</span> useCartStore = defineStore(<span class="string">'cart'</span>, () => { /* ... */ });
+<span class="keyword">export const</span> useProductsStore = defineStore(<span class="string">'products'</span>, () => { /* ... */ });
+
+<span class="comment">// Store ID 通常是模块名</span>
+<span class="comment">// stores/user.ts -> store id: 'user'</span>
+<span class="comment">// stores/cart.ts -> store id: 'cart'</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>Options Store 使用 state/getters/actions 定义</li>
+        <li>Setup Store 使用 ref/computed/函数定义</li>
+        <li>Setup Store 类型推断更好，更灵活</li>
+        <li>两种风格可以混用，但不推荐在同一个项目中混用</li>
+        <li>Store 可以引用其他 Store</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="83-1-Pinia简介.html">← 上一节：Pinia 简介</a>
+      <a href="83-3-State与Getter.html">下一节：State 与 Getter →</a>
+    </div>
+  </div>
+</body>
+</html>

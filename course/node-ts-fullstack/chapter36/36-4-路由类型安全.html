@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.4 路由类型安全 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter36.html">第36章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>36.4 路由类型安全</h1>
+      <p class="subtitle">实现类型安全的 Express 路由</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会定义类型安全的路由</li>
+        <li>掌握路由参数类型推断</li>
+        <li>学会创建类型安全的控制器</li>
+        <li>理解 API 类型共享</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 定义 API 类型</h2>
+
+      <div class="code-block">
+// src/types/api.ts
+
+// 用户相关类型
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin';
+  createdAt: Date;
+}
+
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+}
+
+// 响应类型
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T[]> {
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// 路由类型
+export type RouteHandler<P = any, ResBody = any, ReqBody = any, Query = any> = (
+  req: import('express').Request<P, ResBody, ReqBody, Query>,
+  res: import('express').Response<ResBody>,
+  next: import('express').NextFunction
+) => Promise<void> | void;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛣️</span> 类型安全路由</h2>
+
+      <div class="code-block">
+// src/routes/userRoutes.ts
+import { Router, Request, Response } from 'express';
+import { User, CreateUserInput, UpdateUserInput, ApiResponse, PaginatedResponse } from '../types/api';
+import * as userController from '../controllers/userController';
+
+const router = Router();
+
+// GET /users - 获取用户列表
+router.get('/', async (req: Request, res: Response<PaginatedResponse<User>>) => {
+  const { page = 1, limit = 10 } = req.query;
+  const result = await userController.getUsers(Number(page), Number(limit));
+
+  res.json({
+    success: true,
+    data: result.users,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total: result.total,
+      totalPages: Math.ceil(result.total / Number(limit))
+    }
+  });
+});
+
+// GET /users/:id - 获取单个用户
+router.get('/:id', async (req: Request<{ id: string }>, res: Response<ApiResponse<User>>) => {
+  const user = await userController.getUserById(req.params.id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: 'User not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    data: user
+  });
+});
+
+// POST /users - 创建用户
+router.post('/',
+  async (req: Request<{}, ApiResponse<User>, CreateUserInput>, res: Response<ApiResponse<User>>) => {
+    const user = await userController.createUser(req.body);
+
+    res.status(201).json({
+      success: true,
+      data: user,
+      message: 'User created'
+    });
+  }
+);
+
+// PUT /users/:id - 更新用户
+router.put('/:id',
+  async (req: Request<{ id: string }, ApiResponse<User>, UpdateUserInput>, res: Response<ApiResponse<User>>) => {
+    const user = await userController.updateUser(req.params.id, req.body);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user
+    });
+  }
+);
+
+// DELETE /users/:id - 删除用户
+router.delete('/:id', async (req: Request<{ id: string }>, res: Response<ApiResponse>) => {
+  await userController.deleteUser(req.params.id);
+
+  res.json({
+    success: true,
+    message: 'User deleted'
+  });
+});
+
+export default router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎮</span> 类型安全控制器</h2>
+
+      <div class="code-block">
+// src/controllers/userController.ts
+import { User, CreateUserInput, UpdateUserInput } from '../types/api';
+import { NotFoundError } from '../utils/errors';
+
+// 模拟数据库
+const users: User[] = [];
+
+export async function getUsers(page: number, limit: number): Promise<{ users: User[], total: number }> {
+  const start = (page - 1) * limit;
+  const paginatedUsers = users.slice(start, start + limit);
+
+  return {
+    users: paginatedUsers,
+    total: users.length
+  };
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  return users.find(u => u.id === id) || null;
+}
+
+export async function createUser(input: CreateUserInput): Promise<User> {
+  const user: User = {
+    id: crypto.randomUUID(),
+    name: input.name,
+    email: input.email,
+    role: 'user',
+    createdAt: new Date()
+  };
+
+  users.push(user);
+  return user;
+}
+
+export async function updateUser(id: string, input: UpdateUserInput): Promise<User | null> {
+  const index = users.findIndex(u => u.id === id);
+
+  if (index === -1) {
+    return null;
+  }
+
+  users[index] = {
+    ...users[index],
+    ...input
+  };
+
+  return users[index];
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const index = users.findIndex(u => u.id === id);
+
+  if (index === -1) {
+    throw new NotFoundError('User not found');
+  }
+
+  users.splice(index, 1);
+  return true;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 路由类型工具</h2>
+
+      <div class="code-block">
+// src/utils/routeTypes.ts
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+
+// 类型安全的路由处理器
+type TypedRequestHandler<
+  P = Record<string, string>,
+  ResBody = any,
+  ReqBody = any,
+  Query = Record<string, any>
+> = (
+  req: Request<P, ResBody, ReqBody, Query>,
+  res: Response<ResBody>,
+  next: NextFunction
+) => Promise<void> | void;
+
+// 创建类型安全的路由器
+interface TypedRouter {
+  get<P, ResBody, ReqBody, Query>(
+    path: string,
+    handler: TypedRequestHandler<P, ResBody, ReqBody, Query>
+  ): void;
+  post<P, ResBody, ReqBody, Query>(
+    path: string,
+    handler: TypedRequestHandler<P, ResBody, ReqBody, Query>
+  ): void;
+  // ... 其他方法
+}
+
+// 异步处理器包装
+export const asyncHandler = <P = any, ResBody = any, ReqBody = any, Query = any>(
+  fn: TypedRequestHandler<P, ResBody, ReqBody, Query>
+): RequestHandler => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+// 使用
+import { asyncHandler } from '../utils/routeTypes';
+
+router.get<{ id: string }, User>('/:id', asyncHandler(async (req, res) => {
+  const user = await getUserById(req.params.id);
+  res.json(user);
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>定义统一的 API 类型接口</li>
+            <li>使用泛型指定路由的参数、请求体、响应类型</li>
+            <li>控制器使用明确的输入输出类型</li>
+            <li>使用工具函数简化类型安全路由</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="36-3-RequestResponse类型扩展.html">← 上一节：Request/Response 类型扩展</a>
+      <a href="36-5-错误类型处理.html">下一节：错误类型处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

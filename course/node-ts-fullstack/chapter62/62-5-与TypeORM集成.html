@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>62.5 与 TypeORM 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="62-1-GraphQL模块配置.html">第62章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>62.5 与 TypeORM 集成</h1>
+      <p class="subtitle">GraphQL 与 TypeORM 完美配合</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Entity 定义</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Entity, PrimaryGeneratedColumn, Column, OneToMany } <span class="keyword">from</span> <span class="string">'typeorm'</span>;
+<span class="keyword">import</span> { ObjectType, Field, ID } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+
+<span class="keyword">@Entity</span>()
+<span class="keyword">@ObjectType</span>()
+<span class="keyword">export class</span> <span class="function">User</span> {
+  <span class="keyword">@PrimaryGeneratedColumn</span>()
+  <span class="keyword">@Field</span>(() => ID)
+  id: <span class="keyword">number</span>;
+
+  <span class="keyword">@Column</span>()
+  <span class="keyword">@Field</span>()
+  name: <span class="keyword">string</span>;
+
+  <span class="keyword">@Column</span>({ unique: <span class="keyword">true</span> })
+  <span class="keyword">@Field</span>()
+  email: <span class="keyword">string</span>;
+
+  <span class="keyword">@Column</span>()
+  password: <span class="keyword">string</span>;  <span class="comment">// 不添加 @Field，不在 GraphQL 中暴露</span>
+
+  <span class="keyword">@OneToMany</span>(() => Post, post => post.author)
+  <span class="keyword">@Field</span>(() => [Post])
+  posts: Post[];
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Service 实现</h2>
+
+      <div class="code-block">
+<span class="keyword">@Injectable</span>()
+<span class="keyword">export class</span> <span class="function">UserService</span> {
+  <span class="keyword">constructor</span>(
+    <span class="keyword">@InjectRepository</span>(User)
+    <span class="keyword">private</span> userRepository: Repository<User>,
+  ) {}
+
+  <span class="keyword">async</span> <span class="function">findAll</span>(): Promise<User[]> {
+    <span class="keyword">return this</span>.userRepository.find({
+      relations: [<span class="string">'posts'</span>],
+    });
+  }
+
+  <span class="keyword">async</span> <span class="function">findOne</span>(id: <span class="keyword">number</span>): Promise<User | <span class="keyword">null</span>> {
+    <span class="keyword">return this</span>.userRepository.findOne({
+      where: { id },
+      relations: [<span class="string">'posts'</span>],
+    });
+  }
+
+  <span class="keyword">async</span> <span class="function">create</span>(input: CreateUserInput): Promise<User> {
+    <span class="keyword">const</span> user = <span class="keyword">this</span>.userRepository.create(input);
+    <span class="keyword">return this</span>.userRepository.save(user);
+  }
+
+  <span class="keyword">async</span> <span class="function">update</span>(id: <span class="keyword">number</span>, input: UpdateUserInput): Promise<User | <span class="keyword">null</span>> {
+    <span class="keyword">await this</span>.userRepository.update(id, input);
+    <span class="keyword">return this</span>.findOne(id);
+  }
+
+  <span class="keyword">async</span> <span class="function">remove</span>(id: <span class="keyword">number</span>): Promise<<span class="keyword">void</span>> {
+    <span class="keyword">await this</span>.userRepository.delete(id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>Entity 可以同时作为 TypeORM 实体和 GraphQL 类型</li>
+        <li>敏感字段不添加 @Field 装饰器</li>
+        <li>使用 relations 加载关联数据</li>
+        <li>Service 处理业务逻辑和数据访问</li>
+        <li>Resolver 调用 Service 处理请求</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="62-4-Resolver实现.html">← 上一节：Resolver 实现</a>
+      <a href="../chapter63/63-1-WebSocket基础.html">下一章：WebSocket 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

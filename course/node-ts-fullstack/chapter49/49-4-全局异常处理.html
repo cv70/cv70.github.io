@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.4 全局异常处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="49-1-异常过滤器.html">第四十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>49.4 全局异常处理</h1>
+      <p class="subtitle">配置全局异常过滤器</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握全局异常过滤器的配置</li>
+        <li>学会处理不同类型的异常</li>
+        <li>了解异常日志记录</li>
+        <li>掌握生产环境异常处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 配置全局异常过滤器</h2>
+      <div class="code-block">
+// 方式1：main.ts 注册
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new GlobalExceptionFilter());
+  await app.listen(3000);
+}
+
+// 方式2：模块注册（支持依赖注入）
+@Module({
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整的全局异常过滤器</h2>
+      <div class="code-block">
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+
+interface ErrorResponse {
+  code: number;
+  message: string;
+  error?: string;
+  details?: any;
+  timestamp: string;
+  path: string;
+  traceId?: string;
+}
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    const traceId = request.headers['x-trace-id'] || this.generateTraceId();
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let errorResponse: ErrorResponse = {
+      code: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'Internal server error',
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      traceId,
+    };
+
+    // 处理不同类型的异常
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+
+      errorResponse = {
+        code: status,
+        message: this.extractMessage(exceptionResponse),
+        error: this.extractError(exceptionResponse),
+        details: this.extractDetails(exceptionResponse),
+        timestamp: new Date().toISOString(),
+        path: request.url,
+        traceId,
+      };
+    } else if (exception instanceof Error) {
+      // 处理原生错误
+      errorResponse = {
+        code: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: process.env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : exception.message,
+        error: exception.name,
+        details: process.env.NODE_ENV === 'production'
+          ? undefined
+          : { stack: exception.stack },
+        timestamp: new Date().toISOString(),
+        path: request.url,
+        traceId,
+      };
+
+      this.logger.error(
+        `[${traceId}] Unhandled exception: ${exception.message}`,
+        exception.stack,
+      );
+    }
+
+    // 记录错误日志
+    this.logError(errorResponse, status, traceId);
+
+    response.status(status).json(errorResponse);
+  }
+
+  private extractMessage(response: any): string {
+    if (typeof response === 'string') return response;
+    if (typeof response === 'object' && response.message) {
+      return Array.isArray(response.message)
+        ? response.message.join(', ')
+        : response.message;
+    }
+    return 'An error occurred';
+  }
+
+  private extractError(response: any): string | undefined {
+    if (typeof response === 'object' && response.error) {
+      return response.error;
+    }
+    return undefined;
+  }
+
+  private extractDetails(response: any): any {
+    if (typeof response === 'object') {
+      const { message, error, statusCode, ...details } = response;
+      return Object.keys(details).length > 0 ? details : undefined;
+    }
+    return undefined;
+  }
+
+  private generateTraceId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
+  private logError(errorResponse: ErrorResponse, status: number, traceId: string): void {
+    if (status >= 500) {
+      this.logger.error(`[${traceId}] Server error: ${JSON.stringify(errorResponse)}`);
+    } else if (status >= 400) {
+      this.logger.warn(`[${traceId}] Client error: ${JSON.stringify(errorResponse)}`);
+    }
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Trace ID</div>
+          <p>使用 Trace ID 可以追踪单个请求的完整生命周期，在日志中关联所有相关信息，便于问题排查。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 处理特定异常类型</h2>
+      <div class="code-block">
+import { Catch, ExceptionFilter, ArgumentsHost } from '@nestjs/common';
+import { QueryFailedError, EntityNotFoundError } from 'typeorm';
+import { Request, Response } from 'express';
+
+// 数据库异常过滤器
+@Catch(QueryFailedError)
+export class DatabaseExceptionFilter implements ExceptionFilter {
+  catch(exception: QueryFailedError, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+
+    let message = 'Database error';
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+
+    // 根据数据库错误码处理
+    if (exception.message.includes('duplicate key')) {
+      message = 'Duplicate entry';
+      status = HttpStatus.CONFLICT;
+    } else if (exception.message.includes('foreign key')) {
+      message = 'Referenced record not found';
+      status = HttpStatus.BAD_REQUEST;
+    }
+
+    response.status(status).json({
+      code: status,
+      message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// 注册多个过滤器
+@Module({
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: DatabaseExceptionFilter,
+    },
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 全局过滤器统一处理所有异常</li>
+            <li>• 生产环境隐藏敏感错误信息</li>
+            <li>• Trace ID 追踪请求链路</li>
+            <li>• 可针对特定异常创建专用过滤器</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="49-3-自定义异常.html">← 上一节：自定义异常</a>
+      <a href="49-5-异常日志.html">下一节：异常日志 →</a>
+    </div>
+  </div>
+</body>
+</html>

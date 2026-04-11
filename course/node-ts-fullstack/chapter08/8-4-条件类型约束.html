@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.4 条件类型约束 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="8-1-条件类型基础.html">第八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>8.4 条件类型约束</h1>
+      <p class="subtitle">为条件类型添加类型约束</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解条件类型约束的概念</li>
+        <li>掌握 extends 约束的用法</li>
+        <li>学会约束 infer 推断的类型</li>
+        <li>了解嵌套条件类型的约束</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本约束</h2>
+      <div class="code-block">
+// 使用 extends 约束条件类型的输入
+type MessageOf<T extends { message: unknown }> = T['message'];
+
+interface Email {
+  message: string;
+}
+
+interface SMS {
+  message: string;
+  phone: string;
+}
+
+type EmailMessage = MessageOf<Email>;  // string
+type SMSMessage = MessageOf<SMS>;      // string
+
+// 没有 message 属性会报错
+// type Error = MessageOf<number>;  // Error: number 不满足约束
+
+// 更灵活的约束
+type MessageOf2<T> = T extends { message: unknown } ? T['message'] : never;
+
+type M1 = MessageOf2<Email>;   // string
+type M2 = MessageOf2<number>;  // never
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 约束 infer 类型</h2>
+      <div class="code-block">
+// 约束推断的类型必须满足某些条件
+type ExtractReturnType<T extends (...args: any[]) => any> =
+  T extends (...args: any[]) => infer R ? R : never;
+
+// 约束返回值必须是对象
+type ExtractObjectReturn<T> =
+  T extends (...args: any[]) => infer R
+    ? R extends object
+      ? R
+      : never
+    : never;
+
+function returnObject() {
+  return { x: 1, y: 2 };
+}
+
+function returnNumber() {
+  return 42;
+}
+
+type ObjReturn = ExtractObjectReturn<typeof returnObject>;  // { x: number; y: number }
+type NumReturn = ExtractObjectReturn<typeof returnNumber>;  // never
+
+// 提取数组的非空元素类型
+type NonNullableArrayElement<T> =
+  T extends (infer E)[]
+    ? E extends null | undefined
+      ? never
+      : E
+    : never;
+
+type Arr = NonNullableArrayElement<(string | null)[]>;
+// string
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 嵌套条件约束</h2>
+      <div class="code-block">
+// 深层类型提取
+type DeepValue<T, K extends string> =
+  K extends keyof T
+    ? T[K]
+    : K extends `${infer First}.${infer Rest}`
+      ? First extends keyof T
+        ? DeepValue<T[First], Rest>
+        : never
+      : never;
+
+interface Config {
+  database: {
+    host: string;
+    port: number;
+    credentials: {
+      username: string;
+      password: string;
+    };
+  };
+}
+
+type Host = DeepValue<Config, 'database.host'>;  // string
+type Port = DeepValue<Config, 'database.port'>;  // number
+type Username = DeepValue<Config, 'database.credentials.username'>;  // string
+
+// 约束泛型参数必须可赋值给 infer 类型
+type MatchPattern<T, P> =
+  T extends P
+    ? T
+    : never;
+
+type Matched = MatchPattern<string | number, string>;  // string
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>条件类型约束可以确保类型安全，但过于复杂的约束会降低代码可读性。保持约束简单明了。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• extends 用于约束条件类型输入</li>
+            <li>• 可以约束 infer 推断的类型</li>
+            <li>• 嵌套条件实现深层类型提取</li>
+            <li>• 约束提高类型安全性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="8-3-infer关键字.html">← 上一节：infer 关键字</a>
+      <a href="8-5-预定义条件类型.html">下一节：预定义条件类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

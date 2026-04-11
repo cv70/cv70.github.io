@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>61.4 N+1 问题与 DataLoader - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="61-1-Resolver编写.html">第61章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>61.4 N+1 问题与 DataLoader</h1>
+      <p class="subtitle">GraphQL 性能优化的关键技术</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> N+1 问题</h2>
+      <p>N+1 问题是 GraphQL 中常见的性能问题。当查询关联数据时，如果不加处理，会产生大量数据库查询。</p>
+
+      <div class="code-block">
+<span class="comment">// 问题查询</span>
+query {
+  users {
+    name
+    posts {
+      title
+    }
+  }
+}
+
+<span class="comment">// 执行过程（假设有 10 个用户）</span>
+<span class="comment">// 1. 查询用户列表: SELECT * FROM users</span>
+<span class="comment">// 2. 查询用户1的文章: SELECT * FROM posts WHERE authorId = 1</span>
+<span class="comment">// 3. 查询用户2的文章: SELECT * FROM posts WHERE authorId = 2</span>
+<span class="comment">// ...</span>
+<span class="comment">// 11. 查询用户10的文章: SELECT * FROM posts WHERE authorId = 10</span>
+<span class="comment">// 总共 1 + 10 = 11 次查询！</span>
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">N+1 问题的影响</div>
+          <ul>
+            <li>数据库查询次数爆炸</li>
+            <li>响应时间显著增加</li>
+            <li>数据库负载过高</li>
+            <li>影响整体系统性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> DataLoader 简介</h2>
+      <p>DataLoader 是 Facebook 开发的批量数据加载工具，通过批处理和缓存解决 N+1 问题。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">批处理（Batching）</h3>
+          <p class="card-text">将多个单独请求合并为一个批量请求</p>
+          <div class="code-block">
+<span class="comment">// 单独请求</span>
+SELECT * FROM posts WHERE authorId = 1
+SELECT * FROM posts WHERE authorId = 2
+SELECT * FROM posts WHERE authorId = 3
+
+<span class="comment">// 批处理</span>
+SELECT * FROM posts WHERE authorId IN (1, 2, 3)
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">缓存（Caching）</h3>
+          <p class="card-text">同一请求中相同 key 只加载一次</p>
+          <div class="code-block">
+<span class="comment">// 第一次请求 authorId=1</span>
+<span class="comment">// 从数据库加载</span>
+
+<span class="comment">// 第二次请求 authorId=1</span>
+<span class="comment">// 从缓存返回</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> DataLoader 实现</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> DataLoader <span class="keyword">from</span> <span class="string">'dataloader'</span>;
+
+<span class="comment">// 创建 DataLoader</span>
+<span class="keyword">const</span> userLoader = <span class="keyword">new</span> DataLoader<<span class="keyword">number</span>, User>(<span class="keyword">async</span> (ids) => {
+  <span class="comment">// 批量查询</span>
+  <span class="keyword">const</span> users = <span class="keyword">await</span> prisma.user.findMany({
+    where: { id: { in: ids <span class="keyword">as</span> <span class="keyword">number</span>[] } },
+  });
+
+  <span class="comment">// 创建 ID 到 User 的映射</span>
+  <span class="keyword">const</span> userMap = <span class="keyword">new</span> Map(users.map(user => [user.id, user]));
+
+  <span class="comment">// 按输入顺序返回结果</span>
+  <span class="keyword">return</span> ids.map(id => userMap.get(id) || <span class="keyword">null</span>);
+});
+
+<span class="comment">// 帖子 DataLoader</span>
+<span class="keyword">const</span> postsByAuthorLoader = <span class="keyword">new</span> DataLoader<<span class="keyword">number</span>, Post[]>(<span class="keyword">async</span> (authorIds) => {
+  <span class="comment">// 批量查询所有作者的文章</span>
+  <span class="keyword">const</span> posts = <span class="keyword">await</span> prisma.post.findMany({
+    where: { authorId: { in: authorIds <span class="keyword">as</span> <span class="keyword">number</span>[] } },
+  });
+
+  <span class="comment">// 按作者 ID 分组</span>
+  <span class="keyword">const</span> postsByAuthor = <span class="keyword">new</span> Map<<span class="keyword">number</span>, Post[]>();
+
+  posts.forEach(post => {
+    <span class="keyword">const</span> authorPosts = postsByAuthor.get(post.authorId) || [];
+    authorPosts.push(post);
+    postsByAuthor.set(post.authorId, authorPosts);
+  });
+
+  <span class="comment">// 按输入顺序返回</span>
+  <span class="keyword">return</span> authorIds.map(id => postsByAuthor.get(id) || []);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 在 Resolver 中使用 DataLoader</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> DataLoader <span class="keyword">from</span> <span class="string">'dataloader'</span>;
+
+<span class="comment">// 创建 DataLoader 工厂函数</span>
+<span class="keyword">function</span> <span class="function">createLoaders</span>(prisma: PrismaClient) {
+  <span class="keyword">return</span> {
+    user: <span class="keyword">new</span> DataLoader<<span class="keyword">number</span>, User>(<span class="keyword">async</span> (ids) => {
+      <span class="keyword">const</span> users = <span class="keyword">await</span> prisma.user.findMany({
+        where: { id: { in: [...ids] } },
+      });
+      <span class="keyword">const</span> userMap = <span class="keyword">new</span> Map(users.map(u => [u.id, u]));
+      <span class="keyword">return</span> [...ids].map(id => userMap.get(id) || <span class="keyword">null</span>);
+    }),
+
+    postsByAuthor: <span class="keyword">new</span> DataLoader<<span class="keyword">number</span>, Post[]>(<span class="keyword">async</span> (authorIds) => {
+      <span class="keyword">const</span> posts = <span class="keyword">await</span> prisma.post.findMany({
+        where: { authorId: { in: [...authorIds] } },
+      });
+      <span class="keyword">const</span> grouped = <span class="keyword">new</span> Map<<span class="keyword">number</span>, Post[]>();
+      posts.forEach(post => {
+        <span class="keyword">const</span> list = grouped.get(post.authorId) || [];
+        list.push(post);
+        grouped.set(post.authorId, list);
+      });
+      <span class="keyword">return</span> [...authorIds].map(id => grouped.get(id) || []);
+    }),
+
+    commentsByPost: <span class="keyword">new</span> DataLoader<<span class="keyword">number</span>, Comment[]>(<span class="keyword">async</span> (postIds) => {
+      <span class="keyword">const</span> comments = <span class="keyword">await</span> prisma.comment.findMany({
+        where: { postId: { in: [...postIds] } },
+      });
+      <span class="keyword">const</span> grouped = <span class="keyword">new</span> Map<<span class="keyword">number</span>, Comment[]>();
+      comments.forEach(comment => {
+        <span class="keyword">const</span> list = grouped.get(comment.postId) || [];
+        list.push(comment);
+        grouped.set(comment.postId, list);
+      });
+      <span class="keyword">return</span> [...postIds].map(id => grouped.get(id) || []);
+    }),
+  };
+}
+
+<span class="comment">// Context 类型</span>
+<span class="keyword">interface</span> Context {
+  prisma: PrismaClient;
+  loaders: ReturnType<<span class="keyword">typeof</span> createLoaders>;
+}
+
+<span class="comment">// Resolvers</span>
+<span class="keyword">const</span> resolvers = {
+  User: {
+    posts: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.loaders.postsByAuthor.load(parent.id);
+    },
+  },
+  Post: {
+    author: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.loaders.user.load(parent.authorId);
+    },
+    comments: <span class="keyword">async</span> (parent, _, context) => {
+      <span class="keyword">return</span> context.loaders.commentsByPost.load(parent.id);
+    },
+  },
+};
+
+<span class="comment">// Apollo Server 配置</span>
+<span class="keyword">const</span> server = <span class="keyword">new</span> ApolloServer<Context>({ typeDefs, resolvers });
+
+<span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> () => ({
+    prisma,
+    loaders: createLoaders(prisma),  <span class="comment">// 每个请求创建新的 DataLoader</span>
+  }),
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 性能对比</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>无 DataLoader</th>
+            <th>有 DataLoader</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>查询 10 个用户的文章</td>
+            <td>11 次 DB 查询</td>
+            <td>2 次 DB 查询</td>
+          </tr>
+          <tr>
+            <td>查询 100 个用户的文章</td>
+            <td>101 次 DB 查询</td>
+            <td>2 次 DB 查询</td>
+          </tr>
+          <tr>
+            <td>重复查询相同用户</td>
+            <td>每次都查询 DB</td>
+            <td>缓存返回</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> DataLoader 最佳实践</h2>
+
+      <div class="code-block">
+<span class="comment">// 1. 每个请求创建新的 DataLoader 实例</span>
+<span class="keyword">await</span> startStandaloneServer(server, {
+  context: <span class="keyword">async</span> () => ({
+    loaders: createLoaders(prisma),  <span class="comment">// 每次创建新实例</span>
+  }),
+});
+
+<span class="comment">// 2. 正确处理排序</span>
+<span class="keyword">const</span> userLoader = <span class="keyword">new</span> DataLoader(<span class="keyword">async</span> (ids) => {
+  <span class="keyword">const</span> users = <span class="keyword">await</span> prisma.user.findMany({
+    where: { id: { in: [...ids] } },
+  });
+  <span class="keyword">const</span> userMap = <span class="keyword">new</span> Map(users.map(u => [u.id, u]));
+  <span class="comment">// 必须按输入 ids 的顺序返回</span>
+  <span class="keyword">return</span> [...ids].map(id => userMap.get(id) || <span class="keyword">null</span>);
+});
+
+<span class="comment">// 3. 处理一对多关系</span>
+<span class="keyword">const</span> postsByAuthorLoader = <span class="keyword">new</span> DataLoader(<span class="keyword">async</span> (authorIds) => {
+  <span class="keyword">const</span> posts = <span class="keyword">await</span> prisma.post.findMany({
+    where: { authorId: { in: [...authorIds] } },
+  });
+  <span class="comment">// 按作者分组</span>
+  <span class="keyword">const</span> grouped = <span class="keyword">new</span> Map<<span class="keyword">number</span>, Post[]>();
+  posts.forEach(post => {
+    <span class="keyword">if</span> (!grouped.has(post.authorId)) {
+      grouped.set(post.authorId, []);
+    }
+    grouped.get(post.authorId)!.push(post);
+  });
+  <span class="keyword">return</span> [...authorIds].map(id => grouped.get(id) || []);
+});
+
+<span class="comment">// 4. 使用缓存选项</span>
+<span class="keyword">const</span> loader = <span class="keyword">new</span> DataLoader(batchFn, {
+  cache: <span class="keyword">true</span>,           <span class="comment">// 启用缓存</span>
+  maxBatchSize: <span class="number">100</span>,    <span class="comment">// 最大批量大小</span>
+  cacheMap: <span class="keyword">new</span> Map(),   <span class="comment">// 自定义缓存</span>
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>N+1 问题会导致大量数据库查询</li>
+        <li>DataLoader 通过批处理和缓存解决 N+1 问题</li>
+        <li>每个请求创建新的 DataLoader 实例</li>
+        <li>正确处理返回结果的排序</li>
+        <li>一对多关系需要特殊处理</li>
+        <li>显著提升 GraphQL 查询性能</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="61-3-分页实现.html">← 上一节：分页实现</a>
+      <a href="61-5-认证与授权.html">下一节：认证与授权 →</a>
+    </div>
+  </div>
+</body>
+</html>

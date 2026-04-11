@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>112.5 媒体管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="112-1-需求分析.html">第112章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>112.5 媒体管理</h1>
+      <p class="subtitle">文件上传与图片处理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握文件上传实现</li>
+        <li>学会图片处理优化</li>
+        <li>理解存储策略</li>
+        <li>了解CDN加速</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 媒体管理架构</h2>
+      <div class="code-block">
+// 媒体管理功能
+
+const features = {
+  upload: {
+    name: '文件上传',
+    items: ['拖拽上传', '批量上传', '断点续传', '进度显示']
+  },
+  image: {
+    name: '图片处理',
+    items: ['自动压缩', '格式转换', '缩略图生成', '水印添加']
+  },
+  storage: {
+    name: '存储策略',
+    items: ['本地存储', '对象存储(S3)', 'CDN加速', '文件分发']
+  },
+  management: {
+    name: '媒体管理',
+    items: ['文件夹管理', '标签分类', '搜索过滤', '批量操作']
+  }
+};
+
+// 存储方案对比
+const storageOptions = {
+  local: {
+    pros: ['简单', '无额外成本'],
+    cons: ['无CDN', '扩展性差', '单点故障']
+  },
+  s3: {
+    pros: ['高可用', 'CDN支持', '按需付费'],
+    cons: ['成本', '网络延迟']
+  },
+  minio: {
+    pros: ['S3兼容', '私有部署', '免费'],
+    cons: ['运维成本', '无内置CDN']
+  }
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">存储选择</div>
+          <p>小型项目本地存储足够；生产环境推荐S3兼容的对象存储。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 文件上传服务</h2>
+      <div class="code-block">
+// media.entity.ts
+@Entity('media')
+export class Media {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  filename: string;
+
+  @Column()
+  originalName: string;
+
+  @Column()
+  mimeType: string;
+
+  @Column()
+  size: number;
+
+  @Column()
+  path: string;
+
+  @Column({ nullable: true })
+  url: string;
+
+  @Column({ nullable: true })
+  thumbnailUrl: string;
+
+  @Column({ nullable: true })
+  width: number;
+
+  @Column({ nullable: true })
+  height: number;
+
+  @Column()
+  uploadedBy: string;
+
+  @Column({ type: 'json', nullable: true })
+  metadata: Record<string, any>;
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// media.service.ts
+@Injectable()
+export class MediaService {
+  constructor(
+    @InjectRepository(Media) private mediaRepo: Repository<Media>,
+    private s3Service: S3Service,
+  ) {}
+
+  async uploadImage(
+    file: Express.Multer.File,
+    userId: string,
+    options?: { compress?: boolean; watermark?: boolean }
+  ): Promise<Media> {
+    // 生成文件名
+    const ext = path.extname(file.originalname);
+    const filename = `${uuidv4()}${ext}`;
+
+    // 图片处理
+    let buffer = file.buffer;
+    let width: number, height: number;
+
+    const metadata = await sharp(buffer).metadata();
+    width = metadata.width;
+    height = metadata.height;
+
+    // 压缩
+    if (options?.compress !== false) {
+      buffer = await sharp(buffer)
+        .resize(2048, null, { withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+    }
+
+    // 上传到存储
+    const url = await this.s3Service.upload(filename, buffer, file.mimetype);
+
+    // 生成缩略图
+    const thumbnailBuffer = await sharp(file.buffer)
+      .resize(200, 200, { fit: 'cover' })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+
+    const thumbnailFilename = `thumb_${filename}`;
+    const thumbnailUrl = await this.s3Service.upload(
+      thumbnailFilename,
+      thumbnailBuffer,
+      'image/jpeg'
+    );
+
+    // 保存记录
+    const media = this.mediaRepo.create({
+      filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: buffer.length,
+      path: filename,
+      url,
+      thumbnailUrl,
+      width,
+      height,
+      uploadedBy: userId,
+    });
+
+    return this.mediaRepo.save(media);
+  }
+
+  // 删除文件
+  async deleteMedia(id: string, userId: string): Promise<void> {
+    const media = await this.mediaRepo.findOne({ where: { id } });
+
+    if (!media) {
+      throw new NotFoundException('文件不存在');
+    }
+
+    // 删除存储文件
+    await this.s3Service.delete(media.path);
+
+    if (media.thumbnailUrl) {
+      await this.s3Service.delete(`thumb_${media.path}`);
+    }
+
+    // 删除记录
+    await this.mediaRepo.remove(media);
+  }
+}
+
+// S3存储服务
+@Injectable()
+export class S3Service {
+  private s3: S3Client;
+  private bucket: string;
+
+  constructor() {
+    this.s3 = new S3Client({
+      region: process.env.S3_REGION,
+      endpoint: process.env.S3_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY,
+        secretAccessKey: process.env.S3_SECRET_KEY,
+      },
+    });
+    this.bucket = process.env.S3_BUCKET;
+  }
+
+  async upload(key: string, body: Buffer, contentType: string): Promise<string> {
+    await this.s3.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }));
+
+    return `${process.env.CDN_URL}/${key}`;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.s3.send(new DeleteObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+  }
+
+  // 生成签名URL（私有文件）
+  async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    return getSignedUrl(this.s3, command, { expiresIn });
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 图片上传需要压缩和生成缩略图</li>
+            <li>• 对象存储适合生产环境</li>
+            <li>• CDN加速文件访问</li>
+            <li>• 保存文件元信息便于管理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="112-4-富文本编辑.html">← 上一节：富文本编辑</a>
+      <a href="../chapter113/113-1-平台架构.html">下一章：API 开放平台实战 →</a>
+    </div>
+  </div>
+</body>
+</html>

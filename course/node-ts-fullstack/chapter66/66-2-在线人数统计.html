@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>66.2 在线人数统计 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="66-1-实时聊天室.html">第六十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>66.2 在线人数统计</h1>
+      <p class="subtitle">实时在线用户监控</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>实现在线人数统计功能</li>
+        <li>掌握用户连接状态管理</li>
+        <li>学会房间级别的在线统计</li>
+        <li>了解统计数据的可视化展示</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 全局在线统计</h2>
+
+      <div class="card">
+        <h3 class="card-title">服务端实现</h3>
+        <div class="code-block">
+import { Server, Socket } from 'socket.io';
+
+interface OnlineUser {
+  id: string;
+  username: string;
+  socketId: string;
+  connectedAt: Date;
+  lastActivity: Date;
+  ip?: string;
+  userAgent?: string;
+}
+
+class OnlineUserManager {
+  private users = new Map&lt;string, OnlineUser&gt;();  // userId -> User
+  private socketToUser = new Map&lt;string, string&gt;(); // socketId -> userId
+
+  add(socket: Socket, userId: string, username: string): OnlineUser {
+    const user: OnlineUser = {
+      id: userId,
+      username,
+      socketId: socket.id,
+      connectedAt: new Date(),
+      lastActivity: new Date(),
+      ip: socket.handshake.address,
+      userAgent: socket.handshake.headers['user-agent']
+    };
+
+    this.users.set(userId, user);
+    this.socketToUser.set(socket.id, userId);
+
+    return user;
+  }
+
+  remove(socketId: string): OnlineUser | null {
+    const userId = this.socketToUser.get(socketId);
+    if (!userId) return null;
+
+    const user = this.users.get(userId);
+    this.users.delete(userId);
+    this.socketToUser.delete(socketId);
+
+    return user || null;
+  }
+
+  updateActivity(userId: string): void {
+    const user = this.users.get(userId);
+    if (user) {
+      user.lastActivity = new Date();
+    }
+  }
+
+  getCount(): number {
+    return this.users.size;
+  }
+
+  getAll(): OnlineUser[] {
+    return Array.from(this.users.values());
+  }
+
+  getByRoom(roomId: string, io: Server): OnlineUser[] {
+    const roomSockets = io.sockets.adapter.rooms.get(roomId);
+    if (!roomSockets) return [];
+
+    const users: OnlineUser[] = [];
+    roomSockets.forEach(socketId => {
+      const userId = this.socketToUser.get(socketId);
+      if (userId) {
+        const user = this.users.get(userId);
+        if (user) users.push(user);
+      }
+    });
+
+    return users;
+  }
+}
+
+const onlineManager = new OnlineUserManager();
+
+export function setupOnlineTracking(io: Server) {
+  // 定时广播在线人数
+  setInterval(() => {
+    const stats = {
+      total: onlineManager.getCount(),
+      timestamp: Date.now()
+    };
+    io.emit('online:stats', stats);
+  }, 5000);
+
+  io.on('connection', (socket) => {
+    const userId = socket.handshake.auth.userId;
+    const username = socket.handshake.auth.username;
+
+    // 添加在线用户
+    const user = onlineManager.add(socket, userId, username);
+
+    // 广播用户上线
+    io.emit('user:online', {
+      user,
+      onlineCount: onlineManager.getCount()
+    });
+
+    // 发送当前在线用户列表给新用户
+    socket.emit('online:list', onlineManager.getAll());
+
+    // 更新活动状态
+    socket.onAny(() => {
+      onlineManager.updateActivity(userId);
+    });
+
+    // 断开连接
+    socket.on('disconnect', () => {
+      const leftUser = onlineManager.remove(socket.id);
+
+      if (leftUser) {
+        // 广播用户下线
+        io.emit('user:offline', {
+          user: leftUser,
+          onlineCount: onlineManager.getCount()
+        });
+      }
+    });
+  });
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏠</span> 房间级别统计</h2>
+
+      <div class="card">
+        <h3 class="card-title">房间在线人数</h3>
+        <div class="code-block">
+// 房间在线统计
+class RoomStatsManager {
+  private roomStats = new Map&lt;string, {
+    onlineCount: number;
+    peakCount: number;
+    totalVisits: number;
+  }&gt;();
+
+  joinRoom(roomId: string): void {
+    if (!this.roomStats.has(roomId)) {
+      this.roomStats.set(roomId, {
+        onlineCount: 0,
+        peakCount: 0,
+        totalVisits: 0
+      });
+    }
+
+    const stats = this.roomStats.get(roomId)!;
+    stats.onlineCount++;
+    stats.totalVisits++;
+
+    if (stats.onlineCount > stats.peakCount) {
+      stats.peakCount = stats.onlineCount;
+    }
+  }
+
+  leaveRoom(roomId: string): void {
+    const stats = this.roomStats.get(roomId);
+    if (stats && stats.onlineCount > 0) {
+      stats.onlineCount--;
+    }
+  }
+
+  getStats(roomId: string) {
+    return this.roomStats.get(roomId);
+  }
+
+  getAllStats() {
+    const result: Record&lt;string, any&gt; = {};
+    this.roomStats.forEach((value, key) => {
+      result[key] = value;
+    });
+    return result;
+  }
+}
+
+const roomStats = new RoomStatsManager();
+
+// 在 Socket.IO 中使用
+io.on('connection', (socket) => {
+  socket.on('room:join', (roomId: string) => {
+    socket.join(roomId);
+    roomStats.joinRoom(roomId);
+
+    // 广播房间统计更新
+    const stats = roomStats.getStats(roomId);
+    io.to(roomId).emit('room:stats', {
+      roomId,
+      ...stats
+    });
+  });
+
+  socket.on('room:leave', (roomId: string) => {
+    socket.leave(roomId);
+    roomStats.leaveRoom(roomId);
+
+    // 广播房间统计更新
+    const stats = roomStats.getStats(roomId);
+    if (stats) {
+      io.to(roomId).emit('room:stats', {
+        roomId,
+        ...stats
+      });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    // 用户断开时，从所有房间统计中移除
+    socket.rooms.forEach(roomId => {
+      if (roomId !== socket.id) {
+        roomStats.leaveRoom(roomId);
+      }
+    });
+  });
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 客户端展示</h2>
+
+      <div class="card">
+        <h3 class="card-title">React 组件</h3>
+        <div class="code-block">
+import { useState, useEffect } from 'react';
+import { useSocket } from '../hooks/useSocket';
+
+interface OnlineStats {
+  total: number;
+  timestamp: number;
+}
+
+interface OnlineUser {
+  id: string;
+  username: string;
+  connectedAt: Date;
+}
+
+export function OnlineIndicator() {
+  const { socket, isConnected } = useSocket();
+  const [onlineStats, setOnlineStats] = useState&lt;OnlineStats&gt;({ total: 0, timestamp: 0 });
+  const [onlineUsers, setOnlineUsers] = useState&lt;OnlineUser[]&gt;([]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // 接收在线统计
+    socket.on('online:stats', (stats) => {
+      setOnlineStats(stats);
+    });
+
+    // 接收在线用户列表
+    socket.on('online:list', (users) => {
+      setOnlineUsers(users);
+    });
+
+    // 用户上线
+    socket.on('user:online', ({ user, onlineCount }) => {
+      setOnlineUsers(prev => {
+        if (!prev.find(u => u.id === user.id)) {
+          return [...prev, user];
+        }
+        return prev;
+      });
+      setOnlineStats(prev => ({ ...prev, total: onlineCount }));
+    });
+
+    // 用户下线
+    socket.on('user:offline', ({ user, onlineCount }) => {
+      setOnlineUsers(prev => prev.filter(u => u.id !== user.id));
+      setOnlineStats(prev => ({ ...prev, total: onlineCount }));
+    });
+
+    return () => {
+      socket.off('online:stats');
+      socket.off('online:list');
+      socket.off('user:online');
+      socket.off('user:offline');
+    };
+  }, [socket]);
+
+  return (
+    &lt;div className="online-indicator"&gt;
+      &lt;div className="status-bar"&gt;
+        &lt;span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} /&gt;
+        &lt;span className="count"&gt;在线: {onlineStats.total}&lt;/span&gt;
+      &lt;/div&gt;
+
+      &lt;div className="user-list"&gt;
+        &lt;h4&gt;在线用户&lt;/h4&gt;
+        &lt;ul&gt;
+          {onlineUsers.map(user => (
+            &lt;li key={user.id}&gt;
+              &lt;span className="avatar"&gt;{user.username[0]}&lt;/span&gt;
+              &lt;span className="name"&gt;{user.username}&lt;/span&gt;
+            &lt;/li&gt;
+          ))}
+        &lt;/ul&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">样式</h3>
+        <div class="code-block">
+.online-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+  background: #10b981;
+}
+
+.status-dot.disconnected {
+  background: #ef4444;
+}
+
+.count {
+  font-weight: 600;
+  color: #333;
+}
+
+.user-list {
+  margin-top: 10px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.user-list h4 {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  margin: 0;
+}
+
+.user-list ul {
+  list-style: none;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.user-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+}
+
+.user-list li:hover {
+  background: #f5f5f5;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 统计仪表盘</h2>
+
+      <div class="card">
+        <h3 class="card-title">管理后台统计</h3>
+        <div class="code-block">
+// 服务端统计 API
+import express from 'express';
+
+const app = express();
+
+interface SystemStats {
+  totalConnections: number;
+  activeConnections: number;
+  uniqueUsers: number;
+  peakToday: number;
+  avgSessionDuration: number;
+  topRooms: Array&lt;{ roomId: string; users: number }&gt;;
+}
+
+// 统计中间件
+let totalConnections = 0;
+const dailyStats = new Map&lt;string, number&gt;();
+
+io.on('connection', (socket) => {
+  totalConnections++;
+  const today = new Date().toDateString();
+  const currentDaily = dailyStats.get(today) || 0;
+  dailyStats.set(today, currentDaily + 1);
+
+  socket.on('disconnect', () => {
+    // 记录会话时长等
+  });
+});
+
+// 获取统计信息
+app.get('/api/stats', (req, res) => {
+  const stats: SystemStats = {
+    totalConnections,
+    activeConnections: onlineManager.getCount(),
+    uniqueUsers: onlineManager.getAll().length,
+    peakToday: Math.max(...Array.from(dailyStats.values())),
+    avgSessionDuration: 0, // 计算平均会话时长
+    topRooms: getTopRooms()
+  };
+
+  res.json(stats);
+});
+
+// 获取在线用户详情
+app.get('/api/online', (req, res) => {
+  res.json(onlineManager.getAll());
+});
+
+// 获取房间统计
+app.get('/api/rooms/stats', (req, res) => {
+  res.json(roomStats.getAllStats());
+});
+
+function getTopRooms() {
+  return Object.entries(roomStats.getAllStats())
+    .map(([roomId, stats]) => ({
+      roomId,
+      users: stats.onlineCount
+    }))
+    .sort((a, b) => b.users - a.users)
+    .slice(0, 10);
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 Map 管理用户与 Socket 的映射关系</li>
+            <li>• 定时广播在线统计确保数据同步</li>
+            <li>• 房间级别统计支持更细粒度监控</li>
+            <li>• 记录峰值、访问量等历史数据</li>
+            <li>• 提供 HTTP API 用于管理后台展示</li>
+            <li>• 前端组件实时更新用户列表</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="66-1-实时聊天室.html">← 上一节</a>
+      <a href="66-3-实时通知系统.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

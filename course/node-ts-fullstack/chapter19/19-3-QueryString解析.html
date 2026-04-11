@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.3 Query String 解析 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="19-1-URL解析.html">第十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>19.3 Query String 解析</h1>
+      <p class="subtitle">处理 URL 查询字符串</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 querystring 模块</li>
+        <li>学会解析和字符串化</li>
+        <li>理解编码处理</li>
+        <li>掌握复杂查询参数处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> querystring 模块</h2>
+      <div class="code-block">
+const querystring = require('querystring');
+
+// 解析查询字符串
+const str = 'name=Alice&age=25&active=true';
+const obj = querystring.parse(str);
+
+console.log(obj);
+// { name: 'Alice', age: '25', active: 'true' }
+
+// 指定分隔符
+const obj2 = querystring.parse('name:Alice;age:25', ';', ':');
+console.log(obj2);  // { name: 'Alice', age: '25' }
+
+// 字符串化
+const obj3 = { name: 'Alice', age: 25, active: true };
+const str2 = querystring.stringify(obj3);
+console.log(str2);  // name=Alice&age=25&active=true
+
+// 指定分隔符
+const str3 = querystring.stringify(obj3, ';', ':');
+console.log(str3);  // name:Alice;age:25;active:true
+
+// URL 编码
+const encoded = querystring.escape('你好世界');
+console.log(encoded);  // %E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C
+
+// URL 解码
+const decoded = querystring.unescape('%E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C');
+console.log(decoded);  // 你好世界
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>querystring 模块已标记为 Legacy，推荐使用 URLSearchParams。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> URLSearchParams</h2>
+      <div class="code-block">
+// 推荐：使用 URLSearchParams
+const params = new URLSearchParams('name=Alice&age=25&tags=a&tags=b');
+
+// 获取值
+console.log(params.get('name'));      // 'Alice'
+console.log(params.getAll('tags'));   // ['a', 'b']
+
+// 检查存在
+console.log(params.has('name'));      // true
+
+// 设置值
+params.set('name', 'Bob');
+params.append('tags', 'c');
+
+// 删除
+params.delete('age');
+
+// 遍历
+for (const [key, value] of params) {
+  console.log(`${key}: ${value}`);
+}
+
+// 转换为对象
+const obj = Object.fromEntries(params);
+console.log(obj);  // { name: 'Bob', tags: 'c' }
+
+// 注意：Object.fromEntries 只保留最后一个同名参数
+
+// 转换为字符串
+console.log(params.toString());  // name=Bob&tags=a&tags=b&tags=c
+
+// 从对象创建
+const params2 = new URLSearchParams({
+  name: 'Alice',
+  age: 25
+});
+console.log(params2.toString());  // name=Alice&age=25
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 复杂参数处理</h2>
+      <div class="code-block">
+// 处理数组参数
+function parseArrayParams(str) {
+  const params = new URLSearchParams(str);
+  const result = {};
+
+  for (const [key, value] of params) {
+    if (key.endsWith('[]')) {
+      const realKey = key.slice(0, -2);
+      if (!result[realKey]) result[realKey] = [];
+      result[realKey].push(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+const arrStr = 'tags[]=js&tags[]=node&name=Alice';
+console.log(parseArrayParams(arrStr));
+// { tags: ['js', 'node'], name: 'Alice' }
+
+// 处理嵌套对象参数
+function parseNestedParams(str) {
+  const params = new URLSearchParams(str);
+  const result = {};
+
+  for (const [key, value] of params) {
+    const parts = key.split('.');
+    let obj = result;
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+
+    obj[parts[parts.length - 1]] = value;
+  }
+
+  return result;
+}
+
+const nestedStr = 'user.name=Alice&user.age=25&title=Hello';
+console.log(parseNestedParams(nestedStr));
+// { user: { name: 'Alice', age: '25' }, title: 'Hello' }
+
+// 类型转换
+function parseWithTypes(str) {
+  const params = new URLSearchParams(str);
+  const result = {};
+
+  for (const [key, value] of params) {
+    // 尝试转换为合适类型
+    if (value === 'true') result[key] = true;
+    else if (value === 'false') result[key] = false;
+    else if (value === 'null') result[key] = null;
+    else if (!isNaN(value) && value !== '') result[key] = Number(value);
+    else result[key] = value;
+  }
+
+  return result;
+}
+
+console.log(parseWithTypes('active=true&count=10&name=Alice'));
+// { active: true, count: 10, name: 'Alice' }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实际应用示例</h2>
+      <div class="code-block">
+const http = require('http');
+const url = require('url');
+
+// HTTP 请求中解析查询参数
+const server = http.createServer((req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+
+  // 获取查询参数
+  const page = parsedUrl.searchParams.get('page') || '1';
+  const limit = parsedUrl.searchParams.get('limit') || '10';
+  const search = parsedUrl.searchParams.get('search') || '';
+
+  console.log('分页:', { page, limit, search });
+
+  // 获取所有同名参数
+  const tags = parsedUrl.searchParams.getAll('tag');
+  console.log('标签:', tags);
+
+  // 转换为对象
+  const query = Object.fromEntries(parsedUrl.searchParams);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ query, tags }));
+});
+
+server.listen(3000);
+
+// 构建分页 URL
+function buildPaginationUrl(baseUrl, currentPage, totalPages, params = {}) {
+  const url = new URL(baseUrl);
+
+  Object.entries(params).forEach(([k, v]) => {
+    url.searchParams.set(k, v);
+  });
+
+  return {
+    first: buildPageUrl(url, 1),
+    prev: currentPage > 1 ? buildPageUrl(url, currentPage - 1) : null,
+    current: buildPageUrl(url, currentPage),
+    next: currentPage < totalPages ? buildPageUrl(url, currentPage + 1) : null,
+    last: buildPageUrl(url, totalPages)
+  };
+}
+
+function buildPageUrl(url, page) {
+  const newUrl = new URL(url.href);
+  newUrl.searchParams.set('page', page);
+  return newUrl.href;
+}
+
+const pagination = buildPaginationUrl('https://api.example.com/users', 2, 10, { limit: 20 });
+console.log(pagination);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• querystring 模块已弃用，使用 URLSearchParams</li>
+            <li>• getAll() 获取同名参数数组</li>
+            <li>• Object.fromEntries 转换为对象</li>
+            <li>• 注意处理数组和嵌套对象参数</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="19-2-URL构造.html">← 上一节：URL 构造</a>
+      <a href="19-4-URL参数处理.html">下一节：URL 参数处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

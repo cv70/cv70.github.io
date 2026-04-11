@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>63.1 WebSocket 协议 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="63-1-WebSocket协议.html">第六十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>63.1 WebSocket 协议</h1>
+      <p class="subtitle">深入理解 WebSocket 通信机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 WebSocket 协议的基本概念</li>
+        <li>掌握 WebSocket 的工作原理</li>
+        <li>了解 WebSocket 握手过程</li>
+        <li>熟悉 WebSocket 数据帧格式</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是 WebSocket</h3>
+      <p class="card-text">
+        <strong>WebSocket</strong>是一种在单个 TCP 连接上进行全双工通信的协议。它于2011年被 IETF 定为标准 RFC 6455，并由 W3C 将 WebSocket API 纳入 HTML5 标准。
+      </p>
+      <p class="card-text">
+        WebSocket 使得客户端和服务器之间的数据交换变得更加简单，允许服务端主动向客户端推送数据。在 WebSocket API 中，浏览器和服务器只需要完成一次握手，两者之间就直接可以创建持久性的连接，并进行双向数据传输。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> WebSocket 协议特点</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">核心特性</h3>
+          <ul class="feature-list">
+            <li>基于 TCP 协议，支持二进制和文本数据</li>
+            <li>全双工通信，服务端可主动推送</li>
+            <li>握手阶段使用 HTTP 协议</li>
+            <li>数据格式轻量，性能开销小</li>
+            <li>没有同源限制，客户端可以与任意服务器通信</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">协议标识</h3>
+          <div class="code-block">
+ws://example.com:8080/path
+wss://example.com:8080/path  // 加密连接
+          </div>
+          <p class="card-text" style="margin-top: 1rem;">
+            <code>ws://</code> 是非加密连接，<code>wss://</code> 是加密连接（WebSocket Secure），类似于 HTTP 和 HTTPS 的关系。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🤝</span> WebSocket 握手过程</h2>
+      <p class="card-text">WebSocket 连接建立需要经过 HTTP 握手升级过程：</p>
+
+      <div class="steps">
+        <div class="step active">
+          <div class="step-number">1</div>
+          <div class="step-label">客户端发起请求</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">2</div>
+          <div class="step-label">服务端响应确认</div>
+        </div>
+        <div class="step active">
+          <div class="step-number">3</div>
+          <div class="step-label">建立 WebSocket 连接</div>
+        </div>
+      </div>
+
+      <div class="code-block">
+客户端请求：
+GET /chat HTTP/1.1
+Host: server.example.com
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+Origin: http://example.com
+
+服务端响应：
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">握手验证原理</div>
+        <p><code>Sec-WebSocket-Accept</code> 的值是服务端将 <code>Sec-WebSocket-Key</code> 与固定的 GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11" 拼接后，进行 SHA-1 哈希，再进行 Base64 编码得到的。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> WebSocket 数据帧格式</h2>
+      <p class="card-text">WebSocket 使用帧（Frame）来传输数据，基本帧格式如下：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>长度</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FIN</td>
+            <td>1 bit</td>
+            <td>是否为最后一帧</td>
+          </tr>
+          <tr>
+            <td>RSV1-3</td>
+            <td>3 bits</td>
+            <td>保留位，用于扩展</td>
+          </tr>
+          <tr>
+            <td>Opcode</td>
+            <td>4 bits</td>
+            <td>帧类型（文本、二进制等）</td>
+          </tr>
+          <tr>
+            <td>Mask</td>
+            <td>1 bit</td>
+            <td>是否使用掩码</td>
+          </tr>
+          <tr>
+            <td>Payload length</td>
+            <td>7/7+16/7+64 bits</td>
+            <td>负载数据长度</td>
+          </tr>
+          <tr>
+            <td>Masking-key</td>
+            <td>0/32 bits</td>
+            <td>掩码密钥（客户端必须使用）</td>
+          </tr>
+          <tr>
+            <td>Payload data</td>
+            <td>变长</td>
+            <td>实际数据内容</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Opcode 类型说明</h3>
+      <div class="code-block">
+0x0: 继续帧 (Continuation Frame)
+0x1: 文本帧 (Text Frame)
+0x2: 二进制帧 (Binary Frame)
+0x8: 关闭帧 (Connection Close)
+0x9: Ping 帧
+0xA: Pong 帧
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 心跳机制</h2>
+      <p class="card-text">WebSocket 提供了内置的心跳机制，通过 Ping/Pong 帧来保持连接活跃：</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Ping 帧</h3>
+          <p class="card-text">服务端或客户端可以发送 Ping 帧来探测对方是否仍然存活。Ping 帧可以携带数据。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Pong 帧</h3>
+          <p class="card-text">收到 Ping 帧的一方必须回复 Pong 帧。Pong 帧携带与 Ping 帧相同的数据。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• WebSocket 是一种全双工通信协议，基于 TCP 实现</li>
+            <li>• 通过 HTTP Upgrade 机制完成握手升级</li>
+            <li>• 使用数据帧格式传输，支持文本和二进制数据</li>
+            <li>• 内置 Ping/Pong 心跳机制保持连接</li>
+            <li>• 相比 HTTP，WebSocket 更适合实时通信场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../index.html">← 返回首页</a>
+      <a href="63-2-WebSocket-vs-HTTP.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

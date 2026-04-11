@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>101.4 HTTPS 配置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="101-1-云服务器部署.html">第101章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>101.4 HTTPS 配置</h1>
+      <p class="subtitle">使用 Let's Encrypt 配置免费 SSL 证书</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 HTTPS 和 SSL/TLS 的原理</li>
+        <li>学会使用 Certbot 获取免费证书</li>
+        <li>掌握 Nginx HTTPS 配置</li>
+        <li>了解证书自动续期配置</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="HTTPS Configuration" class="card-image">
+      <h3 class="card-title">为什么需要 HTTPS</h3>
+      <p class="card-text">
+        <strong>HTTPS</strong>（HTTP Secure）通过 SSL/TLS 协议加密 HTTP 通信，
+        保护数据传输安全，防止数据被窃取或篡改。现代浏览器将 HTTP 网站标记为"不安全"，
+        搜索引擎也对 HTTPS 网站给予更高权重。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> HTTPS 的优势</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
+          <h3 class="card-title">数据加密</h3>
+          <p class="card-text">保护敏感信息不被窃取</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+          <h3 class="card-title">身份验证</h3>
+          <p class="card-text">确认服务器真实身份</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+          <h3 class="card-title">SEO 优化</h3>
+          <p class="card-text">搜索引擎优先收录</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">用户信任</h3>
+          <p class="card-text">浏览器显示安全标识</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 安装 Certbot</h2>
+      <div class="code-block">
+<span class="comment"># Ubuntu/Debian</span>
+sudo apt update
+sudo apt install certbot python3-certbot-nginx -y
+
+<span class="comment"># CentOS/RHEL</span>
+sudo yum install certbot python3-certbot-nginx -y
+
+<span class="comment"># 验证安装</span>
+certbot --version
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📜</span> 获取 SSL 证书</h2>
+      <h3>方法1: 使用 Certbot 自动配置</h3>
+      <div class="code-block">
+<span class="comment"># 自动获取证书并配置 Nginx</span>
+sudo certbot --nginx -d example.com -d www.example.com
+
+<span class="comment"># 按提示输入邮箱并同意条款</span>
+<span class="comment"># Certbot 会自动修改 Nginx 配置</span>
+      </div>
+
+      <h3>方法2: 手动获取证书</h3>
+      <div class="code-block">
+<span class="comment"># 仅获取证书，不修改配置</span>
+sudo certbot certonly --nginx -d example.com -d www.example.com
+
+<span class="comment"># 证书位置</span>
+<span class="comment"># /etc/letsencrypt/live/example.com/fullchain.pem</span>
+<span class="comment"># /etc/letsencrypt/live/example.com/privkey.pem</span>
+
+<span class="comment"># 使用 DNS 验证（适用于内网或负载均衡）</span>
+sudo certbot certonly --manual --preferred-challenges dns -d example.com
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> Nginx HTTPS 配置</h2>
+      <div class="code-block">
+<span class="comment"># /etc/nginx/sites-available/myapp</span>
+server {
+    listen 80;
+    server_name example.com www.example.com;
+
+    <span class="comment"># 强制跳转 HTTPS</span>
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name example.com www.example.com;
+
+    <span class="comment"># SSL 证书配置</span>
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    <span class="comment"># SSL 安全配置</span>
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:
+                 ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:
+                 ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:
+                 DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+
+    <span class="comment"># SSL 会话配置</span>
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+
+    <span class="comment"># HSTS (可选，增强安全性)</span>
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    <span class="comment"># OCSP Stapling</span>
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    <span class="comment"># 反向代理</span>
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 证书自动续期</h2>
+      <div class="code-block">
+<span class="comment"># 测试续期</span>
+sudo certbot renew --dry-run
+
+<span class="comment"># Certbot 会自动添加定时任务</span>
+<span class="comment"># 查看定时任务</span>
+sudo systemctl list-timers | grep certbot
+
+<span class="comment"># 手动续期</span>
+sudo certbot renew
+
+<span class="comment"># 续期后重载 Nginx</span>
+sudo systemctl reload nginx
+      </div>
+
+      <h3>自定义续期钩子</h3>
+      <div class="code-block">
+<span class="comment"># /etc/letsencrypt/renewal/example.com.conf</span>
+<span class="comment"># 添加以下内容</span>
+renew_hook = systemctl reload nginx
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> SSL 测试与验证</h2>
+      <div class="code-block">
+<span class="comment"># 在线测试: https://www.ssllabs.com/ssltest/</span>
+
+<span class="comment"># 命令行测试</span>
+openssl s_client -connect example.com:443 -servername example.com
+
+<span class="comment"># 查看证书信息</span>
+openssl x509 -in /etc/letsencrypt/live/example.com/cert.pem -text -noout
+
+<span class="comment"># 检查证书过期时间</span>
+echo | openssl s_client -connect example.com:443 2>/dev/null | \
+      openssl x509 -noout -dates
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>Let's Encrypt 证书有效期为 90 天，需要定期续期</li>
+          <li>确保证书续期时 Nginx 能够正常重载</li>
+          <li>配置防火墙开放 443 端口</li>
+          <li>测试环境中先使用 --dry-run 避免触发限制</li>
+          <li>每个域名每周最多申请 5 次</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• HTTPS 加密传输保护数据安全</li>
+            <li>• 使用 Certbot 免费获取 Let's Encrypt 证书</li>
+            <li>• 配置 TLS 1.2+ 和安全的加密套件</li>
+            <li>• 设置自动续期确保证书持续有效</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="101-3-Nginx反向代理.html">← 上一节</a>
+      <a href="101-5-阿里云腾讯云部署.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.3 角色守卫 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="47-1-守卫概念.html">第四十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>47.3 角色守卫</h1>
+      <p class="subtitle">实现基于角色的访问控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 RBAC 概念</li>
+        <li>实现角色装饰器</li>
+        <li>创建角色守卫</li>
+        <li>掌握角色验证流程</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> RBAC 概念</h2>
+      <p>RBAC（Role-Based Access Control）基于角色的访问控制，根据用户角色决定是否有权访问资源。</p>
+
+      <div class="code-block">
+// 角色定义
+enum Role {
+  USER = 'user',
+  ADMIN = 'admin',
+  SUPER_ADMIN = 'super_admin',
+}
+
+// 用户对象
+interface User {
+  id: number;
+  username: string;
+  roles: Role[];
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 创建角色装饰器</h2>
+      <div class="code-block">
+// roles.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+
+// 使用装饰器
+@Controller('admin')
+@Roles(Role.ADMIN)  // 控制器级别
+export class AdminController {
+
+  @Get('users')
+  getUsers() {}  // 需要 ADMIN 角色
+
+  @Roles(Role.SUPER_ADMIN)  // 方法级别覆盖
+  @Delete('users/:id')
+  deleteUser() {}  // 需要 SUPER_ADMIN 角色
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 实现角色守卫</h2>
+      <div class="code-block">
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from './roles.decorator';
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    // 获取所需角色
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    // 如果没有设置角色要求，允许访问
+    if (!requiredRoles) {
+      return true;
+    }
+
+    // 获取当前用户（由 AuthGuard 附加）
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    // 检查用户是否具有所需角色
+    const hasRole = requiredRoles.some((role) =>
+      user.roles?.includes(role),
+    );
+
+    if (!hasRole) {
+      throw new ForbiddenException(
+        `Required roles: ${requiredRoles.join(', ')}`,
+      );
+    }
+
+    return true;
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">getAllAndOverride</div>
+          <p>getAllAndOverride 会依次检查方法级和控制器级的元数据，返回第一个非 undefined 的值。这允许方法级覆盖控制器级的设置。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 组合使用守卫</h2>
+      <div class="code-block">
+@Controller('admin')
+@UseGuards(AuthGuard, RolesGuard)  // 先认证，再检查角色
+@Roles(Role.ADMIN)
+export class AdminController {
+
+  @Get('dashboard')
+  getDashboard() {
+    // 需要 ADMIN 角色
+    return { message: 'Admin dashboard' };
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @Delete('users/:id')
+  deleteUser() {
+    // 需要 SUPER_ADMIN 角色
+    return { message: 'User deleted' };
+  }
+}
+
+// 执行流程：
+// 1. AuthGuard 验证用户身份，将 user 附加到 request
+// 2. RolesGuard 检查用户角色是否满足要求
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 高级角色控制</h2>
+      <div class="code-block">
+// 支持多角色 AND/OR 逻辑
+export const ROLES_KEY = 'roles';
+export const ROLES_MODE_KEY = 'rolesMode';
+
+enum RolesMode {
+  OR = 'OR',   // 满足任一角色即可
+  AND = 'AND', // 必须满足所有角色
+}
+
+export const Roles = (roles: Role[], mode: RolesMode = RolesMode.OR) => {
+  return (target: any, propertyKey?: string, descriptor?: PropertyDescriptor) => {
+    SetMetadata(ROLES_KEY, roles)(target, propertyKey, descriptor);
+    SetMetadata(ROLES_MODE_KEY, mode)(target, propertyKey, descriptor);
+  };
+};
+
+// 守卫中实现
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    const mode = this.reflector.getAllAndOverride<RolesMode>(
+      ROLES_MODE_KEY,
+      [context.getHandler(), context.getClass()],
+    ) || RolesMode.OR;
+
+    const { user } = context.switchToHttp().getRequest();
+
+    if (mode === RolesMode.AND) {
+      return requiredRoles.every(role => user.roles?.includes(role));
+    }
+
+    return requiredRoles.some(role => user.roles?.includes(role));
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">守卫顺序</div>
+          <p>角色守卫依赖于 AuthGuard 先执行，确保 request.user 存在。如果角色守卫先执行会报错。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• RBAC 基于角色控制访问</li>
+            <li>• @Roles() 装饰器声明所需角色</li>
+            <li>• RolesGuard 检查用户角色</li>
+            <li>• 需要 AuthGuard 先执行附加用户信息</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="47-2-创建守卫.html">← 上一节：创建守卫</a>
+      <a href="47-4-权限守卫.html">下一节：权限守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

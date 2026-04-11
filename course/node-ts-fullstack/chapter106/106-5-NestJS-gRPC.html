@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>106.5 NestJS gRPC - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="106-1-RPC概念.html">第106章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>106.5 NestJS gRPC</h1>
+      <p class="subtitle">在NestJS中使用gRPC服务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握NestJS gRPC模块配置</li>
+        <li>学会定义gRPC控制器</li>
+        <li>学习gRPC客户端的使用</li>
+        <li>了解gRPC与REST混合使用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 模块配置</h2>
+      <div class="code-block">
+// 安装依赖
+// npm install @nestjs/microservices @grpc/grpc-js @grpc/proto-loader
+
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { join } from 'path';
+
+@Module({
+  imports: [
+    ClientsModule.register([
+      {
+        name: 'USER_SERVICE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'user',
+          protoPath: join(__dirname, '../proto/user.proto'),
+          url: 'localhost:5000',
+          loader: {
+            keepCase: true,
+            enums: String,
+            defaults: true,
+            oneofs: true
+          }
+        }
+      }
+    ])
+  ],
+  controllers: [UserController],
+  providers: [UserService]
+})
+export class AppModule {}
+
+// user.proto
+syntax = "proto3";
+
+package user;
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc CreateUser(CreateUserRequest) returns (User);
+  rpc ListUsers(ListUsersRequest) returns (stream User);
+}
+
+message User {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message GetUserRequest {
+  int32 id = 1;
+}
+
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">NestJS gRPC优势</div>
+          <p>装饰器定义服务、依赖注入、拦截器支持、与REST混合使用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> gRPC服务端实现</h2>
+      <div class="code-block">
+// user.controller.ts
+import { Controller } from '@nestjs/common';
+import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
+import { Observable, from } from 'rxjs';
+
+@Controller()
+export class UserGrpcController {
+  constructor(private readonly userService: UserService) {}
+
+  // 一元RPC
+  @GrpcMethod('UserService', 'GetUser')
+  async getUser(data: GetUserRequest): Promise<User> {
+    const user = await this.userService.findById(data.id);
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email
+    };
+  }
+
+  @GrpcMethod('UserService', 'CreateUser')
+  async createUser(data: CreateUserRequest): Promise<User> {
+    const user = await this.userService.create(data);
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email
+    };
+  }
+
+  // 服务端流RPC
+  @GrpcMethod('UserService', 'ListUsers')
+  listUsers(data: ListUsersRequest): Observable<User> {
+    const users = this.userService.findAll(data.page, data.pageSize);
+
+    // 返回Observable流
+    return from(users.then(userList =>
+      userList.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }))
+    ));
+  }
+
+  // 双向流RPC
+  @GrpcStreamMethod('ChatService', 'Chat')
+  chat(data$: Observable<ChatMessage>): Observable<ChatMessage> {
+    return new Observable(observer => {
+      data$.subscribe({
+        next: (message) => {
+          // 处理消息并广播
+          this.chatService.broadcast(message);
+          observer.next({
+            sender: 'Server',
+            content: `Received: ${message.content}`,
+            timestamp: Date.now()
+          });
+        },
+        complete: () => observer.complete()
+      });
+    });
+  }
+}
+
+// main.ts - 启动gRPC服务
+import { NestFactory } from '@nestjs/core';
+import { Transport, MicroserviceOptions } from '@nestjs/microservices';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.GRPC,
+      options: {
+        package: 'user',
+        protoPath: join(__dirname, '../proto/user.proto'),
+        url: 'localhost:5000'
+      }
+    }
+  );
+
+  await app.listen();
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> gRPC客户端使用</h2>
+      <div class="code-block">
+// user.service.ts
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { ClientGrpc } from '@nestjs/microservices';
+
+interface UserServiceGrpc {
+  getUser(data: GetUserRequest): Observable<User>;
+  createUser(data: CreateUserRequest): Observable<User>;
+  listUsers(data: ListUsersRequest): Observable<User>;
+}
+
+@Injectable()
+export class UserService implements OnModuleInit {
+  private userService: UserServiceGrpc;
+
+  constructor(
+    @Inject('USER_SERVICE') private client: ClientGrpc
+  ) {}
+
+  onModuleInit() {
+    this.userService = this.client.getService<UserServiceGrpc>('UserService');
+  }
+
+  async getUser(id: number): Promise<User> {
+    return this.userService.getUser({ id }).toPromise();
+  }
+
+  async createUser(data: CreateUserRequest): Promise<User> {
+    return this.userService.createUser(data).toPromise();
+  }
+
+  async listUsers(page: number, pageSize: number): Promise<User[]> {
+    return new Promise((resolve) => {
+      const users: User[] = [];
+      const stream = this.userService.listUsers({ page, pageSize });
+
+      stream.subscribe({
+        next: (user) => users.push(user),
+        complete: () => resolve(users)
+      });
+    });
+  }
+}
+
+// 混合使用gRPC和REST
+// main.ts
+async function bootstrap() {
+  // 创建REST应用
+  const app = await NestFactory.create(AppModule);
+  app.enableCors();
+  await app.listen(3000);
+
+  // 同时启动gRPC微服务
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'user',
+      protoPath: join(__dirname, '../proto/user.proto'),
+      url: 'localhost:5000'
+    }
+  });
+
+  await app.startAllMicroservices();
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• NestJS提供优雅的gRPC集成</li>
+            <li>• 使用装饰器定义gRPC方法</li>
+            <li>• 支持RxJS处理流式数据</li>
+            <li>• 可以同时运行REST和gRPC服务</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="106-4-gRPC流式通信.html">← 上一节：gRPC 流式通信</a>
+      <a href="../chapter107/107-1-服务发现原理.html">下一章：服务发现原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>98.5 性能监控 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="98-1-资源优化.html">第九十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>98.5 性能监控</h1>
+      <p class="subtitle">前端性能监控与分析</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解前端性能指标</li>
+        <li>掌握 Performance API 使用</li>
+        <li>学会性能数据上报</li>
+        <li>了解性能分析工具</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 性能指标体系</h2>
+      <div class="code-block">
+# Core Web Vitals
+
+┌─────────────────┬──────────────────────────────────┐
+│     指标        │              说明                 │
+├─────────────────┼──────────────────────────────────┤
+│ LCP             │ 最大内容绘制时间 &lt; 2.5s          │
+│ FID             │ 首次输入延迟 &lt; 100ms             │
+│ CLS             │ 累积布局偏移 &lt; 0.1               │
+│ INP             │ 交互到下一次绘制 &lt; 200ms        │
+└─────────────────┴──────────────────────────────────┘
+
+# 其他关键指标
+
+## 加载性能
+- FCP (First Contentful Paint): 首次内容绘制
+- TTFB (Time to First Byte): 首字节时间
+- DOMContentLoaded: DOM 加载完成
+- Load: 页面完全加载
+
+## 交互性能
+- TTI (Time to Interactive): 可交互时间
+- TBT (Total Blocking Time): 总阻塞时间
+
+## 资源性能
+- 资源加载时间
+- 资源大小
+- 请求数量
+
+# 指标评分标准
+
+┌─────────────────┬────────────┬────────────┬────────────┐
+│     指标        │    好      │   需改进   │    差      │
+├─────────────────┼────────────┼────────────┼────────────┤
+│ LCP            │ &lt; 2.5s    │ 2.5s - 4s  │ &gt; 4s      │
+│ FID            │ &lt; 100ms   │ 100-300ms  │ &gt; 300ms   │
+│ CLS            │ &lt; 0.1     │ 0.1 - 0.25 │ &gt; 0.25    │
+│ INP            │ &lt; 200ms   │ 200-500ms  │ &gt; 500ms   │
+└─────────────────┴────────────┴────────────┴────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Performance API</h2>
+      <div class="code-block">
+# 获取性能指标
+
+// 页面加载性能
+const timing = performance.timing;
+const metrics = {
+  // DNS 查询时间
+  dns: timing.domainLookupEnd - timing.domainLookupStart,
+
+  // TCP 连接时间
+  tcp: timing.connectEnd - timing.connectStart,
+
+  // 请求响应时间
+  request: timing.responseEnd - timing.requestStart,
+
+  // DOM 解析时间
+  domParse: timing.domInteractive - timing.responseEnd,
+
+  // DOM 完成时间
+  domComplete: timing.domComplete - timing.domInteractive,
+
+  // 页面加载总时间
+  total: timing.loadEventEnd - timing.navigationStart,
+};
+
+# 使用 PerformanceObserver
+
+// 监控 LCP
+const lcpObserver = new PerformanceObserver((list) => {
+  const entries = list.getEntries();
+  const lastEntry = entries[entries.length - 1];
+
+  console.log('LCP:', lastEntry.startTime);
+  // 上报数据
+  reportMetric('LCP', lastEntry.startTime);
+});
+
+lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
+
+// 监控 FID
+const fidObserver = new PerformanceObserver((list) => {
+  list.getEntries().forEach((entry) => {
+    console.log('FID:', entry.processingStart - entry.startTime);
+    reportMetric('FID', entry.processingStart - entry.startTime);
+  });
+});
+
+fidObserver.observe({ type: 'first-input', buffered: true });
+
+// 监控 CLS
+let clsValue = 0;
+const clsObserver = new PerformanceObserver((list) => {
+  list.getEntries().forEach((entry) => {
+    if (!entry.hadRecentInput) {
+      clsValue += entry.value;
+    }
+  });
+  console.log('CLS:', clsValue);
+});
+
+clsObserver.observe({ type: 'layout-shift', buffered: true });
+
+# 获取资源加载性能
+
+const resources = performance.getEntriesByType('resource');
+resources.forEach((resource) => {
+  console.log({
+    name: resource.name,
+    duration: resource.duration,
+    size: resource.transferSize,
+    type: resource.initiatorType,
+  });
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">web-vitals 库</div>
+          <p>推荐使用 Google 官方的 web-vitals 库，它封装了 Performance API，提供了简单的接口来获取 Core Web Vitals 指标。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 性能数据上报</h2>
+      <div class="code-block">
+# 使用 web-vitals 库
+
+import { getLCP, getFID, getCLS, getINP } from 'web-vitals';
+
+function sendToAnalytics(metric) {
+  const body = JSON.stringify({
+    name: metric.name,
+    value: metric.value,
+    id: metric.id,
+    page: window.location.pathname,
+    timestamp: Date.now(),
+  });
+
+  // 使用 sendBeacon 确保数据发送
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon('/api/analytics', body);
+  } else {
+    fetch('/api/analytics', {
+      method: 'POST',
+      body,
+      keepalive: true,
+    });
+  }
+}
+
+getLCP(sendToAnalytics);
+getFID(sendToAnalytics);
+getCLS(sendToAnalytics);
+getINP(sendToAnalytics);
+
+# 错误监控
+
+// 全局错误捕获
+window.addEventListener('error', (event) => {
+  reportError({
+    type: 'error',
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    stack: event.error?.stack,
+  });
+});
+
+// Promise 未捕获错误
+window.addEventListener('unhandledrejection', (event) => {
+  reportError({
+    type: 'unhandledrejection',
+    reason: event.reason,
+  });
+});
+
+# 自定义性能标记
+
+// 标记开始
+performance.mark('task-start');
+
+// 执行任务
+doSomething();
+
+// 标记结束
+performance.mark('task-end');
+
+// 测量时间
+performance.measure('task-duration', 'task-start', 'task-end');
+
+// 获取测量结果
+const measures = performance.getEntriesByName('task-duration');
+console.log(measures[0].duration);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 性能分析工具</h2>
+      <div class="code-block">
+# Chrome DevTools
+
+1. Performance 面板
+   - 录制页面性能
+   - 分析 CPU/网络/内存
+   - 查看帧率和长任务
+
+2. Lighthouse
+   - 综合性能评分
+   - 优化建议
+   - PWA 检测
+
+3. Network 面板
+   - 请求瀑布图
+   - 资源大小和时间
+   - 缓存状态
+
+# 在线工具
+
+# PageSpeed Insights
+https://pagespeed.web.dev/
+
+# WebPageTest
+https://www.webpagetest.org/
+
+# Lighthouse CI
+npm install -g @lhci/cli
+lhci autorun
+
+# 持续监控
+
+# 集成 Sentry
+import * as Sentry from '@sentry/browser';
+
+Sentry.init({
+  dsn: 'YOUR_DSN',
+  integrations: [
+    new Sentry.BrowserTracing(),
+    new Sentry.Replay(),
+  ],
+  tracesSampleRate: 0.1,
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+});
+
+# 集成 Google Analytics 4
+
+gtag('event', 'web_vitals', {
+  event_category: 'Web Vitals',
+  event_label: metric.name,
+  value: Math.round(metric.value),
+  non_interaction: true,
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Core Web Vitals 是核心性能指标</li>
+            <li>• 使用 PerformanceObserver 监控指标</li>
+            <li>• 使用 sendBeacon 上报数据</li>
+            <li>• 持续监控，及时发现性能问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="98-4-CDN加速.html">← 上一节：CDN 加速</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

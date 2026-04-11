@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.3 路由参数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter31.html">第31章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>31.3 路由参数</h1>
+      <p class="subtitle">深入理解路由参数的各种用法和最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握路由参数、查询参数、请求体的区别</li>
+        <li>学会获取和验证路由参数</li>
+        <li>理解参数预处理的方法</li>
+        <li>掌握参数的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 参数类型概述</h2>
+      <p>在 Express 中，获取客户端数据有三种主要方式：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>参数类型</th>
+            <th>位置</th>
+            <th>获取方式</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>路由参数</td>
+            <td>URL 路径中</td>
+            <td><code>req.params</code></td>
+            <td><code>/users/123</code> 中的 123</td>
+          </tr>
+          <tr>
+            <td>查询参数</td>
+            <td>URL 问号后</td>
+            <td><code>req.query</code></td>
+            <td><code>?page=1&amp;size=10</code></td>
+          </tr>
+          <tr>
+            <td>请求体</td>
+            <td>请求正文中</td>
+            <td><code>req.body</code></td>
+            <td>JSON 表单数据</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// 完整示例：展示三种参数
+app.post('/users/:id/posts', (req, res) => {
+  // 路由参数
+  const { id } = req.params;           // URL 中的 :id
+
+  // 查询参数
+  const { draft, notify } = req.query; // ?draft=true&notify=yes
+
+  // 请求体
+  const { title, content } = req.body; // POST 数据
+
+  res.json({
+    userId: id,
+    draft: draft === 'true',
+    notify: notify === 'yes',
+    post: { title, content }
+  });
+});
+
+// 请求示例：
+// POST /users/123/posts?draft=true&notify=yes
+// Body: { "title": "Hello", "content": "World" }</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔢</span> 路由参数详解</h2>
+
+      <h3>基本使用</h3>
+      <div class="code-block">
+// 单个参数
+app.get('/users/:id', (req, res) => {
+  console.log(req.params); // { id: '123' }
+  res.send(`User ID: ${req.params.id}`);
+});
+
+// 多个参数
+app.get('/posts/:postId/comments/:commentId', (req, res) => {
+  console.log(req.params); // { postId: '1', commentId: '2' }
+  res.json(req.params);
+});
+
+// 嵌套参数
+app.get('/orgs/:orgId/teams/:teamId/members/:memberId', (req, res) => {
+  const { orgId, teamId, memberId } = req.params;
+  res.json({ orgId, teamId, memberId });
+});</div>
+
+      <h3>参数格式限制</h3>
+      <div class="code-block">
+// 只匹配数字 ID
+app.get('/users/:id(\\d+)', (req, res) => {
+  // /users/123 -> 匹配
+  // /users/abc -> 404
+  res.send(`Numeric ID: ${req.params.id}`);
+});
+
+// 只匹配特定长度
+app.get('/code/:code([A-Z]{3,6})', (req, res) => {
+  // 只匹配 3-6 位大写字母
+  res.send(`Code: ${req.params.code}`);
+});
+
+// 匹配 UUID
+app.get('/items/:uuid([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', (req, res) => {
+  res.send(`UUID: ${req.params.uuid}`);
+});
+
+// 匹配 MongoDB ObjectId
+app.get('/documents/:id([0-9a-fA-F]{24})', (req, res) => {
+  res.send(`ObjectId: ${req.params.id}`);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">❓</span> 查询参数详解</h2>
+
+      <h3>基本使用</h3>
+      <div class="code-block">
+// GET /search?keyword=express&page=1&size=10
+app.get('/search', (req, res) => {
+  const { keyword, page = 1, size = 10 } = req.query;
+
+  res.json({
+    keyword,
+    page: parseInt(page),
+    size: parseInt(size)
+  });
+});
+
+// 多值参数（使用数组）
+// GET /filter?tags=node&tags=express&tags=typescript
+app.get('/filter', (req, res) => {
+  const { tags } = req.query;
+  // tags 可能是字符串或数组
+
+  const tagList = Array.isArray(tags) ? tags : [tags];
+
+  res.json({ tags: tagList });
+});</div>
+
+      <h3>分页查询封装</h3>
+      <div class="code-block">
+// 分页中间件
+const pagination = (req, res, next) => {
+  const page = parseInt(req.query.page) || 1;
+  const size = parseInt(req.query.size) || 10;
+  const limit = Math.min(size, 100); // 最大 100 条
+  const offset = (page - 1) * limit;
+
+  req.pagination = { page, size: limit, offset };
+  next();
+};
+
+// 使用
+app.get('/articles', pagination, async (req, res) => {
+  const { page, size, offset } = req.pagination;
+
+  // 模拟数据库查询
+  const articles = await Article.findAll({
+    offset,
+    limit: size
+  });
+
+  res.json({
+    data: articles,
+    page,
+    size,
+    total: await Article.count()
+  });
+});</div>
+
+      <h3>搜索和过滤</h3>
+      <div class="code-block">
+// 综合查询示例
+// GET /products?category=electronics&minPrice=100&maxPrice=1000&sort=price&order=asc
+app.get('/products', async (req, res) => {
+  const {
+    category,
+    minPrice,
+    maxPrice,
+    sort = 'createdAt',
+    order = 'desc'
+  } = req.query;
+
+  // 构建查询条件
+  const where = {};
+  if (category) where.category = category;
+  if (minPrice || maxPrice) {
+    where.price = {};
+    if (minPrice) where.price.gte = parseFloat(minPrice);
+    if (maxPrice) where.price.lte = parseFloat(maxPrice);
+  }
+
+  // 查询数据库
+  const products = await Product.findAll({
+    where,
+    order: [[sort, order]]
+  });
+
+  res.json({ data: products });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 请求体详解</h2>
+
+      <h3>解析中间件配置</h3>
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 解析 JSON 格式
+app.use(express.json());
+
+// 解析 URL 编码格式
+app.use(express.urlencoded({ extended: true }));
+
+// 解析原始文本
+app.use(express.text());
+
+// 解析 Buffer
+app.use(express.raw());
+
+// 使用
+app.post('/api/json', (req, res) => {
+  console.log(req.body); // JSON 对象
+  res.json(req.body);
+});
+
+app.post('/api/form', (req, res) => {
+  console.log(req.body); // 表单对象
+  res.json(req.body);
+});</div>
+
+      <h3>表单数据处理</h3>
+      <div class="code-block">
+// HTML 表单
+/*
+<form action="/submit" method="POST">
+  <input name="username" />
+  <input name="email" />
+  <select name="role">
+    <option value="user">User</option>
+    <option value="admin">Admin</option>
+  </select>
+  <button type="submit">Submit</button>
+</form>
+*/
+
+app.post('/submit', (req, res) => {
+  const { username, email, role } = req.body;
+  res.json({ username, email, role });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 参数预处理</h2>
+
+      <h3>使用中间件预处理</h3>
+      <div class="code-block">
+// 参数验证中间件
+const validateUserId = (req, res, next) => {
+  const { id } = req.params;
+
+  // 检查是否为有效数字
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid user ID format'
+    });
+  }
+
+  // 转换为数字并附加到请求对象
+  req.userId = parseInt(id);
+  next();
+};
+
+// 使用中间件
+app.get('/users/:id', validateUserId, async (req, res) => {
+  const user = await User.findById(req.userId);
+  res.json(user);
+});</div>
+
+      <h3>通用参数处理器</h3>
+      <div class="code-block">
+// 解析整数参数
+const parseIntParam = (paramName) => {
+  return (req, res, next) => {
+    const value = req.params[paramName];
+    const parsed = parseInt(value);
+
+    if (isNaN(parsed)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid ${paramName}: must be a number`
+      });
+    }
+
+    req[`${paramName}Int`] = parsed;
+    next();
+  };
+};
+
+// 使用
+app.get('/users/:id', parseIntParam('id'), (req, res) => {
+  // req.idInt 已经是解析后的整数
+  res.send(`User ID: ${req.idInt}`);
+});</div>
+
+      <h3>参数转换工厂</h3>
+      <div class="code-block">
+// 通用参数转换器
+const transformParam = (paramName, transformer) => {
+  return (req, res, next) => {
+    try {
+      req.params[paramName] = transformer(req.params[paramName]);
+      next();
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid ${paramName}: ${error.message}`
+      });
+    }
+  };
+};
+
+// 使用示例
+app.get('/users/:id',
+  transformParam('id', (val) => {
+    const num = parseInt(val);
+    if (isNaN(num)) throw new Error('Must be a number');
+    return num;
+  }),
+  (req, res) => {
+    res.send(`User ID: ${req.params.id}`);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 参数验证最佳实践</h2>
+
+      <div class="code-block">
+// 使用 Joi 进行验证
+const Joi = require('joi');
+
+// 验证模式
+const userSchema = Joi.object({
+  name: Joi.string().min(2).max(50).required(),
+  email: Joi.string().email().required(),
+  age: Joi.number().integer().min(0).max(150),
+  role: Joi.string().valid('user', 'admin').default('user')
+});
+
+// 验证中间件
+const validateBody = (schema) => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body, {
+      abortEarly: false, // 返回所有错误
+      stripUnknown: true  // 移除未知字段
+    });
+
+    if (error) {
+      const messages = error.details.map(d => d.message);
+      return res.status(400).json({
+        success: false,
+        errors: messages
+      });
+    }
+
+    req.body = value; // 使用验证后的值
+    next();
+  };
+};
+
+// 使用
+app.post('/users', validateBody(userSchema), async (req, res) => {
+  // req.body 已经过验证和转换
+  const user = await User.create(req.body);
+  res.status(201).json(user);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>路由参数用 req.params，查询参数用 req.query，请求体用 req.body</li>
+            <li>路由参数可以用正则限制格式，如 :id(\\d+)</li>
+            <li>查询参数适合分页、过滤、搜索等场景</li>
+            <li>使用中间件进行参数预处理和验证</li>
+            <li>推荐使用 Joi 等库进行复杂的参数验证</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>实现一个支持分页、排序、过滤的产品列表 API</li>
+        <li>编写一个验证 MongoDB ObjectId 的中间件</li>
+        <li>使用 Joi 实现用户注册的完整参数验证</li>
+        <li>实现一个搜索 API，支持关键词、分类、时间范围等查询</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="31-2-路由路径模式.html">← 上一节：路由路径模式</a>
+      <a href="31-4-路由模块化.html">下一节：路由模块化 →</a>
+    </div>
+  </div>
+</body>
+</html>

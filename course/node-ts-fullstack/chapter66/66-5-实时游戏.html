@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>66.5 实时游戏 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="66-1-实时聊天室.html">第六十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>66.5 实时游戏</h1>
+      <p class="subtitle">多人实时游戏开发</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解实时游戏的核心需求</li>
+        <li>掌握游戏状态同步策略</li>
+        <li>学会处理延迟和预测</li>
+        <li>了解防作弊的基本方法</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">实时游戏特点</h3>
+      <p class="card-text">实时多人游戏对网络通信有特殊要求：</p>
+      <div class="grid grid-3" style="margin-top: 1rem;">
+        <div class="card" style="text-align: center; padding: 1.5rem;">
+          <div style="font-size: 2.5rem;">⚡</div>
+          <h4>低延迟</h4>
+          <p style="font-size: 0.9rem;">延迟需控制在 100ms 以内</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 1.5rem;">
+          <div style="font-size: 2.5rem;">🔄</div>
+          <h4>高频同步</h4>
+          <p style="font-size: 0.9rem;">每秒 20-60 次状态更新</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 1.5rem;">
+          <div style="font-size: 2.5rem;">🎯</div>
+          <h4>一致性</h4>
+          <p style="font-size: 0.9rem;">所有玩家看到相同的游戏状态</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎮</span> 简单多人游戏实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">游戏类型定义</h3>
+        <div class="code-block">
+// types/game.ts
+
+// 玩家
+interface Player {
+  id: string;
+  name: string;
+  position: { x: number; y: number };
+  velocity: { x: number; y: number };
+  rotation: number;
+  color: string;
+  score: number;
+  health: number;
+  isAlive: boolean;
+}
+
+// 游戏房间
+interface GameRoom {
+  id: string;
+  name: string;
+  maxPlayers: number;
+  players: Map&lt;string, Player&gt;;
+  gameState: GameState;
+  tickRate: number;  // 每秒更新次数
+  lastTick: number;
+}
+
+// 游戏状态
+interface GameState {
+  status: 'waiting' | 'playing' | 'ended';
+  countdown: number;
+  items: GameItem[];
+  obstacles: Obstacle[];
+  startTime: number;
+  duration: number;
+}
+
+// 游戏物品
+interface GameItem {
+  id: string;
+  type: 'coin' | 'powerup' | 'weapon';
+  position: { x: number; y: number };
+  collected: boolean;
+}
+
+// 玩家输入
+interface PlayerInput {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+  action: boolean;
+  timestamp: number;
+}
+
+// 服务端事件
+interface ServerToClientEvents {
+  'game:joined': (room: GameRoom) => void;
+  'game:state': (state: { players: Player[]; items: GameItem[] }) => void;
+  'game:player-joined': (player: Player) => void;
+  'game:player-left': (playerId: string) => void;
+  'game:start': () => void;
+  'game:end': (results: { winner: string; scores: Record&lt;string, number&gt; }) => void;
+}
+
+// 客户端事件
+interface ClientToServerEvents {
+  'game:join': (roomId: string, callback: (success: boolean) => void) => void;
+  'game:input': (input: PlayerInput) => void;
+  'game:ready': () => void;
+  'game:leave': () => void;
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">游戏服务端</h3>
+        <div class="code-block">
+import { Server } from 'socket.io';
+
+class GameServer {
+  private rooms = new Map&lt;string, GameRoom&gt;();
+  private tickInterval?: NodeJS.Timeout;
+  private readonly TICK_RATE = 20; // 每秒 20 次
+
+  constructor(private io: Server) {
+    this.startGameLoop();
+  }
+
+  private startGameLoop() {
+    this.tickInterval = setInterval(() => {
+      this.tick();
+    }, 1000 / this.TICK_RATE);
+  }
+
+  private tick() {
+    this.rooms.forEach((room, roomId) => {
+      if (room.gameState.status !== 'playing') return;
+
+      // 更新所有玩家
+      room.players.forEach((player) => {
+        this.updatePlayer(player);
+      });
+
+      // 碰撞检测
+      this.checkCollisions(room);
+
+      // 发送状态更新
+      const state = {
+        players: Array.from(room.players.values()),
+        items: room.gameState.items.filter(i => !i.collected)
+      };
+
+      // 使用 volatile 发送（可丢失）
+      this.io.to(roomId).volatile.emit('game:state', state);
+    });
+  }
+
+  private updatePlayer(player: Player) {
+    // 应用速度更新位置
+    player.position.x += player.velocity.x;
+    player.position.y += player.velocity.y;
+
+    // 边界检查
+    player.position.x = Math.max(0, Math.min(800, player.position.x));
+    player.position.y = Math.max(0, Math.min(600, player.position.y));
+
+    // 摩擦力
+    player.velocity.x *= 0.9;
+    player.velocity.y *= 0.9;
+  }
+
+  private checkCollisions(room: GameRoom) {
+    room.players.forEach((player) => {
+      // 检查物品碰撞
+      room.gameState.items.forEach((item) => {
+        if (!item.collected && this.checkDistance(player.position, item.position, 20)) {
+          item.collected = true;
+          player.score += 10;
+          this.io.to(room.id).emit('item:collected', {
+            itemId: item.id,
+            playerId: player.id
+          });
+        }
+      });
+
+      // 检查玩家碰撞
+      room.players.forEach((other) => {
+        if (player.id !== other.id && this.checkDistance(player.position, other.position, 30)) {
+          // 弹开
+          const dx = player.position.x - other.position.x;
+          const dy = player.position.y - other.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist > 0) {
+            player.velocity.x += (dx / dist) * 2;
+            player.velocity.y += (dy / dist) * 2;
+          }
+        }
+      });
+    });
+  }
+
+  private checkDistance(a: { x: number; y: number }, b: { x: number; y: number }, threshold: number): boolean {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy) < threshold;
+  }
+
+  // 加入游戏
+  joinGame(socket: any, roomId: string) {
+    let room = this.rooms.get(roomId);
+
+    if (!room) {
+      room = this.createRoom(roomId);
+      this.rooms.set(roomId, room);
+    }
+
+    if (room.players.size >= room.maxPlayers) {
+      return false;
+    }
+
+    const player: Player = {
+      id: socket.data.userId,
+      name: socket.data.username,
+      position: { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
+      velocity: { x: 0, y: 0 },
+      rotation: 0,
+      color: this.generateColor(),
+      score: 0,
+      health: 100,
+      isAlive: true
+    };
+
+    room.players.set(player.id, player);
+    socket.join(roomId);
+
+    // 通知其他玩家
+    socket.to(roomId).emit('game:player-joined', player);
+
+    // 发送当前游戏状态
+    socket.emit('game:joined', room);
+
+    return true;
+  }
+
+  // 处理输入
+  handleInput(socket: any, input: PlayerInput) {
+    const roomId = this.findPlayerRoom(socket.data.userId);
+    if (!roomId) return;
+
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState.status !== 'playing') return;
+
+    const player = room.players.get(socket.data.userId);
+    if (!player) return;
+
+    // 应用输入
+    const speed = 0.5;
+
+    if (input.up) player.velocity.y -= speed;
+    if (input.down) player.velocity.y += speed;
+    if (input.left) player.velocity.x -= speed;
+    if (input.right) player.velocity.x += speed;
+  }
+
+  // 开始游戏
+  startGame(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    room.gameState.status = 'playing';
+    room.gameState.startTime = Date.now();
+
+    // 生成物品
+    this.spawnItems(room);
+
+    // 通知所有玩家
+    this.io.to(roomId).emit('game:start');
+  }
+
+  // 生成物品
+  private spawnItems(room: GameRoom) {
+    for (let i = 0; i < 10; i++) {
+      room.gameState.items.push({
+        id: `item-${i}`,
+        type: 'coin',
+        position: {
+          x: Math.random() * 700 + 50,
+          y: Math.random() * 500 + 50
+        },
+        collected: false
+      });
+    }
+  }
+
+  // 创建房间
+  private createRoom(id: string): GameRoom {
+    return {
+      id,
+      name: `Room ${id}`,
+      maxPlayers: 10,
+      players: new Map(),
+      gameState: {
+        status: 'waiting',
+        countdown: 5,
+        items: [],
+        obstacles: [],
+        startTime: 0,
+        duration: 60
+      },
+      tickRate: this.TICK_RATE,
+      lastTick: Date.now()
+    };
+  }
+
+  private generateColor(): string {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  private findPlayerRoom(userId: string): string | null {
+    for (const [roomId, room] of this.rooms) {
+      if (room.players.has(userId)) return roomId;
+    }
+    return null;
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 客户端预测与插值</h2>
+
+      <div class="card">
+        <h3 class="card-title">客户端预测</h3>
+        <p class="card-text">客户端预测让玩家操作立即响应，无需等待服务端确认：</p>
+        <div class="code-block">
+// client/game.ts
+
+class GameClient {
+  private socket: Socket;
+  private localPlayer: Player;
+  private otherPlayers = new Map&lt;string, Player&gt;();
+  private pendingInputs: { input: PlayerInput; sequence: number }[] = [];
+  private inputSequence = 0;
+  private serverState: GameState | null = null;
+
+  constructor(socket: Socket) {
+    this.socket = socket;
+
+    // 接收服务端状态
+    socket.on('game:state', (state) => {
+      this.serverState = state;
+      this.reconcile();
+    });
+  }
+
+  // 处理玩家输入
+  handleInput(input: PlayerInput) {
+    // 1. 立即应用输入（客户端预测）
+    this.applyInput(this.localPlayer, input);
+
+    // 2. 保存输入序列号
+    const sequence = this.inputSequence++;
+    this.pendingInputs.push({ input, sequence });
+
+    // 3. 发送给服务端
+    this.socket.emit('game:input', {
+      ...input,
+      sequence
+    });
+  }
+
+  // 应用输入
+  private applyInput(player: Player, input: PlayerInput) {
+    const speed = 0.5;
+
+    if (input.up) player.velocity.y -= speed;
+    if (input.down) player.velocity.y += speed;
+    if (input.left) player.velocity.x -= speed;
+    if (input.right) player.velocity.x += speed;
+
+    // 更新位置
+    player.position.x += player.velocity.x;
+    player.position.y += player.velocity.y;
+
+    // 摩擦力
+    player.velocity.x *= 0.9;
+    player.velocity.y *= 0.9;
+  }
+
+  // 状态和解（校正客户端预测）
+  private reconcile() {
+    if (!this.serverState) return;
+
+    // 找到本地玩家在服务端的状态
+    const serverPlayer = this.serverState.players.find(p => p.id === this.localPlayer.id);
+    if (!serverPlayer) return;
+
+    // 移除已确认的输入
+    const lastProcessedSequence = serverPlayer.lastProcessedInput || 0;
+    this.pendingInputs = this.pendingInputs.filter(
+      pending => pending.sequence > lastProcessedSequence
+    );
+
+    // 重放到当前位置
+    this.localPlayer.position = { ...serverPlayer.position };
+    this.localPlayer.velocity = { ...serverPlayer.velocity };
+
+    // 重新应用未确认的输入
+    this.pendingInputs.forEach(({ input }) => {
+      this.applyInput(this.localPlayer, input);
+    });
+
+    // 更新其他玩家（使用插值）
+    this.serverState.players.forEach(player => {
+      if (player.id !== this.localPlayer.id) {
+        this.interpolateOtherPlayer(player);
+      }
+    });
+  }
+
+  // 插值其他玩家位置
+  private interpolateOtherPlayer(serverPlayer: Player) {
+    const clientPlayer = this.otherPlayers.get(serverPlayer.id);
+    if (!clientPlayer) {
+      this.otherPlayers.set(serverPlayer.id, { ...serverPlayer });
+      return;
+    }
+
+    // 平滑插值到服务端位置
+    clientPlayer.position.x += (serverPlayer.position.x - clientPlayer.position.x) * 0.3;
+    clientPlayer.position.y += (serverPlayer.position.y - clientPlayer.position.y) * 0.3;
+  }
+
+  // 渲染循环
+  render() {
+    // 渲染本地玩家
+    this.renderPlayer(this.localPlayer);
+
+    // 渲染其他玩家（插值后的位置）
+    this.otherPlayers.forEach(player => {
+      this.renderPlayer(player);
+    });
+  }
+
+  private renderPlayer(player: Player) {
+    // Canvas 渲染逻辑
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 防作弊基础</h2>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">防作弊策略</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li><strong>服务端权威</strong>：所有关键逻辑在服务端执行</li>
+            <li><strong>输入验证</strong>：检查输入是否合理（速度、频率）</li>
+            <li><strong>状态同步</strong>：定期同步权威状态给客户端</li>
+            <li><strong>延迟补偿</strong>：处理网络延迟对公平性的影响</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="code-block">
+// 服务端防作弊检查
+function validateInput(player: Player, input: PlayerInput): boolean {
+  // 检查移动速度是否合理
+  const maxSpeed = 10;
+  const speed = Math.sqrt(input.velocityX ** 2 + input.velocityY ** 2);
+
+  if (speed > maxSpeed) {
+    console.warn(`玩家 ${player.id} 速度异常: ${speed}`);
+    return false;
+  }
+
+  // 检查输入频率
+  const timeSinceLastInput = Date.now() - player.lastInputTime;
+  if (timeSinceLastInput < 16) { // 约 60 FPS
+    console.warn(`玩家 ${player.id} 输入频率异常`);
+    return false;
+  }
+
+  // 检查位置跳变
+  const distance = Math.sqrt(
+    (input.position.x - player.position.x) ** 2 +
+    (input.position.y - player.position.y) ** 2
+  );
+
+  if (distance > 100) {
+    console.warn(`玩家 ${player.id} 位置跳变: ${distance}`);
+    return false;
+  }
+
+  return true;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 实时游戏需要低延迟和高频状态同步</li>
+            <li>• 使用 volatile 发送可丢失的高频状态更新</li>
+            <li>• 客户端预测提升操作响应体验</li>
+            <li>• 状态和解确保客户端与服务端一致</li>
+            <li>• 其他玩家使用插值平滑显示</li>
+            <li>• 服务端权威是防作弊的基础</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="66-4-协作编辑.html">← 上一节</a>
+      <a href="../chapter67/67-1-WebSocketGateway装饰器.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

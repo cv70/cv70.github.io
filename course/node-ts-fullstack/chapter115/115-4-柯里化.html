@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>115.4 柯里化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="115-1-函数式概念.html">第115章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>115.4 柯里化</h1>
+      <p class="subtitle">将多参数函数转换为单参数函数链</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解柯里化的概念</li>
+        <li>掌握柯里化实现</li>
+        <li>学会部分应用</li>
+        <li>了解柯里化的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 柯里化定义</h2>
+      <div class="code-block">
+// 柯里化：将接受多个参数的函数转换为一系列接受单个参数的函数
+
+// 普通函数
+function add(a: number, b: number, c: number): number {
+  return a + b + c;
+}
+
+add(1, 2, 3);  // 6
+
+// 柯里化后
+function curriedAdd(a: number): (b: number) => (c: number) => number {
+  return (b: number) => (c: number) => a + b + c;
+}
+
+curriedAdd(1)(2)(3);  // 6
+
+// 可以分步调用
+const add1 = curriedAdd(1);
+const add1and2 = add1(2);
+add1and2(3);  // 6
+
+// 优势
+const advantages = {
+  复用性: '可以创建预配置的函数',
+  组合性: '更容易与其他函数组合',
+  延迟执行: '可以在需要时才提供完整参数',
+  可读性: '参数分步传递更清晰'
+};
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">柯里化用途</div>
+          <p>创建预配置函数、参数复用、延迟计算、函数组合。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 柯里化实现</h2>
+      <div class="code-block">
+// 通用柯里化函数
+function curry<T extends (...args: any[]) => any>(fn: T) {
+  return function curried(...args: any[]): any {
+    if (args.length >= fn.length) {
+      return fn(...args);
+    }
+    return (...moreArgs: any[]) => curried(...args, ...moreArgs);
+  };
+}
+
+// 使用
+const curriedAdd = curry(add);
+
+curriedAdd(1, 2, 3);    // 6
+curriedAdd(1)(2)(3);    // 6
+curriedAdd(1, 2)(3);    // 6
+curriedAdd(1)(2, 3);    // 6
+
+// 实际应用
+
+// 日志函数柯里化
+function log(level: string, module: string, message: string) {
+  console.log(`[${level}] [${module}] ${message}`);
+}
+
+const curriedLog = curry(log);
+
+// 创建特定级别的日志器
+const errorLog = curriedLog('ERROR');
+const infoLog = curriedLog('INFO');
+
+// 创建特定模块的日志器
+const userModuleError = errorLog('UserModule');
+const orderModuleError = errorLog('OrderModule');
+
+userModuleError('User not found');
+// [ERROR] [UserModule] User not found
+
+orderModuleError('Order creation failed');
+// [ERROR] [OrderModule] Order creation failed
+
+// HTTP请求柯里化
+function request(method: string, baseUrl: string, path: string, data?: any) {
+  return fetch(`${baseUrl}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: data ? JSON.stringify(data) : undefined
+  });
+}
+
+const curriedRequest = curry(request);
+
+// 创建特定服务的API客户端
+const apiClient = curriedRequest('GET')('https://api.example.com');
+
+// 创建资源特定的方法
+const userApi = {
+  get: apiClient('/users'),
+  getById: (id: string) => apiClient(`/users/${id}`),
+  create: curriedRequest('POST')('https://api.example.com')('/users')
+};
+
+// 部分应用（Partial Application）
+function partial<T extends (...args: any[]) => any>(
+  fn: T,
+  ...presetArgs: any[]
+): (...args: any[]) => any {
+  return (...laterArgs: any[]) => fn(...presetArgs, ...laterArgs);
+}
+
+const multiply = (a: number, b: number, c: number) => a * b * c;
+const double = partial(multiply, 2);  // 固定第一个参数为2
+double(3, 4);  // 24
+
+// 柯里化 vs 部分应用
+const difference = {
+  柯里化: '转换为一系列单参数函数',
+  部分应用: '固定部分参数，返回接受剩余参数的函数'
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 柯里化将多参数函数转为单参数函数链</li>
+            <li>• 支持分步调用和参数复用</li>
+            <li>• 便于创建预配置函数</li>
+            <li>• 与函数组合配合使用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="115-3-高阶函数.html">← 上一节：高阶函数</a>
+      <a href="115-5-函数组合.html">下一节：函数组合 →</a>
+    </div>
+  </div>
+</body>
+</html>

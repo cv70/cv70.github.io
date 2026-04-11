@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>51.2 常见认证方式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="51-1-认证与授权.html">第五十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>51.2 常见认证方式</h1>
+      <p class="subtitle">了解主流的身份验证技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解基础认证方式</li>
+        <li>掌握Session认证原理</li>
+        <li>理解Token认证机制</li>
+        <li>熟悉OAuth第三方认证</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔑</span> 基础认证方式</h2>
+      <div class="code-block">
+// 1. HTTP Basic Authentication
+// 请求头格式：Authorization: Basic base64(username:password)
+
+import basicAuth from 'express-basic-auth';
+
+app.use(basicAuth({
+  users: { 'admin': 'secret123' },
+  challenge: true,
+  realm: 'My Application'
+}));
+
+// 2. API Key 认证
+// 请求头格式：X-API-Key: your-api-key
+
+interface ApiKey {
+  key: string;
+  userId: string;
+  permissions: string[];
+  expiresAt: Date;
+}
+
+async function apiKeyMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const apiKey = req.headers['x-api-key'] as string;
+
+  if (!apiKey) {
+    return res.status(401).json({ error: '缺少 API Key' });
+  }
+
+  const keyInfo = await validateApiKey(apiKey);
+
+  if (!keyInfo || keyInfo.expiresAt < new Date()) {
+    return res.status(401).json({ error: 'API Key 无效或已过期' });
+  }
+
+  req.apiKey = keyInfo;
+  next();
+}
+
+// 3. 表单认证（用户名密码）
+interface LoginCredentials {
+  username: string;
+  password: string;
+  rememberMe?: boolean;
+}
+
+app.post('/login', async (req: Request, res: Response) => {
+  const { username, password, rememberMe }: LoginCredentials = req.body;
+
+  const result = await authenticateUser(username, password);
+
+  if (!result.success) {
+    return res.status(401).json({ error: result.message });
+  }
+
+  // 根据rememberMe设置token有效期
+  const expiresIn = rememberMe ? '30d' : '24h';
+  const token = generateToken(result.user, { expiresIn });
+
+  res.json({
+    message: '登录成功',
+    user: result.user,
+    token
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎫</span> Session认证</h2>
+      <div class="code-block">
+// Session 认证流程
+/*
+1. 用户登录 -> 服务器验证凭证
+2. 服务器创建Session，生成Session ID
+3. 服务器返回Session ID（通过Cookie）
+4. 客户端后续请求携带Cookie
+5. 服务器根据Session ID查找Session数据
+*/
+
+import session from 'express-session';
+import connectRedis from 'connect-redis';
+
+const RedisStore = connectRedis(session);
+
+app.use(session({
+  store: new RedisStore({ client: redisClient }),
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24小时
+  }
+}));
+
+// 登录路由
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await authenticateUser(username, password);
+
+  if (!user) {
+    return res.status(401).json({ error: '用户名或密码错误' });
+  }
+
+  // 存储用户信息到Session
+  req.session.userId = user.id;
+  req.session.userRole = user.role;
+
+  res.json({ message: '登录成功', user });
+});
+
+// 受保护路由
+app.get('/profile', requireAuth, (req, res) => {
+  // Session数据可通过req.session访问
+  res.json({ userId: req.session.userId });
+});
+
+// 登出
+app.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: '登出失败' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ message: '登出成功' });
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> Token认证（JWT）</h2>
+      <div class="code-block">
+// JWT 认证流程
+/*
+1. 用户登录 -> 服务器验证凭证
+2. 服务器生成JWT Token
+3. 客户端存储Token（localStorage/memory）
+4. 后续请求在Header中携带Token
+5. 服务器验证Token签名并提取用户信息
+*/
+
+import jwt from 'jsonwebtoken';
+
+interface JwtPayload {
+  userId: string;
+  role: string;
+  iat: number;
+  exp: number;
+}
+
+// 生成Token
+function generateAccessToken(user: User): string {
+  return jwt.sign(
+    { userId: user.id, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: '15m' }
+  );
+}
+
+function generateRefreshToken(user: User): string {
+  return jwt.sign(
+    { userId: user.id, tokenVersion: user.tokenVersion },
+    process.env.REFRESH_TOKEN_SECRET!,
+    { expiresIn: '7d' }
+  );
+}
+
+// 验证Token中间件
+function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: '未提供认证令牌' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    req.user = payload;
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: '令牌已过期', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(401).json({ error: '无效的令牌' });
+  }
+}
+
+// 使用示例
+app.get('/protected', authMiddleware, (req, res) => {
+  res.json({
+    message: '访问成功',
+    user: req.user
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> OAuth 第三方认证</h2>
+      <div class="code-block">
+// OAuth 2.0 授权流程
+/*
+1. 用户点击"使用Google登录"
+2. 重定向到授权服务器（Google）
+3. 用户在授权服务器登录并授权
+4. 授权服务器重定向回应用，携带授权码
+5. 应用用授权码换取访问令牌
+6. 用访问令牌获取用户信息
+*/
+
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  callbackURL: '/auth/google/callback'
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    // 查找或创建用户
+    let user = await User.findOne({ googleId: profile.id });
+
+    if (!user) {
+      user = await User.create({
+        googleId: profile.id,
+        email: profile.emails![0].value,
+        name: profile.displayName,
+        avatar: profile.photos![0].value
+      });
+    }
+
+    done(null, user);
+  } catch (error) {
+    done(error, undefined);
+  }
+}));
+
+// 路由配置
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+  passport.authenticate('google', { session: false }),
+  (req, res) => {
+    const user = req.user as User;
+    const token = generateAccessToken(user);
+
+    // 重定向到前端，携带token
+    res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
+  }
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">认证方式选择</div>
+          <p>Session适合传统Web应用，JWT适合SPA和移动应用，OAuth用于第三方登录。现代应用通常会组合使用多种认证方式。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Basic Auth简单但不安全，仅适合内部API</li>
+            <li>• API Key适合服务间调用</li>
+            <li>• Session适合传统Web应用</li>
+            <li>• JWT适合前后端分离架构</li>
+            <li>• OAuth用于第三方登录集成</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="51-1-认证与授权.html">← 上一节：认证与授权</a>
+      <a href="51-3-密码存储安全.html">下一节：密码存储安全 →</a>
+    </div>
+  </div>
+</body>
+</html>

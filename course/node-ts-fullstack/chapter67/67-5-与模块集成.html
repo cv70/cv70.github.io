@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>67.5 与模块集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="67-1-WebSocketGateway装饰器.html">第六十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>67.5 与模块集成</h1>
+      <p class="subtitle">NestJS WebSocket 模块化架构</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 WebSocket Gateway 的模块化组织</li>
+        <li>学会与其他模块的依赖注入</li>
+        <li>理解跨模块通信</li>
+        <li>了解全局网关配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 项目结构</h2>
+
+      <div class="code-block">
+src/
+├── app.module.ts
+├── main.ts
+├── common/
+│   ├── guards/
+│   │   └── ws-jwt.guard.ts
+│   ├── filters/
+│   │   └── ws-exception.filter.ts
+│   └── interceptors/
+│       └── logging.interceptor.ts
+├── auth/
+│   ├── auth.module.ts
+│   ├── auth.service.ts
+│   └── auth.gateway.ts
+├── chat/
+│   ├── chat.module.ts
+│   ├── chat.gateway.ts
+│   ├── chat.service.ts
+│   └── dto/
+│       └── message.dto.ts
+├── notification/
+│   ├── notification.module.ts
+│   ├── notification.gateway.ts
+│   └── notification.service.ts
+└── game/
+    ├── game.module.ts
+    ├── game.gateway.ts
+    └── game.service.ts
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 模块定义</h2>
+
+      <div class="card">
+        <h3 class="card-title">聊天模块</h3>
+        <div class="code-block">
+// chat/chat.module.ts
+import { Module } from '@nestjs/common';
+import { ChatGateway } from './chat.gateway';
+import { ChatService } from './chat.service';
+import { AuthModule } from '../auth/auth.module';
+
+@Module({
+  imports: [AuthModule],  // 导入认证模块
+  providers: [ChatGateway, ChatService],
+  exports: [ChatService]
+})
+export class ChatModule {}
+
+// chat/chat.gateway.ts
+import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { Server } from 'socket.io';
+import { ChatService } from './chat.service';
+import { AuthService } from '../auth/auth.service';
+
+@WebSocketGateway({
+  namespace: 'chat',
+  cors: { origin: '*' }
+})
+export class ChatGateway {
+  @WebSocketServer()
+  server: Server;
+
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly authService: AuthService
+  ) {}
+}
+
+// chat/chat.service.ts
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class ChatService {
+  private rooms = new Map&lt;string, any&gt;();
+
+  async createRoom(name: string) {
+    // 创建房间逻辑
+  }
+
+  async getMessages(roomId: string) {
+    // 获取消息逻辑
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">通知模块</h3>
+        <div class="code-block">
+// notification/notification.module.ts
+import { Module } from '@nestjs/common';
+import { NotificationGateway } from './notification.gateway';
+import { NotificationService } from './notification.service';
+
+@Module({
+  providers: [NotificationGateway, NotificationService],
+  exports: [NotificationService]
+})
+export class NotificationModule {}
+
+// notification/notification.gateway.ts
+import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { Server } from 'socket.io';
+
+@WebSocketGateway({
+  namespace: 'notifications',
+  cors: { origin: '*' }
+})
+export class NotificationGateway {
+  @WebSocketServer()
+  server: Server;
+
+  // 通知相关事件处理
+}
+
+// notification/notification.service.ts
+import { Injectable } from '@nestjs/common';
+import { NotificationGateway } from './notification.gateway';
+
+@Injectable()
+export class NotificationService {
+  constructor(private readonly gateway: NotificationGateway) {}
+
+  // 发送通知给特定用户
+  sendToUser(userId: string, notification: any) {
+    this.gateway.server.to(`user:${userId}`).emit('notification', notification);
+  }
+
+  // 广播通知
+  broadcast(notification: any) {
+    this.gateway.server.emit('notification', notification);
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 跨模块通信</h2>
+
+      <div class="card">
+        <h3 class="card-title">使用 Event Emitter</h3>
+        <div class="code-block">
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+
+@Module({
+  imports: [
+    EventEmitterModule.forRoot(),
+    ChatModule,
+    NotificationModule
+  ]
+})
+export class AppModule {}
+
+// chat/chat.gateway.ts
+import { WebSocketGateway, SubscribeMessage } from '@nestjs/websockets';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+@WebSocketGateway({ namespace: 'chat' })
+export class ChatGateway {
+  constructor(private eventEmitter: EventEmitter2) {}
+
+  @SubscribeMessage('message')
+  handleMessage(client: any, payload: any) {
+    // 发送事件
+    this.eventEmitter.emit('message.created', {
+      userId: client.data.userId,
+      message: payload
+    });
+  }
+}
+
+// notification/notification.service.ts
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { NotificationGateway } from './notification.gateway';
+
+@Injectable()
+export class NotificationService {
+  constructor(private readonly gateway: NotificationGateway) {}
+
+  @OnEvent('message.created')
+  handleMessageCreated(payload: any) {
+    // 发送通知
+    this.gateway.server.emit('notification', {
+      type: 'new_message',
+      data: payload
+    });
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 全局网关配置</h2>
+
+      <div class="card">
+        <h3 class="card-title">全局守卫和过滤器</h3>
+        <div class="code-block">
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { WsJwtGuard } from './common/guards/ws-jwt.guard';
+import { WsExceptionFilter } from './common/filters/ws-exception.filter';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // WebSocket 适配器
+  app.useWebSocketAdapter(new IoAdapter(app));
+
+  // 全局 WebSocket 守卫
+  app.useGlobalGuards(new WsJwtGuard());
+
+  // 全局 WebSocket 过滤器
+  app.useGlobalFilters(new WsExceptionFilter());
+
+  await app.listen(3000);
+}
+bootstrap();
+
+// 或者使用 Provider
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { WsJwtGuard } from './common/guards/ws-jwt.guard';
+import { WsExceptionFilter } from './common/filters/ws-exception.filter';
+
+@Module({
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: WsJwtGuard
+    },
+    {
+      provide: APP_FILTER,
+      useClass: WsExceptionFilter
+    }
+  ]
+})
+export class AppModule {}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">自定义 WebSocket 适配器</h3>
+        <div class="code-block">
+// common/adapters/socket.adapter.ts
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { ServerOptions } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
+
+export class RedisIoAdapter extends IoAdapter {
+  private adapterConstructor: any;
+
+  async connectToRedis(): Promise&lt;void&gt; {
+    const pubClient = createClient({ url: 'redis://localhost:6379' });
+    const subClient = pubClient.duplicate();
+
+    await Promise.all([
+      pubClient.connect(),
+      subClient.connect()
+    ]);
+
+    this.adapterConstructor = createAdapter(pubClient, subClient);
+  }
+
+  createIOServer(port: number, options?: ServerOptions): any {
+    const server = super.createIOServer(port, options);
+    server.adapter(this.adapterConstructor);
+    return server;
+  }
+}
+
+// main.ts
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
+
+  await app.listen(3000);
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 完整示例</h2>
+
+      <div class="code-block">
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { AuthModule } from './auth/auth.module';
+import { ChatModule } from './chat/chat.module';
+import { NotificationModule } from './notification/notification.module';
+import { GameModule } from './game/game.module';
+
+@Module({
+  imports: [
+    EventEmitterModule.forRoot(),
+    AuthModule,
+    ChatModule,
+    NotificationModule,
+    GameModule
+  ]
+})
+export class AppModule {}
+
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { Logger } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+
+  // 启用 CORS
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true
+  });
+
+  // WebSocket 适配器
+  app.useWebSocketAdapter(new IoAdapter(app));
+
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+
+  logger.log(`Application running on port ${port}`);
+}
+bootstrap();
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 每个 Gateway 应该在独立的模块中定义</li>
+            <li>• 使用 imports 导入其他模块的依赖</li>
+            <li>• EventEmitter2 实现跨模块通信</li>
+            <li>• 全局守卫和过滤器简化配置</li>
+            <li>• 自定义适配器支持 Redis 集群</li>
+            <li>• 模块化架构提高代码可维护性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="67-4-身份验证.html">← 上一节</a>
+      <a href="../index.html">返回首页 →</a>
+    </div>
+  </div>
+</body>
+</html>

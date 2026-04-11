@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.3 状态码设置 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter34.html">第34章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>34.3 状态码设置</h1>
+      <p class="subtitle">理解并正确使用 HTTP 状态码</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 HTTP 状态码的分类</li>
+        <li>掌握常用状态码的使用场景</li>
+        <li>学会正确设置状态码</li>
+        <li>理解状态码与 RESTful API 的关系</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> HTTP 状态码分类</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>类别</th>
+            <th>范围</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1xx</td>
+            <td>100-199</td>
+            <td>信息响应 - 请求处理中</td>
+          </tr>
+          <tr>
+            <td>2xx</td>
+            <td>200-299</td>
+            <td>成功 - 请求成功处理</td>
+          </tr>
+          <tr>
+            <td>3xx</td>
+            <td>300-399</td>
+            <td>重定向 - 需要进一步操作</td>
+          </tr>
+          <tr>
+            <td>4xx</td>
+            <td>400-499</td>
+            <td>客户端错误 - 请求有问题</td>
+          </tr>
+          <tr>
+            <td>5xx</td>
+            <td>500-599</td>
+            <td>服务器错误 - 服务器出错</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 2xx 成功状态码</h2>
+
+      <div class="code-block">
+// 200 OK - 成功
+app.get('/users', (req, res) => {
+  res.status(200).json({ users: [] });
+});
+
+// 201 Created - 资源创建成功
+app.post('/users', (req, res) => {
+  const user = createUser(req.body);
+  res.status(201).json(user);
+});
+
+// 204 No Content - 成功但无返回内容
+app.delete('/users/:id', (req, res) => {
+  deleteUser(req.params.id);
+  res.status(204).send();
+});
+
+// 202 Accepted - 已接受处理
+app.post('/import', (req, res) => {
+  // 异步处理
+  processImport(req.body);
+  res.status(202).json({ message: 'Import started' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">❌</span> 4xx 客户端错误</h2>
+
+      <div class="code-block">
+// 400 Bad Request - 请求参数错误
+app.post('/users', (req, res) => {
+  if (!req.body.email) {
+    return res.status(400).json({ error: 'Email required' });
+  }
+  // ...
+});
+
+// 401 Unauthorized - 未认证
+app.get('/profile', (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Please login' });
+  }
+  // ...
+});
+
+// 403 Forbidden - 无权限
+app.delete('/users/:id', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  // ...
+});
+
+// 404 Not Found - 资源不存在
+app.get('/users/:id', (req, res) => {
+  const user = findUser(req.params.id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  // ...
+});
+
+// 409 Conflict - 资源冲突
+app.post('/users', (req, res) => {
+  if (await emailExists(req.body.email)) {
+    return res.status(409).json({ error: 'Email already exists' });
+  }
+  // ...
+});
+
+// 422 Unprocessable Entity - 语义错误
+app.post('/users', (req, res) => {
+  const errors = validateUser(req.body);
+  if (errors.length > 0) {
+    return res.status(422).json({ errors });
+  }
+  // ...
+});
+
+// 429 Too Many Requests - 请求过于频繁
+app.get('/api', rateLimitMiddleware, (req, res) => {
+  if (rateLimited) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  // ...
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔥</span> 5xx 服务器错误</h2>
+
+      <div class="code-block">
+// 500 Internal Server Error - 服务器内部错误
+app.get('/error', (req, res) => {
+  try {
+    // 可能出错的代码
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 502 Bad Gateway - 上游服务错误
+app.get('/proxy', async (req, res) => {
+  try {
+    const response = await fetch(upstreamUrl);
+  } catch (error) {
+    res.status(502).json({ error: 'Upstream service error' });
+  }
+});
+
+// 503 Service Unavailable - 服务不可用
+app.get('/health', (req, res) => {
+  if (!serviceReady) {
+    return res.status(503).json({ error: 'Service unavailable' });
+  }
+  res.json({ status: 'ok' });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> RESTful API 状态码最佳实践</h2>
+
+      <div class="code-block">
+// 用户 CRUD 示例
+
+// GET /users - 列表
+app.get('/users', async (req, res) => {
+  const users = await User.findAll();
+  res.status(200).json({ data: users });  // 200
+});
+
+// GET /users/:id - 详情
+app.get('/users/:id', async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ error: 'Not found' });  // 404
+  }
+  res.status(200).json(user);  // 200
+});
+
+// POST /users - 创建
+app.post('/users', async (req, res) => {
+  const user = await User.create(req.body);
+  res.status(201).json(user);  // 201
+});
+
+// PUT /users/:id - 完整更新
+app.put('/users/:id', async (req, res) => {
+  const user = await User.update(req.params.id, req.body);
+  res.status(200).json(user);  // 200
+});
+
+// PATCH /users/:id - 部分更新
+app.patch('/users/:id', async (req, res) => {
+  const user = await User.patch(req.params.id, req.body);
+  res.status(200).json(user);  // 200
+});
+
+// DELETE /users/:id - 删除
+app.delete('/users/:id', async (req, res) => {
+  await User.delete(req.params.id);
+  res.status(204).send();  // 204
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>2xx 表示成功，4xx 表示客户端错误，5xx 表示服务器错误</li>
+            <li>201 创建成功，204 删除成功（无内容）</li>
+            <li>400 参数错误，401 未认证，403 无权限，404 未找到</li>
+            <li>正确使用状态码是良好 API 设计的基础</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="34-2-设置响应头.html">← 上一节：设置响应头</a>
+      <a href="34-4-文件下载.html">下一节：文件下载 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.4 错误处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="16-1-EventEmitter基础.html">第十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>16.4 错误处理</h1>
+      <p class="subtitle">事件中的错误处理最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 error 事件的特殊性</li>
+        <li>学会正确处理事件错误</li>
+        <li>掌握全局错误捕获</li>
+        <li>了解错误处理最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> error 事件</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// error 事件的特殊性：
+// 如果没有监听器，会抛出错误并终止进程
+
+// 不监听 error 事件的后果
+emitter.emit('error', new Error('出错了！'));
+// 抛出错误，进程崩溃
+
+// 正确做法：始终监听 error 事件
+emitter.on('error', (err) => {
+  console.error('捕获到错误:', err.message);
+});
+
+emitter.emit('error', new Error('出错了！'));
+// 输出: 捕获到错误: 出错了！
+// 程序继续运行
+
+// 多个 error 监听器
+emitter.on('error', (err) => {
+  // 记录日志
+  console.error('[LOG]', err.message);
+});
+
+emitter.on('error', (err) => {
+  // 发送错误报告
+  sendErrorReport(err);
+});
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">重要</div>
+          <p>使用 EventEmitter 时必须监听 error 事件，否则未捕获的错误会导致进程崩溃！</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 监听器中的错误</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+const emitter = new EventEmitter();
+
+// 监听器抛出错误
+emitter.on('event', () => {
+  throw new Error('监听器中的错误');
+});
+
+// 需要全局捕获
+process.on('uncaughtException', (err) => {
+  console.error('未捕获的错误:', err);
+});
+
+emitter.emit('event');
+
+// 更好的方式：包装监听器
+function safeListener(listener) {
+  return function(...args) {
+    try {
+      return listener.apply(this, args);
+    } catch (err) {
+      this.emit('error', err);
+    }
+  };
+}
+
+// 安全注册监听器
+emitter.on('data', safeListener((data) => {
+  if (!data) throw new Error('数据为空');
+  console.log('处理数据:', data);
+}));
+
+emitter.on('error', (err) => {
+  console.error('处理错误:', err.message);
+});
+
+emitter.emit('data', null);  // 触发错误但不崩溃
+
+// 封装安全发射器
+class SafeEmitter extends EventEmitter {
+  emit(event, ...args) {
+    if (event === 'error') {
+      return super.emit(event, ...args);
+    }
+
+    const listeners = this.listeners(event);
+    for (const listener of listeners) {
+      try {
+        listener(...args);
+      } catch (err) {
+        super.emit('error', err);
+      }
+    }
+    return listeners.length > 0;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 异步错误处理</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+class AsyncEmitter extends EventEmitter {
+  async emitAsync(event, ...args) {
+    const listeners = this.listeners(event);
+
+    if (listeners.length === 0 && event === 'error') {
+      throw args[0] || new Error('Unhandled error');
+    }
+
+    for (const listener of listeners) {
+      try {
+        await listener(...args);
+      } catch (err) {
+        if (event === 'error') {
+          throw err;
+        }
+        this.emit('error', err);
+      }
+    }
+  }
+}
+
+// 使用
+const emitter = new AsyncEmitter();
+
+emitter.on('fetch', async (url) => {
+  const response = await fetch(url);
+  return response.json();
+});
+
+emitter.on('error', (err) => {
+  console.error('异步错误:', err);
+});
+
+// 异步触发
+emitter.emitAsync('fetch', 'https://api.example.com/data');
+
+// Promise 版本
+emitter.on('async-event', async () => {
+  throw new Error('异步错误');
+});
+
+// 未处理的 Promise 拒绝
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 全局错误处理</h2>
+      <div class="code-block">
+// 1. 未捕获异常
+process.on('uncaughtException', (err, origin) => {
+  console.error(`未捕获异常 (${origin}):`, err);
+  // 可选：优雅关闭
+  // process.exit(1);
+});
+
+// 2. 未处理的 Promise 拒绝
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
+
+// 3. 警告
+process.on('warning', (warning) => {
+  console.warn('警告:', warning.name, warning.message);
+});
+
+// 4. 完整的错误处理示例
+class Application extends EventEmitter {
+  constructor() {
+    super();
+
+    // 内部错误处理
+    this.on('error', (err) => {
+      console.error('[App Error]', err.message);
+      // 写入日志
+      this.logError(err);
+    });
+
+    // 全局错误处理
+    process.on('uncaughtException', (err) => {
+      console.error('[Uncaught]', err);
+      this.shutdown();
+    });
+
+    process.on('unhandledRejection', (err) => {
+      console.error('[Unhandled Rejection]', err);
+    });
+  }
+
+  logError(err) {
+    // 写入错误日志
+  }
+
+  shutdown() {
+    console.log('应用关闭...');
+    process.exit(1);
+  }
+}
+
+// 使用
+const app = new Application();
+app.emit('error', new Error('测试错误'));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• error 事件没有监听器会崩溃</li>
+            <li>• 始终监听 error 事件</li>
+            <li>• 使用 try-catch 包装监听器</li>
+            <li>• 配置全局错误处理程序</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="16-3-一次性事件.html">← 上一节：一次性事件</a>
+      <a href="16-5-自定义事件.html">下一节：自定义事件 →</a>
+    </div>
+  </div>
+</body>
+</html>

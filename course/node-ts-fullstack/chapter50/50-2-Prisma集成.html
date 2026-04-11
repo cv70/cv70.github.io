@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.2 Prisma 集成 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="50-1-TypeORM集成.html">第五十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>50.2 Prisma 集成</h1>
+      <p class="subtitle">使用 Prisma ORM 简化数据库操作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>安装和配置 Prisma</li>
+        <li>定义数据模型</li>
+        <li>使用 Prisma Client</li>
+        <li>集成到 NestJS</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 安装和初始化</h2>
+      <div class="code-block">
+# 安装 Prisma
+npm install prisma --save-dev
+npm install @prisma/client
+
+# 初始化 Prisma
+npx prisma init
+
+# 项目结构
+project/
+├── prisma/
+│   └── schema.prisma    # 数据模型定义
+├── src/
+└── .env                 # 环境变量
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义数据模型</h2>
+      <div class="code-block">
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String
+  role      Role     @default(USER)
+  orders    Order[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  total     Decimal  @db.Decimal(10, 2)
+  status    OrderStatus @default(PENDING)
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("orders")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Prisma Schema</div>
+          <p>Prisma Schema 文件定义数据模型，Prisma 会自动生成类型安全的客户端代码。支持关系、枚举、索引等。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 创建 Prisma Service</h2>
+      <div class="code-block">
+// prisma/prisma.service.ts
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async onModuleDestroy() {
+    await this.$disconnect();
+  }
+}
+
+// prisma/prisma.module.ts
+import { Module, Global } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
+
+@Global()
+@Module({
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
+
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { PrismaModule } from './prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 使用 Prisma Client</h2>
+      <div class="code-block">
+// users/users.service.ts
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { User, Prisma } from '@prisma/client';
+
+@Injectable()
+export class UsersService {
+  constructor(private prisma: PrismaService) {}
+
+  async findAll(): Promise<User[]> {
+    return this.prisma.user.findMany();
+  }
+
+  async findOne(id: number): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { orders: true },  // 包含关联数据
+    });
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
+  }
+
+  async create(data: Prisma.UserCreateInput): Promise<User> {
+    return this.prisma.user.create({
+      data,
+    });
+  }
+
+  async update(id: number, data: Prisma.UserUpdateInput): Promise<User> {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async remove(id: number): Promise<User> {
+    return this.prisma.user.delete({
+      where: { id },
+    });
+  }
+
+  // 复杂查询
+  async findActiveUsersWithOrders() {
+    return this.prisma.user.findMany({
+      where: {
+        orders: {
+          some: {
+            status: 'PAID',
+          },
+        },
+      },
+      include: {
+        orders: {
+          where: { status: 'PAID' },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">类型安全</div>
+          <p>Prisma 生成完全类型安全的客户端。Prisma.UserCreateInput 等类型确保数据结构正确。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Prisma 提供类型安全的数据库访问</li>
+            <li>• schema.prisma 定义数据模型</li>
+            <li>• PrismaClient 提供丰富的查询方法</li>
+            <li>• 自动生成 TypeScript 类型</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-1-TypeORM集成.html">← 上一节：TypeORM 集成</a>
+      <a href="50-3-Mongoose集成.html">下一节：Mongoose 集成 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.2 可读流 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="17-1-流的概念.html">第十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>17.2 可读流</h1>
+      <p class="subtitle">读取数据流</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握可读流的创建和使用</li>
+        <li>理解 data 和 readable 事件</li>
+        <li>学会自定义可读流</li>
+        <li>掌握流的暂停和恢复</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 使用可读流</h2>
+      <div class="code-block">
+const fs = require('fs');
+
+// 创建文件可读流
+const readable = fs.createReadStream('file.txt', {
+  encoding: 'utf8',
+  highWaterMark: 64 * 1024,  // 缓冲区大小
+  start: 0,                   // 开始位置
+  end: 100                    // 结束位置
+});
+
+// flowing 模式 - data 事件
+readable.on('data', (chunk) => {
+  console.log('读取到:', chunk.length, '字节');
+});
+
+readable.on('end', () => {
+  console.log('读取完成');
+});
+
+readable.on('error', (err) => {
+  console.error('读取错误:', err);
+});
+
+readable.on('open', (fd) => {
+  console.log('文件打开，描述符:', fd);
+});
+
+readable.on('close', () => {
+  console.log('文件关闭');
+});
+
+// 暂停和恢复
+readable.pause();  // 暂停 data 事件
+readable.resume(); // 恢复 data 事件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> readable 事件模式</h2>
+      <div class="code-block">
+const fs = require('fs');
+const readable = fs.createReadStream('file.txt', { highWaterMark: 32 });
+
+// paused 模式 - 手动读取
+readable.on('readable', () => {
+  // 缓冲区有数据可读时触发
+  let chunk;
+  while (null !== (chunk = readable.read())) {
+    console.log('读取:', chunk.toString());
+  }
+});
+
+readable.on('end', () => {
+  console.log('结束');
+});
+
+// read(size) 指定读取大小
+const smallChunk = readable.read(10);  // 读取 10 字节
+
+// 编码设置
+readable.setEncoding('utf8');
+// 或在创建时指定
+
+// 示例：逐行处理
+const readline = require('readline');
+
+const rl = readline.createInterface({
+  input: fs.createReadStream('file.txt'),
+  crlfDelay: Infinity
+});
+
+rl.on('line', (line) => {
+  console.log('行:', line);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 自定义可读流</h2>
+      <div class="code-block">
+const { Readable } = require('stream');
+
+// 方式一：简单方式
+const readable = new Readable({
+  read() {}  // 必须实现
+});
+
+readable.push('Hello ');
+readable.push('World');
+readable.push(null);  // 表示结束
+
+readable.on('data', (chunk) => {
+  console.log(chunk.toString());
+});
+
+// 方式二：继承实现
+class CounterStream extends Readable {
+  constructor(opt) {
+    super(opt);
+    this.max = opt.max || 10;
+    this.count = 0;
+  }
+
+  _read(size) {
+    this.count++;
+    if (this.count > this.max) {
+      this.push(null);  // 结束
+      return;
+    }
+    const data = Buffer.from(String(this.count));
+    this.push(data);
+  }
+}
+
+const counter = new CounterStream({ max: 5 });
+counter.on('data', (chunk) => {
+  console.log('计数:', chunk.toString());
+});
+// 输出: 1, 2, 3, 4, 5
+
+// 方式三：from 静态方法（Node.js 12+）
+const { Readable } = require('stream');
+
+const readable = Readable.from(['a', 'b', 'c']);
+
+readable.on('data', (chunk) => {
+  console.log(chunk);  // 'a', 'b', 'c'
+});
+
+// 从迭代器创建
+async function* generate() {
+  yield 'Hello';
+  yield ' ';
+  yield 'World';
+}
+
+const readable = Readable.from(generate());
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实际应用示例</h2>
+      <div class="code-block">
+const fs = require('fs');
+const { Readable } = require('stream');
+
+// 1. 进度读取
+function readWithProgress(filepath) {
+  const stream = fs.createReadStream(filepath);
+  const stats = fs.statSync(filepath);
+  let read = 0;
+
+  stream.on('data', (chunk) => {
+    read += chunk.length;
+    const percent = ((read / stats.size) * 100).toFixed(2);
+    process.stdout.write(`\r进度: ${percent}%`);
+  });
+
+  stream.on('end', () => {
+    console.log('\n完成');
+  });
+
+  return stream;
+}
+
+// 2. 行计数器
+class LineCounter extends Readable {
+  constructor(source, options) {
+    super(options);
+    this.source = source;
+    this.lines = 0;
+    this.leftover = '';
+  }
+
+  _read(size) {
+    const chunk = this.source.read(size);
+    if (chunk === null) {
+      if (this.leftover) this.lines++;
+      this.push(Buffer.from(String(this.lines)));
+      this.push(null);
+      return;
+    }
+
+    const data = this.leftover + chunk.toString();
+    const lines = data.split('\n');
+    this.leftover = lines.pop();
+    this.lines += lines.length;
+    this.push(chunk);
+  }
+}
+
+// 3. 缓冲读取
+async function readBuffered(stream) {
+  const chunks = [];
+
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+// 使用
+const data = await readBuffered(fs.createReadStream('file.txt'));
+
+// 4. 限制速率
+class ThrottledStream extends Readable {
+  constructor(source, bytesPerSecond) {
+    super();
+    this.source = source;
+    this.bytesPerSecond = bytesPerSecond;
+  }
+
+  _read(size) {
+    setTimeout(() => {
+      const chunk = this.source.read(size);
+      this.push(chunk);
+    }, size / this.bytesPerSecond * 1000);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• data 事件是 flowing 模式</li>
+            <li>• readable 事件 + read() 是 paused 模式</li>
+            <li>• 继承 Readable 实现 _read() 创建自定义流</li>
+            <li>• push(null) 表示流结束</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="17-1-流的概念.html">← 上一节：流的概念</a>
+      <a href="17-3-可写流.html">下一节：可写流 →</a>
+    </div>
+  </div>
+</body>
+</html>

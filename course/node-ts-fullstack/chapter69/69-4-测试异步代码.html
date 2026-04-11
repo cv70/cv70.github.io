@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.4 测试异步代码 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="69-3-匹配器Matchers.html">上一节</a></li>
+      <li><a href="69-5-测试生命周期.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>69.4 测试异步代码</h1>
+      <p class="subtitle">第十部分：测试篇 - 掌握异步代码的测试技巧</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 异步测试的重要性</h2>
+      <p>Node.js 开发中大量使用异步代码，如数据库操作、API 调用、文件读写等。正确测试异步代码是后端开发的关键技能。</p>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">常见错误</div>
+          <p>忘记等待异步操作完成是最常见的错误，导致测试提前结束，无法验证异步代码的结果。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 回调函数测试</h2>
+
+      <div class="code-block">// 被测试的函数
+function fetchData(callback: (data: string) =&gt; void) {
+  setTimeout(() =&gt; {
+    callback('peanut butter');
+  }, 100);
+}</div>
+
+      <h3>错误写法</h3>
+      <div class="code-block">// ❌ 错误：测试会在回调执行前结束
+test('the data is peanut butter', () =&gt; {
+  functionCallback(data =&gt; {
+    expect(data).toBe('peanut butter');
+  });
+  // 测试在这里就结束了！
+});</div>
+
+      <h3>正确写法：使用 done 参数</h3>
+      <div class="code-block">// ✅ 正确：使用 done 参数
+test('the data is peanut butter', done =&gt; {
+  functionCallback(data =&gt; {
+    expect(data).toBe('peanut butter');
+    done(); // 告诉 Jest 测试完成
+  });
+});</div>
+
+      <div class="code-block">// 处理异步错误
+test('the fetch fails with an error', done =&gt; {
+  fetchWithError((error, data) =&gt; {
+    if (error) {
+      expect(error.message).toBe('Network error');
+      done();
+      return;
+    }
+    done.fail('Should have thrown an error');
+  });
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">done 参数</div>
+          <p>Jest 会等待 done() 被调用才结束测试。如果 done() 没有被调用，测试会超时失败。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Promise 测试</h2>
+
+      <div class="code-block">// 被测试的函数
+function fetchData(): Promise&lt;string&gt; {
+  return new Promise(resolve =&gt; {
+    setTimeout(() =&gt; resolve('peanut butter'), 100);
+  });
+}
+
+function fetchError(): Promise&lt;never&gt; {
+  return Promise.reject(new Error('Network error'));
+}</div>
+
+      <h3>方式一：返回 Promise</h3>
+      <div class="code-block">// ✅ 返回 Promise
+test('the data is peanut butter', () =&gt; {
+  return fetchData().then(data =&gt; {
+    expect(data).toBe('peanut butter');
+  });
+});</div>
+
+      <h3>方式二：使用 async/await（推荐）</h3>
+      <div class="code-block">// ✅ 使用 async/await（推荐）
+test('the data is peanut butter', async () =&gt; {
+  const data = await fetchData();
+  expect(data).toBe('peanut butter');
+});</div>
+
+      <h3>方式三：使用 .resolves / .rejects</h3>
+      <div class="code-block">// ✅ 使用 resolves
+test('the data is peanut butter', () =&gt; {
+  return expect(fetchData()).resolves.toBe('peanut butter');
+});
+
+// ✅ 使用 rejects
+test('the fetch fails with an error', () =&gt; {
+  return expect(fetchError()).rejects.toThrow('Network error');
+});
+
+// ✅ 结合 async/await
+test('the data is peanut butter', async () =&gt; {
+  await expect(fetchData()).resolves.toBe('peanut butter');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> async/await 最佳实践</h2>
+
+      <div class="code-block">describe('UserService', () =&gt; {
+  let service: UserService;
+
+  beforeEach(() =&gt; {
+    service = new UserService();
+  });
+
+  test('should create user', async () =&gt; {
+    // Arrange
+    const userData = {
+      name: 'John',
+      email: 'john@example.com'
+    };
+
+    // Act
+    const user = await service.create(userData);
+
+    // Assert
+    expect(user).toMatchObject({
+      name: 'John',
+      email: 'john@example.com'
+    });
+    expect(user.id).toBeDefined();
+  });
+
+  test('should throw error for duplicate email', async () =&gt; {
+    // 先创建一个用户
+    await service.create({
+      name: 'John',
+      email: 'john@example.com'
+    });
+
+    // 尝试创建相同邮箱的用户
+    await expect(service.create({
+      name: 'Jane',
+      email: 'john@example.com'
+    })).rejects.toThrow('Email already exists');
+  });
+});</div>
+
+      <h3>并发测试</h3>
+      <div class="code-block">// 默认：测试顺序执行
+test('test 1', async () =&gt; {
+  await someAsyncOperation();
+});
+
+test('test 2', async () =&gt; {
+  await anotherAsyncOperation();
+});
+
+// 并发执行测试
+test.concurrent('concurrent test 1', async () =&gt; {
+  await someAsyncOperation();
+});
+
+test.concurrent('concurrent test 2', async () =&gt; {
+  await anotherAsyncOperation();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 测试定时器</h2>
+
+      <div class="code-block">// 被测试的代码
+function delayedMessage(callback: (msg: string) =&gt; void) {
+  setTimeout(() =&gt; {
+    callback('Hello after delay');
+  }, 1000);
+}
+
+function intervalCounter(callback: (count: number) =&gt; void) {
+  let count = 0;
+  const id = setInterval(() =&gt; {
+    count++;
+    callback(count);
+    if (count === 3) clearInterval(id);
+  }, 100);
+  return id;
+}</div>
+
+      <h3>使用 Jest 假定时器</h3>
+      <div class="code-block">describe('Timer tests', () =&gt; {
+  beforeEach(() =&gt; {
+    // 使用假定时器
+    jest.useFakeTimers();
+  });
+
+  afterEach(() =&gt; {
+    // 恢复真实定时器
+    jest.useRealTimers();
+  });
+
+  test('calls callback after delay', () =&gt; {
+    const callback = jest.fn();
+    delayedMessage(callback);
+
+    // 此时回调还没被调用
+    expect(callback).not.toHaveBeenCalled();
+
+    // 快进时间
+    jest.advanceTimersByTime(1000);
+
+    // 现在回调被调用了
+    expect(callback).toHaveBeenCalledWith('Hello after delay');
+  });
+
+  test('runs all timers', () =&gt; {
+    const callback = jest.fn();
+    delayedMessage(callback);
+
+    // 运行所有定时器
+    jest.runAllTimers();
+
+    expect(callback).toHaveBeenCalled();
+  });
+
+  test('interval counter', () =&gt; {
+    const callback = jest.fn();
+    intervalCounter(callback);
+
+    // 快进到第一个间隔
+    jest.advanceTimersByTime(100);
+    expect(callback).toHaveBeenCalledWith(1);
+
+    // 快进到第二个间隔
+    jest.advanceTimersByTime(100);
+    expect(callback).toHaveBeenCalledWith(2);
+
+    // 快进剩余时间
+    jest.advanceTimersByTime(100);
+    expect(callback).toHaveBeenCalledWith(3);
+  });
+
+  test('only pending timers', () =&gt; {
+    const callback = jest.fn();
+    delayedMessage(callback);
+
+    // 只运行待处理的定时器
+    jest.runOnlyPendingTimers();
+
+    expect(callback).toHaveBeenCalled();
+  });
+});</div>
+
+      <h3>定时器方法一览</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>jest.useFakeTimers()</td>
+            <td>使用假定时器</td>
+          </tr>
+          <tr>
+            <td>jest.useRealTimers()</td>
+            <td>恢复真实定时器</td>
+          </tr>
+          <tr>
+            <td>jest.runAllTimers()</td>
+            <td>运行所有定时器</td>
+          </tr>
+          <tr>
+            <td>jest.runOnlyPendingTimers()</td>
+            <td>只运行待处理的定时器</td>
+          </tr>
+          <tr>
+            <td>jest.advanceTimersByTime(ms)</td>
+            <td>快进指定时间</td>
+          </tr>
+          <tr>
+            <td>jest.advanceTimersToNextTimer()</td>
+            <td>快进到下一个定时器</td>
+          </tr>
+          <tr>
+            <td>jest.getTimerCount()</td>
+            <td>获取定时器数量</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试超时设置</h2>
+
+      <div class="code-block">// 设置测试超时时间
+test('slow operation', async () =&gt; {
+  const result = await slowOperation();
+  expect(result).toBeDefined();
+}, 10000); // 10 秒超时
+
+// 设置整个 describe 的超时
+describe('slow tests', () =&gt; {
+  test('test 1', async () =&gt; {
+    // ...
+  });
+
+  test('test 2', async () =&gt; {
+    // ...
+  });
+}, 30000); // 30 秒超时
+
+// 在配置中设置默认超时
+// jest.config.ts
+export default {
+  testTimeout: 10000 // 默认 10 秒
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 完整示例：数据库操作测试</h2>
+
+      <div class="code-block">// tests/services/user.service.test.ts
+import { UserService } from '@/services/user.service';
+import { createConnection, Connection } from 'typeorm';
+import { User } from '@/entities/user.entity';
+
+describe('UserService', () => {
+  let connection: Connection;
+  let service: UserService;
+
+  beforeAll(async () => {
+    // 建立测试数据库连接
+    connection = await createConnection({
+      type: 'sqlite',
+      database: ':memory:',
+      entities: [User],
+      synchronize: true
+    });
+    service = new UserService(connection);
+  });
+
+  afterAll(async () => {
+    // 关闭连接
+    await connection.close();
+  });
+
+  beforeEach(async () => {
+    // 清空数据
+    await connection.getRepository(User).clear();
+  });
+
+  describe('create', () => {
+    it('should create a new user', async () => {
+      const userData = {
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+
+      const user = await service.create(userData);
+
+      expect(user).toMatchObject(userData);
+      expect(user.id).toBeDefined();
+      expect(user.createdAt).toBeInstanceOf(Date);
+    });
+
+    it('should throw error for duplicate email', async () => {
+      await service.create({
+        name: 'John',
+        email: 'john@example.com'
+      });
+
+      await expect(service.create({
+        name: 'Jane',
+        email: 'john@example.com'
+      })).rejects.toThrow();
+    });
+  });
+
+  describe('findByEmail', () => {
+    it('should return user when found', async () => {
+      await service.create({
+        name: 'John',
+        email: 'john@example.com'
+      });
+
+      const user = await service.findByEmail('john@example.com');
+
+      expect(user).not.toBeNull();
+      expect(user?.name).toBe('John');
+    });
+
+    it('should return null when not found', async () => {
+      const user = await service.findByEmail('nonexistent@example.com');
+      expect(user).toBeNull();
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>回调函数测试使用 done 参数</li>
+            <li>Promise 测试推荐使用 async/await</li>
+            <li>resolves/rejects 用于简洁的 Promise 断言</li>
+            <li>使用 Jest 假定时器测试定时器相关代码</li>
+            <li>合理设置测试超时时间</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-3-匹配器Matchers.html">← 上一节：匹配器 Matchers</a>
+      <a href="69-5-测试生命周期.html">下一节：测试生命周期 →</a>
+    </div>
+  </div>
+</body>
+</html>

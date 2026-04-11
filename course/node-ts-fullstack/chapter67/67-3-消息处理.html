@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>67.3 消息处理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="67-1-WebSocketGateway装饰器.html">第六十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>67.3 消息处理</h1>
+      <p class="subtitle">NestJS WebSocket 消息处理机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握消息的接收和发送</li>
+        <li>学会使用管道验证消息</li>
+        <li>理解响应式消息处理</li>
+        <li>了解异常处理机制</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 消息发送方式</h2>
+
+      <div class="card">
+        <h3 class="card-title">服务端发送消息</h3>
+        <div class="code-block">
+import { WebSocketGateway, WebSocketServer, SubscribeMessage, ConnectedSocket, MessageBody } from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+
+@WebSocketGateway()
+export class MessageGateway {
+  @WebSocketServer()
+  server: Server;
+
+  // 1. 向所有客户端发送
+  broadcastToAll(message: string) {
+    this.server.emit('event', message);
+  }
+
+  // 2. 向特定客户端发送
+  sendToClient(clientId: string, event: string, data: any) {
+    this.server.to(clientId).emit(event, data);
+  }
+
+  // 3. 向房间发送
+  sendToRoom(roomId: string, event: string, data: any) {
+    this.server.to(roomId).emit(event, data);
+  }
+
+  // 4. 排除特定客户端发送
+  broadcastExcept(clientId: string, event: string, data: any) {
+    this.server.except(clientId).emit(event, data);
+  }
+
+  // 处理客户端消息
+  @SubscribeMessage('message')
+  handleMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: string
+  ) {
+    // 向发送者回复
+    client.emit('reply', '收到消息');
+
+    // 向除发送者外的所有人发送
+    client.broadcast.emit('message', data);
+
+    // 返回值会作为确认发送回客户端
+    return { status: 'received', data };
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">响应式消息处理</h3>
+        <div class="code-block">
+import { from, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+@WebSocketGateway()
+export class ReactiveGateway {
+  @WebSocketServer()
+  server: Server;
+
+  // 返回 Observable - 流式响应
+  @SubscribeMessage('stream')
+  handleStream(@MessageBody() data: number): Observable&lt;{ count: number }&gt; {
+    return from(Array.from({ length: data }, (_, i) => i + 1)).pipe(
+      map(count => ({ count }))
+    );
+    // 客户端会收到多条消息：{ count: 1 }, { count: 2 }, ...
+  }
+
+  // 返回 Promise - 异步响应
+  @SubscribeMessage('async-message')
+  async handleAsyncMessage(@MessageBody() data: string): Promise&lt;any&gt; {
+    const result = await this.processData(data);
+    return { result };
+  }
+
+  private async processData(data: string): Promise&lt;string&gt; {
+    return new Promise(resolve => {
+      setTimeout(() => resolve(`Processed: ${data}`), 1000);
+    });
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 消息验证</h2>
+
+      <div class="card">
+        <h3 class="card-title">使用管道验证</h3>
+        <div class="code-block">
+import { WebSocketGateway, SubscribeMessage, MessageBody, UsePipes, ValidationPipe } from '@nestjs/websockets';
+import { IsString, IsNumber, Min, Max, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+// DTO 定义
+class PositionDto {
+  @IsNumber()
+  @Min(0)
+  x: number;
+
+  @IsNumber()
+  @Min(0)
+  y: number;
+}
+
+class SendMessageDto {
+  @IsString()
+  roomId: string;
+
+  @IsString()
+  content: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PositionDto)
+  position?: PositionDto;
+}
+
+// 全局管道验证
+@WebSocketGateway()
+@UsePipes(new ValidationPipe({
+  transform: true,        // 自动转换类型
+  whitelist: true,        // 移除未定义的属性
+  forbidNonWhitelisted: true  // 拒绝未定义的属性
+}))
+export class ValidatedGateway {
+  @SubscribeMessage('send-message')
+  handleSendMessage(@MessageBody() data: SendMessageDto) {
+    // data 已经过验证和转换
+    console.log(data.roomId);    // string
+    console.log(data.content);   // string
+    console.log(data.position);  // PositionDto | undefined
+    return { success: true };
+  }
+}
+
+// 单个方法使用管道
+@WebSocketGateway()
+export class PartialValidatedGateway {
+  @SubscribeMessage('move')
+  @UsePipes(new ValidationPipe())
+  handleMove(@MessageBody() position: PositionDto) {
+    return { position };
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 异常处理</h2>
+
+      <div class="card">
+        <h3 class="card-title">WebSocket 异常过滤器</h3>
+        <div class="code-block">
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  MessageBody,
+  UseFilters,
+  ArgumentsHost,
+  Catch,
+  WsExceptionFilter
+} from '@nestjs/websockets';
+import { WsException } from '@nestjs/websockets';
+
+// 自定义异常
+export class RoomNotFoundException extends WsException {
+  constructor(roomId: string) {
+    super({
+      event: 'error',
+      data: {
+        code: 'ROOM_NOT_FOUND',
+        message: `Room ${roomId} not found`
+      }
+    });
+  }
+}
+
+// 异常过滤器
+@Catch()
+export class WebSocketExceptionFilter implements WsExceptionFilter {
+  catch(exception: any, host: ArgumentsHost) {
+    const client = host.switchToWs().getClient();
+
+    const error = exception instanceof WsException
+      ? exception.getError()
+      : { event: 'error', data: { message: 'Internal error' } };
+
+    client.emit('error', error);
+  }
+}
+
+// 使用异常过滤器
+@WebSocketGateway()
+@UseFilters(new WebSocketExceptionFilter())
+export class ExceptionHandlingGateway {
+  @SubscribeMessage('join-room')
+  handleJoinRoom(@MessageBody() roomId: string) {
+    const room = this.findRoom(roomId);
+
+    if (!room) {
+      throw new RoomNotFoundException(roomId);
+    }
+
+    return { success: true, room };
+  }
+
+  private findRoom(roomId: string) {
+    return null; // 模拟找不到
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 守卫（Guard）</h2>
+
+      <div class="code-block">
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  UseGuards,
+  CanActivate,
+  ExecutionContext
+} from '@nestjs/websockets';
+import { Injectable } from '@nestjs/common';
+
+// WebSocket 守卫
+@Injectable()
+export class WsAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const client = context.switchToWs().getClient();
+    const token = client.handshake.auth.token;
+
+    if (!token) {
+      return false;
+    }
+
+    // 验证 token
+    try {
+      const user = this.validateToken(token);
+      client.data.user = user;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private validateToken(token: string) {
+    // JWT 验证逻辑
+    return { id: 'user-123', name: 'Test User' };
+  }
+}
+
+// 角色守卫
+@Injectable()
+export class WsRolesGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const client = context.switchToWs().getClient();
+    const user = client.data.user;
+
+    // 检查用户角色
+    return user?.role === 'admin';
+  }
+}
+
+// 使用守卫
+@WebSocketGateway()
+@UseGuards(WsAuthGuard)
+export class GuardedGateway {
+  @SubscribeMessage('message')
+  handleMessage(@ConnectedSocket() client: Socket) {
+    // 只有认证通过的用户才能访问
+    return { success: true };
+  }
+
+  @SubscribeMessage('admin-action')
+  @UseGuards(WsRolesGuard)
+  handleAdminAction() {
+    // 只有管理员才能访问
+    return { success: true };
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 拦截器</h2>
+
+      <div class="code-block">
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  UseInterceptors,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler
+} from '@nestjs/websockets';
+import { Injectable } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+
+// 日志拦截器
+@Injectable()
+export class LoggingInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;any&gt; {
+    const client = context.switchToWs().getClient();
+    const event = context.switchToWs().getData();
+
+    console.log(`[${new Date().toISOString()}] ${client.id}: ${event}`);
+
+    const now = Date.now();
+
+    return next.handle().pipe(
+      tap(() => {
+        console.log(`处理耗时: ${Date.now() - now}ms`);
+      })
+    );
+  }
+}
+
+// 转换拦截器
+@Injectable()
+export class TransformInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;any&gt; {
+    return next.handle().pipe(
+      map(data => ({
+        success: true,
+        data,
+        timestamp: Date.now()
+      }))
+    );
+  }
+}
+
+// 使用拦截器
+@WebSocketGateway()
+@UseInterceptors(LoggingInterceptor, TransformInterceptor)
+export class InterceptedGateway {
+  @SubscribeMessage('ping')
+  handlePing() {
+    return 'pong';
+    // 经过 TransformInterceptor 后返回:
+    // { success: true, data: 'pong', timestamp: 1700000000000 }
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 返回值自动发送给客户端作为确认</li>
+            <li>• 返回 Observable 实现流式响应</li>
+            <li>• 使用 ValidationPipe 验证消息</li>
+            <li>• WsExceptionFilter 处理 WebSocket 异常</li>
+            <li>• Guard 实现认证和授权</li>
+            <li>• Interceptor 用于日志记录和数据转换</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="67-2-网关实现.html">← 上一节</a>
+      <a href="67-4-身份验证.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

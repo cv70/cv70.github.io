@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>106.4 gRPC 流式通信 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="106-1-RPC概念.html">第106章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>106.4 gRPC 流式通信</h1>
+      <p class="subtitle">高效的数据流传输模式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解服务端流式RPC</li>
+        <li>理解客户端流式RPC</li>
+        <li>掌握双向流式RPC</li>
+        <li>学会流式通信的实际应用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 服务端流式RPC</h2>
+      <div class="code-block">
+// Proto定义
+service OrderService {
+  // 服务端流：返回多个订单
+  rpc ListOrders(ListOrdersRequest) returns (stream Order);
+}
+
+// 服务端实现
+import * as grpc from '@grpc/grpc-js';
+
+class OrderServiceImpl {
+  async listOrders(
+    call: grpc.ServerWritableStream<ListOrdersRequest, Order>
+  ) {
+    const { page, pageSize } = call.request;
+
+    // 模拟分批获取数据
+    for (let i = 0; i < pageSize; i++) {
+      const order = await this.getOrder(page * pageSize + i);
+
+      // 发送单个订单
+      call.write(order);
+
+      // 模拟延迟
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // 结束流
+    call.end();
+  }
+}
+
+// 客户端调用
+async function listOrders(client: OrderServiceClient) {
+  const request = { page: 1, pageSize: 10 };
+
+  const stream = client.listOrders(request);
+
+  stream.on('data', (order: Order) => {
+    console.log('Received order:', order.id);
+  });
+
+  stream.on('end', () => {
+    console.log('All orders received');
+  });
+
+  stream.on('error', (error: Error) => {
+    console.error('Error:', error);
+  });
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">服务端流适用场景</div>
+          <p>大量数据返回、实时数据推送、日志流、事件流。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 客户端流式RPC</h2>
+      <div class="code-block">
+// Proto定义
+service UploadService {
+  // 客户端流：上传多个文件块
+  rpc UploadFile(stream FileChunk) returns (UploadResult);
+}
+
+// 服务端实现
+class UploadServiceImpl {
+  async uploadFile(
+    call: grpc.ServerReadableStream<FileChunk, UploadResult>,
+    callback: grpc.sendUnaryData<UploadResult>
+  ) {
+    const chunks: Buffer[] = [];
+
+    call.on('data', (chunk: FileChunk) => {
+      console.log('Received chunk:', chunk.sequence);
+      chunks.push(Buffer.from(chunk.data));
+    });
+
+    call.on('end', async () => {
+      // 合并所有块
+      const fileBuffer = Buffer.concat(chunks);
+
+      // 保存文件
+      const filePath = await this.saveFile(fileBuffer);
+
+      callback(null, {
+        success: true,
+        filePath,
+        size: fileBuffer.length
+      });
+    });
+
+    call.on('error', (error: Error) => {
+      callback(error, null);
+    });
+  }
+}
+
+// 客户端调用
+async function uploadFile(client: UploadServiceClient, filePath: string) {
+  return new Promise((resolve, reject) => {
+    const stream = client.uploadFile((error, result) => {
+      if (error) reject(error);
+      else resolve(result);
+    });
+
+    // 读取文件并分块发送
+    const fileStream = fs.createReadStream(filePath);
+    let sequence = 0;
+
+    fileStream.on('data', (chunk: Buffer) => {
+      stream.write({
+        sequence: sequence++,
+        data: chunk,
+        filename: path.basename(filePath)
+      });
+    });
+
+    fileStream.on('end', () => {
+      stream.end();
+    });
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 双向流式RPC</h2>
+      <div class="code-block">
+// Proto定义
+service ChatService {
+  // 双向流：实时聊天
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+
+// 服务端实现
+class ChatServiceImpl {
+  private clients: Map<string, grpc.ServerDuplexStream<ChatMessage, ChatMessage>> = new Map();
+
+  async chat(call: grpc.ServerDuplexStream<ChatMessage, ChatMessage>) {
+    const clientId = uuidv4();
+    this.clients.set(clientId, call);
+
+    call.on('data', (message: ChatMessage) => {
+      console.log(`${message.sender}: ${message.content}`);
+
+      // 广播给所有客户端
+      for (const [id, client] of this.clients) {
+        if (id !== clientId) {
+          client.write({
+            sender: message.sender,
+            content: message.content,
+            timestamp: Date.now()
+          });
+        }
+      }
+    });
+
+    call.on('end', () => {
+      this.clients.delete(clientId);
+      call.end();
+    });
+  }
+}
+
+// 客户端实现
+async function startChat(client: ChatServiceClient, username: string) {
+  const stream = client.chat();
+
+  // 发送消息
+  const sendMessage = (content: string) => {
+    stream.write({
+      sender: username,
+      content,
+      timestamp: Date.now()
+    });
+  };
+
+  // 接收消息
+  stream.on('data', (message: ChatMessage) => {
+    console.log(`${message.sender}: ${message.content}`);
+  });
+
+  // 用户输入
+  readline.on('line', (line: string) => {
+    sendMessage(line);
+  });
+
+  // 结束
+  process.on('SIGINT', () => {
+    stream.end();
+    process.exit();
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 服务端流适合大量数据返回</li>
+            <li>• 客户端流适合批量数据上传</li>
+            <li>• 双向流适合实时通信场景</li>
+            <li>• 流式通信减少内存占用和延迟</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="106-3-Protocol-Buffers.html">← 上一节：Protocol Buffers</a>
+      <a href="106-5-NestJS-gRPC.html">下一节：NestJS gRPC →</a>
+    </div>
+  </div>
+</body>
+</html>

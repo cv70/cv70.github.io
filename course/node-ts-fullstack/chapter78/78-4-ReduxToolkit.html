@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>78.4 Redux Toolkit - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="78-1-状态管理概述.html">第七十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>78.4 Redux Toolkit</h1>
+      <p class="subtitle">现代化的 Redux 开发方式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Redux Toolkit 的优势</li>
+        <li>掌握 createSlice 创建切片</li>
+        <li>学会配置 store</li>
+        <li>了解 createAsyncThunk 处理异步</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Redux Toolkit 简介</h2>
+      <div class="code-block">
+// Redux Toolkit (RTK) 是 Redux 官方推荐的开发方式
+// 简化了 Redux 的样板代码，提供更好的开发体验
+
+// 安装
+// npm install @reduxjs/toolkit react-redux
+
+// 主要 API
+// - configureStore：创建 store
+// - createSlice：创建 reducer 和 action
+// - createAsyncThunk：处理异步操作
+// - createEntityAdapter：规范化数据
+
+// 对比传统 Redux
+// 传统：需要手动定义 action type、action creator、reducer
+// RTK：一个 createSlice 搞定所有
+
+import { createSlice, configureStore, PayloadAction } from '@reduxjs/toolkit';
+
+// 创建 slice
+interface CounterState {
+  value: number;
+}
+
+const initialState: CounterState = {
+  value: 0,
+};
+
+const counterSlice = createSlice({
+  name: 'counter',
+  initialState,
+  reducers: {
+    increment: (state) =&gt; {
+      // RTK 允许直接修改 state（内部使用 Immer）
+      state.value += 1;
+    },
+    decrement: (state) =&gt; {
+      state.value -= 1;
+    },
+    incrementByAmount: (state, action: PayloadAction&lt;number&gt;) =&gt; {
+      state.value += action.payload;
+    },
+    reset: (state) =&gt; {
+      state.value = 0;
+    },
+  },
+});
+
+// 自动生成的 action creators
+export const { increment, decrement, incrementByAmount, reset } = counterSlice.actions;
+
+// 创建 store
+const store = configureStore({
+  reducer: {
+    counter: counterSlice.reducer,
+  },
+});
+
+// 类型导出
+export type RootState = ReturnType&lt;typeof store.getState&gt;;
+export type AppDispatch = typeof store.dispatch;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 完整示例：Todo 应用</h2>
+      <div class="code-block">
+// store/todoSlice.ts
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+
+interface Todo {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+interface TodoState {
+  items: Todo[];
+  filter: 'all' | 'active' | 'completed';
+}
+
+const initialState: TodoState = {
+  items: [],
+  filter: 'all',
+};
+
+const todoSlice = createSlice({
+  name: 'todos',
+  initialState,
+  reducers: {
+    addTodo: (state, action: PayloadAction&lt;string&gt;) =&gt; {
+      state.items.push({
+        id: crypto.randomUUID(),
+        text: action.payload,
+        completed: false,
+      });
+    },
+    toggleTodo: (state, action: PayloadAction&lt;string&gt;) =&gt; {
+      const todo = state.items.find(t =&gt; t.id === action.payload);
+      if (todo) {
+        todo.completed = !todo.completed;
+      }
+    },
+    deleteTodo: (state, action: PayloadAction&lt;string&gt;) =&gt; {
+      state.items = state.items.filter(t =&gt; t.id !== action.payload);
+    },
+    setFilter: (state, action: PayloadAction&lt;TodoState['filter']&gt;) =&gt; {
+      state.filter = action.payload;
+    },
+    clearCompleted: (state) =&gt; {
+      state.items = state.items.filter(t =&gt; !t.completed);
+    },
+  },
+});
+
+export const { addTodo, toggleTodo, deleteTodo, setFilter, clearCompleted } = todoSlice.actions;
+export default todoSlice.reducer;
+
+// store/index.ts
+import { configureStore } from '@reduxjs/toolkit';
+import todoReducer from './todoSlice';
+
+export const store = configureStore({
+  reducer: {
+    todos: todoReducer,
+  },
+});
+
+export type RootState = ReturnType&lt;typeof store.getState&gt;;
+export type AppDispatch = typeof store.dispatch;
+
+// hooks.ts（类型安全的 hooks）
+import { useDispatch, useSelector, TypedUseSelectorHook } from 'react-redux';
+import type { RootState, AppDispatch } from './store';
+
+export const useAppDispatch = () =&gt; useDispatch&lt;AppDispatch&gt;();
+export const useAppSelector: TypedUseSelectorHook&lt;RootState&gt; = useSelector;
+
+// 组件中使用
+function TodoList() {
+  const dispatch = useAppDispatch();
+  const { items, filter } = useAppSelector(state =&gt; state.todos);
+
+  const filteredTodos = items.filter(todo =&gt; {
+    if (filter === 'active') return !todo.completed;
+    if (filter === 'completed') return todo.completed;
+    return true;
+  });
+
+  const handleAdd = (text: string) =&gt; {
+    dispatch(addTodo(text));
+  };
+
+  return (
+    &lt;div&gt;
+      &lt;TodoInput onSubmit={handleAdd} /&gt;
+      &lt;ul&gt;
+        {filteredTodos.map(todo =&gt; (
+          &lt;li key={todo.id}&gt;
+            &lt;input
+              type="checkbox"
+              checked={todo.completed}
+              onChange={() =&gt; dispatch(toggleTodo(todo.id))}
+            /&gt;
+            {todo.text}
+            &lt;button onClick={() =&gt; dispatch(deleteTodo(todo.id))}&gt;Delete&lt;/button&gt;
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 异步操作</h2>
+      <div class="code-block">
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+
+// 定义异步 thunk
+export const fetchTodos = createAsyncThunk(
+  'todos/fetchTodos',
+  async (_, { rejectWithValue }) =&gt; {
+    try {
+      const response = await fetch('/api/todos');
+      if (!response.ok) throw new Error('Failed to fetch');
+      return await response.json();
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+interface TodosState {
+  items: Todo[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: TodosState = {
+  items: [],
+  loading: false,
+  error: null,
+};
+
+const todosSlice = createSlice({
+  name: 'todos',
+  initialState,
+  reducers: {
+    clearError: (state) =&gt; {
+      state.error = null;
+    },
+  },
+  extraReducers: (builder) =&gt; {
+    builder
+      .addCase(fetchTodos.pending, (state) =&gt; {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTodos.fulfilled, (state, action) =&gt; {
+        state.loading = false;
+        state.items = action.payload;
+      })
+      .addCase(fetchTodos.rejected, (state, action) =&gt; {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+  },
+});
+
+// 组件中使用
+function TodoList() {
+  const dispatch = useAppDispatch();
+  const { items, loading, error } = useAppSelector(state =&gt; state.todos);
+
+  useEffect(() =&gt; {
+    dispatch(fetchTodos());
+  }, [dispatch]);
+
+  if (loading) return &lt;div&gt;Loading...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error}&lt;/div&gt;;
+
+  return (
+    &lt;ul&gt;
+      {items.map(todo =&gt; (
+        &lt;li key={todo.id}&gt;{todo.text}&lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Redux Toolkit 简化了 Redux 开发</li>
+            <li>• createSlice 同时创建 reducer 和 action</li>
+            <li>• 使用 Immer 支持直接修改 state</li>
+            <li>• createAsyncThunk 处理异步操作</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="78-3-Redux基础.html">← 上一节：Redux 基础</a>
+      <a href="78-5-Zustand状态管理.html">下一节：Zustand 状态管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

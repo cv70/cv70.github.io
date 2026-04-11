@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>66.1 实时聊天室 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="66-1-实时聊天室.html">第六十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>66.1 实时聊天室</h1>
+      <p class="subtitle">构建完整的实时聊天应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>实现完整的聊天室功能</li>
+        <li>掌握用户管理和消息处理</li>
+        <li>学会房间加入/离开机制</li>
+        <li>理解实时通信的完整流程</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 项目架构</h2>
+
+      <div class="code-block">
+chat-app/
+├── server/
+│   ├── src/
+│   │   ├── index.ts           # 入口文件
+│   │   ├── socket.ts          # Socket.IO 配置
+│   │   ├── handlers/
+│   │   │   ├── chat.handler.ts
+│   │   │   └── room.handler.ts
+│   │   ├── models/
+│   │   │   ├── user.model.ts
+│   │   │   └── message.model.ts
+│   │   └── services/
+│   │       ├── room.service.ts
+│   │       └── message.service.ts
+│   └── package.json
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ChatRoom.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   └── UserList.tsx
+│   │   ├── hooks/
+│   │   │   └── useSocket.ts
+│   │   └── App.tsx
+│   └── package.json
+└── shared/
+    └── types.ts              # 共享类型定义
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 共享类型定义</h2>
+
+      <div class="code-block">
+// shared/types.ts
+
+// 用户
+export interface User {
+  id: string;
+  username: string;
+  avatar?: string;
+  status: 'online' | 'offline' | 'typing';
+  joinedAt: Date;
+}
+
+// 消息
+export interface Message {
+  id: string;
+  content: string;
+  type: 'text' | 'image' | 'system';
+  sender: User;
+  roomId: string;
+  timestamp: Date;
+  read: boolean;
+}
+
+// 房间
+export interface Room {
+  id: string;
+  name: string;
+  description?: string;
+  creator: string;
+  users: Map&lt;string, User&gt;;
+  messages: Message[];
+  createdAt: Date;
+  isPrivate: boolean;
+}
+
+// 服务端到客户端事件
+export interface ServerToClientEvents {
+  'room:joined': (room: Room) => void;
+  'room:left': (roomId: string) => void;
+  'room:user-joined': (user: User) => void;
+  'room:user-left': (user: User) => void;
+  'message:new': (message: Message) => void;
+  'user:typing': (userId: string, isTyping: boolean) => void;
+  'user:updated': (user: User) => void;
+  error: (error: { code: string; message: string }) => void;
+}
+
+// 客户端到服务端事件
+export interface ClientToServerEvents {
+  'room:join': (roomId: string, callback: (room: Room | null, error?: string) => void) => void;
+  'room:leave': (roomId: string, callback: (success: boolean) => void) => void;
+  'room:create': (data: { name: string; isPrivate?: boolean }, callback: (room: Room) => void) => void;
+  'message:send': (data: { roomId: string; content: string }, callback: (message: Message) => void) => void;
+  'user:typing': (roomId: string, isTyping: boolean) => void;
+  'message:history': (roomId: string, callback: (messages: Message[]) => void) => void;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🖥️</span> 服务端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">Socket.IO 服务端配置</h3>
+        <div class="code-block">
+// server/src/socket.ts
+import { Server } from 'socket.io';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  User,
+  Room,
+  Message
+} from '../../shared/types';
+
+const rooms = new Map&lt;string, Room&gt;();
+const userSockets = new Map&lt;string, string&gt;(); // userId -> socketId
+
+export function setupSocket(io: Server<ClientToServerEvents, ServerToClientEvents>) {
+  // 认证中间件
+  io.use((socket, next) => {
+    const userId = socket.handshake.auth.userId;
+    const username = socket.handshake.auth.username;
+
+    if (!userId || !username) {
+      return next(new Error('认证失败'));
+    }
+
+    socket.data.userId = userId;
+    socket.data.username = username;
+    next();
+  });
+
+  io.on('connection', (socket) => {
+    const userId = socket.data.userId;
+    const username = socket.data.username;
+
+    console.log(`用户连接: ${username} (${userId})`);
+
+    // 创建用户对象
+    const user: User = {
+      id: userId,
+      username,
+      status: 'online',
+      joinedAt: new Date()
+    };
+
+    userSockets.set(userId, socket.id);
+
+    // ==================== 房间管理 ====================
+
+    // 创建房间
+    socket.on('room:create', (data, callback) => {
+      const roomId = generateRoomId();
+      const room: Room = {
+        id: roomId,
+        name: data.name,
+        creator: userId,
+        users: new Map([[userId, user]]),
+        messages: [],
+        createdAt: new Date(),
+        isPrivate: data.isPrivate || false
+      };
+
+      rooms.set(roomId, room);
+      socket.join(roomId);
+
+      callback(room);
+      io.emit('room:created', room); // 通知所有人有新房间
+    });
+
+    // 加入房间
+    socket.on('room:join', (roomId, callback) => {
+      const room = rooms.get(roomId);
+
+      if (!room) {
+        return callback(null, '房间不存在');
+      }
+
+      // 加入房间
+      socket.join(roomId);
+      room.users.set(userId, user);
+
+      // 通知房间内其他人
+      socket.to(roomId).emit('room:user-joined', user);
+
+      // 返回房间信息
+      callback({
+        ...room,
+        users: Array.from(room.users.values())
+      } as any);
+    });
+
+    // 离开房间
+    socket.on('room:leave', (roomId, callback) => {
+      const room = rooms.get(roomId);
+
+      if (room) {
+        room.users.delete(userId);
+        socket.leave(roomId);
+
+        // 通知其他人
+        socket.to(roomId).emit('room:user-left', user);
+
+        // 如果房间为空，删除房间
+        if (room.users.size === 0) {
+          rooms.delete(roomId);
+        }
+      }
+
+      callback(true);
+    });
+
+    // ==================== 消息处理 ====================
+
+    // 发送消息
+    socket.on('message:send', (data, callback) => {
+      const room = rooms.get(data.roomId);
+
+      if (!room) {
+        return;
+      }
+
+      const message: Message = {
+        id: generateMessageId(),
+        content: data.content,
+        type: 'text',
+        sender: user,
+        roomId: data.roomId,
+        timestamp: new Date(),
+        read: false
+      };
+
+      // 保存消息
+      room.messages.push(message);
+
+      // 广播给房间所有人
+      io.to(data.roomId).emit('message:new', message);
+
+      callback(message);
+    });
+
+    // 获取历史消息
+    socket.on('message:history', (roomId, callback) => {
+      const room = rooms.get(roomId);
+      callback(room?.messages || []);
+    });
+
+    // ==================== 用户状态 ====================
+
+    // 输入状态
+    socket.on('user:typing', (roomId, isTyping) => {
+      socket.to(roomId).emit('user:typing', userId, isTyping);
+    });
+
+    // 断开连接
+    socket.on('disconnect', () => {
+      console.log(`用户断开: ${username}`);
+
+      // 从所有房间中移除用户
+      rooms.forEach((room) => {
+        if (room.users.has(userId)) {
+          room.users.delete(userId);
+          socket.to(room.id).emit('room:user-left', user);
+        }
+      });
+
+      userSockets.delete(userId);
+    });
+  });
+}
+
+// 辅助函数
+function generateRoomId(): string {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+function generateMessageId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚛️</span> React 客户端实现</h2>
+
+      <div class="card">
+        <h3 class="card-title">Socket Hook</h3>
+        <div class="code-block">
+// client/src/hooks/useSocket.ts
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  Message,
+  User,
+  Room
+} from '../../../shared/types';
+
+export function useChatSocket(url: string) {
+  const socketRef = useRef&lt;Socket&lt;ServerToClientEvents, ClientToServerEvents&gt;&gt;(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState&lt;Room | null&gt;(null);
+  const [messages, setMessages] = useState&lt;Message[]&gt;([]);
+  const [users, setUsers] = useState&lt;User[]&gt;([]);
+  const [typingUsers, setTypingUsers] = useState&lt;Set&lt;string&gt;&gt;(new Set());
+
+  useEffect(() => {
+    const socket = io(url, {
+      auth: {
+        userId: localStorage.getItem('userId'),
+        username: localStorage.getItem('username')
+      }
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => setIsConnected(true));
+    socket.on('disconnect', () => setIsConnected(false));
+
+    // 房间事件
+    socket.on('room:joined', (room) => {
+      setCurrentRoom(room);
+      setUsers(Array.from((room as any).users || []));
+    });
+
+    socket.on('room:user-joined', (user) => {
+      setUsers(prev => [...prev, user]);
+      // 添加系统消息
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: `${user.username} 加入了房间`,
+        type: 'system',
+        sender: user,
+        roomId: currentRoom?.id || '',
+        timestamp: new Date(),
+        read: true
+      }]);
+    });
+
+    socket.on('room:user-left', (user) => {
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: `${user.username} 离开了房间`,
+        type: 'system',
+        sender: user,
+        roomId: currentRoom?.id || '',
+        timestamp: new Date(),
+        read: true
+      }]);
+    });
+
+    // 消息事件
+    socket.on('message:new', (message) => {
+      setMessages(prev => [...prev, message]);
+    });
+
+    // 输入状态
+    socket.on('user:typing', (userId, isTyping) => {
+      setTypingUsers(prev => {
+        const newSet = new Set(prev);
+        if (isTyping) {
+          newSet.add(userId);
+        } else {
+          newSet.delete(userId);
+        }
+        return newSet;
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [url]);
+
+  // 加入房间
+  const joinRoom = useCallback((roomId: string) => {
+    return new Promise&lt;Room&gt;((resolve, reject) => {
+      socketRef.current?.emit('room:join', roomId, (room, error) => {
+        if (error) reject(error);
+        else resolve(room);
+      });
+    });
+  }, []);
+
+  // 发送消息
+  const sendMessage = useCallback((content: string) => {
+    if (!currentRoom) return;
+
+    socketRef.current?.emit('message:send', {
+      roomId: currentRoom.id,
+      content
+    }, (message) => {
+      // 消息已发送
+    });
+  }, [currentRoom]);
+
+  // 设置输入状态
+  const setTyping = useCallback((isTyping: boolean) => {
+    if (!currentRoom) return;
+    socketRef.current?.emit('user:typing', currentRoom.id, isTyping);
+  }, [currentRoom]);
+
+  return {
+    isConnected,
+    currentRoom,
+    messages,
+    users,
+    typingUsers,
+    joinRoom,
+    sendMessage,
+    setTyping
+  };
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">聊天室组件</h3>
+        <div class="code-block">
+// client/src/components/ChatRoom.tsx
+import React, { useState, useEffect } from 'react';
+import { useChatSocket } from '../hooks/useSocket';
+
+export function ChatRoom() {
+  const {
+    isConnected,
+    messages,
+    users,
+    typingUsers,
+    joinRoom,
+    sendMessage,
+    setTyping
+  } = useChatSocket('http://localhost:3000');
+
+  const [input, setInput] = useState('');
+  const [roomId, setRoomId] = useState('');
+
+  const handleSend = () => {
+    if (input.trim()) {
+      sendMessage(input.trim());
+      setInput('');
+      setTyping(false);
+    }
+  };
+
+  const handleInput = (e: React.ChangeEvent&lt;HTMLInputElement&gt;) => {
+    setInput(e.target.value);
+    setTyping(true);
+
+    // 停止输入后 1 秒清除状态
+    clearTimeout(handleInput.timeout);
+    handleInput.timeout = setTimeout(() => setTyping(false), 1000);
+  };
+
+  return (
+    &lt;div className="chat-container"&gt;
+      {/* 侧边栏 - 用户列表 */}
+      &lt;div className="sidebar"&gt;
+        &lt;h3&gt;在线用户 ({users.length})&lt;/h3&gt;
+        &lt;ul&gt;
+          {users.map(user => (
+            &lt;li key={user.id}&gt;
+              {user.username}
+              {typingUsers.has(user.id) && &lt;span&gt;正在输入...&lt;/span&gt;}
+            &lt;/li&gt;
+          ))}
+        &lt;/ul&gt;
+      &lt;/div&gt;
+
+      {/* 主聊天区域 */}
+      &lt;div className="main-chat"&gt;
+        {/* 消息列表 */}
+        &lt;div className="messages"&gt;
+          {messages.map(msg => (
+            &lt;div key={msg.id} className={`message ${msg.type}&quot;`}&gt;
+              {msg.type === 'system' ? (
+                &lt;span className="system"&gt;{msg.content}&lt;/span&gt;
+              ) : (
+                &lt;&gt;
+                  &lt;span className="sender"&gt;{msg.sender.username}:&lt;/span&gt;
+                  &lt;span className="content"&gt;{msg.content}&lt;/span&gt;
+                &lt;/&gt;
+              )}
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+
+        {/* 输入框 */}
+        &lt;div className="input-area"&gt;
+          &lt;input
+            type="text"
+            value={input}
+            onChange={handleInput}
+            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="输入消息..."
+          /&gt;
+          &lt;button onClick={handleSend}&gt;发送&lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 样式实现</h2>
+
+      <div class="code-block">
+/* chat.css */
+.chat-container {
+  display: flex;
+  height: 100vh;
+  background: #f5f5f5;
+}
+
+.sidebar {
+  width: 250px;
+  background: #2c3e50;
+  color: white;
+  padding: 1rem;
+}
+
+.sidebar h3 {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #34495e;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: #34495e;
+  border-radius: 4px;
+}
+
+.sidebar .typing {
+  font-size: 0.8em;
+  color: #3498db;
+  font-style: italic;
+}
+
+.main-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.message {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.message.system {
+  background: #e8f4fd;
+  text-align: center;
+  color: #3498db;
+  font-style: italic;
+}
+
+.message .sender {
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.message .content {
+  margin-left: 0.5rem;
+}
+
+.input-area {
+  display: flex;
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid #ddd;
+}
+
+.input-area input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-right: 0.5rem;
+}
+
+.input-area button {
+  padding: 0.75rem 1.5rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.input-area button:hover {
+  background: #2980b9;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用共享类型定义确保前后端类型一致</li>
+            <li>• 服务端管理房间和用户状态</li>
+            <li>• 客户端使用 Hook 封装 Socket 逻辑</li>
+            <li>• 实现用户加入/离开的系统消息</li>
+            <li>• 输入状态提升用户体验</li>
+            <li>• 消息持久化可扩展为数据库存储</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter65/65-5-重连机制.html">← 上一节</a>
+      <a href="66-2-在线人数统计.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

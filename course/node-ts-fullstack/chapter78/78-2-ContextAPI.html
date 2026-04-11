@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>78.2 Context API - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="78-1-状态管理概述.html">第七十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>78.2 Context API</h1>
+      <p class="subtitle">React 内置的状态共享方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 Context API</li>
+        <li>掌握 Context 最佳实践</li>
+        <li>学会拆分 Context 优化性能</li>
+        <li>了解 Context 的局限性</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Context 基础回顾</h2>
+      <div class="code-block">
+import { createContext, useContext, useState, ReactNode } from 'react';
+
+// 创建 Context
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface UserContextType {
+  user: User | null;
+  login: (user: User) =&gt; void;
+  logout: () =&gt; void;
+}
+
+const UserContext = createContext&lt;UserContextType | undefined&gt;(undefined);
+
+// Provider 组件
+function UserProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState&lt;User | null&gt;(null);
+
+  const login = (user: User) =&gt; setUser(user);
+  const logout = () =&gt; setUser(null);
+
+  return (
+    &lt;UserContext.Provider value={{ user, login, logout }}&gt;
+      {children}
+    &lt;/UserContext.Provider&gt;
+  );
+}
+
+// 自定义 Hook
+function useUser() {
+  const context = useContext(UserContext);
+  if (context === undefined) {
+    throw new Error('useUser must be used within UserProvider');
+  }
+  return context;
+}
+
+// 使用
+function App() {
+  return (
+    &lt;UserProvider&gt;
+      &lt;Header /&gt;
+      &lt;Main /&gt;
+    &lt;/UserProvider&gt;
+  );
+}
+
+function Header() {
+  const { user, logout } = useUser();
+
+  return (
+    &lt;header&gt;
+      {user ? (
+        &lt;&gt;
+          &lt;span&gt;{user.name}&lt;/span&gt;
+          &lt;button onClick={logout}&gt;Logout&lt;/button&gt;
+        &lt;/&gt;
+      ) : (
+        &lt;a href="/login"&gt;Login&lt;/a&gt;
+      )}
+    &lt;/header&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 性能优化：拆分 Context</h2>
+      <div class="code-block">
+// 问题：单一 Context 导致不必要的渲染
+// 当 user 更新时，所有消费组件都会重新渲染
+
+// 解决：拆分为多个 Context
+// 1. 状态 Context（数据）
+// 2. 更新 Context（方法）
+
+// 状态 Context
+const UserStateContext = createContext&lt;User | null&gt;(null);
+
+// 更新 Context
+const UserDispatchContext = createContext&lt;{
+  login: (user: User) =&gt; void;
+  logout: () =&gt; void;
+} | undefined&gt;(undefined);
+
+// Provider
+function UserProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState&lt;User | null&gt;(null);
+
+  const dispatch = useMemo(() =&gt; ({
+    login: (user: User) =&gt; setUser(user),
+    logout: () =&gt; setUser(null),
+  }), []);
+
+  return (
+    &lt;UserStateContext.Provider value={user}&gt;
+      &lt;UserDispatchContext.Provider value={dispatch}&gt;
+        {children}
+      &lt;/UserDispatchContext.Provider&gt;
+    &lt;/UserStateContext.Provider&gt;
+  );
+}
+
+// 自定义 Hooks
+function useUserState() {
+  return useContext(UserStateContext);
+}
+
+function useUserDispatch() {
+  const context = useContext(UserDispatchContext);
+  if (!context) {
+    throw new Error('useUserDispatch must be used within UserProvider');
+  }
+  return context;
+}
+
+// 使用：只订阅需要的数据
+function UserAvatar() {
+  const user = useUserState();  // 只订阅状态
+  return &lt;img src={user?.avatar} /&gt;;
+}
+
+function LogoutButton() {
+  const { logout } = useUserDispatch();  // 只订阅方法
+  // user 更新不会导致此组件重新渲染
+  return &lt;button onClick={logout}&gt;Logout&lt;/button&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Context 局限性</h2>
+      <div class="code-block">
+// Context 的局限性
+
+// 1. 不适合高频更新
+// - Context 值更新时，所有消费者都会重新渲染
+// - 不适合频繁变化的数据（如鼠标位置）
+
+// 2. 不适合复杂状态逻辑
+// - 没有内置的状态管理机制
+// - 需要手动实现 action、reducer
+
+// 3. 调试困难
+// - 没有时间旅行调试
+// - 状态变化难以追踪
+
+// 4. 不支持选择性订阅
+// - 必须订阅整个 Context 值
+// - 细粒度更新需要拆分 Context
+
+// 高频更新的替代方案
+// 1. Zustand：细粒度订阅
+const useStore = create((set) =&gt; ({
+  count: 0,
+  increment: () =&gt; set((state) =&gt; ({ count: state.count + 1 })),
+}));
+
+// 组件可以选择性订阅
+function CountDisplay() {
+  const count = useStore((state) =&gt; state.count);  // 只订阅 count
+  return &lt;div&gt;{count}&lt;/div&gt;;
+}
+
+function IncrementButton() {
+  const increment = useStore((state) =&gt; state.increment);  // 只订阅方法
+  // count 更新不会导致重新渲染
+  return &lt;button onClick={increment}&gt;+&lt;/button&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Context 适合低频更新的全局状态</li>
+            <li>• 拆分 Context 可以优化性能</li>
+            <li>• 创建自定义 Hook 封装 Context</li>
+            <li>• 高频更新考虑使用 Zustand 等方案</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="78-1-状态管理概述.html">← 上一节：状态管理概述</a>
+      <a href="78-3-Redux基础.html">下一节：Redux 基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

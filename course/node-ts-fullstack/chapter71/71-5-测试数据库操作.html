@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.5 测试数据库操作 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="71-4-测试Express应用.html">上一节</a></li>
+      <li><a href="../chapter72/72-1-测试模块配置.html">下一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>71.5 测试数据库操作</h1>
+      <p class="subtitle">第十部分：测试篇 - 数据库集成测试最佳实践</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 测试数据库策略</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">内存数据库</h3>
+          <p class="card-text">使用 SQLite 内存数据库，速度快，适合单元/集成测试。</p>
+          <ul class="feature-list">
+            <li>快速执行</li>
+            <li>无需外部依赖</li>
+            <li>每次测试全新状态</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">测试数据库</h3>
+          <p class="card-text">使用真实的测试数据库，更接近生产环境。</p>
+          <ul class="feature-list">
+            <li>真实数据库行为</li>
+            <li>验证 SQL 语法</li>
+            <li>测试数据库特定功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 配置测试数据库</h2>
+
+      <div class="code-block">// tests/setup/database.ts
+import { Connection, createConnection, ConnectionOptions } from 'typeorm';
+import { User } from '../../src/entities/User';
+import { Post } from '../../src/entities/Post';
+
+let connection: Connection;
+
+export async function setupTestDatabase(): Promise&lt;Connection&gt; {
+  const config: ConnectionOptions = {
+    type: 'sqlite',
+    database: ':memory:',
+    entities: [User, Post],
+    synchronize: true,
+    dropSchema: true
+  };
+
+  connection = await createConnection(config);
+  return connection;
+}
+
+export async function teardownTestDatabase(): Promise&lt;void&gt; {
+  if (connection && connection.isConnected) {
+    await connection.close();
+  }
+}
+
+export function getConnection(): Connection {
+  return connection;
+}</div>
+
+      <div class="code-block">// tests/setup/global-setup.ts
+import { setupTestDatabase, teardownTestDatabase } from './database';
+
+export = async () => {
+  await setupTestDatabase();
+  // global teardown
+  return async () => {
+    await teardownTestDatabase();
+  };
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> Repository 测试</h2>
+
+      <div class="code-block">// tests/repositories/user.repository.test.ts
+import { getConnection } from 'typeorm';
+import { UserRepository } from '../../src/repositories/user.repository';
+import { User } from '../../src/entities/User';
+import { setupTestDatabase, teardownTestDatabase } from '../setup/database';
+
+describe('UserRepository', () => {
+  let repository: UserRepository;
+
+  beforeAll(async () => {
+    await setupTestDatabase();
+    const connection = getConnection();
+    repository = new UserRepository(connection.getRepository(User));
+  });
+
+  afterAll(async () => {
+    await teardownTestDatabase();
+  });
+
+  beforeEach(async () => {
+    // 清空数据
+    await getConnection().getRepository(User).clear();
+  });
+
+  describe('findById', () => {
+    it('should find user by id', async () => {
+      // 创建测试数据
+      const user = await repository.create({
+        name: 'John Doe',
+        email: 'john@example.com'
+      });
+
+      const found = await repository.findById(user.id);
+
+      expect(found).toBeDefined();
+      expect(found?.name).toBe('John Doe');
+    });
+
+    it('should return null for non-existent user', async () => {
+      const found = await repository.findById('non-existent-id');
+      expect(found).toBeNull();
+    });
+  });
+
+  describe('create', () => {
+    it('should create a new user', async () => {
+      const user = await repository.create({
+        name: 'Jane Doe',
+        email: 'jane@example.com'
+      });
+
+      expect(user.id).toBeDefined();
+      expect(user.name).toBe('Jane Doe');
+    });
+
+    it('should reject duplicate email', async () => {
+      await repository.create({
+        name: 'User 1',
+        email: 'same@example.com'
+      });
+
+      await expect(repository.create({
+        name: 'User 2',
+        email: 'same@example.com'
+      })).rejects.toThrow();
+    });
+  });
+
+  describe('update', () => {
+    it('should update user', async () => {
+      const user = await repository.create({
+        name: 'Original Name',
+        email: 'original@example.com'
+      });
+
+      const updated = await repository.update(user.id, {
+        name: 'Updated Name'
+      });
+
+      expect(updated.name).toBe('Updated Name');
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete user', async () => {
+      const user = await repository.create({
+        name: 'To Delete',
+        email: 'delete@example.com'
+      });
+
+      await repository.delete(user.id);
+
+      const found = await repository.findById(user.id);
+      expect(found).toBeNull();
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> Service 层测试</h2>
+
+      <div class="code-block">// tests/services/user.service.test.ts
+import { getConnection } from 'typeorm';
+import { UserService } from '../../src/services/user.service';
+import { UserRepository } from '../../src/repositories/user.repository';
+import { User } from '../../src/entities/User';
+import { setupTestDatabase, teardownTestDatabase } from '../setup/database';
+
+describe('UserService', () => {
+  let service: UserService;
+  let repository: UserRepository;
+
+  beforeAll(async () => {
+    await setupTestDatabase();
+    const connection = getConnection();
+    repository = new UserRepository(connection.getRepository(User));
+    service = new UserService(repository);
+  });
+
+  afterAll(async () => {
+    await teardownTestDatabase();
+  });
+
+  beforeEach(async () => {
+    await getConnection().getRepository(User).clear();
+  });
+
+  describe('createUser', () => {
+    it('should create user with hashed password', async () => {
+      const user = await service.createUser({
+        name: 'John',
+        email: 'john@example.com',
+        password: 'plainPassword'
+      });
+
+      expect(user.password).not.toBe('plainPassword');
+      expect(user.name).toBe('John');
+    });
+
+    it('should validate email format', async () => {
+      await expect(service.createUser({
+        name: 'John',
+        email: 'invalid-email',
+        password: 'password'
+      })).rejects.toThrow('Invalid email format');
+    });
+  });
+
+  describe('authenticate', () => {
+    it('should authenticate with correct credentials', async () => {
+      await service.createUser({
+        name: 'John',
+        email: 'john@example.com',
+        password: 'password123'
+      });
+
+      const result = await service.authenticate({
+        email: 'john@example.com',
+        password: 'password123'
+      });
+
+      expect(result).toBeDefined();
+      expect(result.token).toBeDefined();
+    });
+
+    it('should reject wrong password', async () => {
+      await service.createUser({
+        name: 'John',
+        email: 'john@example.com',
+        password: 'password123'
+      });
+
+      await expect(service.authenticate({
+        email: 'john@example.com',
+        password: 'wrongpassword'
+      })).rejects.toThrow('Invalid credentials');
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 数据库事务测试</h2>
+
+      <div class="code-block">describe('Transaction Tests', () => {
+  it('should rollback on error', async () => {
+    const connection = getConnection();
+    const queryRunner = connection.createQueryRunner();
+
+    await queryRunner.startTransaction();
+
+    try {
+      // 创建用户
+      await queryRunner.manager.save(User, {
+        name: 'User 1',
+        email: 'user1@example.com'
+      });
+
+      // 模拟错误
+      throw new Error('Simulated error');
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      // 验证回滚
+      const users = await queryRunner.manager.find(User);
+      expect(users).toHaveLength(0);
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  it('should commit on success', async () => {
+    const connection = getConnection();
+    const queryRunner = connection.createQueryRunner();
+
+    await queryRunner.startTransaction();
+
+    try {
+      await queryRunner.manager.save(User, {
+        name: 'User 1',
+        email: 'user1@example.com'
+      });
+
+      await queryRunner.commitTransaction();
+
+      const users = await connection.manager.find(User);
+      expect(users).toHaveLength(1);
+    } finally {
+      await queryRunner.release();
+    }
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 测试数据工厂</h2>
+
+      <div class="code-block">// tests/factories/user.factory.ts
+import { Connection } from 'typeorm';
+import { User } from '../../src/entities/User';
+
+type UserFactoryOptions = Partial&lt;User&gt;;
+
+export async function createUser(
+  connection: Connection,
+  options: UserFactoryOptions = {}
+): Promise&lt;User&gt; {
+  const defaultOptions = {
+    name: 'Test User',
+    email: `test${Date.now()}@example.com`,
+    password: 'hashedPassword',
+    isActive: true
+  };
+
+  const user = connection.manager.create(User, {
+    ...defaultOptions,
+    ...options
+  });
+
+  return connection.manager.save(user);
+}
+
+export async function createUsers(
+  connection: Connection,
+  count: number,
+  options: UserFactoryOptions = {}
+): Promise&lt;User[]&gt; {
+  const users: User[] = [];
+
+  for (let i = 0; i &lt; count; i++) {
+    const user = await createUser(connection, {
+      ...options,
+      email: options.email || `user${i}@example.com`
+    });
+    users.push(user);
+  }
+
+  return users;
+}</div>
+
+      <div class="code-block">// 使用工厂
+import { createUser, createUsers } from '../factories/user.factory';
+import { getConnection } from 'typeorm';
+
+describe('with test data', () => {
+  it('works with factory-created data', async () => {
+    const connection = getConnection();
+
+    const user = await createUser(connection, {
+      name: 'Specific Name'
+    });
+
+    expect(user.name).toBe('Specific Name');
+  });
+
+  it('can create multiple users', async () => {
+    const connection = getConnection();
+    const users = await createUsers(connection, 5);
+
+    expect(users).toHaveLength(5);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 数据库测试最佳实践</h2>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">✅ 推荐</h3>
+          <ul class="feature-list">
+            <li>每次测试后清理数据</li>
+            <li>使用内存数据库加速测试</li>
+            <li>创建测试数据工厂</li>
+            <li>测试边界条件</li>
+            <li>使用事务隔离测试</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">❌ 避免</h3>
+          <ul class="feature-list">
+            <li>测试间共享数据</li>
+            <li>依赖测试执行顺序</li>
+            <li>使用生产数据库</li>
+            <li>忘记清理数据</li>
+            <li>硬编码测试数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用内存数据库进行快速测试</li>
+            <li>每次测试前后清理数据</li>
+            <li>创建数据工厂简化测试数据创建</li>
+            <li>测试事务和回滚逻辑</li>
+            <li>隔离测试，避免相互依赖</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="71-4-测试Express应用.html">← 上一节：测试 Express 应用</a>
+      <a href="../chapter72/72-1-测试模块配置.html">下一章：NestJS 测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

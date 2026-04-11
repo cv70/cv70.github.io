@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>79.5 泛型组件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="79-1-组件类型定义.html">第七十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>79.5 泛型组件</h1>
+      <p class="subtitle">创建灵活的可复用组件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解泛型组件的概念</li>
+        <li>掌握泛型组件的写法</li>
+        <li>学会约束泛型类型</li>
+        <li>了解泛型组件的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 泛型组件基础</h2>
+      <div class="code-block">
+// 问题：不同数据类型需要不同组件
+function StringList({ items }: { items: string[] }) {
+  return (
+    &lt;ul&gt;
+      {items.map((item, i) =&gt; &lt;li key={i}&gt;{item}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+
+function NumberList({ items }: { items: number[] }) {
+  return (
+    &lt;ul&gt;
+      {items.map((item, i) =&gt; &lt;li key={i}&gt;{item}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+
+// 解决：泛型组件
+// 使用函数声明
+function List&lt;T&gt;({ items }: { items: T[] }) {
+  return (
+    &lt;ul&gt;
+      {items.map((item, i) =&gt; &lt;li key={i}&gt;{String(item)}&lt;/li&gt;)}
+    &lt;/ul&gt;
+  );
+}
+
+// 使用箭头函数
+const List = &lt;T,&gt;({ items }: { items: T[] }) =&gt; (
+  &lt;ul&gt;
+    {items.map((item, i) =&gt; &lt;li key={i}&gt;{String(item)}&lt;/li&gt;)}
+  &lt;/ul&gt;
+);
+
+// 使用：类型推断
+&lt;List items={['a', 'b', 'c']} /&gt;  // T = string
+&lt;List items={[1, 2, 3]} /&gt;        // T = number
+
+// 显式指定类型（有时需要）
+&lt;List&lt;User&gt; items={users} /&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 泛型组件示例</h2>
+      <div class="code-block">
+// 带渲染函数的列表组件
+interface ListProps&lt;T&gt; {
+  items: T[];
+  renderItem: (item: T, index: number) =&gt; ReactNode;
+  keyExtractor: (item: T) =&gt; string | number;
+}
+
+function List&lt;T&gt;({ items, renderItem, keyExtractor }: ListProps&lt;T&gt;) {
+  return (
+    &lt;ul&gt;
+      {items.map((item, index) =&gt; (
+        &lt;li key={keyExtractor(item)}&gt;
+          {renderItem(item, index)}
+        &lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}
+
+// 使用
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+function UserList() {
+  const users: User[] = [
+    { id: '1', name: 'Alice', email: 'alice@example.com' },
+    { id: '2', name: 'Bob', email: 'bob@example.com' },
+  ];
+
+  return (
+    &lt;List
+      items={users}
+      keyExtractor={(user) =&gt; user.id}
+      renderItem={(user) =&gt; (
+        &lt;div&gt;
+          &lt;strong&gt;{user.name}&lt;/strong&gt;
+          &lt;span&gt;{user.email}&lt;/span&gt;
+        &lt;/div&gt;
+      )}
+    /&gt;
+  );
+}
+
+// 选择器组件
+interface SelectProps&lt;T&gt; {
+  options: T[];
+  value: T | null;
+  onChange: (value: T) =&gt; void;
+  getOptionLabel: (option: T) =&gt; string;
+  getOptionValue: (option: T) =&gt; string;
+}
+
+function Select&lt;T&gt;({
+  options,
+  value,
+  onChange,
+  getOptionLabel,
+  getOptionValue,
+}: SelectProps&lt;T&gt;) {
+  return (
+    &lt;select
+      value={value ? getOptionValue(value) : ''}
+      onChange={(e) =&gt; {
+        const selected = options.find(
+          (o) =&gt; getOptionValue(o) === e.target.value
+        );
+        if (selected) onChange(selected);
+      }}
+    &gt;
+      {options.map((option) =&gt; (
+        &lt;option key={getOptionValue(option)} value={getOptionValue(option)}&gt;
+          {getOptionLabel(option)}
+        &lt;/option&gt;
+      ))}
+    &lt;/select&gt;
+  );
+}
+
+// 使用
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+function ProductSelect() {
+  const [selected, setSelected] = useState&lt;Product | null&gt;(null);
+  const products: Product[] = [...];
+
+  return (
+    &lt;Select
+      options={products}
+      value={selected}
+      onChange={setSelected}
+      getOptionLabel={(p) =&gt; `${p.name} - $${p.price}`}
+      getOptionValue={(p) =&gt; String(p.id)}
+    /&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 泛型约束</h2>
+      <div class="code-block">
+// 约束 T 必须有 id 属性
+interface WithId {
+  id: string | number;
+}
+
+interface DataTableProps&lt;T extends WithId&gt; {
+  data: T[];
+  columns: Column&lt;T&gt;[];
+}
+
+interface Column&lt;T&gt; {
+  key: keyof T;
+  header: string;
+  render?: (value: T[keyof T], row: T) =&gt; ReactNode;
+}
+
+function DataTable&lt;T extends WithId&gt;({ data, columns }: DataTableProps&lt;T&gt;) {
+  return (
+    &lt;table&gt;
+      &lt;thead&gt;
+        &lt;tr&gt;
+          {columns.map((col) =&gt; (
+            &lt;th key={String(col.key)}&gt;{col.header}&lt;/th&gt;
+          ))}
+        &lt;/tr&gt;
+      &lt;/thead&gt;
+      &lt;tbody&gt;
+        {data.map((row) =&gt; (
+          &lt;tr key={row.id}&gt;
+            {columns.map((col) =&gt; (
+              &lt;td key={String(col.key)}&gt;
+                {col.render
+                  ? col.render(row[col.key], row)
+                  : String(row[col.key])}
+              &lt;/td&gt;
+            ))}
+          &lt;/tr&gt;
+        ))}
+      &lt;/tbody&gt;
+    &lt;/table&gt;
+  );
+}
+
+// 使用
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+function UserTable() {
+  const users: User[] = [...];
+
+  const columns: Column&lt;User&gt;[] = [
+    { key: 'name', header: 'Name' },
+    { key: 'email', header: 'Email' },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (role) =&gt; &lt;span className={`badge-${role}`}&gt;{role}&lt;/span&gt;,
+    },
+  ];
+
+  return &lt;DataTable data={users} columns={columns} /&gt;;
+}
+
+// 多个泛型参数
+interface PairProps&lt;K, V&gt; {
+  data: [K, V][];
+  renderKey: (key: K) =&gt; ReactNode;
+  renderValue: (value: V) =&gt; ReactNode;
+}
+
+function PairList&lt;K, V&gt;({ data, renderKey, renderValue }: PairProps&lt;K, V&gt;) {
+  return (
+    &lt;dl&gt;
+      {data.map(([key, value], i) =&gt; (
+        &lt;React.Fragment key={i}&gt;
+          &lt;dt&gt;{renderKey(key)}&lt;/dt&gt;
+          &lt;dd&gt;{renderValue(value)}&lt;/dd&gt;
+        &lt;/React.Fragment&gt;
+      ))}
+    &lt;/dl&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 泛型组件增加组件的复用性</li>
+            <li>• 箭头函数使用 &lt;T,&gt; 语法</li>
+            <li>• 使用 extends 约束泛型类型</li>
+            <li>• 渲染函数让泛型组件更灵活</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="79-4-事件类型.html">← 上一节：事件类型</a>
+      <a href="79-6-类型声明文件.html">下一节：类型声明文件 →</a>
+    </div>
+  </div>
+</body>
+</html>

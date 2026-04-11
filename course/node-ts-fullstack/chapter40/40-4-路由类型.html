@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.4 路由类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="40-1-项目配置.html">第四十章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>40.4 路由类型</h1>
+      <p class="subtitle">类型安全的路由定义</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 koa-router 的类型定义</li>
+        <li>学会定义类型安全的路由处理器</li>
+        <li>理解 RouterContext 类型参数</li>
+        <li>学会路由模块化组织</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Router 基本类型</h2>
+      <div class="code-block">
+import Router, { RouterContext, Middleware } from '@koa/router';
+
+const router = new Router();
+
+// RouterContext 泛型参数
+// RouterContext<Params, State, Query>
+
+// 基本路由
+router.get('/', async (ctx: RouterContext) => {
+  ctx.body = { message: 'Hello' };
+});
+
+// 带参数的路由
+router.get('/users/:id', async (ctx: RouterContext<{ id: string }>) => {
+  const { id } = ctx.params;  // 类型安全
+  ctx.body = { userId: id };
+});
+
+// 多参数路由
+router.get(
+  '/posts/:postId/comments/:commentId',
+  async (ctx: RouterContext<{ postId: string; commentId: string }>) => {
+    const { postId, commentId } = ctx.params;
+    ctx.body = { postId, commentId };
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义路由类型</h2>
+      <div class="code-block">
+// src/types/routes.ts
+import { RouterContext } from '@koa/router';
+
+// 路由参数类型
+export interface UserRoutes {
+  ':id': string;
+}
+
+export interface PostRoutes {
+  ':postId': string;
+  ':postId/comments/:commentId': { postId: string; commentId: string };
+}
+
+// 查询参数类型
+export interface PaginationQuery {
+  page?: string;
+  limit?: string;
+  sort?: 'asc' | 'desc';
+}
+
+// 请求体类型
+export interface CreateUserBody {
+  username: string;
+  email: string;
+  password: string;
+}
+
+// 完整的路由上下文类型
+export type UserRouteContext<Params = {}, Body = any, Query = any> = RouterContext<
+  Params,
+  any,
+  Query
+> & {
+  request: {
+    body: Body;
+  };
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👤</span> 用户路由示例</h2>
+      <div class="code-block">
+// src/routes/userRoutes.ts
+import Router, { RouterContext } from '@koa/router';
+import { User, CreateUserDTO, UpdateUserDTO } from '@/types/user';
+import { ApiResponse, PaginatedResponse } from '@/types/response';
+
+const router = new Router({ prefix: '/api/users' });
+
+// GET /api/users - 获取列表
+router.get('/', async (ctx: RouterContext<any, any, { page?: string; limit?: string }>) => {
+  const page = parseInt(ctx.query.page || '1', 10);
+  const limit = parseInt(ctx.query.limit || '10', 10);
+
+  const result = await UserService.findAll({ page, limit });
+
+  const response: PaginatedResponse<User> = {
+    success: true,
+    ...result
+  };
+
+  ctx.body = response;
+});
+
+// GET /api/users/:id - 获取单个
+router.get('/:id', async (ctx: RouterContext<{ id: string }>) => {
+  const user = await UserService.findById(ctx.params.id);
+
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { success: false, error: 'User not found' };
+    return;
+  }
+
+  ctx.body = { success: true, data: user };
+});
+
+// POST /api/users - 创建
+router.post('/', async (ctx: RouterContext<any, any, any, CreateUserDTO>) => {
+  const data = ctx.request.body;
+  const user = await UserService.create(data);
+
+  ctx.status = 201;
+  ctx.body = { success: true, data: user };
+});
+
+// PUT /api/users/:id - 更新
+router.put('/:id', async (ctx: RouterContext<{ id: string }, any, any, UpdateUserDTO>) => {
+  const { id } = ctx.params;
+  const data = ctx.request.body;
+
+  const user = await UserService.update(id, data);
+  ctx.body = { success: true, data: user };
+});
+
+// DELETE /api/users/:id - 删除
+router.delete('/:id', async (ctx: RouterContext<{ id: string }>) => {
+  await UserService.delete(ctx.params.id);
+  ctx.body = { success: true, message: 'User deleted' };
+});
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧩</span> 控制器模式</h2>
+      <div class="code-block">
+// src/controllers/userController.ts
+import { RouterContext, Next } from '@koa/router';
+import { User, CreateUserDTO, UpdateUserDTO } from '@/types/user';
+
+// 控制器类型
+type ControllerAction<Params = any, Query = any, Body = any> = (
+  ctx: RouterContext<Params, any, Query> & { request: { body: Body } },
+  next: Next
+) => Promise<void>;
+
+class UserController {
+  // 获取用户列表
+  index: ControllerAction<any, { page?: string; limit?: string }> = async (ctx) => {
+    const page = parseInt(ctx.query.page || '1', 10);
+    const limit = parseInt(ctx.query.limit || '10', 10);
+
+    const result = await UserService.findAll({ page, limit });
+    ctx.body = { success: true, ...result };
+  };
+
+  // 获取单个用户
+  show: ControllerAction<{ id: string }> = async (ctx) => {
+    const user = await UserService.findById(ctx.params.id);
+
+    if (!user) {
+      ctx.status = 404;
+      ctx.body = { success: false, error: 'User not found' };
+      return;
+    }
+
+    ctx.body = { success: true, data: user };
+  };
+
+  // 创建用户
+  store: ControllerAction<any, any, CreateUserDTO> = async (ctx) => {
+    const data = ctx.request.body;
+    const user = await UserService.create(data);
+    ctx.status = 201;
+    ctx.body = { success: true, data: user };
+  };
+
+  // 更新用户
+  update: ControllerAction<{ id: string }, any, UpdateUserDTO> = async (ctx) => {
+    const { id } = ctx.params;
+    const data = ctx.request.body;
+    const user = await UserService.update(id, data);
+    ctx.body = { success: true, data: user };
+  };
+
+  // 删除用户
+  destroy: ControllerAction<{ id: string }> = async (ctx) => {
+    await UserService.delete(ctx.params.id);
+    ctx.body = { success: true, message: 'User deleted' };
+  };
+}
+
+export default new UserController();
+      </div>
+
+      <div class="code-block">
+// src/routes/userRoutes.ts
+import Router from '@koa/router';
+import UserController from '@/controllers/userController';
+
+const router = new Router({ prefix: '/api/users' });
+
+router.get('/', UserController.index);
+router.get('/:id', UserController.show);
+router.post('/', UserController.store);
+router.put('/:id', UserController.update);
+router.delete('/:id', UserController.destroy);
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 路由模块化</h2>
+      <div class="code-block">
+// src/routes/index.ts
+import Router from '@koa/router';
+import userRoutes from './userRoutes';
+import authRoutes from './authRoutes';
+import postRoutes from './postRoutes';
+
+const router = new Router();
+
+// 注册子路由
+router.use(userRoutes.routes());
+router.use(authRoutes.routes());
+router.use(postRoutes.routes());
+
+// 健康检查
+router.get('/health', async (ctx) => {
+  ctx.body = { status: 'ok', timestamp: new Date().toISOString() };
+});
+
+export default router;
+      </div>
+
+      <div class="code-block">
+// src/app.ts
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import routes from './routes';
+
+const app = new Koa();
+
+app.use(bodyParser());
+app.use(routes.routes());
+app.use(routes.allowedMethods());
+
+export default app;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 带中间件的路由</h2>
+      <div class="code-block">
+// src/routes/adminRoutes.ts
+import Router, { RouterContext } from '@koa/router';
+import { authMiddleware } from '@/middlewares/auth';
+import { adminOnly } from '@/middlewares/admin';
+
+const router = new Router({ prefix: '/api/admin' });
+
+// 所有路由都需要认证和管理员权限
+router.use(authMiddleware({ secret: process.env.JWT_SECRET! }));
+router.use(adminOnly());
+
+// 管理员专用路由
+router.get('/users', async (ctx: RouterContext) => {
+  const users = await UserService.findAllAdmin();
+  ctx.body = { success: true, data: users };
+});
+
+router.delete('/users/:id', async (ctx: RouterContext<{ id: string }>) => {
+  await UserService.adminDelete(ctx.params.id);
+  ctx.body = { success: true };
+});
+
+export default router;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 路由装饰器（高级）</h2>
+      <div class="code-block">
+// src/decorators/route.ts
+import Router, { RouterContext, Next } from '@koa/router';
+
+const router = new Router();
+
+// 路由装饰器工厂
+function Route(method: 'get' | 'post' | 'put' | 'delete', path: string) {
+  return function (
+    target: any,
+    propertyKey: string,
+    descriptor: PropertyDescriptor
+  ) {
+    const originalMethod = descriptor.value;
+
+    router[method](path, async (ctx: RouterContext, next: Next) => {
+      await originalMethod.call(target, ctx, next);
+    });
+  };
+}
+
+// 快捷装饰器
+const Get = (path: string) => Route('get', path);
+const Post = (path: string) => Route('post', path);
+const Put = (path: string) => Route('put', path);
+const Delete = (path: string) => Route('delete', path);
+
+// 使用装饰器
+class PostController {
+  @Get('/posts')
+  async index(ctx: RouterContext) {
+    ctx.body = await PostService.findAll();
+  }
+
+  @Get('/posts/:id')
+  async show(ctx: RouterContext<{ id: string }>) {
+    ctx.body = await PostService.findById(ctx.params.id);
+  }
+
+  @Post('/posts')
+  async create(ctx: RouterContext) {
+    const post = await PostService.create(ctx.request.body);
+    ctx.status = 201;
+    ctx.body = post;
+  }
+}
+
+export { router, Get, Post, Put, Delete };
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 RouterContext 定义路由处理器类型</li>
+            <li>• 泛型参数：RouterContext&lt;Params, State, Query&gt;</li>
+            <li>• 使用控制器模式组织路由处理</li>
+            <li>• 模块化路由便于管理和维护</li>
+            <li>• 可选：装饰器方式定义路由</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-3-中间件类型.html">← 上一节：中间件类型</a>
+      <a href="40-5-最佳实践.html">下一节：最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

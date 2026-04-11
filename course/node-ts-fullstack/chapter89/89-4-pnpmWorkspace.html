@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>89.4 pnpm workspace - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="89-1-Monorepo概念.html">第八十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>89.4 pnpm workspace</h1>
+      <p class="subtitle">高效的包管理工作区</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 pnpm workspace 的工作原理</li>
+        <li>掌握工作区配置方法</li>
+        <li>学会包管理和依赖操作</li>
+        <li>了解 pnpm 的优势</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> pnpm 简介</h2>
+      <p>pnpm 是一个快速、节省磁盘空间的包管理器，使用符号链接和硬链接来节省磁盘空间。</p>
+      <div class="code-block">
+# 安装 pnpm
+npm install -g pnpm
+
+# pnpm 核心优势
+1. 节省磁盘空间 - 全局存储 + 硬链接
+2. 安装速度快 - 并行安装 + 链接
+3. 严格的依赖管理 - 防止幽灵依赖
+4. 原生支持 monorepo
+
+# 与 npm/yarn 对比
+npm/yarn: 每个项目独立 node_modules（重复存储）
+pnpm: 全局存储 + 硬链接（共享存储）
+
+# node_modules 结构
+node_modules/
+├── .pnpm/                    # 所有包的实际存储
+│   ├── react@18.2.0/
+│   │   └── node_modules/
+│   └── lodash@4.17.21/
+│       └── node_modules/
+├── react -> .pnpm/react@18.2.0/node_modules/react
+└── lodash -> .pnpm/lodash@4.17.21/node_modules/lodash
+
+# 常用命令
+pnpm install          # 安装依赖
+pnpm add lodash       # 添加依赖
+pnpm add -D typescript # 添加开发依赖
+pnpm remove lodash    # 移除依赖
+pnpm update           # 更新依赖
+pnpm run build        # 运行脚本
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">幽灵依赖</div>
+          <p>npm/yarn 允许访问未在 package.json 中声明的依赖（平铺结构）。pnpm 严格隔离，只能访问明确声明的依赖。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Workspace 配置</h2>
+      <div class="code-block">
+# pnpm-workspace.yaml
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - '!**/test/**'
+
+# 目录结构
+my-workspace/
+├── packages/
+│   ├── utils/
+│   │   ├── package.json
+│   │   └── src/
+│   └── ui/
+│       ├── package.json
+│       └── src/
+├── apps/
+│   ├── web/
+│   │   └── package.json
+│   └── admin/
+│       └── package.json
+├── pnpm-workspace.yaml
+├── package.json
+└── pnpm-lock.yaml
+
+# 根 package.json
+{
+  "name": "my-workspace",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test"
+  }
+}
+
+# 初始化工作区
+pnpm install
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 包管理操作</h2>
+      <div class="code-block">
+# 安装所有依赖
+pnpm install
+
+# 添加依赖到指定包
+pnpm add lodash --filter @myorg/utils
+pnpm add axios --filter @myorg/api
+
+# 添加本地包依赖
+pnpm add @myorg/utils --filter @myorg/api
+
+# 添加开发依赖
+pnpm add -D typescript --filter @myorg/utils
+
+# 添加到根目录（工作区级别）
+pnpm add -Dw typescript
+pnpm add -Dw eslint
+
+# 运行命令
+# 在所有包中运行
+pnpm -r run build
+pnpm -r run test
+
+# 在指定包中运行
+pnpm --filter @myorg/utils run build
+pnpm --filter @myorg/api run dev
+
+# 并行运行
+pnpm -r --parallel run dev
+
+# 查看包信息
+pnpm list -r
+pnpm list --depth=0
+
+# 依赖关系可视化
+pnpm why lodash
+
+# 更新依赖
+pnpm update --latest
+
+# 清理
+pnpm store prune  # 清理全局存储
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 包引用配置</h2>
+      <div class="code-block">
+// packages/utils/package.json
+{
+  "name": "@myorg/utils",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./string": {
+      "import": "./dist/string.mjs",
+      "require": "./dist/string.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --watch"
+  }
+}
+
+// packages/api/package.json
+{
+  "name": "@myorg/api",
+  "version": "1.0.0",
+  "dependencies": {
+    "@myorg/utils": "workspace:*"  // 引用工作区包
+  }
+}
+
+// workspace 协议
+"dependencies": {
+  "@myorg/utils": "workspace:*"    // 使用最新版本
+  "@myorg/ui": "workspace:^"       // 使用兼容版本
+  "@myorg/config": "workspace:~"   // 使用近似版本
+}
+
+// 发布时自动转换为实际版本号
+// workspace:* → 1.0.0
+// workspace:^ → ^1.0.0
+// workspace:~ → ~1.0.0
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 配置优化</h2>
+      <div class="code-block">
+# .npmrc 配置
+shamefully-hoist=true        # 提升依赖（兼容性）
+strict-peer-dependencies=false # 不严格检查 peer deps
+auto-install-peers=true      # 自动安装 peer deps
+
+# .pnpmfile.cjs - 钩子配置
+function readPackage(pkg, context) {
+  // 修改包的依赖
+  if (pkg.name === 'some-package') {
+    delete pkg.dependencies['unwanted-dep']
+  }
+  return pkg
+}
+
+module.exports = {
+  hooks: {
+    readPackage
+  }
+}
+
+# 根 package.json 常用脚本
+{
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "clean": "pnpm -r run clean && pnpm store prune",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  }
+}
+
+# 发布工作区包
+pnpm -r publish --access public
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• pnpm 使用硬链接节省磁盘空间</li>
+            <li>• workspace 协议简化本地包引用</li>
+            <li>• --filter 指定操作的目标包</li>
+            <li>• -r 在所有包中递归执行命令</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="89-3-Nx工具.html">← 上一节：Nx 工具</a>
+      <a href="89-5-Turborepo.html">下一节：Turborepo →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65.1 浏览器客户端 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="65-1-浏览器客户端.html">第六十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>65.1 浏览器客户端</h1>
+      <p class="subtitle">Socket.IO 浏览器端开发</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 Socket.IO 客户端的安装和引入</li>
+        <li>理解客户端连接配置</li>
+        <li>学会浏览器客户端的基本使用</li>
+        <li>了解与前端框架的集成方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 客户端安装</h2>
+
+      <div class="card">
+        <h3 class="card-title">方式一：CDN 引入</h3>
+        <div class="code-block">
+&lt;!-- 从服务端自动提供（推荐） --&gt;
+&lt;script src="/socket.io/socket.io.js"&gt;&lt;/script&gt;
+
+&lt;!-- 使用 CDN --&gt;
+&lt;script src="https://cdn.socket.io/4.7.2/socket.io.min.js"&gt;&lt;/script&gt;
+
+&lt;!-- 使用后 --&gt;
+&lt;script&gt;
+  const socket = io();
+&lt;/script&gt;
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式二：NPM 安装</h3>
+        <div class="code-block">
+# 安装
+npm install socket.io-client
+
+# 使用
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000');
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">方式三：TypeScript 项目</h3>
+        <div class="code-block">
+// 安装
+npm install socket.io-client
+
+// 类型定义（通常已包含在包中）
+import { io, Socket } from 'socket.io-client';
+
+interface ServerToClientEvents {
+  message: (data: { content: string }) => void;
+}
+
+interface ClientToServerEvents {
+  send: (content: string) => void;
+}
+
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 连接配置</h2>
+
+      <div class="code-block">
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000', {
+  // ==================== 连接配置 ====================
+  autoConnect: true,      // 自动连接，默认 true
+  reconnection: true,     // 自动重连，默认 true
+  reconnectionAttempts: Infinity,  // 重连次数，默认无限
+  reconnectionDelay: 1000,         // 重连延迟，默认 1000ms
+  reconnectionDelayMax: 5000,      // 最大延迟，默认 5000ms
+  timeout: 20000,        // 连接超时，默认 20000ms
+
+  // ==================== 传输配置 ====================
+  transports: ['polling', 'websocket'],  // 传输方式
+  upgrade: true,         // 允许升级传输，默认 true
+
+  // ==================== 认证配置 ====================
+  auth: {
+    token: 'user-jwt-token',
+    userId: '123'
+  },
+
+  // ==================== 查询参数 ====================
+  query: {
+    roomId: 'room-123',
+    type: 'chat'
+  },
+
+  // ==================== 请求头 ====================
+  extraHeaders: {
+    'X-Custom-Header': 'value'
+  },
+
+  // ==================== 路径配置 ====================
+  path: '/socket.io/',   // 服务端路径，默认 '/socket.io/'
+  forceNew: false,       // 强制新连接，默认 false
+  withCredentials: true  // 跨域携带 Cookie
+});
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚛️</span> React 集成</h2>
+
+      <div class="card">
+        <h3 class="card-title">自定义 Hook</h3>
+        <div class="code-block">
+import { useEffect, useState, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface UseSocketOptions {
+  url: string;
+  auth?: { token?: string };
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+}
+
+export function useSocket(options: UseSocketOptions) {
+  const { url, auth, onConnect, onDisconnect } = options;
+  const socketRef = useRef&lt;Socket | null&gt;(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    // 创建连接
+    socketRef.current = io(url, {
+      auth,
+      autoConnect: true
+    });
+
+    const socket = socketRef.current;
+
+    socket.on('connect', () => {
+      setIsConnected(true);
+      onConnect?.();
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+      onDisconnect?.();
+    });
+
+    // 清理
+    return () => {
+      socket.disconnect();
+    };
+  }, [url]);
+
+  return {
+    socket: socketRef.current,
+    isConnected
+  };
+}
+
+// 使用示例
+function ChatComponent() {
+  const { socket, isConnected } = useSocket({
+    url: 'http://localhost:3000',
+    auth: { token: localStorage.getItem('token') || '' }
+  });
+
+  const [messages, setMessages] = useState&lt;string[]&gt;([]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('message', (content: string) => {
+      setMessages(prev => [...prev, content]);
+    });
+
+    return () => {
+      socket.off('message');
+    };
+  }, [socket]);
+
+  const sendMessage = (content: string) => {
+    socket?.emit('send-message', content);
+  };
+
+  return (
+    &lt;div&gt;
+      &lt;div&gt;状态: {isConnected ? '已连接' : '未连接'}&lt;/div&gt;
+      &lt;ul&gt;
+        {messages.map((msg, i) => &lt;li key={i}&gt;{msg}&lt;/li&gt;)}
+      &lt;/ul&gt;
+      &lt;button onClick={() => sendMessage('Hello')}&gt;发送&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Context Provider</h3>
+        <div class="code-block">
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+interface SocketContextType {
+  socket: Socket | null;
+  isConnected: boolean;
+}
+
+const SocketContext = createContext&lt;SocketContextType&gt;({
+  socket: null,
+  isConnected: false
+});
+
+export function SocketProvider({ children }: { children: ReactNode }) {
+  const [socket, setSocket] = useState&lt;Socket | null&gt;(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    const newSocket = io('http://localhost:3000', {
+      auth: { token: localStorage.getItem('token') }
+    });
+
+    newSocket.on('connect', () => setIsConnected(true));
+    newSocket.on('disconnect', () => setIsConnected(false));
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, []);
+
+  return (
+    &lt;SocketContext.Provider value={{ socket, isConnected }}&gt;
+      {children}
+    &lt;/SocketContext.Provider&gt;
+  );
+}
+
+export function useSocketContext() {
+  return useContext(SocketContext);
+}
+
+// App.tsx
+function App() {
+  return (
+    &lt;SocketProvider&gt;
+      &lt;ChatApp /&gt;
+    &lt;/SocketProvider&gt;
+  );
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💚</span> Vue 集成</h2>
+
+      <div class="card">
+        <h3 class="card-title">Composition API</h3>
+        <div class="code-block">
+&lt;script setup lang="ts"&gt;
+import { ref, onMounted, onUnmounted } from 'vue';
+import { io, Socket } from 'socket.io-client';
+
+const socket = ref&lt;Socket | null&gt;(null);
+const isConnected = ref(false);
+const messages = ref&lt;string[]&gt;([]);
+
+onMounted(() => {
+  socket.value = io('http://localhost:3000', {
+    auth: { token: localStorage.getItem('token') }
+  });
+
+  socket.value.on('connect', () => {
+    isConnected.value = true;
+  });
+
+  socket.value.on('disconnect', () => {
+    isConnected.value = false;
+  });
+
+  socket.value.on('message', (content: string) => {
+    messages.value.push(content);
+  });
+});
+
+onUnmounted(() => {
+  socket.value?.disconnect();
+});
+
+function sendMessage(content: string) {
+  socket.value?.emit('send-message', content);
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div&gt;
+    &lt;div&gt;状态: {{ isConnected ? '已连接' : '未连接' }}&lt;/div&gt;
+    &lt;ul&gt;
+      &lt;li v-for="(msg, i) in messages" :key="i"&gt;{{ msg }}&lt;/li&gt;
+    &lt;/ul&gt;
+    &lt;button @click="sendMessage('Hello')"&gt;发送&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">全局插件</h3>
+        <div class="code-block">
+// socket.ts
+import { io, Socket } from 'socket.io-client';
+import type { App } from 'vue';
+
+export const SocketPlugin = {
+  install(app: App, options: { url: string }) {
+    const socket = io(options.url);
+
+    // 提供全局属性
+    app.config.globalProperties.$socket = socket;
+
+    // 或使用 provide/inject
+    app.provide('socket', socket);
+  }
+};
+
+// main.ts
+import { createApp } from 'vue';
+import App from './App.vue';
+import { SocketPlugin } from './socket';
+
+const app = createApp(App);
+app.use(SocketPlugin, { url: 'http://localhost:3000' });
+app.mount('#app');
+
+// 组件中使用
+import { inject } from 'vue';
+
+const socket = inject&lt;Socket&gt;('socket');
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Socket 实例属性</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>属性</th>
+            <th>类型</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>id</code></td>
+            <td>string</td>
+            <td>Socket 唯一标识</td>
+          </tr>
+          <tr>
+            <td><code>connected</code></td>
+            <td>boolean</td>
+            <td>是否已连接</td>
+          </tr>
+          <tr>
+            <td><code>disconnected</code></td>
+            <td>boolean</td>
+            <td>是否已断开</td>
+          </tr>
+          <tr>
+            <td><code>io</code></td>
+            <td>Manager</td>
+            <td>底层 Manager 实例</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 1.5rem;">常用方法</h3>
+      <div class="code-block">
+// 连接
+socket.connect();
+
+// 断开
+socket.disconnect();
+
+// 发送事件
+socket.emit('event', data);
+
+// 发送并等待确认
+socket.emit('event', data, (response) => {
+  console.log('确认:', response);
+});
+
+// 监听事件
+socket.on('event', handler);
+
+// 监听一次
+socket.once('event', handler);
+
+// 移除监听
+socket.off('event', handler);
+
+// 移除所有监听
+socket.off('event');
+
+// 发送 volatile 消息
+socket.volatile.emit('event', data);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 支持 CDN、NPM 多种引入方式</li>
+            <li>• TypeScript 项目有完整类型支持</li>
+            <li>• 丰富的连接配置选项</li>
+            <li>• React 推荐使用 Hook 或 Context</li>
+            <li>• Vue 使用 Composition API 或插件</li>
+            <li>• 注意组件卸载时断开连接</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter64/64-6-私聊实现.html">← 上一节</a>
+      <a href="65-2-连接管理.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

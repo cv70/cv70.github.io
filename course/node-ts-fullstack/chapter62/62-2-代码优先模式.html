@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>62.2 代码优先模式 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="62-1-GraphQL模块配置.html">第62章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>62.2 代码优先模式</h1>
+      <p class="subtitle">使用 TypeScript 装饰器定义 GraphQL 类型</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 代码优先概述</h2>
+      <p>代码优先模式使用 TypeScript 装饰器定义 GraphQL Schema，自动生成 GraphQL 类型定义。这种方式保持 TypeScript 类型和 GraphQL Schema 同步。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">代码优先优势</div>
+          <ul>
+            <li>TypeScript 类型安全</li>
+            <li>减少重复代码</li>
+            <li>自动生成 Schema</li>
+            <li>开发效率高</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 定义对象类型</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { ObjectType, Field, ID, Int } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { Post } <span class="keyword">from</span> <span class="string">'./post.entity'</span>;
+
+<span class="keyword">@ObjectType</span>()
+<span class="keyword">export class</span> <span class="function">User</span> {
+  <span class="keyword">@Field</span>(() => ID)
+  id: <span class="keyword">number</span>;
+
+  <span class="keyword">@Field</span>({ description: <span class="string">'用户名'</span> })
+  name: <span class="keyword">string</span>;
+
+  <span class="keyword">@Field</span>()
+  email: <span class="keyword">string</span>;
+
+  <span class="keyword">@Field</span>({ nullable: <span class="keyword">true</span> })
+  bio?: <span class="keyword">string</span>;
+
+  <span class="keyword">@Field</span>(() => Int, { nullable: <span class="keyword">true</span> })
+  age?: <span class="keyword">number</span>;
+
+  <span class="keyword">@Field</span>(() => [Post], { description: <span class="string">'用户文章列表'</span> })
+  posts: Post[];
+
+  <span class="keyword">@Field</span>()
+  createdAt: Date;
+}
+
+<span class="comment">// 生成的 GraphQL Schema</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  email: String!
+  bio: String
+  age: Int
+  posts: [Post!]!
+  createdAt: DateTime!
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 定义输入类型</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { InputType, Field, PartialType } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { IsString, IsEmail, MinLength } <span class="keyword">from</span> <span class="string">'class-validator'</span>;
+
+<span class="keyword">@InputType</span>()
+<span class="keyword">export class</span> <span class="function">CreateUserInput</span> {
+  <span class="keyword">@Field</span>()
+  @IsString()
+  @MinLength(<span class="number">2</span>)
+  name: <span class="keyword">string</span>;
+
+  <span class="keyword">@Field</span>()
+  @IsEmail()
+  email: <span class="keyword">string</span>;
+
+  <span class="keyword">@Field</span>()
+  @MinLength(<span class="number">6</span>)
+  password: <span class="keyword">string</span>;
+}
+
+<span class="keyword">@InputType</span>()
+<span class="keyword">export class</span> <span class="function">UpdateUserInput</span> <span class="keyword">extends</span> PartialType(CreateUserInput) {
+  <span class="comment">// 所有字段变为可选</span>
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 定义 Query 和 Mutation</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> { Resolver, Query, Mutation, Args, ID } <span class="keyword">from</span> <span class="string">'@nestjs/graphql'</span>;
+<span class="keyword">import</span> { UserService } <span class="keyword">from</span> <span class="string">'./user.service'</span>;
+<span class="keyword">import</span> { User } <span class="keyword">from</span> <span class="string">'./user.entity'</span>;
+<span class="keyword">import</span> { CreateUserInput, UpdateUserInput } <span class="keyword">from</span> <span class="string">'./user.input'</span>;
+
+<span class="keyword">@Resolver</span>(() => User)
+<span class="keyword">export class</span> <span class="function">UserResolver</span> {
+  <span class="keyword">constructor</span>(<span class="keyword">private readonly</span> userService: UserService) {}
+
+  <span class="keyword">@Query</span>(() => [User], { name: <span class="string">'users'</span> })
+  <span class="keyword">async</span> <span class="function">findAll</span>(): Promise<User[]> {
+    <span class="keyword">return this</span>.userService.findAll();
+  }
+
+  <span class="keyword">@Query</span>(() => User, { name: <span class="string">'user'</span>, nullable: <span class="keyword">true</span> })
+  <span class="keyword">async</span> <span class="function">findOne</span>(
+    <span class="keyword">@Args</span>(<span class="string">'id'</span>, { type: () => ID }) id: <span class="keyword">string</span>,
+  ): Promise<User | <span class="keyword">null</span>> {
+    <span class="keyword">return this</span>.userService.findOne(+id);
+  }
+
+  <span class="keyword">@Mutation</span>(() => User)
+  <span class="keyword">async</span> <span class="function">createUser</span>(
+    <span class="keyword">@Args</span>(<span class="string">'input'</span>) input: CreateUserInput,
+  ): Promise<User> {
+    <span class="keyword">return this</span>.userService.create(input);
+  }
+
+  <span class="keyword">@Mutation</span>(() => User, { nullable: <span class="keyword">true</span> })
+  <span class="keyword">async</span> <span class="function">updateUser</span>(
+    <span class="keyword">@Args</span>(<span class="string">'id'</span>, { type: () => ID }) id: <span class="keyword">string</span>,
+    <span class="keyword">@Args</span>(<span class="string">'input'</span>) input: UpdateUserInput,
+  ): Promise<User | <span class="keyword">null</span>> {
+    <span class="keyword">return this</span>.userService.update(+id, input);
+  }
+
+  <span class="keyword">@Mutation</span>(() => Boolean)
+  <span class="keyword">async</span> <span class="function">deleteUser</span>(
+    <span class="keyword">@Args</span>(<span class="string">'id'</span>, { type: () => ID }) id: <span class="keyword">string</span>,
+  ): Promise<<span class="keyword">boolean</span>> {
+    <span class="keyword">await this</span>.userService.remove(+id);
+    <span class="keyword">return true</span>;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>使用 @ObjectType 定义 GraphQL 对象类型</li>
+        <li>使用 @InputType 定义输入类型</li>
+        <li>使用 @Query 和 @Mutation 定义操作</li>
+        <li>使用 @Args 定义参数</li>
+        <li>可以与 class-validator 配合验证</li>
+        <li>自动生成 Schema 文件</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="62-1-GraphQL模块配置.html">← 上一节：GraphQL 模块配置</a>
+      <a href="62-3-Schema优先模式.html">下一节：Schema 优先模式 →</a>
+    </div>
+  </div>
+</body>
+</html>

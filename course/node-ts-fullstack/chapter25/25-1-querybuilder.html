@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.1 QueryBuilder - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="25-1-querybuilder.html">第二十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>25.1 QueryBuilder</h1>
+      <p class="subtitle">构建复杂的数据库查询</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 QueryBuilder 的作用</li>
+        <li>掌握基本查询构建方法</li>
+        <li>学会链式调用和参数绑定</li>
+        <li>了解获取结果的不同方式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> QueryBuilder 简介</h2>
+      <p>QueryBuilder 是 TypeORM 提供的查询构建器，允许使用链式 API 构建复杂 SQL 查询，同时保持类型安全。</p>
+
+      <div class="code-block">
+// 创建 QueryBuilder
+import { AppDataSource } from './data-source';
+import { User } from './entity/User';
+
+const userRepository = AppDataSource.getRepository(User);
+
+// 方式一：从 Repository 创建
+const qb = userRepository.createQueryBuilder('user');
+
+// 方式二：从 DataSource 创建
+const qb = AppDataSource.createQueryBuilder(User, 'user');
+
+// 方式三：从 EntityManager 创建
+const qb = AppDataSource.manager.createQueryBuilder(User, 'user');
+
+// 基本查询
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .orderBy('user.createdAt', 'DESC')
+  .getMany();
+
+// 生成的 SQL
+// SELECT user.id, user.username, user.status, user.createdAt
+// FROM users user
+// WHERE user.status = 'active'
+// ORDER BY user.createdAt DESC
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">别名的重要性</div>
+          <p>createBuider 的第一个参数是实体类，第二个参数是别名（如 'user'）。别名在后续的 WHERE、ORDER BY 等子句中引用实体时使用。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 基本查询方法</h2>
+      <div class="code-block">
+// SELECT 查询
+const users = await userRepository
+  .createQueryBuilder('user')
+  .select(['user.id', 'user.username', 'user.email'])
+  .getMany();
+
+// SELECT DISTINCT
+const uniqueEmails = await userRepository
+  .createQueryBuilder('user')
+  .select('DISTINCT user.email', 'email')
+  .getRawMany();
+
+// 添加选择列
+const usersWithCount = await userRepository
+  .createQueryBuilder('user')
+  .leftJoin('user.posts', 'post')
+  .addSelect('COUNT(post.id)', 'postCount')
+  .groupBy('user.id')
+  .getRawMany();
+
+// WHERE 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .andWhere('user.age >= :minAge', { minAge: 18 })
+  .getMany();
+
+// OR 条件
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .orWhere('user.role = :role', { role: 'admin' })
+  .getMany();
+
+// 复杂条件组合
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where(
+    new Brackets((qb) => {
+      qb.where('user.status = :status', { status: 'active' })
+        .andWhere('user.age >= :minAge', { minAge: 18 });
+    })
+  )
+  .orWhere(
+    new Brackets((qb) => {
+      qb.where('user.role = :role', { role: 'admin' });
+    })
+  )
+  .getMany();
+
+// 生成的 SQL
+// SELECT * FROM users user
+// WHERE (user.status = 'active' AND user.age >= 18)
+//    OR (user.role = 'admin')
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 参数绑定</h2>
+      <div class="code-block">
+// 命名参数（推荐）
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .andWhere('user.age > :age', { age: 18 })
+  .getMany();
+
+// 链式参数
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status')
+  .setParameter('status', 'active')
+  .andWhere('user.age > :age')
+  .setParameter('age', 18)
+  .getMany();
+
+// 批量参数 - IN 查询
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.id IN (:...ids)', { ids: [1, 2, 3] })
+  .getMany();
+
+// 生成的 SQL
+// SELECT * FROM users user WHERE user.id IN (1, 2, 3)
+
+// LIKE 查询
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.username LIKE :keyword', { keyword: '%alice%' })
+  .getMany();
+
+// 安全防注入
+// 参数化查询自动处理 SQL 注入防护
+const userInput = "alice'; DROP TABLE users;--";
+const users = await userRepository
+  .createQueryBuilder('user')
+  .where('user.username = :username', { username: userInput })
+  .getMany();
+// 安全：username 会被转义，不会执行恶意 SQL
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 获取结果</h2>
+      <div class="code-block">
+// 获取多条记录
+const users = await userRepository
+  .createQueryBuilder('user')
+  .getMany();  // 返回 User[]
+
+// 获取单条记录
+const user = await userRepository
+  .createQueryBuilder('user')
+  .where('user.id = :id', { id: 1 })
+  .getOne();  // 返回 User | null
+
+// 获取原始数据
+const rawUsers = await userRepository
+  .createQueryBuilder('user')
+  .select(['user.id AS id', 'user.username AS name'])
+  .getRawMany();  // 返回 { id: number, name: string }[]
+
+// 获取单条原始数据
+const rawUser = await userRepository
+  .createQueryBuilder('user')
+  .where('user.id = :id', { id: 1 })
+  .getRawOne();
+
+// 获取数量
+const count = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .getCount();  // 返回 number
+
+// 获取结果和总数
+const [users, total] = await userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .getManyAndCount();  // 返回 [User[], number]
+
+// 检查是否存在
+const exists = await userRepository
+  .createQueryBuilder('user')
+  .where('user.email = :email', { email: 'test@mail.com' })
+  .getExists();  // 返回 boolean
+
+// 获取 SQL（不执行）
+const sql = userRepository
+  .createQueryBuilder('user')
+  .where('user.status = :status', { status: 'active' })
+  .getSql();  // 返回 SQL 字符串
+
+console.log(sql);
+// SELECT ... FROM users user WHERE user.status = ?
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• QueryBuilder 提供链式 API 构建 SQL</li>
+            <li>• 参数绑定防止 SQL 注入</li>
+            <li>• getMany/getOne/getRawMany 等获取结果</li>
+            <li>• 使用 Brackets 构建复杂条件组合</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter24/24-4-级联操作.html">← 上一章：级联操作</a>
+      <a href="25-2-条件查询.html">下一节：条件查询 →</a>
+    </div>
+  </div>
+</body>
+</html>

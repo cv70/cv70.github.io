@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>105.4 Redis 消息 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="105-1-消息队列概述.html">第105章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>105.4 Redis 消息</h1>
+      <p class="subtitle">轻量级消息队列方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Redis发布订阅模式</li>
+        <li>掌握Redis列表实现队列</li>
+        <li>学习Redis Stream消息队列</li>
+        <li>了解Redis消息队列的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Redis发布订阅</h2>
+      <div class="code-block">
+import { createClient } from 'redis';
+
+// 创建Redis客户端
+const publisher = createClient({ url: 'redis://localhost:6379' });
+const subscriber = createClient({ url: 'redis://localhost:6379' });
+
+await publisher.connect();
+await subscriber.connect();
+
+// ==================== 发布订阅模式 ====================
+
+// 订阅消息
+await subscriber.subscribe('notifications', (message) => {
+  console.log('Received:', message);
+});
+
+// 模式订阅（通配符）
+await subscriber.pSubscribe('user:*', (message, channel) => {
+  console.log(`Channel: ${channel}, Message: ${message}`);
+});
+
+// 发布消息
+await publisher.publish('notifications', 'Hello World');
+await publisher.publish('user:123', 'User update');
+await publisher.publish('user:456', 'Profile changed');
+
+// 取消订阅
+await subscriber.unsubscribe('notifications');
+await subscriber.pUnsubscribe('user:*');
+
+// 注意：发布订阅的消息不会被持久化
+// 如果没有订阅者，消息会丢失
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">发布订阅特点</div>
+          <p>实时性好，但消息不持久化，适合实时通知、聊天室等场景。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Redis列表实现队列</h2>
+      <div class="code-block">
+// 使用List实现简单队列
+
+// 生产者：LPUSH推入消息
+async function produce(queueName: string, message: any) {
+  await publisher.lPush(queueName, JSON.stringify(message));
+}
+
+// 消费者：BRPOP阻塞获取
+async function consume(queueName: string) {
+  while (true) {
+    // BRPOP是阻塞操作，会等待直到有消息
+    const result = await subscriber.brPop(queueName, 0);
+
+    if (result) {
+      const message = JSON.parse(result.element);
+      await processMessage(message);
+    }
+  }
+}
+
+// 实现延迟队列
+async function delayQueue() {
+  // 使用有序集合（Sorted Set）实现延迟队列
+  const queueName = 'delayed:tasks';
+  const now = Date.now();
+  const executeAt = now + 60000; // 1分钟后执行
+
+  // 添加延迟任务
+  await publisher.zAdd(queueName, {
+    score: executeAt,
+    value: JSON.stringify({ taskId: '123', action: 'send_email' })
+  });
+
+  // 消费延迟任务
+  async function processDelayedTasks() {
+    while (true) {
+      const now = Date.now();
+
+      // 获取到期的任务
+      const tasks = await subscriber.zRangeByScore(queueName, 0, now);
+
+      for (const task of tasks) {
+        await processTask(JSON.parse(task));
+        // 删除已处理的任务
+        await subscriber.zRem(queueName, task);
+      }
+
+      // 等待一段时间再检查
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+// 实现可靠队列（带备份）
+async function reliableQueue() {
+  const queueName = 'tasks';
+  const backupQueue = 'tasks:processing';
+
+  // 消费时将消息移动到备份队列
+  async function consumeWithBackup() {
+    // RPOPLPUSH：从队列尾部弹出并推入备份队列
+    const message = await subscriber.rPopLPush(queueName, backupQueue);
+
+    if (message) {
+      try {
+        await processMessage(JSON.parse(message));
+        // 处理成功后从备份队列删除
+        await subscriber.lRem(backupQueue, 1, message);
+      } catch (error) {
+        // 处理失败，消息留在备份队列，稍后重试
+        console.error('Processing failed:', error);
+      }
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> Redis Stream</h2>
+      <div class="code-block">
+// Redis 5.0+ 引入Stream数据类型，更适合做消息队列
+
+// 添加消息到Stream
+async function addToStream() {
+  const streamKey = 'orders:stream';
+
+  // XADD添加消息
+  const messageId = await publisher.xAdd(streamKey, '*', {
+    orderId: '123',
+    userId: 'user-1',
+    amount: '100',
+    status: 'created'
+  });
+
+  console.log('Message ID:', messageId);  // 1671234567890-0
+}
+
+// 消费消息
+async function consumeFromStream() {
+  const streamKey = 'orders:stream';
+  const groupName = 'order-processor';
+  const consumerName = 'consumer-1';
+
+  // 创建消费者组
+  try {
+    await subscriber.xGroupCreate(streamKey, groupName, '0', {
+      MKSTREAM: true
+    });
+  } catch (e) {
+    // 组已存在
+  }
+
+  // 读取消息
+  while (true) {
+    // XREADGROUP读取消息
+    const messages = await subscriber.xReadGroup(
+      groupName,
+      consumerName,
+      [{ key: streamKey, id: '>' }],  // '>' 表示获取新消息
+      { COUNT: 10, BLOCK: 5000 }       // 阻塞5秒
+    );
+
+    if (messages) {
+      for (const stream of messages) {
+        for (const message of stream.messages) {
+          try {
+            await processMessage(message);
+            // 确认消息已处理
+            await subscriber.xAck(streamKey, groupName, message.id);
+          } catch (error) {
+            console.error('Failed to process:', message.id);
+          }
+        }
+      }
+    }
+  }
+}
+
+// 查看待处理消息（Pending Entries List）
+async function getPendingMessages() {
+  const streamKey = 'orders:stream';
+  const groupName = 'order-processor';
+
+  const pending = await subscriber.xPending(streamKey, groupName);
+  console.log('Pending messages:', pending);
+  // {
+  //   total: 5,
+  //   min: '1671234567890-0',
+  //   max: '1671234567891-0',
+  //   consumers: [{ name: 'consumer-1', count: 5 }]
+  // }
+}
+
+// 认领超时消息
+async function claimTimeoutMessages() {
+  const streamKey = 'orders:stream';
+  const groupName = 'order-processor';
+  const consumerName = 'consumer-1';
+
+  // 认领空闲超过60秒的消息
+  const claimed = await subscriber.xClaim(
+    streamKey,
+    groupName,
+    consumerName,
+    60000,  // 最小空闲时间（毫秒）
+    ['1671234567890-0', '1671234567891-0']  // 要认领的消息ID
+  );
+
+  for (const message of claimed) {
+    await processMessage(message);
+    await subscriber.xAck(streamKey, groupName, message.id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 发布订阅适合实时消息，但不持久化</li>
+            <li>• List可实现简单队列</li>
+            <li>• Stream是专业的消息队列方案</li>
+            <li>• Redis消息适合轻量级、实时性要求高的场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="105-3-Kafka.html">← 上一节：Kafka</a>
+      <a href="105-5-消息可靠性.html">下一节：消息可靠性 →</a>
+    </div>
+  </div>
+</body>
+</html>

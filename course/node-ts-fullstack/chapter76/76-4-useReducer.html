@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.4 useReducer - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="76-1-useState.html">第七十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>76.4 useReducer</h1>
+      <p class="subtitle">复杂状态管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 useReducer 的工作原理</li>
+        <li>掌握 reducer 函数的编写</li>
+        <li>学会处理复杂状态逻辑</li>
+        <li>了解 useReducer 与 Context 结合</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> useReducer 基础</h2>
+      <div class="code-block">
+import { useReducer } from 'react';
+
+// 语法
+// const [state, dispatch] = useReducer(reducer, initialState);
+
+// 定义类型
+interface State {
+  count: number;
+}
+
+type Action =
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'reset'; payload: number };
+
+// reducer 函数
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'increment':
+      return { count: state.count + 1 };
+    case 'decrement':
+      return { count: state.count - 1 };
+    case 'reset':
+      return { count: action.payload };
+    default:
+      throw new Error('Unknown action type');
+  }
+}
+
+// 使用
+function Counter() {
+  const [state, dispatch] = useReducer(reducer, { count: 0 });
+
+  return (
+    &lt;div&gt;
+      &lt;p&gt;Count: {state.count}&lt;/p&gt;
+      &lt;button onClick={() =&gt; dispatch({ type: 'increment' })}&gt;+&lt;/button&gt;
+      &lt;button onClick={() =&gt; dispatch({ type: 'decrement' })}&gt;-&lt;/button&gt;
+      &lt;button onClick={() =&gt; dispatch({ type: 'reset', payload: 0 })}&gt;Reset&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 复杂状态示例</h2>
+      <div class="code-block">
+// 表单状态管理
+interface FormState {
+  username: string;
+  email: string;
+  errors: Record&lt;string, string&gt;;
+  isSubmitting: boolean;
+}
+
+type FormAction =
+  | { type: 'SET_FIELD'; field: string; value: string }
+  | { type: 'SET_ERROR'; field: string; error: string }
+  | { type: 'CLEAR_ERROR'; field: string }
+  | { type: 'SUBMIT_START' }
+  | { type: 'SUBMIT_SUCCESS' }
+  | { type: 'SUBMIT_ERROR'; error: string }
+  | { type: 'RESET' };
+
+const initialState: FormState = {
+  username: '',
+  email: '',
+  errors: {},
+  isSubmitting: false,
+};
+
+function formReducer(state: FormState, action: FormAction): FormState {
+  switch (action.type) {
+    case 'SET_FIELD':
+      return { ...state, [action.field]: action.value };
+    case 'SET_ERROR':
+      return {
+        ...state,
+        errors: { ...state.errors, [action.field]: action.error },
+      };
+    case 'CLEAR_ERROR':
+      const { [action.field]: _, ...rest } = state.errors;
+      return { ...state, errors: rest };
+    case 'SUBMIT_START':
+      return { ...state, isSubmitting: true };
+    case 'SUBMIT_SUCCESS':
+      return { ...state, isSubmitting: false };
+    case 'SUBMIT_ERROR':
+      return { ...state, isSubmitting: false, errors: { form: action.error } };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+}
+
+function Form() {
+  const [state, dispatch] = useReducer(formReducer, initialState);
+
+  const handleSubmit = async (e: React.FormEvent) =&gt; {
+    e.preventDefault();
+    dispatch({ type: 'SUBMIT_START' });
+
+    try {
+      await submitForm(state);
+      dispatch({ type: 'SUBMIT_SUCCESS' });
+    } catch (error) {
+      dispatch({ type: 'SUBMIT_ERROR', error: error.message });
+    }
+  };
+
+  return (
+    &lt;form onSubmit={handleSubmit}&gt;
+      &lt;input
+        value={state.username}
+        onChange={e =&gt; dispatch({ type: 'SET_FIELD', field: 'username', value: e.target.value })}
+      /&gt;
+      {state.errors.username && &lt;span&gt;{state.errors.username}&lt;/span&gt;}
+      &lt;button disabled={state.isSubmitting}&gt;
+        {state.isSubmitting ? 'Submitting...' : 'Submit'}
+      &lt;/button&gt;
+    &lt;/form&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> useReducer + Context</h2>
+      <div class="code-block">
+// 结合 Context 实现全局状态管理
+import { createContext, useContext, useReducer, ReactNode } from 'react';
+
+// Types
+interface Todo {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
+type TodoAction =
+  | { type: 'ADD'; text: string }
+  | { type: 'TOGGLE'; id: number }
+  | { type: 'DELETE'; id: number };
+
+// Context
+const TodoContext = createContext&lt;{
+  todos: Todo[];
+  dispatch: React.Dispatch&lt;TodoAction&gt;;
+}&gt;({ todos: [], dispatch: () =&gt; {} });
+
+// Reducer
+function todoReducer(state: Todo[], action: TodoAction): Todo[] {
+  switch (action.type) {
+    case 'ADD':
+      return [...state, { id: Date.now(), text: action.text, done: false }];
+    case 'TOGGLE':
+      return state.map(todo =&gt;
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo
+      );
+    case 'DELETE':
+      return state.filter(todo =&gt; todo.id !== action.id);
+    default:
+      return state;
+  }
+}
+
+// Provider
+function TodoProvider({ children }: { children: ReactNode }) {
+  const [todos, dispatch] = useReducer(todoReducer, []);
+
+  return (
+    &lt;TodoContext.Provider value={{ todos, dispatch }}&gt;
+      {children}
+    &lt;/TodoContext.Provider&gt;
+  );
+}
+
+// Hook
+function useTodos() {
+  return useContext(TodoContext);
+}
+
+// 使用
+function App() {
+  return (
+    &lt;TodoProvider&gt;
+      &lt;TodoList /&gt;
+    &lt;/TodoProvider&gt;
+  );
+}
+
+function TodoList() {
+  const { todos, dispatch } = useTodos();
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() =&gt; dispatch({ type: 'ADD', text: 'New Todo' })}&gt;
+        Add
+      &lt;/button&gt;
+      &lt;ul&gt;
+        {todos.map(todo =&gt; (
+          &lt;li key={todo.id}&gt;
+            &lt;input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() =&gt; dispatch({ type: 'TOGGLE', id: todo.id })}
+            /&gt;
+            {todo.text}
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• useReducer 适合复杂状态逻辑</li>
+            <li>• reducer 接收状态和 action，返回新状态</li>
+            <li>• dispatch 触发状态更新</li>
+            <li>• 结合 Context 可实现全局状态管理</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-3-useContext.html">← 上一节：useContext</a>
+      <a href="76-5-自定义Hook.html">下一节：自定义 Hook →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.5 第三方中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="45-1-中间件概念.html">第四十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>45.5 第三方中间件</h1>
+      <p class="subtitle">集成 Express 生态的中间件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解常用的第三方中间件</li>
+        <li>学会集成 Express 中间件</li>
+        <li>掌握安全相关中间件的配置</li>
+        <li>了解性能优化中间件</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 常用第三方中间件</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>中间件</th>
+            <th>用途</th>
+            <th>安装命令</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>helmet</td>
+            <td>安全头设置</td>
+            <td>npm install helmet</td>
+          </tr>
+          <tr>
+            <td>compression</td>
+            <td>响应压缩</td>
+            <td>npm install compression</td>
+          </tr>
+          <tr>
+            <td>express-rate-limit</td>
+            <td>请求限流</td>
+            <td>npm install express-rate-limit</td>
+          </tr>
+          <tr>
+            <td>morgan</td>
+            <td>请求日志</td>
+            <td>npm install morgan</td>
+          </tr>
+          <tr>
+            <td>cors</td>
+            <td>跨域处理</td>
+            <td>npm install cors</td>
+          </tr>
+          <tr>
+            <td>cookie-parser</td>
+            <td>Cookie 解析</td>
+            <td>npm install cookie-parser</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 安全中间件配置</h2>
+      <div class="code-block">
+// main.ts
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // Helmet - 安全HTTP头
+  app.use(helmet());
+
+  // 自定义 Helmet 配置
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", 'cdn.example.com'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // 请求限流
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,  // 15分钟窗口
+      max: 100,                  // 每个IP最多100个请求
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        statusCode: 429,
+        message: 'Too many requests, please try again later.',
+      },
+    })
+  );
+
+  // 不同路由不同限流策略
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+  });
+  const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,  // 1小时
+    max: 5,  // 登录最多5次
+  });
+
+  // 需要在模块中配置或使用函数判断路由
+  app.use('/api', apiLimiter);
+  app.use('/auth/login', authLimiter);
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 日志和监控中间件</h2>
+      <div class="code-block">
+// main.ts
+import morgan from 'morgan';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+  });
+
+  // Morgan 日志
+  if (process.env.NODE_ENV === 'development') {
+    app.use(morgan('dev'));
+  } else {
+    app.use(morgan('combined'));
+  }
+
+  // 自定义 Morgan 格式
+  morgan.token('user-id', (req) => req['user']?.id || 'anonymous');
+  app.use(morgan(':method :url :status :response-time ms - User: :user-id'));
+
+  await app.listen(3000);
+}
+bootstrap();
+
+// 或者使用 NestJS 内置 Logger
+import { Logger } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+
+  app.use((req, res, next) => {
+    logger.log(`${req.method} ${req.url}`);
+    next();
+  });
+
+  await app.listen(3000);
+  logger.log(`Application running on: ${await app.getUrl()}`);
+}
+bootstrap();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化中间件</h2>
+      <div class="code-block">
+import compression from 'compression';
+import express from 'express';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // 响应压缩
+  app.use(compression());
+
+  // 自定义压缩配置
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+    threshold: 1024,  // 大于1KB才压缩
+    level: 6,         // 压缩级别 0-9
+  }));
+
+  // 静态文件服务
+  app.use('/static', express.static('public', {
+    maxAge: '1d',      // 缓存1天
+    etag: true,
+  }));
+
+  await app.listen(3000);
+}
+bootstrap();
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">中间件顺序</div>
+          <p>中间件的注册顺序很重要。通常：安全中间件 -> 日志 -> 压缩 -> 路由处理。Helmet 应该放在最前面。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• NestJS 可以使用所有 Express 中间件</li>
+            <li>• Helmet 增强应用安全性</li>
+            <li>• express-rate-limit 防止暴力攻击</li>
+            <li>• compression 优化响应大小</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="45-4-全局中间件.html">← 上一节：全局中间件</a>
+      <a href="../chapter46/46-1-管道概念.html">下一章：管道概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.3 错误处理中间件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter32.html">第32章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>32.3 错误处理中间件</h1>
+      <p class="subtitle">掌握 Express 错误处理的完整机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Express 错误处理中间件的工作原理</li>
+        <li>学会自定义错误类型和错误处理</li>
+        <li>掌握异步错误的捕获方法</li>
+        <li>学会优雅地处理和返回错误信息</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 错误处理中间件基础</h2>
+      <p>Express 错误处理中间件有四个参数 (err, req, res, next)，Express 会自动识别并调用它来处理错误。</p>
+
+      <h3>基本语法</h3>
+      <div class="code-block">
+// 错误处理中间件有四个参数
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
+});</div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">关键区别</div>
+          <p>普通中间件有 3 个参数，错误处理中间件有 4 个参数。Express 根据参数数量识别中间件类型。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 错误传递机制</h2>
+
+      <h3>同步错误</h3>
+      <div class="code-block">
+// 同步代码中的错误会自动被 Express 捕获
+app.get('/sync-error', (req, res) => {
+  throw new Error('Sync error!');
+});
+
+// 或者手动传递给 next()
+app.get('/manual-error', (req, res, next) => {
+  try {
+    // 一些操作
+    throw new Error('Manual error');
+  } catch (error) {
+    next(error);  // 传递给错误处理中间件
+  }
+});
+
+// 错误处理中间件
+app.use((err, req, res, next) => {
+  res.status(500).json({
+    success: false,
+    message: err.message
+  });
+});</div>
+
+      <h3>异步错误</h3>
+      <div class="code-block">
+// ❌ 异步错误不会被自动捕获
+app.get('/async-error', async (req, res) => {
+  const user = await User.findById('invalid');
+  // 如果出错，Express 不会捕获
+});
+
+// ✅ 方式一：手动捕获
+app.get('/async-error-1', async (req, res, next) => {
+  try {
+    const user = await User.findById('invalid');
+    res.json(user);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ✅ 方式二：使用异步包装器
+const asyncHandler = fn => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+app.get('/async-error-2', asyncHandler(async (req, res) => {
+  const user = await User.findById('invalid');
+  res.json(user);
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 自定义错误类</h2>
+
+      <div class="code-block">
+// utils/errors.js
+
+// 基础应用错误
+class AppError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+    this.isOperational = true;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// 404 错误
+class NotFoundError extends AppError {
+  constructor(message = 'Resource not found') {
+    super(message, 404);
+  }
+}
+
+// 验证错误
+class ValidationError extends AppError {
+  constructor(message = 'Validation failed', errors = []) {
+    super(message, 400);
+    this.errors = errors;
+  }
+}
+
+// 认证错误
+class AuthenticationError extends AppError {
+  constructor(message = 'Authentication failed') {
+    super(message, 401);
+  }
+}
+
+// 权限错误
+class AuthorizationError extends AppError {
+  constructor(message = 'Access denied') {
+    super(message, 403);
+  }
+}
+
+// 冲突错误
+class ConflictError extends AppError {
+  constructor(message = 'Resource conflict') {
+    super(message, 409);
+  }
+}
+
+module.exports = {
+  AppError,
+  NotFoundError,
+  ValidationError,
+  AuthenticationError,
+  AuthorizationError,
+  ConflictError
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 完整的错误处理系统</h2>
+
+      <div class="code-block">
+// middleware/errorHandler.js
+const { AppError } = require('../utils/errors');
+
+// 开发环境错误响应
+const sendErrorDev = (err, res) => {
+  res.status(err.statusCode).json({
+    success: false,
+    status: err.status,
+    message: err.message,
+    errors: err.errors,
+    stack: err.stack,
+    error: err
+  });
+};
+
+// 生产环境错误响应
+const sendErrorProd = (err, res) => {
+  // 操作性错误：可以安全地发送给客户端
+  if (err.isOperational) {
+    res.status(err.statusCode).json({
+      success: false,
+      status: err.status,
+      message: err.message,
+      errors: err.errors
+    });
+  } else {
+    // 编程错误或未知错误：不泄露细节
+    console.error('ERROR 💥:', err);
+    res.status(500).json({
+      success: false,
+      status: 'error',
+      message: 'Something went wrong'
+    });
+  }
+};
+
+// 处理特定错误类型
+const handleCastErrorDB = (err) => {
+  return new AppError(`Invalid ${err.path}: ${err.value}`, 400);
+};
+
+const handleDuplicateFieldsDB = (err) => {
+  const value = err.errmsg.match(/(["'])(\\?.)*?\1/)[0];
+  return new AppError(`Duplicate field value: ${value}`, 400);
+};
+
+const handleValidationErrorDB = (err) => {
+  const errors = Object.values(err.errors).map(el => el.message);
+  return new AppError(`Invalid input data: ${errors.join('. ')}`, 400);
+};
+
+const handleJWTError = () => {
+  return new AppError('Invalid token. Please log in again', 401);
+};
+
+const handleJWTExpiredError = () => {
+  return new AppError('Your token has expired. Please log in again', 401);
+};
+
+// 全局错误处理中间件
+module.exports = (err, req, res, next) => {
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || 'error';
+
+  if (process.env.NODE_ENV === 'development') {
+    sendErrorDev(err, res);
+  } else {
+    let error = { ...err };
+    error.message = err.message;
+    error.stack = err.stack;
+
+    // MongoDB CastError
+    if (err.name === 'CastError') {
+      error = handleCastErrorDB(err);
+    }
+
+    // MongoDB 重复键错误
+    if (err.code === 11000) {
+      error = handleDuplicateFieldsDB(err);
+    }
+
+    // MongoDB 验证错误
+    if (err.name === 'ValidationError') {
+      error = handleValidationErrorDB(err);
+    }
+
+    // JWT 错误
+    if (err.name === 'JsonWebTokenError') {
+      error = handleJWTError();
+    }
+
+    if (err.name === 'TokenExpiredError') {
+      error = handleJWTExpiredError();
+    }
+
+    sendErrorProd(error, res);
+  }
+};</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 使用错误处理</h2>
+
+      <h3>在路由中使用自定义错误</h3>
+      <div class="code-block">
+// controllers/userController.js
+const { NotFoundError, ValidationError } = require('../utils/errors');
+
+exports.getUser = async (req, res, next) => {
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  res.json(user);
+};
+
+exports.createUser = async (req, res, next) => {
+  const { name, email } = req.body;
+
+  if (!name || !email) {
+    throw new ValidationError('Name and email are required', [
+      { field: 'name', message: 'Name is required' },
+      { field: 'email', message: 'Email is required' }
+    ]);
+  }
+
+  const user = await User.create({ name, email });
+  res.status(201).json(user);
+};
+
+// 使用 asyncHandler 包装
+const asyncHandler = require('../middleware/asyncHandler');
+
+exports.getUser = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new NotFoundError('User not found');
+  res.json(user);
+});</div>
+
+      <h3>异步处理包装器</h3>
+      <div class="code-block">
+// middleware/asyncHandler.js
+const asyncHandler = fn => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+module.exports = asyncHandler;
+
+// 在路由中使用
+const asyncHandler = require('../middleware/asyncHandler');
+
+router.get('/users/:id',
+  asyncHandler(userController.getUser)
+);
+
+router.post('/users',
+  asyncHandler(userController.createUser)
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 404 错误处理</h2>
+
+      <div class="code-block">
+// 处理未匹配的路由
+app.all('*', (req, res, next) => {
+  next(new NotFoundError(`Cannot find ${req.originalUrl} on this server`));
+});
+
+// 或者
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整应用示例</h2>
+
+      <div class="code-block">
+// app.js
+const express = require('express');
+const app = express();
+
+// 中间件
+app.use(express.json());
+
+// 路由
+app.use('/api/users', require('./routes/users'));
+app.use('/api/posts', require('./routes/posts'));
+
+// 404 处理
+app.all('*', (req, res, next) => {
+  next(new NotFoundError(`Cannot find ${req.originalUrl}`));
+});
+
+// 全局错误处理 - 必须放在最后
+app.use(errorHandler);
+
+module.exports = app;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>错误处理中间件有四个参数 (err, req, res, next)</li>
+            <li>同步错误自动捕获，异步错误需要手动传递给 next()</li>
+            <li>使用 asyncHandler 包装器简化异步错误处理</li>
+            <li>创建自定义错误类，区分不同类型的错误</li>
+            <li>开发和生产环境返回不同的错误详情</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>创建完整的自定义错误类系统</li>
+        <li>实现一个异步错误处理包装器</li>
+        <li>为现有项目添加全局错误处理中间件</li>
+        <li>实现区分开发/生产环境的错误响应</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-2-路由级中间件.html">← 上一节：路由级中间件</a>
+      <a href="32-4-内置中间件.html">下一节：内置中间件 →</a>
+    </div>
+  </div>
+</body>
+</html>

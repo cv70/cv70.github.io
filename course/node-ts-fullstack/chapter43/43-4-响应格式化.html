@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>43.4 响应格式化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="43-1-控制器基础.html">第四十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>43.4 响应格式化</h1>
+      <p class="subtitle">掌握 NestJS 响应处理技巧</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 NestJS 的响应机制</li>
+        <li>掌握状态码设置</li>
+        <li>学会自定义响应头</li>
+        <li>了解响应序列化</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 标准响应</h2>
+      <p>NestJS 默认将返回值序列化为 JSON，状态码根据 HTTP 方法自动设置：</p>
+      <div class="code-block">
+import { Controller, Get, Post } from '@nestjs/common';
+
+@Controller('users')
+export class UsersController {
+
+  @Get()
+  findAll() {
+    // 自动返回 JSON，状态码 200
+    return [
+      { id: 1, name: 'John' },
+      { id: 2, name: 'Jane' },
+    ];
+  }
+
+  @Post()
+  create() {
+    // 自动返回 JSON，状态码 201
+    return { id: 1, name: 'John' };
+  }
+
+  @Get('empty')
+  getEmpty() {
+    // 返回空响应，状态码 200
+    return;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 自定义状态码</h2>
+      <div class="code-block">
+import { Controller, Get, Post, HttpCode, HttpStatus } from '@nestjs/common';
+
+@Controller('users')
+export class UsersController {
+
+  // 使用 @HttpCode 设置状态码
+  @Post()
+  @HttpCode(HttpStatus.CREATED)  // 201
+  create() {
+    return { message: 'User created' };
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)  // 200
+  login() {
+    return { token: 'xxx' };
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)  // 204
+  remove() {
+    // 无返回内容
+  }
+
+  // 使用 @Res 自定义响应
+  @Get('custom')
+  customResponse(@Res() res: Response) {
+    return res
+      .status(201)
+      .header('X-Custom-Header', 'value')
+      .json({ message: 'Custom response' });
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">HttpStatus 枚举</div>
+          <p>使用 HttpStatus 枚举代替数字状态码，代码更清晰。常用值：OK(200), CREATED(201), NO_CONTENT(204), BAD_REQUEST(400), UNAUTHORIZED(401), NOT_FOUND(404)。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 自定义响应头</h2>
+      <div class="code-block">
+import { Controller, Get, Header, Headers } from '@nestjs/common';
+
+@Controller('api')
+export class ApiController {
+
+  @Get()
+  @Header('Cache-Control', 'none')
+  @Header('X-Response-Time', '123ms')
+  getData() {
+    return { data: 'Hello' };
+  }
+
+  @Get('download')
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename=data.csv')
+  download() {
+    return 'id,name\n1,John\n2,Jane';
+  }
+
+  @Get('cors')
+  @Header('Access-Control-Allow-Origin', '*')
+  cors() {
+    return { message: 'CORS enabled' };
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 响应 DTO 和序列化</h2>
+      <div class="code-block">
+// user.response.dto.ts
+import { Exclude, Expose, Type } from 'class-transformer';
+
+export class UserResponseDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  email: string;
+
+  @Exclude()  // 不会在响应中返回
+  password: string;
+
+  @Expose()
+  @Type(() => Date)
+  createdAt: Date;
+}
+
+// controller
+import { ClassSerializerInterceptor, UseInterceptors } from '@nestjs/common';
+
+@Controller('users')
+@UseInterceptors(ClassSerializerInterceptor)
+export class UsersController {
+
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<UserResponseDto> {
+    const user = await this.usersService.findOne(+id);
+    // password 字段会被自动排除
+    return new UserResponseDto(user);
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">序列化注意</div>
+          <p>使用 ClassSerializerInterceptor 时，需要确保全局开启 class-transformer，或者在控制器上使用 @UseInterceptors 装饰器。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 返回值自动序列化为 JSON</li>
+            <li>• @HttpCode 设置状态码</li>
+            <li>• @Header 设置响应头</li>
+            <li>• 使用 DTO 控制响应数据结构</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="43-3-请求处理.html">← 上一节：请求处理</a>
+      <a href="43-5-路由参数.html">下一节：路由参数 →</a>
+    </div>
+  </div>
+</body>
+</html>

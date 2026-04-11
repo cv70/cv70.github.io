@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.5 Router 类使用 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter31.html">第31章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>31.5 Router 类使用</h1>
+      <p class="subtitle">深入理解 express.Router() 的高级用法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Router 类的完整 API</li>
+        <li>掌握 Router 的中间件应用</li>
+        <li>学会 Router 的高级配置</li>
+        <li>理解 Router 与 App 的区别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> Router 类概述</h2>
+      <p><code>express.Router()</code> 类是一个完整的中间件和路由系统，常被称为"迷你应用"。它与主应用有相似的功能，但有一些关键区别。</p>
+
+      <h3>Router 与 App 的区别</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>express()</th>
+            <th>express.Router()</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>顶级对象</td>
+            <td>是（主应用）</td>
+            <td>否（路由模块）</td>
+          </tr>
+          <tr>
+            <td>设置</td>
+            <td>app.set()/app.get()</td>
+            <td>不支持</td>
+          </tr>
+          <tr>
+            <td>监听端口</td>
+            <td>app.listen()</td>
+            <td>不支持</td>
+          </tr>
+          <tr>
+            <td>路由方法</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+          <tr>
+            <td>中间件</td>
+            <td>支持</td>
+            <td>支持</td>
+          </tr>
+          <tr>
+            <td>挂载路径</td>
+            <td>自动挂载</td>
+            <td>需通过 app.use() 挂载</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Router 完整 API</h2>
+
+      <h3>创建 Router</h3>
+      <div class="code-block">
+// 基本创建
+const router = express.Router();
+
+// 带选项创建
+const router = express.Router({
+  caseSensitive: false,  // 路由区分大小写（默认 false）
+  mergeParams: false,    // 合并父路由参数（默认 false）
+  strict: false          // 严格匹配（默认 false）
+});</div>
+
+      <h3>路由方法</h3>
+      <div class="code-block">
+// 所有 HTTP 方法
+router.get(path, [callbacks])
+router.post(path, [callbacks])
+router.put(path, [callbacks])
+router.patch(path, [callbacks])
+router.delete(path, [callbacks])
+router.head(path, [callbacks])
+router.options(path, [callbacks])
+
+// 特殊方法
+router.all(path, [callbacks])  // 匹配所有方法
+router.use([path], callbacks)  // 中间件</div>
+
+      <h3>路由链式定义</h3>
+      <div class="code-block">
+// router.route() - 链式定义同一路径
+router.route('/users/:id')
+  .all(authMiddleware)        // 所有方法先经过认证
+  .get(userController.show)   // GET 详情
+  .put(userController.update) // PUT 更新
+  .delete(userController.delete); // DELETE 删除
+
+// 等价于：
+router.all('/users/:id', authMiddleware);
+router.get('/users/:id', userController.show);
+router.put('/users/:id', userController.update);
+router.delete('/users/:id', userController.delete);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Router 选项详解</h2>
+
+      <h3>caseSensitive - 大小写敏感</h3>
+      <div class="code-block">
+// 大小写不敏感（默认）
+const router = express.Router({ caseSensitive: false });
+// /Users 和 /users 都匹配
+
+// 大小写敏感
+const router = express.Router({ caseSensitive: true });
+// /Users 和 /users 是不同的路由</div>
+
+      <h3>mergeParams - 合并参数</h3>
+      <div class="code-block">
+// 默认不合并
+const router = express.Router({ mergeParams: false });
+app.use('/users/:userId', router);
+// router 中无法访问 userId
+
+// 合并父路由参数
+const router = express.Router({ mergeParams: true });
+app.use('/users/:userId', router);
+// router 中可以访问 req.params.userId
+
+// 示例
+router.get('/posts/:postId', (req, res) => {
+  const { userId, postId } = req.params;
+  res.json({ userId, postId });
+});
+// GET /users/123/posts/456 -> { userId: '123', postId: '456' }</div>
+
+      <h3>strict - 严格模式</h3>
+      <div class="code-block">
+// 非严格模式（默认）
+const router = express.Router({ strict: false });
+// /foo 和 /foo/ 被视为相同
+
+// 严格模式
+const router = express.Router({ strict: true });
+// /foo 和 /foo/ 是不同的路由</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Router 中间件</h2>
+
+      <h3>模块级中间件</h3>
+      <div class="code-block">
+// routes/admin.js
+const express = require('express');
+const router = express.Router();
+
+// 此中间件只影响 admin 路由模块
+router.use((req, res, next) => {
+  console.log('Admin route accessed');
+  next();
+});
+
+// 管理员认证
+router.use((req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  next();
+});
+
+router.get('/dashboard', (req, res) => {
+  res.json({ message: 'Admin Dashboard' });
+});
+
+module.exports = router;</div>
+
+      <h3>特定路径的中间件</h3>
+      <div class="code-block">
+// 只对特定路径应用中间件
+router.use('/settings', (req, res, next) => {
+  // 验证设置修改权限
+  next();
+});
+
+router.get('/settings', getSettings);
+router.put('/settings', updateSettings);
+
+// 其他路由不受影响
+router.get('/users', getUsers);</div>
+
+      <h3>路由级中间件</h3>
+      <div class="code-block">
+// 特定路由的中间件
+const validatePost = (req, res, next) => {
+  const { title, content } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ message: 'Title and content required' });
+  }
+  next();
+};
+
+router.post('/posts', validatePost, createPost);
+router.put('/posts/:id', validatePost, updatePost);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> Router 高级用法</h2>
+
+      <h3>动态加载路由</h3>
+      <div class="code-block">
+// 延迟加载路由模块
+let adminRouter = null;
+
+app.use('/admin', (req, res, next) => {
+  if (!adminRouter) {
+    adminRouter = require('./routes/admin');
+  }
+  adminRouter(req, res, next);
+});
+
+// 或者条件加载
+if (process.env.ENABLE_ADMIN === 'true') {
+  app.use('/admin', require('./routes/admin'));
+}</div>
+
+      <h3>路由参数预处理</h3>
+      <div class="code-block">
+// 参数预处理
+router.param('userId', (req, res, next, id) => {
+  // 验证 ID 格式
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user ID' });
+  }
+
+  // 查找用户
+  User.findById(parseInt(id))
+    .then(user => {
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      req.user = user;
+      next();
+    })
+    .catch(next);
+});
+
+// 后续路由可直接使用 req.user
+router.get('/users/:userId', (req, res) => {
+  res.json(req.user);
+});
+
+router.put('/users/:userId', (req, res) => {
+  req.user.update(req.body);
+  res.json(req.user);
+});</div>
+
+      <h3>Router 组合</h3>
+      <div class="code-block">
+// 组合多个 Router
+const express = require('express');
+const app = express();
+
+// 用户相关路由
+const userRoutes = express.Router();
+userRoutes.get('/', listUsers);
+userRoutes.post('/', createUser);
+
+const userPostRoutes = express.Router({ mergeParams: true });
+userPostRoutes.get('/', listUserPosts);
+userPostRoutes.post('/', createUserPost);
+
+// 组合
+userRoutes.use('/:userId/posts', userPostRoutes);
+
+// 公开 API
+const publicApiRoutes = express.Router();
+publicApiRoutes.use('/users', userRoutes);
+
+// 私有 API
+const privateApiRoutes = express.Router();
+privateApiRoutes.use(authMiddleware);
+privateApiRoutes.use('/admin', adminRoutes);
+
+// 挂载
+app.use('/api/v1', publicApiRoutes);
+app.use('/api/internal', privateApiRoutes);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 实战示例：API 路由架构</h2>
+
+      <div class="code-block">
+// routes/api/index.js
+const express = require('express');
+const router = express.Router();
+
+// API 版本路由
+const v1Routes = require('./v1');
+const v2Routes = require('./v2');
+
+// API 通用中间件
+router.use((req, res, next) => {
+  res.set({
+    'Content-Type': 'application/json',
+    'X-API-Version': req.headers['x-api-version'] || '1'
+  });
+  next();
+});
+
+// API 文档
+router.get('/docs', (req, res) => {
+  res.json({ message: 'API Documentation' });
+});
+
+// 版本路由
+router.use('/v1', v1Routes);
+router.use('/v2', v2Routes);
+
+// 默认使用最新版本
+router.use('/', v2Routes);
+
+module.exports = router;
+
+// routes/api/v1/index.js
+const express = require('express');
+const router = express.Router();
+const userRoutes = require('./users');
+const postRoutes = require('./posts');
+
+router.use('/users', userRoutes);
+router.use('/posts', postRoutes);
+
+module.exports = router;
+
+// routes/api/v1/users.js
+const express = require('express');
+const router = express.Router();
+const userController = require('../../../controllers/api/v1/userController');
+
+router.param('id', userController.load);
+
+router.route('/')
+  .get(userController.index)
+  .post(userController.create);
+
+router.route('/:id')
+  .get(userController.show)
+  .put(userController.update)
+  .patch(userController.patch)
+  .delete(userController.destroy);
+
+module.exports = router;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Router 是"迷你应用"，支持中间件和路由，但不支持设置和监听</li>
+            <li>Router 选项：caseSensitive、mergeParams、strict</li>
+            <li>mergeParams: true 可访问父路由的参数</li>
+            <li>router.param() 可以预处理路由参数</li>
+            <li>Router 可以嵌套组合，构建复杂的路由结构</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 练习</h2>
+      <ul class="feature-list">
+        <li>创建一个 Router，使用 mergeParams 访问父路由参数</li>
+        <li>使用 router.param() 实现用户自动加载功能</li>
+        <li>构建一个支持多版本的 API 路由结构</li>
+        <li>比较 caseSensitive 和 strict 选项的实际效果</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="31-4-路由模块化.html">← 上一节：路由模块化</a>
+      <a href="31-6-路由最佳实践.html">下一节：路由最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

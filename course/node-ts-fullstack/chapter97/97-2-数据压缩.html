@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>97.2 数据压缩 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="97-1-接口缓存.html">第九十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>97.2 数据压缩</h1>
+      <p class="subtitle">响应数据压缩优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解数据压缩的作用</li>
+        <li>掌握 Gzip/Brotli 压缩配置</li>
+        <li>学会选择压缩策略</li>
+        <li>了解压缩性能权衡</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 数据压缩概述</h2>
+      <div class="code-block">
+# 为什么需要数据压缩
+
+## 减少传输数据量
+- JSON 响应通常较大
+- 文本数据压缩率高
+- 节省带宽成本
+
+## 提高传输速度
+- 更小的数据量
+- 更快的下载速度
+- 改善用户体验
+
+# 常见压缩算法
+
+## Gzip
+- 最广泛支持
+- 压缩率约 70-80%
+- 压缩速度快
+
+## Brotli
+- 新一代压缩算法
+- 压缩率比 Gzip 高 15-20%
+- 压缩速度稍慢
+
+## Deflate
+- 较老的算法
+- 压缩率一般
+- 兼容性好
+
+# 压缩效果示例
+原始大小: 100KB JSON
+Gzip 压缩后: 15-20KB
+Brotli 压缩后: 12-17KB
+
+# 压缩适用场景
+✅ JSON API 响应
+✅ HTML 页面
+✅ CSS/JS 文件
+✅ 文本文件
+❌ 已压缩的图片（PNG/JPG）
+❌ 视频文件
+❌ 二进制文件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Express 压缩配置</h2>
+      <div class="code-block">
+# 使用 compression 中间件
+
+import express from 'express';
+import compression from 'compression';
+
+const app = express();
+
+// 启用压缩
+app.use(compression());
+
+// 自定义配置
+app.use(compression({
+  // 压缩阈值（字节）
+  threshold: 1024,  // 大于 1KB 才压缩
+
+  // 压缩级别 (0-9)
+  level: 6,  // 平衡压缩率和速度
+
+  // 过滤函数
+  filter: (req, res) => {
+    // 检查客户端是否支持
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // 使用默认过滤
+    return compression.filter(req, res);
+  },
+}));
+
+# 支持 Brotli
+
+import express from 'express';
+import shrinkRay from 'shrink-ray-current';
+
+const app = express();
+
+// shrink-ray 支持 Brotli 和 Gzip
+app.use(shrinkRay());
+
+# 手动压缩实现
+
+import zlib from 'zlib';
+import { promisify } from 'util';
+
+const gzip = promisify(zlib.gzip);
+const brotli = promisify(zlib.brotliCompress);
+
+app.get('/api/data', async (req, res) => {
+  const data = await getData();
+  const jsonStr = JSON.stringify(data);
+
+  // 检查客户端支持的压缩方式
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+
+  if (acceptEncoding.includes('br')) {
+    // Brotli 压缩
+    const compressed = await brotli(jsonStr);
+    res.set('Content-Encoding', 'br');
+    res.send(compressed);
+  } else if (acceptEncoding.includes('gzip')) {
+    // Gzip 压缩
+    const compressed = await gzip(jsonStr);
+    res.set('Content-Encoding', 'gzip');
+    res.send(compressed);
+  } else {
+    // 不压缩
+    res.json(data);
+  }
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">压缩级别</div>
+          <p>压缩级别 1-9，级别越高压缩率越好但速度越慢。推荐使用 4-6，平衡压缩率和性能。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Nginx 压缩配置</h2>
+      <div class="code-block">
+# nginx.conf 压缩配置
+
+http {
+  # 启用 Gzip
+  gzip on;
+  gzip_vary on;
+  gzip_proxied any;
+  gzip_comp_level 6;
+  gzip_min_length 1024;
+  gzip_types
+    application/json
+    application/javascript
+    text/plain
+    text/css
+    text/xml
+    application/xml
+    application/xml+rss;
+
+  # 启用 Brotli（需要安装 ngx_brotli 模块）
+  brotli on;
+  brotli_comp_level 6;
+  brotli_types
+    application/json
+    application/javascript
+    text/plain
+    text/css;
+
+  # 禁用对已压缩文件的压缩
+  gzip_disable "msie6";
+}
+
+# 反向代理配置
+
+server {
+  listen 80;
+  server_name api.example.com;
+
+  location / {
+    proxy_pass http://localhost:3000;
+    proxy_http_version 1.1;
+
+    # 传递压缩相关头
+    proxy_set_header Accept-Encoding "";
+
+    # 或者让后端处理压缩
+    # proxy_set_header Accept-Encoding $http_accept_encoding;
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 压缩性能优化</h2>
+      <div class="code-block">
+# 预压缩静态文件
+
+import fs from 'fs';
+import zlib from 'zlib';
+import { promisify } from 'util';
+
+const gzip = promisify(zlib.gzip);
+const brotli = promisify(zlib.brotliCompress);
+
+// 构建时预压缩
+async function precompress(filePath: string) {
+  const content = fs.readFileSync(filePath);
+
+  // 生成 Gzip 版本
+  const gzipped = await gzip(content);
+  fs.writeFileSync(`${filePath}.gz`, gzipped);
+
+  // 生成 Brotli 版本
+  const brotlied = await brotli(content);
+  fs.writeFileSync(`${filePath}.br`, brotlied);
+
+  console.log(`Compressed ${filePath}`);
+}
+
+# Express 静态文件预压缩
+
+import express from 'express';
+import expressStaticGzip from 'express-static-gzip';
+
+const app = express();
+
+// 自动提供预压缩文件
+app.use(expressStaticGzip('public', {
+  enableBrotli: true,
+  orderPreference: ['br', 'gz'],
+}));
+
+# 压缩性能对比
+
+import Benchmark from 'benchmark';
+
+const suite = new Benchmark.Suite();
+
+const testData = JSON.stringify({ /* large data */ });
+
+suite
+  .add('Gzip level 1', {
+    defer: true,
+    fn: async (deferred: any) => {
+      await promisify(zlib.gzip)(testData, { level: 1 });
+      deferred.resolve();
+    },
+  })
+  .add('Gzip level 6', {
+    defer: true,
+    fn: async (deferred: any) => {
+      await promisify(zlib.gzip)(testData, { level: 6 });
+      deferred.resolve();
+    },
+  })
+  .add('Brotli level 4', {
+    defer: true,
+    fn: async (deferred: any) => {
+      await promisify(zlib.brotliCompress)(testData, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+      deferred.resolve();
+    },
+  })
+  .on('complete', function() {
+    console.log('Fastest:', this.filter('fastest').map('name'));
+  })
+  .run();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 数据压缩减少传输体积，提高速度</li>
+            <li>• Brotli 压缩率优于 Gzip</li>
+            <li>• 设置合理的压缩阈值和级别</li>
+            <li>• 静态文件可预压缩提升性能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="97-1-接口缓存.html">← 上一节：接口缓存</a>
+      <a href="97-3-分页优化.html">下一节：分页优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

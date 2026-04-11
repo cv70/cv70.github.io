@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.4 关联查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="25-1-querybuilder.html">第二十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>25.4 关联查询</h1>
+      <p class="subtitle">查询关联实体数据</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 JOIN 查询方法</li>
+        <li>学会关联条件过滤</li>
+        <li>理解关联数据排序</li>
+        <li>了解 N+1 问题及解决方案</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> JOIN 类型</h2>
+      <div class="code-block">
+JOIN 类型说明：
+
+INNER JOIN    只返回两表都匹配的记录
+┌─────────┐     ┌─────────┐
+│ User A  │────►│ Post 1  │  匹配，返回
+│ User B  │     │ Post 2  │  匹配，返回
+│ User C  │     │ (无)    │  不匹配，不返回
+└─────────┘     └─────────┘
+
+LEFT JOIN     返回左表所有记录，右表无则为 NULL
+┌─────────┐     ┌─────────┐
+│ User A  │────►│ Post 1  │  匹配
+│ User B  │────►│ Post 2  │  匹配
+│ User C  │────►│ NULL    │  不匹配，仍返回
+└─────────┘     └─────────┘
+
+RIGHT JOIN    返回右表所有记录（MySQL 支持）
+FULL JOIN     返回两表所有记录（PostgreSQL 支持）
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> FindOptions 关联查询</h2>
+      <div class="code-block">
+// 基础关联查询
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts', 'profile'],
+});
+
+// 嵌套关联
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: {
+    posts: {
+      comments: {
+        author: true,
+      },
+    },
+    profile: true,
+  },
+});
+
+// 关联条件过滤（TypeORM 0.3.x）
+const user = await userRepository.findOne({
+  where: {
+    id: 1,
+    posts: {
+      status: 'published',
+    },
+  },
+  relations: ['posts'],
+});
+
+// 选择关联表的特定字段
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+  select: {
+    id: true,
+    username: true,
+    posts: {
+      id: true,
+      title: true,
+    },
+  },
+});
+
+// 加载所有关联
+const users = await userRepository.find({
+  relations: ['posts', 'comments', 'profile'],
+});
+
+// eager 加载（在实体定义中配置）
+@Entity()
+export class User {
+  @OneToMany(() => Post, (post) => post.user, { eager: true })
+  posts: Post[];
+}
+
+// 自动加载关联
+const user = await userRepository.findOneBy({ id: 1 });
+console.log(user.posts);  // 自动加载
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">eager 加载注意</div>
+          <p>eager: true 会自动加载关联，但每次查询都会加载，可能导致性能问题。建议按需使用 relations 显式指定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> QueryBuilder JOIN 查询</h2>
+      <div class="code-block">
+// INNER JOIN
+const users = await userRepository
+  .createQueryBuilder('user')
+  .innerJoin('user.posts', 'post')
+  .getMany();
+
+// LEFT JOIN
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoin('user.posts', 'post')
+  .getMany();
+
+// 选择关联表字段
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoin('user.posts', 'post')
+  .addSelect(['post.id', 'post.title'])
+  .getMany();
+
+// 关联条件过滤
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoin('user.posts', 'post', 'post.status = :status', { status: 'published' })
+  .getMany();
+
+// 生成的 SQL
+// SELECT user.*, post.id, post.title
+// FROM users user
+// LEFT JOIN posts post ON post.user_id = user.id AND post.status = 'published'
+
+// JOIN 并获取关联实体
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoinAndSelect('user.posts', 'post')
+  .where('user.status = :status', { status: 'active' })
+  .getMany();
+
+// 多表关联
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoinAndSelect('user.posts', 'post')
+  .leftJoinAndSelect('post.comments', 'comment')
+  .leftJoinAndSelect('comment.author', 'author')
+  .getMany();
+
+// 关联表排序
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoinAndSelect('user.posts', 'post')
+  .orderBy('user.createdAt', 'DESC')
+  .addOrderBy('post.createdAt', 'DESC')
+  .getMany();
+
+// 关联表分组
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoin('user.posts', 'post')
+  .addSelect('COUNT(post.id)', 'postCount')
+  .groupBy('user.id')
+  .getRawMany();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> N+1 问题</h2>
+      <div class="code-block">
+// N+1 问题示例
+const users = await userRepository.find();  // 1 次查询
+
+for (const user of users) {
+  const posts = await postRepository.find({
+    where: { user: { id: user.id } },
+  });  // N 次查询
+  user.posts = posts;
+}
+
+// 解决方案一：使用 JOIN 一次性获取
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoinAndSelect('user.posts', 'post')
+  .getMany();  // 1-2 次查询
+
+// 解决方案二：使用 relations
+const users = await userRepository.find({
+  relations: ['posts'],
+});
+
+// 解决方案三：使用 IN 查询批量加载
+const users = await userRepository.find();
+const userIds = users.map(u => u.id);
+
+const posts = await postRepository.find({
+  where: { user: { id: In(userIds) } },
+});
+
+// 手动映射
+const postsByUser = new Map<number, Post[]>();
+for (const post of posts) {
+  const userId = post.user.id;
+  if (!postsByUser.has(userId)) {
+    postsByUser.set(userId, []);
+  }
+  postsByUser.get(userId)!.push(post);
+}
+
+for (const user of users) {
+  user.posts = postsByUser.get(user.id) || [];
+}
+
+// 使用 DataLoader（GraphQL 推荐）
+import DataLoader from 'dataloader';
+
+const postLoader = new DataLoader(async (userIds: number[]) => {
+  const posts = await postRepository.find({
+    where: { user: { id: In(userIds) } },
+  });
+
+  const postsByUser = new Map<number, Post[]>();
+  for (const post of posts) {
+    const userId = post.user.id;
+    if (!postsByUser.has(userId)) {
+      postsByUser.set(userId, []);
+    }
+    postsByUser.get(userId)!.push(post);
+  }
+
+  return userIds.map(id => postsByUser.get(id) || []);
+});
+
+// 使用
+const posts = await postLoader.load(user.id);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 relations 或 JOIN 加载关联数据</li>
+            <li>• leftJoinAndSelect 同时获取关联实体</li>
+            <li>• 避免 N+1 问题，使用 JOIN 或批量查询</li>
+            <li>• DataLoader 适合 GraphQL 场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="25-3-分页查询.html">← 上一节：分页查询</a>
+      <a href="../chapter26/26-1-prisma简介.html">下一章：Prisma 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

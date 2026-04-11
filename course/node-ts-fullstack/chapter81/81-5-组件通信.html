@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>81.5 组件通信 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>81.5 组件通信</h1>
+      <p class="subtitle">Vue 组件间的数据传递方式</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>在 Vue 应用中，组件之间的通信是一个核心话题。本节将介绍各种组件通信方式，包括父子组件通信、跨层级通信、以及使用状态管理工具。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握父子组件通信的基本方式</li>
+        <li>学会使用 provide/inject 跨层级通信</li>
+        <li>了解 ref 模板引用的使用</li>
+        <li>掌握组件通信的最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 组件通信方式概览</h2>
+      <table>
+        <tr>
+          <th>通信方式</th>
+          <th>方向</th>
+          <th>适用场景</th>
+        </tr>
+        <tr>
+          <td>Props</td>
+          <td>父 -> 子</td>
+          <td>传递数据到子组件</td>
+        </tr>
+        <tr>
+          <td>Events (emit)</td>
+          <td>子 -> 父</td>
+          <td>子组件通知父组件</td>
+        </tr>
+        <tr>
+          <td>v-model</td>
+          <td>双向</td>
+          <td>表单双向绑定</td>
+        </tr>
+        <tr>
+          <td>provide/inject</td>
+          <td>跨层级</td>
+          <td>深层嵌套组件通信</td>
+        </tr>
+        <tr>
+          <td>ref 模板引用</td>
+          <td>父 -> 子</td>
+          <td>直接访问子组件</td>
+        </tr>
+        <tr>
+          <td>Event Bus</td>
+          <td>任意组件</td>
+          <td>非父子组件通信</td>
+        </tr>
+        <tr>
+          <td>状态管理 (Pinia)</td>
+          <td>全局</td>
+          <td>复杂应用状态共享</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👨‍👦</span> 父子组件通信</h2>
+
+      <h3>Props（父传子）</h3>
+      <div class="code-block"><span class="comment">&lt;!-- 父组件 --&gt;</span>
+&lt;template&gt;
+  &lt;ChildComponent :message=<span class="string">"parentMessage"</span> :count=<span class="string">"10"</span> /&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">import</span> ChildComponent <span class="keyword">from</span> <span class="string">'./ChildComponent.vue'</span>;
+
+<span class="keyword">const</span> parentMessage = ref(<span class="string">'Hello from parent'</span>);
+&lt;/script&gt;
+
+<span class="comment">&lt;!-- 子组件 --&gt;</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">const</span> props = defineProps&lt;{
+  message: <span class="keyword">string</span>;
+  count: <span class="keyword">number</span>;
+}&gt;();
+
+console.log(props.message); <span class="comment">// 'Hello from parent'</span>
+&lt;/script&gt;</div>
+
+      <h3>Events（子传父）</h3>
+      <div class="code-block"><span class="comment">&lt;!-- 子组件 --&gt;</span>
+&lt;template&gt;
+  &lt;button @click=<span class="string">"handleClick"</span>&gt;发送消息&lt;/button&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">const</span> emit = defineEmits&lt;{
+  (e: <span class="string">'message'</span>, text: <span class="keyword">string</span>): <span class="keyword">void</span>;
+  (e: <span class="string">'update'</span>, data: { id: <span class="keyword">number</span>; name: <span class="keyword">string</span> }): <span class="keyword">void</span>;
+}&gt;();
+
+<span class="keyword">function</span> <span class="function">handleClick</span>() {
+  emit(<span class="string">'message'</span>, <span class="string">'Hello from child'</span>);
+}
+&lt;/script&gt;
+
+<span class="comment">&lt;!-- 父组件 --&gt;</span>
+&lt;template&gt;
+  &lt;ChildComponent @message=<span class="string">"handleMessage"</span> /&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">function</span> <span class="function">handleMessage</span>(text: <span class="keyword">string</span>) {
+  console.log(text); <span class="comment">// 'Hello from child'</span>
+}
+&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> v-model 双向绑定</h2>
+      <div class="code-block"><span class="comment">&lt;!-- 自定义输入组件 --&gt;</span>
+&lt;template&gt;
+  &lt;input
+    :value=<span class="string">"modelValue"</span>
+    @input=<span class="string">"$emit('update:modelValue', ($event.target as HTMLInputElement).value)"</span>
+  /&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+defineProps&lt;{ modelValue: <span class="keyword">string</span> }&gt;();
+defineEmits&lt;{
+  (e: <span class="string">'update:modelValue'</span>, value: <span class="keyword">string</span>): <span class="keyword">void</span>;
+}&gt;();
+&lt;/script&gt;
+
+<span class="comment">&lt;!-- 父组件 --&gt;</span>
+&lt;template&gt;
+  &lt;CustomInput v-model=<span class="string">"inputValue"</span> /&gt;
+&lt;/template&gt;
+
+<span class="comment">&lt;!-- 多个 v-model --&gt;</span>
+&lt;template&gt;
+  &lt;UserForm
+    v-model:username=<span class="string">"username"</span>
+    v-model:email=<span class="string">"email"</span>
+  /&gt;
+&lt;/template&gt;
+
+<span class="comment">&lt;!-- UserForm.vue --&gt;</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+defineProps&lt;{
+  username: <span class="keyword">string</span>;
+  email: <span class="keyword">string</span>;
+}&gt;();
+
+defineEmits&lt;{
+  (e: <span class="string">'update:username'</span>, value: <span class="keyword">string</span>): <span class="keyword">void</span>;
+  (e: <span class="string">'update:email'</span>, value: <span class="keyword">string</span>): <span class="keyword">void</span>;
+}&gt;();
+&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> provide/inject 跨层级通信</h2>
+
+      <h3>基本用法</h3>
+      <div class="code-block"><span class="comment">// 祖先组件</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { provide, ref, readonly } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> theme = ref(<span class="string">'dark'</span>);
+<span class="keyword">const</span> user = ref({ name: <span class="string">'John'</span> });
+
+<span class="comment">// 提供数据</span>
+provide(<span class="string">'theme'</span>, readonly(theme));
+provide(<span class="string">'user'</span>, user);
+
+<span class="comment">// 提供方法来修改数据</span>
+provide(<span class="string">'updateTheme'</span>, (newTheme: <span class="keyword">string</span>) => {
+  theme.value = newTheme;
+});
+&lt;/script&gt;
+
+<span class="comment">// 后代组件（任意层级）</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { inject } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 注入数据</span>
+<span class="keyword">const</span> theme = inject&lt;<span class="keyword">string</span>&gt;(<span class="string">'theme'</span>);
+<span class="keyword">const</span> user = inject&lt;{ name: <span class="keyword">string</span> }&gt;(<span class="string">'user'</span>);
+<span class="keyword">const</span> updateTheme = inject&lt;(theme: <span class="keyword">string</span>) => <span class="keyword">void</span>&gt;(<span class="string">'updateTheme'</span>);
+
+<span class="comment">// 带默认值</span>
+<span class="keyword">const</span> locale = inject(<span class="string">'locale'</span>, <span class="string">'zh-CN'</span>);
+&lt;/script&gt;</div>
+
+      <h3>使用 Symbol 作为 key</h3>
+      <div class="code-block"><span class="comment">// keys.ts - 导出 Symbol</span>
+<span class="keyword">export const</span> ThemeKey = Symbol(<span class="string">'theme'</span>);
+<span class="keyword">export const</span> UserKey = Symbol(<span class="string">'user'</span>);
+
+<span class="comment">// 祖先组件</span>
+<span class="keyword">import</span> { ThemeKey, UserKey } <span class="keyword">from</span> <span class="string">'./keys'</span>;
+provide(ThemeKey, theme);
+
+<span class="comment">// 后代组件</span>
+<span class="keyword">const</span> theme = inject(ThemeKey);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> ref 模板引用</h2>
+
+      <h3>访问子组件</h3>
+      <div class="code-block"><span class="comment">&lt;!-- 父组件 --&gt;</span>
+&lt;template&gt;
+  &lt;ChildComponent ref=<span class="string">"childRef"</span> /&gt;
+  &lt;button @click=<span class="string">"callChildMethod"</span>&gt;调用子组件方法&lt;/button&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">import</span> ChildComponent <span class="keyword">from</span> <span class="string">'./ChildComponent.vue'</span>;
+
+<span class="keyword">const</span> childRef = ref&lt;InstanceType&lt;<span class="keyword">typeof</span> ChildComponent&gt; | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+<span class="keyword">function</span> <span class="function">callChildMethod</span>() {
+  childRef.value?.doSomething();
+}
+&lt;/script&gt;
+
+<span class="comment">&lt;!-- 子组件 --&gt;</span>
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> count = ref(<span class="number">0</span>);
+
+<span class="keyword">function</span> <span class="function">doSomething</span>() {
+  count.value++;
+  console.log(<span class="string">'Method called'</span>);
+}
+
+<span class="comment">// 使用 defineExpose 暴露给父组件</span>
+defineExpose({
+  doSomething,
+  count
+});
+&lt;/script&gt;</div>
+
+      <h3>访问 DOM 元素</h3>
+      <div class="code-block">&lt;template&gt;
+  &lt;input ref=<span class="string">"inputRef"</span> /&gt;
+  &lt;button @click=<span class="string">"focusInput"</span>&gt;Focus&lt;/button&gt;
+&lt;/template&gt;
+
+&lt;script setup lang=<span class="string">"ts"</span>&gt;
+<span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> inputRef = ref&lt;HTMLInputElement | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+
+<span class="keyword">function</span> <span class="function">focusInput</span>() {
+  inputRef.value?.focus();
+}
+&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚌</span> Event Bus</h2>
+      <p>对于非父子关系的组件通信，可以使用事件总线模式。</p>
+      <div class="code-block"><span class="comment">// eventBus.ts</span>
+<span class="keyword">import</span> { ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">type</span> EventHandler = (...args: <span class="keyword">any</span>[]) => <span class="keyword">void</span>;
+
+<span class="keyword">class</span> EventBus {
+  <span class="keyword">private</span> events = <span class="keyword">new</span> Map&lt;<span class="keyword">string</span>, Set&lt;EventHandler&gt;&gt;();
+
+  <span class="function">on</span>(event: <span class="keyword">string</span>, handler: EventHandler) {
+    <span class="keyword">if</span> (!<span class="keyword">this</span>.events.has(event)) {
+      <span class="keyword">this</span>.events.set(event, <span class="keyword">new</span> Set());
+    }
+    <span class="keyword">this</span>.events.get(event)!.add(handler);
+  }
+
+  <span class="function">off</span>(event: <span class="keyword">string</span>, handler: EventHandler) {
+    <span class="keyword">this</span>.events.get(event)?.delete(handler);
+  }
+
+  <span class="function">emit</span>(event: <span class="keyword">string</span>, ...args: <span class="keyword">any</span>[]) {
+    <span class="keyword">this</span>.events.get(event)?.forEach(handler => handler(...args));
+  }
+}
+
+<span class="keyword">export const</span> eventBus = <span class="keyword">new</span> EventBus();
+
+<span class="comment">// 组件 A - 发送事件</span>
+<span class="keyword">import</span> { eventBus } <span class="keyword">from</span> <span class="string">'./eventBus'</span>;
+eventBus.emit(<span class="string">'user-updated'</span>, { id: <span class="number">1</span>, name: <span class="string">'John'</span> });
+
+<span class="comment">// 组件 B - 监听事件</span>
+<span class="keyword">import</span> { onUnmounted } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">import</span> { eventBus } <span class="keyword">from</span> <span class="string">'./eventBus'</span>;
+
+<span class="keyword">const</span> handleUserUpdate = (user: <span class="keyword">any</span>) => {
+  console.log(<span class="string">'User updated:'</span>, user);
+};
+
+eventBus.on(<span class="string">'user-updated'</span>, handleUserUpdate);
+
+onUnmounted(() => {
+  eventBus.off(<span class="string">'user-updated'</span>, handleUserUpdate);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>Props 用于父传子，Events 用于子传父</li>
+        <li>v-model 实现双向绑定</li>
+        <li>provide/inject 用于跨层级通信</li>
+        <li>ref 模板引用可访问子组件实例和 DOM</li>
+        <li>复杂应用推荐使用 Pinia 状态管理</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="81-4-组件基础.html">← 上一节：组件基础</a>
+      <a href="../chapter82/82-1-路由配置.html">下一章：Vue Router →</a>
+    </div>
+  </div>
+</body>
+</html>

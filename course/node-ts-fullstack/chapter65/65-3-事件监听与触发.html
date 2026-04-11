@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65.3 事件监听与触发 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="65-1-浏览器客户端.html">第六十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>65.3 事件监听与触发</h1>
+      <p class="subtitle">客户端事件处理详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握客户端事件监听和发送方法</li>
+        <li>理解消息确认机制的使用</li>
+        <li>学会管理事件监听器</li>
+        <li>了解事件的类型定义</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">👂</span> 事件监听</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本监听</h3>
+        <div class="code-block">
+// 监听事件
+socket.on('message', (data) => {
+  console.log('收到消息:', data);
+});
+
+// 监听多个参数
+socket.on('notification', (title, body, timestamp) => {
+  console.log(`${title}: ${body} at ${timestamp}`);
+});
+
+// 监听对象数据
+socket.on('user-joined', (user) => {
+  console.log(`${user.name} 加入了聊天室`);
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">一次性监听</h3>
+        <div class="code-block">
+// 只监听一次
+socket.once('welcome', (message) => {
+  console.log('欢迎消息:', message);
+  // 此后不再触发
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">TypeScript 类型定义</h3>
+        <div class="code-block">
+// 定义服务端到客户端的事件
+interface ServerToClientEvents {
+  message: (data: { id: string; content: string; userId: string }) => void;
+  notification: (title: string, body: string) => void;
+  userStatus: (userId: string, status: 'online' | 'offline') => void;
+}
+
+// 定义客户端到服务端的事件
+interface ClientToServerEvents {
+  sendMessage: (content: string, callback: (success: boolean) => void) => void;
+  joinRoom: (roomId: string) => void;
+  typing: (isTyping: boolean) => void;
+}
+
+// 应用类型
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
+
+// 类型安全的事件监听
+socket.on('message', (data) => {
+  // data 自动推断为 { id: string; content: string; userId: string }
+  console.log(data.content);
+});
+
+socket.on('userStatus', (userId, status) => {
+  // userId: string, status: 'online' | 'offline'
+  console.log(`User ${userId} is ${status}`);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 发送事件</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本发送</h3>
+        <div class="code-block">
+// 发送简单数据
+socket.emit('ping');
+
+// 发送字符串
+socket.emit('message', 'Hello World');
+
+// 发送对象
+socket.emit('join-room', {
+  roomId: 'room-123',
+  password: 'secret'
+});
+
+// 发送多个参数
+socket.emit('chat', 'room-123', 'Hello everyone', Date.now());
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">带回调确认</h3>
+        <div class="code-block">
+// 发送并等待确认
+socket.emit('join-room', 'room-123', (response) => {
+  if (response.success) {
+    console.log('加入成功');
+    console.log('房间信息:', response.room);
+  } else {
+    console.log('加入失败:', response.error);
+  }
+});
+
+// 服务端
+socket.on('join-room', (roomId, callback) => {
+  try {
+    // 处理逻辑
+    const room = getRoom(roomId);
+    callback({ success: true, room });
+  } catch (error) {
+    callback({ success: false, error: error.message });
+  }
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Promise 封装</h3>
+        <div class="code-block">
+// 封装为 Promise
+function emitAsync&lt;T&gt;(event: string, ...args: any[]): Promise&lt;T&gt; {
+  return new Promise((resolve, reject) => {
+    socket.emit(event, ...args, (response: T) => {
+      resolve(response);
+    });
+
+    // 设置超时
+    setTimeout(() => {
+      reject(new Error('请求超时'));
+    }, 5000);
+  });
+}
+
+// 使用
+async function joinRoom(roomId: string) {
+  try {
+    const response = await emitAsync&lt;JoinResponse&gt;('join-room', roomId);
+    console.log('加入成功:', response);
+  } catch (error) {
+    console.error('加入失败:', error);
+  }
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 监听器管理</h2>
+
+      <div class="card">
+        <h3 class="card-title">移除监听器</h3>
+        <div class="code-block">
+// 定义命名函数
+function onMessage(data) {
+  console.log('消息:', data);
+}
+
+// 添加监听
+socket.on('message', onMessage);
+
+// 移除特定监听
+socket.off('message', onMessage);
+
+// 移除某事件的所有监听
+socket.off('message');
+
+// 移除所有监听
+socket.removeAllListeners();
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">React 清理监听器</h3>
+        <div class="code-block">
+import { useEffect, useState } from 'react';
+
+function ChatRoom({ roomId }: { roomId: string }) {
+  const [messages, setMessages] = useState&lt;Message[]&gt;([]);
+
+  useEffect(() => {
+    // 定义处理函数
+    const handleNewMessage = (message: Message) => {
+      setMessages(prev => [...prev, message]);
+    };
+
+    const handleUserJoined = (user: User) => {
+      console.log(`${user.name} 加入了房间`);
+    };
+
+    // 添加监听
+    socket.on('new-message', handleNewMessage);
+    socket.on('user-joined', handleUserJoined);
+
+    // 加入房间
+    socket.emit('join-room', roomId);
+
+    // 清理函数 - 组件卸载时执行
+    return () => {
+      socket.off('new-message', handleNewMessage);
+      socket.off('user-joined', handleUserJoined);
+      socket.emit('leave-room', roomId);
+    };
+  }, [roomId]);  // roomId 变化时重新执行
+
+  return (
+    &lt;div&gt;
+      {messages.map(msg => (
+        &lt;div key={msg.id}&gt;{msg.content}&lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  );
+}
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 高级技巧</h2>
+
+      <div class="card">
+        <h3 class="card-title">事件拦截器</h3>
+        <div class="code-block">
+// 创建事件拦截器
+const originalOn = socket.on.bind(socket);
+socket.on = (event, handler) => {
+  const wrappedHandler = (...args) => {
+    console.log(`[Event] ${event}`, args);
+    handler(...args);
+  };
+  return originalOn(event, wrappedHandler);
+};
+
+// 所有事件都会被记录
+socket.on('message', (data) => {
+  // ...
+});
+// 控制台: [Event] message [{ content: '...' }]
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">事件队列（离线时缓存）</h3>
+        <div class="code-block">
+class SocketQueue {
+  private queue: Array&lt;{ event: string; args: any[] }&gt; = [];
+
+  emit(event: string, ...args: any[]) {
+    if (socket.connected) {
+      socket.emit(event, ...args);
+    } else {
+      // 离线时缓存
+      this.queue.push({ event, args });
+      console.log(`消息已缓存: ${event}`);
+    }
+  }
+
+  flush() {
+    while (this.queue.length > 0 && socket.connected) {
+      const { event, args } = this.queue.shift()!;
+      socket.emit(event, ...args);
+    }
+  }
+}
+
+const socketQueue = new SocketQueue();
+
+// 连接成功后发送缓存
+socket.on('connect', () => {
+  socketQueue.flush();
+});
+
+// 使用
+socketQueue.emit('send-message', 'Hello');
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">事件类型映射</h3>
+        <div class="code-block">
+// 统一的事件处理
+type EventHandler&lt;T = any&gt; = (data: T) => void;
+
+class EventEmitter&lt;Events extends Record&lt;string, any&gt;&gt; {
+  private handlers = new Map&lt;keyof Events, Set&lt;EventHandler&gt;&gt;();
+
+  on&lt;K extends keyof Events&gt;(event: K, handler: EventHandler&lt;Events[K]&gt;) {
+    if (!this.handlers.has(event)) {
+      this.handlers.set(event, new Set());
+    }
+    this.handlers.get(event)!.add(handler);
+  }
+
+  off&lt;K extends keyof Events&gt;(event: K, handler: EventHandler&lt;Events[K]&gt;) {
+    this.handlers.get(event)?.delete(handler);
+  }
+
+  emit&lt;K extends keyof Events&gt;(event: K, data: Events[K]) {
+    this.handlers.get(event)?.forEach(handler => handler(data));
+  }
+}
+
+// 使用
+interface AppEvents {
+  'user-joined': { userId: string; username: string };
+  'user-left': { userId: string };
+  'message': { content: string; timestamp: number };
+}
+
+const events = new EventEmitter&lt;AppEvents&gt;();
+
+events.on('user-joined', (data) => {
+  console.log(`${data.username} 加入了`);
+});
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 内置事件</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>事件名</th>
+            <th>说明</th>
+            <th>参数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>connect</code></td>
+            <td>连接成功</td>
+            <td>无</td>
+          </tr>
+          <tr>
+            <td><code>connect_error</code></td>
+            <td>连接错误</td>
+            <td>Error 对象</td>
+          </tr>
+          <tr>
+            <td><code>disconnect</code></td>
+            <td>断开连接</td>
+            <td>断开原因字符串</td>
+          </tr>
+          <tr>
+            <td><code>reconnect</code></td>
+            <td>重连成功</td>
+            <td>重连次数</td>
+          </tr>
+          <tr>
+            <td><code>reconnect_attempt</code></td>
+            <td>重连尝试</td>
+            <td>尝试次数</td>
+          </tr>
+          <tr>
+            <td><code>reconnect_error</code></td>
+            <td>重连错误</td>
+            <td>Error 对象</td>
+          </tr>
+          <tr>
+            <td><code>reconnect_failed</code></td>
+            <td>重连失败</td>
+            <td>无</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• <code>socket.on()</code> 监听，<code>socket.emit()</code> 发送</li>
+            <li>• 回调函数实现消息确认机制</li>
+            <li>• TypeScript 支持完整的事件类型定义</li>
+            <li>• 组件卸载时务必移除监听器</li>
+            <li>• 离线时可以缓存消息，连接后发送</li>
+            <li>• 了解内置事件以便正确处理连接状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="65-2-连接管理.html">← 上一节</a>
+      <a href="65-4-错误处理.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

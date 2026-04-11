@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60.3 枚举与接口 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="60-1-类型系统.html">第60章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>60.3 枚举与接口</h1>
+      <p class="subtitle">GraphQL 类型抽象能力</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">🔢</span> 枚举类型</h2>
+
+      <h3>定义枚举</h3>
+      <div class="code-block">
+<span class="comment">// 基本枚举定义</span>
+<span class="keyword">enum</span> UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+<span class="keyword">enum</span> PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  DELETED
+}
+
+<span class="keyword">enum</span> SortOrder {
+  ASC
+  DESC
+}
+
+<span class="keyword">enum</span> MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+      </div>
+
+      <h3>使用枚举</h3>
+      <div class="code-block">
+<span class="comment">// 在对象类型中使用</span>
+<span class="keyword">type</span> User {
+  id: ID!
+  name: String!
+  role: UserRole!       <span class="comment">// 必填枚举</span>
+  status: UserStatus    <span class="comment">// 可选枚举</span>
+}
+
+<span class="keyword">type</span> Post {
+  id: ID!
+  title: String!
+  status: PostStatus!
+}
+
+<span class="comment">// 在参数中使用</span>
+<span class="keyword">type</span> Query {
+  users(role: UserRole): [User!]!
+  posts(status: PostStatus, sort: SortOrder = DESC): [Post!]!
+}
+
+<span class="comment">// 在输入类型中使用</span>
+<span class="keyword">input</span> CreateUserInput {
+  name: String!
+  email: String!
+  role: UserRole = USER    <span class="comment">// 带默认值</span>
+}
+
+<span class="keyword">input</span> PostFilterInput {
+  status: PostStatus
+  sort: SortOrder
+}
+      </div>
+
+      <h3>枚举查询示例</h3>
+      <div class="code-block">
+<span class="comment">// 查询管理员用户</span>
+query GetAdmins {
+  users(role: ADMIN) {
+    id
+    name
+    role
+  }
+}
+
+<span class="comment">// 创建用户时指定角色</span>
+mutation CreateUser {
+  createUser(input: {
+    name: <span class="string">"管理员"</span>
+    email: <span class="string">"admin@example.com"</span>
+    role: ADMIN
+  }) {
+    id
+    name
+    role
+  }
+}
+
+<span class="comment">// 获取已发布的文章</span>
+query GetPublishedPosts {
+  posts(status: PUBLISHED, sort: DESC) {
+    title
+    createdAt
+  }
+}
+      </div>
+
+      <h3>TypeScript 枚举映射</h3>
+      <div class="code-block">
+<span class="comment">// GraphQL Schema</span>
+<span class="keyword">enum</span> UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+<span class="comment">// TypeScript 定义</span>
+<span class="keyword">enum</span> UserRole {
+  USER = <span class="string">'USER'</span>,
+  ADMIN = <span class="string">'ADMIN'</span>,
+  MODERATOR = <span class="string">'MODERATOR'</span>,
+}
+
+<span class="comment">// Resolver 使用</span>
+<span class="keyword">const</span> resolvers = {
+  Query: {
+    users: <span class="keyword">async</span> (_: <span class="keyword">any</span>, { role }: { role?: UserRole }) => {
+      <span class="keyword">if</span> (role === UserRole.ADMIN) {
+        <span class="keyword">return</span> getAdminUsers();
+      }
+      <span class="keyword">return</span> getAllUsers();
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 接口类型</h2>
+
+      <h3>定义接口</h3>
+      <div class="code-block">
+<span class="comment">// 基础接口</span>
+<span class="keyword">interface</span> Node {
+  id: ID!
+  createdAt: DateTime!
+}
+
+<span class="keyword">interface</span> Timestamped {
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+<span class="keyword">interface</span> Ownable {
+  owner: User!
+}
+
+<span class="comment">// 媒体接口</span>
+<span class="keyword">interface</span> Media {
+  id: ID!
+  url: String!
+  filename: String!
+  mimeType: String!
+  size: Int!
+}
+      </div>
+
+      <h3>实现接口</h3>
+      <div class="code-block">
+<span class="comment">// 实现单个接口</span>
+<span class="keyword">type</span> User <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  name: String!
+  email: String!
+}
+
+<span class="keyword">type</span> Post <span class="keyword">implements</span> Node {
+  id: ID!
+  createdAt: DateTime!
+  title: String!
+  content: String
+  author: User!
+}
+
+<span class="comment">// 实现多个接口</span>
+<span class="keyword">type</span> Image <span class="keyword">implements</span> Node & Media & Ownable {
+  <span class="comment">// Node 接口字段</span>
+  id: ID!
+  createdAt: DateTime!
+
+  <span class="comment">// Media 接口字段</span>
+  url: String!
+  filename: String!
+  mimeType: String!
+  size: Int!
+
+  <span class="comment">// Ownable 接口字段</span>
+  owner: User!
+
+  <span class="comment">// Image 特有字段</span>
+  width: Int!
+  height: Int!
+  alt: String
+}
+
+<span class="keyword">type</span> Video <span class="keyword">implements</span> Node & Media & Ownable {
+  id: ID!
+  createdAt: DateTime!
+  url: String!
+  filename: String!
+  mimeType: String!
+  size: Int!
+  owner: User!
+
+  <span class="comment">// Video 特有字段</span>
+  duration: Int!
+  thumbnail: String
+  resolution: String
+}
+      </div>
+
+      <h3>接口作为返回类型</h3>
+      <div class="code-block">
+<span class="keyword">type</span> Query {
+  <span class="comment">// 返回接口类型</span>
+  node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]!
+
+  <span class="comment">// 返回媒体列表</span>
+  media: [Media!]!
+
+  <span class="comment">// 用户的时间线（混合类型）</span>
+  timeline(userId: ID!): [Node!]!
+}
+
+<span class="comment">// 查询时使用内联片段</span>
+query GetNode($id: ID!) {
+  node(id: $id) {
+    id
+    createdAt
+    ... <span class="keyword">on</span> User {
+      name
+      email
+    }
+    ... <span class="keyword">on</span> Post {
+      title
+      content
+    }
+    ... <span class="keyword">on</span> Image {
+      url
+      width
+      height
+    }
+  }
+}
+      </div>
+
+      <h3>接口 Resolver</h3>
+      <div class="code-block">
+<span class="keyword">const</span> resolvers = {
+  <span class="comment">// 接口字段 resolver</span>
+  Node: {
+    __resolveType(obj: <span class="keyword">any</span>) {
+      <span class="keyword">if</span> (obj.name && obj.email) <span class="keyword">return</span> <span class="string">'User'</span>;
+      <span class="keyword">if</span> (obj.title) <span class="keyword">return</span> <span class="string">'Post'</span>;
+      <span class="keyword">if</span> (obj.mimeType) <span class="keyword">return</span> <span class="string">'Media'</span>;
+      <span class="keyword">return null</span>;
+    },
+  },
+
+  Media: {
+    __resolveType(obj: <span class="keyword">any</span>) {
+      <span class="keyword">if</span> (obj.mimeType.startsWith(<span class="string">'image/'</span>)) <span class="keyword">return</span> <span class="string">'Image'</span>;
+      <span class="keyword">if</span> (obj.mimeType.startsWith(<span class="string">'video/'</span>)) <span class="keyword">return</span> <span class="string">'Video'</span>;
+      <span class="keyword">return null</span>;
+    },
+  },
+
+  <span class="comment">// 接口共享字段的 resolver</span>
+  Ownable: {
+    owner: <span class="keyword">async</span> (obj, _, context) => {
+      <span class="keyword">return</span> context.dataSources.userApi.getById(obj.ownerId);
+    },
+  },
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 枚举 vs 接口 对比</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>枚举</th>
+            <th>接口</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>用途</td>
+            <td>定义有限的选项值</td>
+            <td>定义共享字段</td>
+          </tr>
+          <tr>
+            <td>值类型</td>
+            <td>字符串</td>
+            <td>对象</td>
+          </tr>
+          <tr>
+            <td>扩展性</td>
+            <td>添加新值</td>
+            <td>添加新实现类型</td>
+          </tr>
+          <tr>
+            <td>使用场景</td>
+            <td>状态、角色、类型标识</td>
+            <td>多态、共享行为</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 实战示例</h2>
+
+      <h3>通知系统</h3>
+      <div class="code-block">
+<span class="keyword">enum</span> NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MENTION
+  SYSTEM
+}
+
+<span class="keyword">interface</span> Notification {
+  id: ID!
+  type: NotificationType!
+  createdAt: DateTime!
+  read: Boolean!
+}
+
+<span class="keyword">type</span> LikeNotification <span class="keyword">implements</span> Notification {
+  id: ID!
+  type: NotificationType!
+  createdAt: DateTime!
+  read: Boolean!
+  like: Like!
+  post: Post!
+}
+
+<span class="keyword">type</span> CommentNotification <span class="keyword">implements</span> Notification {
+  id: ID!
+  type: NotificationType!
+  createdAt: DateTime!
+  read: Boolean!
+  comment: Comment!
+  post: Post!
+}
+
+<span class="keyword">type</span> FollowNotification <span class="keyword">implements</span> Notification {
+  id: ID!
+  type: NotificationType!
+  createdAt: DateTime!
+  read: Boolean!
+  follower: User!
+}
+
+<span class="keyword">type</span> Query {
+  notifications(type: NotificationType, unreadOnly: Boolean): [Notification!]!
+}
+
+<span class="comment">// 查询</span>
+query GetNotifications {
+  notifications(unreadOnly: <span class="keyword">true</span>) {
+    id
+    type
+    createdAt
+    read
+    ... <span class="keyword">on</span> LikeNotification {
+      post { title }
+    }
+    ... <span class="keyword">on</span> CommentNotification {
+      comment { content }
+      post { title }
+    }
+    ... <span class="keyword">on</span> FollowNotification {
+      follower { name avatar }
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>枚举定义有限的选项值集合</li>
+        <li>枚举可用于字段、参数、输入类型</li>
+        <li>接口定义共享字段，支持多态</li>
+        <li>一个类型可以实现多个接口</li>
+        <li>使用 __resolveType 解析接口的实际类型</li>
+        <li>内联片段查询接口的具体字段</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="60-2-参数与参数类型.html">← 上一节：参数与参数类型</a>
+      <a href="60-4-联合类型.html">下一节：联合类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

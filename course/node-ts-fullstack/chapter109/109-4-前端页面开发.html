@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>109.4 前端页面开发 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="109-1-需求分析.html">第109章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>109.4 前端页面开发</h1>
+      <p class="subtitle">使用React构建博客前端</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握React组件化开发</li>
+        <li>学会状态管理</li>
+        <li>理解路由配置</li>
+        <li>了解API调用封装</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 项目结构</h2>
+      <div class="code-block">
+// React项目目录结构
+
+src/
+├── components/
+│   ├── common/
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── Modal.tsx
+│   │   └── Loading.tsx
+│   ├── layout/
+│   │   ├── Header.tsx
+│   │   ├── Footer.tsx
+│   │   └── Sidebar.tsx
+│   └── article/
+│       ├── ArticleCard.tsx
+│       ├── ArticleList.tsx
+│       ├── ArticleDetail.tsx
+│       └── ArticleEditor.tsx
+├── pages/
+│   ├── Home.tsx
+│   ├── ArticlePage.tsx
+│   ├── Login.tsx
+│   ├── Register.tsx
+│   ├── Profile.tsx
+│   └── Editor.tsx
+├── hooks/
+│   ├── useAuth.ts
+│   ├── useArticles.ts
+│   └── useComments.ts
+├── services/
+│   ├── api.ts
+│   ├── auth.service.ts
+│   └── article.service.ts
+├── store/
+│   ├── useAuthStore.ts
+│   └── useArticleStore.ts
+├── types/
+│   └── index.ts
+├── App.tsx
+└── main.tsx
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 核心组件实现</h2>
+      <div class="code-block">
+// components/article/ArticleList.tsx
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { getArticles } from '../../services/article.service';
+import ArticleCard from './ArticleCard';
+
+interface ArticleListProps {
+  categoryId?: string;
+  tagId?: string;
+}
+
+export default function ArticleList({ categoryId, tagId }: ArticleListProps) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['articles', { categoryId, tagId }],
+    queryFn: () => getArticles({ categoryId, tagId }),
+  });
+
+  if (isLoading) {
+    return <div className="loading">加载中...</div>;
+  }
+
+  if (error) {
+    return <div className="error">加载失败</div>;
+  }
+
+  return (
+    <div className="article-list">
+      {data.items.map(article => (
+        <ArticleCard key={article.id} article={article} />
+      ))}
+
+      <div className="pagination">
+        {data.page > 1 && (
+          <Link to={`?page=${data.page - 1}`}>上一页</Link>
+        )}
+        <span>第 {data.page} / {data.totalPages} 页</span>
+        {data.page < data.totalPages && (
+          <Link to={`?page=${data.page + 1}`}>下一页</Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// components/article/ArticleEditor.tsx
+import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { createArticle, updateArticle } from '../../services/article.service';
+import MarkdownEditor from 'react-markdown-editor-lite';
+import 'react-markdown-editor-lite/lib/index.css';
+
+interface ArticleEditorProps {
+  article?: Article;
+}
+
+export default function ArticleEditor({ article }: ArticleEditorProps) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState(article?.title || '');
+  const [content, setContent] = useState(article?.content || '');
+  const [categoryId, setCategoryId] = useState(article?.categoryId || '');
+  const [status, setStatus] = useState<'draft' | 'published'>(article?.status || 'draft');
+
+  const mutation = useMutation({
+    mutationFn: (data: CreateArticleDto) =>
+      article ? updateArticle(article.id, data) : createArticle(data),
+    onSuccess: (result) => {
+      navigate(`/articles/${result.id}`);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutation.mutate({
+      title,
+      content,
+      categoryId,
+      status,
+      summary: content.slice(0, 200),
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="editor-form">
+      <div className="form-group">
+        <input
+          type="text"
+          placeholder="文章标题"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          className="title-input"
+        />
+      </div>
+
+      <div className="form-group">
+        <select
+          value={categoryId}
+          onChange={e => setCategoryId(e.target.value)}
+        >
+          <option value="">选择分类</option>
+          {/* 分类列表 */}
+        </select>
+      </div>
+
+      <div className="editor-container">
+        <MarkdownEditor
+          value={content}
+          onChange={({ text }) => setContent(text)}
+          renderHTML={text => <div dangerouslySetInnerHTML={{ __html: marked(text) }} />}
+        />
+      </div>
+
+      <div className="actions">
+        <button
+          type="button"
+          onClick={() => setStatus('draft')}
+          className="btn-secondary"
+        >
+          保存草稿
+        </button>
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={mutation.isPending}
+        >
+          {article ? '更新文章' : '发布文章'}
+        </button>
+      </div>
+    </form>
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> 状态管理与API</h2>
+      <div class="code-block">
+// services/api.ts
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  timeout: 10000,
+});
+
+// 请求拦截器
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 响应拦截器
+api.interceptors.response.use(
+  response => response.data,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// services/article.service.ts
+import api from './api';
+
+export const getArticles = (params?: {
+  page?: number;
+  limit?: number;
+  categoryId?: string;
+  tagId?: string;
+}) => api.get('/articles', { params });
+
+export const getArticle = (id: string) => api.get(`/articles/${id}`);
+
+export const createArticle = (data: CreateArticleDto) =>
+  api.post('/articles', data);
+
+export const updateArticle = (id: string, data: UpdateArticleDto) =>
+  api.put(`/articles/${id}`, data);
+
+export const deleteArticle = (id: string) =>
+  api.delete(`/articles/${id}`);
+
+// store/useAuthStore.ts
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  login: (user: User, token: string) => void;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      login: (user, token) => {
+        localStorage.setItem('token', token);
+        set({ user, token });
+      },
+      logout: () => {
+        localStorage.removeItem('token');
+        set({ user: null, token: null });
+      },
+    }),
+    { name: 'auth-storage' }
+  )
+);
+
+// hooks/useAuth.ts
+import { useAuthStore } from '../store/useAuthStore';
+
+export function useAuth() {
+  const { user, token, login, logout } = useAuthStore();
+
+  return {
+    user,
+    token,
+    isAuthenticated: !!token,
+    login,
+    logout,
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 组件化开发提高代码复用</li>
+            <li>• TanStack Query管理服务端状态</li>
+            <li>• Zustand管理客户端状态</li>
+            <li>• axios封装API请求</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="109-3-后端API实现.html">← 上一节：后端 API 实现</a>
+      <a href="109-5-部署上线.html">下一节：部署上线 →</a>
+    </div>
+  </div>
+</body>
+</html>

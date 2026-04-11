@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>98.1 资源优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="98-1-资源优化.html">第九十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>98.1 资源优化</h1>
+      <p class="subtitle">前端资源加载优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解前端资源优化的重要性</li>
+        <li>掌握图片优化技巧</li>
+        <li>学会字体优化方法</li>
+        <li>了解资源预加载策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 资源优化概述</h2>
+      <div class="code-block">
+# 前端资源类型
+
+## 静态资源
+- 图片（PNG, JPG, SVG, WebP）
+- 字体（WOFF, WOFF2）
+- 样式（CSS）
+- 脚本（JavaScript）
+- 媒体（视频, 音频）
+
+## 资源优化目标
+- 减小文件体积
+- 减少请求数量
+- 加快加载速度
+- 提升用户体验
+
+# 优化策略
+
+┌─────────────────┬──────────────────────────────────┐
+│     策略        │              方法                 │
+├─────────────────┼──────────────────────────────────┤
+│ 压缩            │ Gzip, Brotli, 图片压缩           │
+│ 格式转换        │ WebP, AVIF, WOFF2               │
+│ 合并            │ CSS/JS 合并, Sprite 图           │
+│ 懒加载          │ 图片懒加载, 组件懒加载           │
+│ 预加载          │ preload, prefetch, preconnect   │
+│ 缓存            │ 浏览器缓存, CDN 缓存            │
+└─────────────────┴──────────────────────────────────┘
+
+# 性能指标
+
+## Core Web Vitals
+- LCP (Largest Contentful Paint): 最大内容绘制 &lt; 2.5s
+- FID (First Input Delay): 首次输入延迟 &lt; 100ms
+- CLS (Cumulative Layout Shift): 累积布局偏移 &lt; 0.1
+
+## 其他指标
+- FCP (First Contentful Paint)
+- TTI (Time to Interactive)
+- TBT (Total Blocking Time)
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 图片优化</h2>
+      <div class="code-block">
+# 使用现代图片格式
+
+&lt;!-- 使用 picture 元素提供多种格式 --&gt;
+&lt;picture&gt;
+  &lt;source srcset="image.avif" type="image/avif"&gt;
+  &lt;source srcset="image.webp" type="image/webp"&gt;
+  &lt;img src="image.jpg" alt="description"&gt;
+&lt;/picture&gt;
+
+# 响应式图片
+
+&lt;img
+  srcset="
+    image-320w.jpg 320w,
+    image-640w.jpg 640w,
+    image-1280w.jpg 1280w
+  "
+  sizes="(max-width: 640px) 100vw, 50vw"
+  src="image-640w.jpg"
+  alt="description"
+&gt;
+
+# 图片懒加载
+
+&lt;!-- 原生懒加载 --&gt;
+&lt;img src="image.jpg" loading="lazy" alt="description"&gt;
+
+&lt;!-- Intersection Observer API --&gt;
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const img = entry.target;
+      img.src = img.dataset.src;
+      observer.unobserve(img);
+    }
+  });
+});
+
+document.querySelectorAll('img[data-src]').forEach(img => {
+  observer.observe(img);
+});
+
+# 构建时图片优化
+
+// vite.config.ts
+import viteImagemin from 'vite-plugin-imagemin';
+
+export default defineConfig({
+  plugins: [
+    viteImagemin({
+      gifsicle: { optimizationLevel: 3 },
+      optipng: { optimizationLevel: 7 },
+      mozjpeg: { quality: 80 },
+      svgo: {
+        plugins: [
+          { name: 'removeViewBox', active: false },
+        ],
+      },
+      webp: { quality: 80 },
+    }),
+  ],
+});
+
+# 使用 sharp 处理图片
+
+import sharp from 'sharp';
+
+// 转换格式
+await sharp('input.png')
+  .webp({ quality: 80 })
+  .toFile('output.webp');
+
+// 调整大小
+await sharp('input.jpg')
+  .resize(800, 600, { fit: 'inside' })
+  .toFile('output.jpg');
+
+// 压缩
+await sharp('input.jpg')
+  .jpeg({ quality: 80, mozjpeg: true })
+  .toFile('output.jpg');
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">图片格式选择</div>
+          <p>照片使用 WebP/AVIF，图标使用 SVG，需要透明使用 PNG 或 WebP。优先选择新一代格式。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 字体优化</h2>
+      <div class="code-block">
+# 使用 WOFF2 格式
+
+@font-face {
+  font-family: 'MyFont';
+  src: url('font.woff2') format('woff2'),
+       url('font.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;  /* 避免 FOIT */
+}
+
+# 字体子集化
+
+// 使用 fonttools 生成子集
+pip install fonttools brotli
+
+pyftsubset font.ttf \
+  --output-file=font-subset.woff2 \
+  --subset-text="常用汉字" \
+  --flavor=woff2
+
+# 字体预加载
+
+&lt;link rel="preload" href="font.woff2" as="font" type="font/woff2" crossorigin&gt;
+
+# CSS 字体加载优化
+
+/* 使用 font-display */
+@font-face {
+  font-family: 'MyFont';
+  src: url('font.woff2') format('woff2');
+  font-display: optional;  /* 或 swap, fallback, block */
+}
+
+/* font-display 策略 */
+/* block: 隐藏文本直到字体加载（FOIT）*/
+/* swap: 先显示后备字体，加载后替换（FOUT）*/
+/* fallback: 短暂隐藏，超时使用后备字体 */
+/* optional: 网络慢时使用后备字体 */
+
+# JavaScript 字体加载
+
+const font = new FontFace('MyFont', 'url(font.woff2)');
+
+font.load().then((loadedFont) => {
+  document.fonts.add(loadedFont);
+  document.body.style.fontFamily = 'MyFont, sans-serif';
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 资源预加载</h2>
+      <div block">
+# preload - 预加载当前页面需要的资源
+
+&lt;!-- 预加载字体 --&gt;
+&lt;link rel="preload" href="font.woff2" as="font" type="font/woff2" crossorigin&gt;
+
+&lt;!-- 预加载关键 CSS --&gt;
+&lt;link rel="preload" href="critical.css" as="style"&gt;
+
+&lt;!-- 预加载图片 --&gt;
+&lt;link rel="preload" href="hero.jpg" as="image"&gt;
+
+&lt;!-- 预加载脚本 --&gt;
+&lt;link rel="preload" href="critical.js" as="script"&gt;
+
+# prefetch - 预取下一页面可能需要的资源
+
+&lt;!-- 空闲时预取 --&gt;
+&lt;link rel="prefetch" href="next-page.js"&gt;
+&lt;link rel="prefetch" href="next-page.css"&gt;
+
+# preconnect - 预连接
+
+&lt;!-- 预连接到 CDN --&gt;
+&lt;link rel="preconnect" href="https://cdn.example.com"&gt;
+&lt;link rel="dns-prefetch" href="https://cdn.example.com"&gt;
+
+# modulepreload - ES 模块预加载
+
+&lt;link rel="modulepreload" href="module.js"&gt;
+
+# 动态预加载
+
+// 根据用户行为预加载
+function prefetchOnHover(link) {
+  link.addEventListener('mouseenter', () => {
+    const prefetchLink = document.createElement('link');
+    prefetchLink.rel = 'prefetch';
+    prefetchLink.href = link.href;
+    document.head.appendChild(prefetchLink);
+  }, { once: true });
+}
+
+// 使用 link rel="prerender" 完全预渲染
+&lt;link rel="prerender" href="https://example.com/next-page"&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 WebP/AVIF 等现代图片格式</li>
+            <li>• 图片懒加载减少初始加载</li>
+            <li>• 字体使用 WOFF2 格式和子集化</li>
+            <li>• 合理使用 preload 和 prefetch</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter97/97-5-异步处理.html">← 上一章：异步处理</a>
+      <a href="98-2-代码分割.html">下一节：代码分割 →</a>
+    </div>
+  </div>
+</body>
+</html>

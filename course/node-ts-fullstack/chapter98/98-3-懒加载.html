@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>98.3 懒加载 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="98-1-资源优化.html">第九十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>98.3 懒加载</h1>
+      <p class="subtitle">延迟加载策略实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解懒加载的原理</li>
+        <li>掌握图片懒加载实现</li>
+        <li>学会组件懒加载</li>
+        <li>了解数据懒加载策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 懒加载概述</h2>
+      <div class="code-block">
+# 什么是懒加载
+
+延迟加载非关键资源，直到需要时才加载
+
+# 懒加载的好处
+
+## 性能提升
+- 减少初始加载时间
+- 减少带宽消耗
+- 降低服务器压力
+
+## 用户体验
+- 页面更快可交互
+- 按需加载内容
+- 节省用户流量
+
+# 懒加载类型
+
+┌─────────────────┬──────────────────────────────────┐
+│     类型        │              场景                 │
+├─────────────────┼──────────────────────────────────┤
+│ 图片懒加载      │ 滚动到可视区域时加载            │
+│ 组件懒加载      │ 需要显示时加载组件              │
+│ 数据懒加载      │ 滚动到底部时加载更多            │
+│ 路由懒加载      │ 访问路由时加载页面              │
+│ 第三方脚本      │ 用户交互时加载                  │
+└─────────────────┴──────────────────────────────────┘
+
+# 懒加载实现原理
+
+1. 检测元素是否进入可视区域
+2. 触发加载操作
+3. 替换占位内容为真实内容
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 图片懒加载</h2>
+      <div class="code-block">
+# 原生懒加载
+
+&lt;!-- 最简单的方式 --&gt;
+&lt;img src="image.jpg" loading="lazy" alt="description"&gt;
+
+&lt;!-- 带占位图 --&gt;
+&lt;img
+  src="placeholder.jpg"
+  data-src="image.jpg"
+  loading="lazy"
+  alt="description"
+&gt;
+
+# Intersection Observer 实现
+
+class LazyLoader {
+  constructor() {
+    this.observer = new IntersectionObserver(
+      this.handleIntersection.bind(this),
+      {
+        root: null,
+        rootMargin: '50px',
+        threshold: 0.1,
+      }
+    );
+  }
+
+  handleIntersection(entries) {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        this.loadImage(entry.target);
+        this.observer.unobserve(entry.target);
+      }
+    });
+  }
+
+  loadImage(img) {
+    const src = img.dataset.src;
+    if (!src) return;
+
+    img.src = src;
+    img.classList.add('loaded');
+    img.removeAttribute('data-src');
+  }
+
+  observe(elements) {
+    elements.forEach(el => this.observer.observe(el));
+  }
+}
+
+// 使用
+const loader = new LazyLoader();
+loader.observe(document.querySelectorAll('img[data-src]'));
+
+# React 图片懒加载组件
+
+function LazyImage({ src, alt, placeholder }) {
+  const [imageSrc, setImageSrc] = useState(placeholder);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setImageSrc(src);
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: '50px' }
+    );
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [src]);
+
+  return (
+    &lt;img
+      ref={imgRef}
+      src={imageSrc}
+      alt={alt}
+      onLoad={() => setIsLoaded(true)}
+      style={{ opacity: isLoaded ? 1 : 0.5, transition: 'opacity 0.3s' }}
+    /&gt;
+  );
+}
+
+# 使用第三方库
+
+import LazyLoad from 'vanilla-lazyload';
+
+const lazyLoad = new LazyLoad({
+  elements_selector: '.lazy',
+  threshold: 50,
+});
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">懒加载距离</div>
+          <p>设置 rootMargin 可以提前加载，例如 '100px' 表示元素距离可视区域 100px 时就开始加载。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 组件懒加载</h2>
+      <div class="code-block">
+# React.lazy + Suspense
+
+import { lazy, Suspense } from 'react';
+
+// 懒加载组件
+const HeavyChart = lazy(() => import('./HeavyChart'));
+const HeavyTable = lazy(() => import('./HeavyTable'));
+
+function Dashboard() {
+  const [showChart, setShowChart] = useState(false);
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() => setShowChart(true)}&gt;
+        Show Chart
+      &lt;/button&gt;
+
+      {showChart && (
+        &lt;Suspense fallback={&lt;Loading /&gt;}&gt;
+          &lt;HeavyChart /&gt;
+        &lt;/Suspense&gt;
+      )}
+
+      &lt;Suspense fallback={&lt;Loading /&gt;}&gt;
+        &lt;HeavyTable /&gt;
+      &lt;/Suspense&gt;
+    &lt;/div&gt;
+  );
+}
+
+# 视口内组件懒加载
+
+function LazyVisible({ children, fallback, offset = '100px' }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: offset }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, [offset]);
+
+  return (
+    &lt;div ref={ref}&gt;
+      {isVisible ? children : fallback}
+    &lt;/div&gt;
+  );
+}
+
+// 使用
+&lt;LazyVisible fallback={&lt;Skeleton /&gt;}&gt;
+  &lt;HeavyComponent /&gt;
+&lt;/LazyVisible&gt;
+
+# Vue 组件懒加载
+
+import { defineAsyncComponent } from 'vue';
+
+const AsyncComponent = defineAsyncComponent({
+  loader: () => import('./HeavyComponent.vue'),
+  loadingComponent: Loading,
+  errorComponent: Error,
+  delay: 200,
+  timeout: 10000,
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 数据懒加载</h2>
+      <div class="code-block">
+# 无限滚动加载
+
+function useInfiniteScroll(fetchFn, options = {}) {
+  const { threshold = 100 } = options;
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const pageRef = useRef(1);
+
+  const loadMore = async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
+    try {
+      const result = await fetchFn(pageRef.current);
+      setData(prev => [...prev, ...result.items]);
+      setHasMore(result.hasMore);
+      pageRef.current++;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+      if (scrollHeight - scrollTop - clientHeight < threshold) {
+        loadMore();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    loadMore();  // 初始加载
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return { data, loading, hasMore, loadMore };
+}
+
+# 使用 Intersection Observer
+
+function InfiniteList({ fetchFn }) {
+  const loaderRef = useRef(null);
+  const [items, setItems] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      async ([entry]) => {
+        if (entry.isIntersecting && hasMore) {
+          const result = await fetchFn();
+          setItems(prev => [...prev, ...result.items]);
+          setHasMore(result.hasMore);
+        }
+      },
+      { rootMargin: '100px' }
+    );
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore]);
+
+  return (
+    &lt;div&gt;
+      {items.map(item => (
+        &lt;Item key={item.id} data={item} /&gt;
+      ))}
+      {hasMore && &lt;div ref={loaderRef}&gt;Loading...&lt;/div&gt;}
+    &lt;/div&gt;
+  );
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Intersection Observer 是懒加载的核心 API</li>
+            <li>• 图片懒加载优先使用原生 loading="lazy"</li>
+            <li>• 组件懒加载使用 React.lazy + Suspense</li>
+            <li>• 数据懒加载实现无限滚动</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="98-2-代码分割.html">← 上一节：代码分割</a>
+      <a href="98-4-CDN加速.html">下一节：CDN 加速 →</a>
+    </div>
+  </div>
+</body>
+</html>

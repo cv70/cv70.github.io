@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>102.2 云函数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="102-1-Serverless概念.html">第102章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>102.2 云函数</h1>
+      <p class="subtitle">深入理解云函数的工作原理与开发实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解云函数的执行模型</li>
+        <li>掌握云函数的开发模式</li>
+        <li>学会处理触发器和事件</li>
+        <li>了解云函数最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Cloud Functions" class="card-image">
+      <h3 class="card-title">云函数执行模型</h3>
+      <p class="card-text">
+        云函数采用事件驱动模型。当触发器（HTTP 请求、定时任务、数据库变更等）触发函数时，
+        云平台会启动一个执行实例，运行函数代码，处理完成后返回结果。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 函数执行生命周期</h2>
+      <div class="code-block">
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   触发器    │────▶│   冷启动    │────▶│   执行函数   │
+│  HTTP/API   │     │  加载运行时  │     │   处理事件   │
+│  定时任务   │     │  初始化环境  │     │   返回结果   │
+│  消息队列   │     └─────────────┘     └─────────────┘
+└─────────────┘                              │
+                                              ▼
+      <span class="comment"># 热启动：复用已有实例，跳过冷启动</span>
+      ┌─────────────┐     ┌─────────────┐
+      │   触发器    │────▶│   执行函数   │
+      │   (后续)    │     │  (热启动)    │
+      └─────────────┘     └─────────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 函数代码结构</h2>
+      <div class="code-block">
+<span class="comment">// 基本函数结构 (AWS Lambda / 阿里云函数计算)</span>
+exports.handler = async (event, context) => {
+  <span class="comment">// event: 触发事件数据</span>
+  <span class="comment">// context: 运行时上下文</span>
+
+  <span class="comment">// 业务逻辑处理</span>
+  const result = await processData(event);
+
+  <span class="comment">// 返回结果</span>
+  return {
+    statusCode: 200,
+    body: JSON.stringify(result)
+  };
+};
+
+<span class="comment">// Vercel / Next.js API Route</span>
+export default async function handler(req, res) {
+  <span class="comment">// req: HTTP 请求对象</span>
+  <span class="comment">// res: HTTP 响应对象</span>
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { name, email } = req.body;
+
+  <span class="comment">// 处理逻辑</span>
+  const user = await createUser({ name, email });
+
+  res.status(200).json({ user });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 触发器类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>触发器类型</th>
+            <th>说明</th>
+            <th>典型场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>HTTP 触发器</strong></td>
+            <td>通过 HTTP 请求触发</td>
+            <td>API 接口、Webhook</td>
+          </tr>
+          <tr>
+            <td><strong>定时触发器</strong></td>
+            <td>按计划定时触发</td>
+            <td>定时任务、报表生成</td>
+          </tr>
+          <tr>
+            <td><strong>对象存储触发</strong></td>
+            <td>文件上传/删除时触发</td>
+            <td>图片处理、文件转换</td>
+          </tr>
+          <tr>
+            <td><strong>数据库触发</strong></td>
+            <td>数据变更时触发</td>
+            <td>数据同步、审计日志</td>
+          </tr>
+          <tr>
+            <td><strong>消息队列触发</strong></td>
+            <td>消息到达时触发</td>
+            <td>异步处理、事件驱动</td>
+          </tr>
+          <tr>
+            <td><strong>API 网关触发</strong></td>
+            <td>通过 API 网关调用</td>
+            <td>REST API、微服务</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> TypeScript 云函数开发</h2>
+      <div class="code-block">
+<span class="comment">// src/handlers/user.ts</span>
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { UserService } from '../services/user.service';
+
+const userService = new UserService();
+
+export const getUser = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  try {
+    const userId = event.pathParameters?.id;
+
+    if (!userId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'User ID is required' })
+      };
+    }
+
+    const user = await userService.findById(userId);
+
+    if (!user) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'User not found' })
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(user)
+    };
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+};
+
+export const createUser = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { name, email } = body;
+
+    <span class="comment">// 验证输入</span>
+    if (!name || !email) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Name and email are required' })
+      };
+    }
+
+    const user = await userService.create({ name, email });
+
+    return {
+      statusCode: 201,
+      body: JSON.stringify(user)
+    };
+  } catch (error) {
+    console.error('Error creating user:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+  }
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 项目结构</h2>
+      <div class="code-block">
+my-serverless-api/
+├── src/
+│   ├── handlers/           <span class="comment"># 云函数处理程序</span>
+│   │   ├── user.ts
+│   │   └── product.ts
+│   ├── services/           <span class="comment"># 业务服务</span>
+│   │   ├── user.service.ts
+│   │   └── db.service.ts
+│   ├── models/             <span class="comment"># 数据模型</span>
+│   │   └── user.model.ts
+│   └── utils/              <span class="comment"># 工具函数</span>
+│       ├── response.ts
+│       └── validation.ts
+├── serverless.yml          <span class="comment"># Serverless Framework 配置</span>
+├── tsconfig.json
+├── package.json
+└── webpack.config.js       <span class="comment"># 打包配置</span>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 冷启动优化</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">减少冷启动时间</h3>
+          <ul class="feature-list">
+            <li>减少依赖包大小</li>
+            <li>延迟初始化非必要资源</li>
+            <li>使用 Provisioned Concurrency</li>
+            <li>保持函数活跃（定时 ping）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">代码优化示例</h3>
+          <div class="code-block">
+<span class="comment">// 不推荐：每次调用都初始化</span>
+export const handler = async (event) => {
+  const db = new Database();  <span class="comment">// 冷启动慢</span>
+  return db.query(event.id);
+};
+
+<span class="comment">// 推荐：复用连接</span>
+let db: Database | null = null;
+
+export const handler = async (event) => {
+  if (!db) {
+    db = new Database();  <span class="comment">// 只初始化一次</span>
+  }
+  return db.query(event.id);
+};
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">云函数最佳实践</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>单一职责：每个函数只做一件事</li>
+          <li>无状态设计：避免依赖本地状态</li>
+          <li>幂等性：同一请求多次执行结果相同</li>
+          <li>合理设置超时和内存</li>
+          <li>使用环境变量管理配置</li>
+          <li>完善的错误处理和日志</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 云函数是事件驱动的无状态计算单元</li>
+            <li>• 支持多种触发器：HTTP、定时、存储、消息队列等</li>
+            <li>• 注意冷启动优化，复用连接和资源</li>
+            <li>• 遵循单一职责、无状态、幂等性原则</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="102-1-Serverless概念.html">← 上一节</a>
+      <a href="102-3-Vercel部署.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

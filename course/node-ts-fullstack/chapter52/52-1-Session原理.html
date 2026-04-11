@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.1 Session 原理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="52-1-Session原理.html">第五十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>52.1 Session 原理</h1>
+      <p class="subtitle">深入理解服务器端会话机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解Session的工作原理</li>
+        <li>掌握Cookie与Session的关系</li>
+        <li>了解Session的生命周期</li>
+        <li>学会Session安全配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Session 工作流程</h2>
+      <div class="code-block">
+/*
+Session 认证流程：
+
+1. 客户端发送登录请求
+   POST /login { username, password }
+
+2. 服务器验证凭证
+   - 查询数据库验证用户
+   - 验证成功后创建 Session
+
+3. 服务器创建 Session
+   - 生成唯一的 Session ID
+   - 存储 Session 数据（用户ID、角色等）
+   - 设置 Session 过期时间
+
+4. 服务器返回响应
+   - Set-Cookie: session_id=abc123; HttpOnly; Secure
+
+5. 后续请求
+   - 浏览器自动发送 Cookie: session_id=abc123
+   - 服务器根据 Session ID 查找 Session
+   - 验证通过后处理请求
+*/
+
+// Session 数据结构
+interface SessionData {
+  id: string;              // Session ID
+  userId: string;          // 用户ID
+  userRole: string;        // 用户角色
+  createdAt: Date;         // 创建时间
+  lastAccessed: Date;      // 最后访问时间
+  expiresAt: Date;         // 过期时间
+  data: Record&lt;string, any&gt;; // 自定义数据
+}
+
+// Cookie 配置
+interface CookieOptions {
+  httpOnly: boolean;       // 防止 JavaScript 访问
+  secure: boolean;         // 仅 HTTPS 传输
+  sameSite: 'strict' | 'lax' | 'none'; // CSRF 保护
+  maxAge: number;          // 有效期（毫秒）
+  path: string;            // Cookie 路径
+  domain?: string;         // Cookie 域名
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🍪</span> Cookie 与 Session 关系</h2>
+      <div class="code-block">
+// Cookie 是存储在客户端的小型数据
+// Session 是存储在服务器端的用户状态
+
+/*
+┌─────────────────────────────────────────────────────────────┐
+│                     Session 存储位置                         │
+├─────────────────────────────────────────────────────────────┤
+│  内存存储    │  简单快速  │  重启丢失、不支持多实例        │
+│  文件存储    │  持久化    │  性能差、不适合高并发          │
+│  数据库存储  │  持久化    │  可扩展、有性能开销            │
+│  Redis存储   │  快速持久  │  推荐、支持分布式              │
+└─────────────────────────────────────────────────────────────┘
+*/
+
+// Cookie 中存储的内容
+interface SessionCookie {
+  sessionId: string;       // Session 标识
+  // 不存储敏感信息！
+  // 用户数据存储在服务器端 Session 中
+}
+
+// 为什么不在 Cookie 中存储所有数据？
+// 1. Cookie 大小限制（4KB）
+// 2. 每次请求都会发送，增加网络开销
+// 3. 敏感数据暴露在客户端
+// 4. 客户端可以篡改 Cookie
+
+// 签名 Cookie 防止篡改
+import cookieParser from 'cookie-parser';
+
+app.use(cookieParser(process.env.COOKIE_SECRET));
+
+// 设置签名 Cookie
+res.cookie('sessionId', sessionId, {
+  signed: true,    // 使用签名
+  httpOnly: true,
+  secure: true,
+  maxAge: 24 * 60 * 60 * 1000
+});
+
+// 读取签名 Cookie
+const sessionId = req.signedCookies.sessionId;
+
+// 如果 Cookie 被篡改，signedCookies 会返回 false
+if (!sessionId) {
+  return res.status(401).json({ error: '无效的会话' });
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Cookie vs Session</div>
+          <p>Cookie存储在客户端，每次请求自动发送；Session存储在服务器端，通过Session ID关联。敏感数据应存储在Session中，Cookie只存储Session ID。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Session 生命周期</h2>
+      <div class="code-block">
+// Session 生命周期管理
+
+interface SessionStore {
+  // 创建 Session
+  create(sessionId: string, data: SessionData): Promise&lt;void&gt;;
+
+  // 获取 Session
+  get(sessionId: string): Promise&lt;SessionData | null&gt;;
+
+  // 更新 Session
+  update(sessionId: string, data: Partial&lt;SessionData&gt;): Promise&lt;void&gt;;
+
+  // 删除 Session
+  destroy(sessionId: string): Promise&lt;void&gt;;
+
+  // 清理过期 Session
+  cleanup(): Promise&lt;void&gt;;
+}
+
+// 内存 Session 存储（仅用于开发）
+class MemorySessionStore implements SessionStore {
+  private sessions: Map&lt;string, SessionData&gt; = new Map();
+
+  async create(sessionId: string, data: SessionData): Promise&lt;void&gt; {
+    this.sessions.set(sessionId, data);
+  }
+
+  async get(sessionId: string): Promise&lt;SessionData | null&gt; {
+    const session = this.sessions.get(sessionId);
+
+    if (!session) return null;
+
+    // 检查是否过期
+    if (session.expiresAt < new Date()) {
+      this.sessions.delete(sessionId);
+      return null;
+    }
+
+    // 更新最后访问时间
+    session.lastAccessed = new Date();
+    return session;
+  }
+
+  async destroy(sessionId: string): Promise&lt;void&gt; {
+    this.sessions.delete(sessionId);
+  }
+
+  async cleanup(): Promise&lt;void&gt; {
+    const now = new Date();
+    for (const [id, session] of this.sessions.entries()) {
+      if (session.expiresAt < now) {
+        this.sessions.delete(id);
+      }
+    }
+  }
+}
+
+// 定期清理过期 Session
+setInterval(() => {
+  sessionStore.cleanup();
+}, 60 * 60 * 1000); // 每小时执行
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> Session 安全配置</h2>
+      <div class="code-block">
+// 安全的 Session 配置
+const sessionConfig = {
+  name: 'sessionId',           // 不要使用默认的 connect.sid
+
+  secret: process.env.SESSION_SECRET!,  // 强随机密钥
+
+  resave: false,               // 不强制重新保存
+  saveUninitialized: false,    // 不保存未初始化的 Session
+
+  cookie: {
+    httpOnly: true,            // 防止 XSS 窃取
+    secure: process.env.NODE_ENV === 'production', // 仅 HTTPS
+    sameSite: 'strict' as const,  // 防止 CSRF
+    maxAge: 24 * 60 * 60 * 1000,  // 24小时
+    path: '/',
+    domain: undefined          // 使用当前域名
+  },
+
+  // Session ID 生成
+  genid: () => {
+    return crypto.randomBytes(16).toString('hex');
+  }
+};
+
+// 生成安全的 Session Secret
+function generateSessionSecret(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// 轮换 Session Secret（定期更换）
+async function rotateSessionSecret(): Promise&lt;void&gt; {
+  const newSecret = generateSessionSecret();
+
+  // 保存旧 Secret 用于验证现有 Session
+  const oldSecrets = await getOldSecrets();
+
+  // 配置支持多个 Secret（新 Secret 用于签名，旧 Secret 用于验证）
+  app.set('trust proxy', 1);
+  sessionConfig.secret = [newSecret, ...oldSecrets.slice(0, 2)];
+
+  // 逐步迁移用户到新 Secret
+  // 当所有用户都使用新 Secret 后，移除旧 Secret
+}
+
+// Session 固定攻击防护
+async function regenerateSession(
+  req: Request,
+  res: Response
+): Promise&lt;void&gt; {
+  const oldSessionData = req.session.data;
+
+  // 生成新的 Session ID
+  await new Promise&lt;void&gt;((resolve, reject) => {
+    req.session.regenerate((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  // 恢复 Session 数据
+  req.session.data = oldSessionData;
+}
+
+// 登录成功后重新生成 Session
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await authenticateUser(username, password);
+
+  if (user) {
+    // 防止 Session 固定攻击
+    await regenerateSession(req, res);
+
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+
+    res.json({ message: '登录成功' });
+  } else {
+    res.status(401).json({ error: '认证失败' });
+  }
+});
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">Session 固定攻击</div>
+          <p>攻击者诱导用户使用预知的Session ID登录，然后利用该Session ID冒充用户。防护方法：登录成功后重新生成Session ID。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Session存储在服务器，Cookie存储Session ID</li>
+            <li>• Session ID应随机生成，足够长且唯一</li>
+            <li>• Cookie设置HttpOnly、Secure、SameSite</li>
+            <li>• 登录后重新生成Session ID防止固定攻击</li>
+            <li>• 定期清理过期Session释放资源</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter51/51-4-会话管理.html">← 上一章：会话管理</a>
+      <a href="52-2-express-session.html">下一节：express-session →</a>
+    </div>
+  </div>
+</body>
+</html>

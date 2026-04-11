@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.1 流的概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="17-1-流的概念.html">第十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>17.1 流的概念</h1>
+      <p class="subtitle">理解流式数据处理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解流的基本概念</li>
+        <li>了解流的四种类型</li>
+        <li>掌握流的优势</li>
+        <li>了解流的应用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是流</h2>
+      <div class="code-block">
+// 流（Stream）是 Node.js 处理流式数据的抽象接口
+
+// 传统方式：一次性读取全部数据
+const fs = require('fs');
+const data = fs.readFileSync('large-video.mp4');  // 占用大量内存
+
+// 流方式：分块读取处理
+const readStream = fs.createReadStream('large-video.mp4');
+readStream.on('data', (chunk) => {
+  // 每次只处理一小块数据（默认 64KB）
+  console.log('读取块大小:', chunk.length);
+});
+
+// 流的比喻：
+// 传统方式：用水桶一次性装满水
+// 流方式：用管道持续流动水
+
+// 流的基本概念：
+// 1. 数据分成小块（chunk）依次处理
+// 2. 不需要等待全部数据加载完成
+// 3. 内存占用固定且小
+// 4. 可以边读边处理边写
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">流的核心优势</div>
+          <p>流式处理将大数据分成小块，降低内存使用，实现高效的数据处理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 流的四种类型</h2>
+      <div class="code-block">
+const stream = require('stream');
+
+// 1. 可读流（Readable）
+// 用于读取数据，如文件读取、HTTP 请求
+const { Readable } = stream;
+
+// 2. 可写流（Writable）
+// 用于写入数据，如文件写入、HTTP 响应
+const { Writable } = stream;
+
+// 3. 双工流（Duplex）
+// 既可读又可写，如 TCP socket
+const { Duplex } = stream;
+
+// 4. 转换流（Transform）
+// 在读写过程中转换数据，如压缩、加密
+const { Transform } = stream;
+
+// 内置的流示例
+const fs = require('fs');
+const http = require('http');
+const net = require('net');
+const zlib = require('zlib');
+
+// 可读流
+const readStream = fs.createReadStream('file.txt');
+
+// 可写流
+const writeStream = fs.createWriteStream('output.txt');
+
+// 双工流
+const socket = new net.Socket();
+
+// 转换流
+const gzip = zlib.createGzip();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 流的优势</h2>
+      <div class="code-block">
+// 1. 内存效率
+
+// 传统方式：内存占用 = 文件大小
+// 1GB 文件需要 1GB+ 内存
+const bigData = fs.readFileSync('1GB-file.bin');
+
+// 流方式：内存占用 = highWaterMark（默认 64KB）
+// 1GB 文件只需要 64KB 内存
+fs.createReadStream('1GB-file.bin')
+  .pipe(fs.createWriteStream('copy.bin'));
+
+// 2. 时间效率
+// 传统方式：等待全部读取完成才能开始处理
+// 流方式：读取第一个块后立即开始处理
+
+// 3. 可组合性
+// 流可以像管道一样连接
+fs.createReadStream('file.txt')
+  .pipe(zlib.createGzip())        // 压缩
+  .pipe(crypto.createCipher())    // 加密
+  .pipe(fs.createWriteStream('encrypted.gz'));
+
+// 4. 实时处理
+// HTTP 请求体、标准输入等都是流
+// 可以实时处理数据流
+
+// 示例：实时处理日志
+process.stdin.on('data', (chunk) => {
+  const lines = chunk.toString().split('\n');
+  lines.forEach(line => {
+    if (line.includes('ERROR')) {
+      console.error(line);
+    }
+  });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 流的模式</h2>
+      <div class="code-block">
+// 可读流有两种模式：
+// 1. flowing 模式：自动读取数据并通过事件发送
+// 2. paused 模式：需要显式调用 read() 读取
+
+const fs = require('fs');
+const readable = fs.createReadStream('file.txt');
+
+// flowing 模式 - 自动推送数据
+readable.on('data', (chunk) => {
+  console.log('收到数据:', chunk.length);
+});
+
+// 暂停流
+readable.pause();
+
+// 恢复流
+readable.resume();
+
+// paused 模式 - 手动读取
+readable.on('readable', () => {
+  let chunk;
+  while (null !== (chunk = readable.read())) {
+    console.log('手动读取:', chunk.length);
+  }
+});
+
+// 切换模式的操作
+// 进入 flowing 模式：
+// - 添加 'data' 监听器
+// - 调用 resume()
+// - 调用 pipe()
+
+// 进入 paused 模式：
+// - 调用 pause()
+// - 移除所有 'data' 监听器
+// - 调用 unpipe()
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 流分块处理数据，降低内存占用</li>
+            <li>• 四种类型：Readable、Writable、Duplex、Transform</li>
+            <li>• 可读流有 flowing 和 paused 两种模式</li>
+            <li>• 流可以像管道一样连接组合</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter16/16-5-自定义事件.html">← 上一章：自定义事件</a>
+      <a href="17-2-可读流.html">下一节：可读流 →</a>
+    </div>
+  </div>
+</body>
+</html>

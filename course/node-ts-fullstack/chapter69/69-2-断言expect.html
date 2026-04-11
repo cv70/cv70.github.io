@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.2 断言 expect - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="69-1-describe-test-it.html">上一节</a></li>
+      <li><a href="69-3-匹配器Matchers.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>69.2 断言 expect</h1>
+      <p class="subtitle">第十部分：测试篇 - 深入掌握 Jest 的断言机制</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> expect 基础</h2>
+      <p><code>expect</code> 是 Jest 的核心断言函数，用于验证测试结果是否符合预期。</p>
+
+      <div class="code-block">// 基本语法
+expect(actual).matcher(expected)
+
+// actual: 实际值
+// matcher: 匹配器
+// expected: 预期值</div>
+
+      <h3>断言链式调用</h3>
+      <div class="code-block">// 使用 .not 进行否定断言
+expect(1).not.toBe(2);
+expect(true).not.toBeFalsy();
+
+// 使用 .resolves 和 .rejects 处理 Promise
+expect(promise).resolves.toBe(value);
+expect(promise).rejects.toThrow(error);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 相等性断言</h2>
+
+      <div class="code-block">describe('相等性断言', () => {
+  test('toBe - 严格相等 (===)', () => {
+    // 用于基本类型
+    expect(1).toBe(1);
+    expect('hello').toBe('hello');
+    expect(true).toBe(true);
+
+    // 对象引用相等
+    const obj = { a: 1 };
+    expect(obj).toBe(obj); // 同一引用
+
+    // 不同引用的对象不相等
+    expect({ a: 1 }).not.toBe({ a: 1 });
+  });
+
+  test('toEqual - 深度相等', () => {
+    // 用于对象和数组的深度比较
+    expect({ a: 1 }).toEqual({ a: 1 });
+    expect([1, 2, 3]).toEqual([1, 2, 3]);
+
+    // 嵌套对象
+    expect({
+      name: 'John',
+      address: { city: 'NYC' }
+    }).toEqual({
+      name: 'John',
+      address: { city: 'NYC' }
+    });
+  });
+
+  test('toStrictEqual - 严格深度相等', () => {
+    // 比 toEqual 更严格
+    // 会检查 undefined 属性和数组稀疏性
+
+    // toEqual 忽略 undefined
+    expect({ a: 1, b: undefined }).toEqual({ a: 1 });
+
+    // toStrictEqual 不忽略
+    expect({ a: 1, b: undefined }).not.toStrictEqual({ a: 1 });
+  });
+});</div>
+
+      <h3>三种相等性对比</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>匹配器</th>
+            <th>比较方式</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>toBe</td>
+            <td>===</td>
+            <td>基本类型、同一引用</td>
+          </tr>
+          <tr>
+            <td>toEqual</td>
+            <td>深度递归比较</td>
+            <td>对象、数组内容比较</td>
+          </tr>
+          <tr>
+            <td>toStrictEqual</td>
+            <td>严格深度比较</td>
+            <td>需要检查 undefined 和稀疏数组</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 真值断言</h2>
+
+      <div class="code-block">describe('真值断言', () => {
+  test('toBeTruthy / toBeFalsy', () => {
+    // toBeTruthy: 转换为布尔值为 true
+    expect(1).toBeTruthy();
+    expect('hello').toBeTruthy();
+    expect({}).toBeTruthy();
+    expect([]).toBeTruthy();
+
+    // toBeFalsy: 转换为布尔值为 false
+    expect(0).toBeFalsy();
+    expect('').toBeFalsy();
+    expect(null).toBeFalsy();
+    expect(undefined).toBeFalsy();
+    expect(NaN).toBeFalsy();
+  });
+
+  test('toBeNull / toBeUndefined', () => {
+    expect(null).toBeNull();
+    expect(undefined).toBeUndefined();
+
+    // toBeDefined: 不是 undefined
+    expect(1).toBeDefined();
+    expect(null).toBeDefined(); // null 是已定义的
+  });
+
+  test('toBeNaN', () => {
+    expect(NaN).toBeNaN();
+    expect(1).not.toBeNaN();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 数字断言</h2>
+
+      <div class="code-block">describe('数字断言', () => {
+  test('大小比较', () => {
+    expect(5).toBeGreaterThan(3);
+    expect(5).toBeGreaterThanOrEqual(5);
+    expect(3).toBeLessThan(5);
+    expect(3).toBeLessThanOrEqual(3);
+  });
+
+  test('浮点数近似相等', () => {
+    // 浮点数精度问题，使用 toBeCloseTo
+    expect(0.1 + 0.2).toBeCloseTo(0.3);
+    expect(0.1 + 0.2).not.toBe(0.3); // 这会失败！
+
+    // 可以指定精度（默认 2）
+    expect(0.1 + 0.2).toBeCloseTo(0.3, 5);
+    expect(Math.PI).toBeCloseTo(3.14, 2);
+  });
+
+  test('BigInt 支持', () => {
+    expect(1n).toBeGreaterThan(0n);
+    expect(5n).toBeLessThan(10n);
+  });
+});</div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">浮点数陷阱</div>
+          <p>永远不要使用 toBe 比较浮点数计算结果，因为 JavaScript 的浮点数精度问题。始终使用 toBeCloseTo。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 字符串断言</h2>
+
+      <div class="code-block">describe('字符串断言', () => {
+  test('toMatch - 正则匹配', () => {
+    expect('hello world').toMatch(/world/);
+    expect('hello world').toMatch(/hello/);
+    expect('hello world').not.toMatch(/bye/);
+
+    // 也支持字符串
+    expect('hello world').toMatch('hello');
+  });
+
+  test('toContain - 包含', () => {
+    expect('hello world').toContain('hello');
+    expect('hello world').toContain('world');
+    expect('hello world').not.toContain('bye');
+  });
+
+  test('toHaveLength - 长度', () => {
+    expect('hello').toHaveLength(5);
+    expect('').toHaveLength(0);
+    expect(['a', 'b', 'c']).toHaveLength(3);
+  });
+
+  test('字符串方法链', () => {
+    const text = 'Hello, World!';
+
+    // 组合使用
+    expect(text)
+      .toMatch(/Hello/)
+      .toMatch(/World/)
+      .toHaveLength(13);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 数组和可迭代对象断言</h2>
+
+      <div class="code-block">describe('数组断言', () => {
+  test('toContain - 包含元素', () => {
+    expect([1, 2, 3]).toContain(2);
+    expect(['a', 'b', 'c']).toContain('a');
+  });
+
+  test('toContainEqual - 包含相等元素', () => {
+    // toContain 只检查引用
+    expect([{ a: 1 }]).not.toContain({ a: 1 });
+
+    // toContainEqual 检查内容
+    expect([{ a: 1 }]).toContainEqual({ a: 1 });
+  });
+
+  test('arrayContaining - 数组包含', () => {
+    expect([1, 2, 3, 4, 5]).toEqual(
+      expect.arrayContaining([1, 2, 3])
+    );
+  });
+
+  test('toHaveLength - 长度', () => {
+    expect([1, 2, 3]).toHaveLength(3);
+  });
+
+  test('Set 和 Map', () => {
+    const set = new Set([1, 2, 3]);
+    expect(set).toContain(1);
+    expect(set).toHaveSize(3);
+
+    const map = new Map([['a', 1], ['b', 2]]);
+    expect(map).toHaveProperty('a', 1);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">7.</span> 对象断言</h2>
+
+      <div class="code-block">describe('对象断言', () => {
+  test('toHaveProperty - 属性检查', () => {
+    const user = {
+      name: 'John',
+      age: 30,
+      address: {
+        city: 'NYC',
+        country: 'USA'
+      }
+    };
+
+    // 检查属性存在
+    expect(user).toHaveProperty('name');
+
+    // 检查属性值
+    expect(user).toHaveProperty('name', 'John');
+    expect(user).toHaveProperty('age', 30);
+
+    // 嵌套属性（使用点号或数组）
+    expect(user).toHaveProperty('address.city', 'NYC');
+    expect(user).toHaveProperty(['address', 'city'], 'NYC');
+  });
+
+  test('toMatchObject - 部分匹配', () => {
+    const user = {
+      name: 'John',
+      age: 30,
+      email: 'john@example.com'
+    };
+
+    // 只检查指定的属性
+    expect(user).toMatchObject({ name: 'John' });
+    expect(user).toMatchObject({ age: 30, email: 'john@example.com' });
+  });
+
+  test('objectContaining - 对象包含', () => {
+    expect({ a: 1, b: 2, c: 3 }).toEqual(
+      expect.objectContaining({ a: 1 })
+    );
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">8.</span> 异常断言</h2>
+
+      <div class="code-block">describe('异常断言', () => {
+  test('toThrow - 抛出异常', () => {
+    const throwError = () => {
+      throw new Error('Something went wrong');
+    };
+
+    // 检查是否抛出异常
+    expect(throwError).toThrow();
+
+    // 检查异常消息
+    expect(throwError).toThrow('Something went wrong');
+    expect(throwError).toThrow(/wrong/);
+
+    // 检查异常类型
+    expect(throwError).toThrow(Error);
+  });
+
+  test('异步异常', async () => {
+    const asyncThrow = async () => {
+      throw new Error('Async error');
+    };
+
+    // 使用 rejects
+    await expect(asyncThrow()).rejects.toThrow('Async error');
+
+    // 或者使用 try/catch
+    let error;
+    try {
+      await asyncThrow();
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  test('不抛出异常', () => {
+    const noThrow = () => 1 + 1;
+    expect(noThrow).not.toThrow();
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">9.</span> Promise 断言</h2>
+
+      <div class="code-block">describe('Promise 断言', () => {
+  test('resolves', async () => {
+    const success = Promise.resolve('success');
+
+    // 使用 resolves
+    await expect(success).resolves.toBe('success');
+
+    // 也可以用 .then
+    await expect(success).resolves.toMatch(/success/);
+  });
+
+  test('rejects', async () => {
+    const failure = Promise.reject(new Error('failed'));
+
+    // 使用 rejects
+    await expect(failure).rejects.toThrow('failed');
+    await expect(failure).rejects.toBeInstanceOf(Error);
+  });
+
+  test('结合 async/await', async () => {
+    const fetchData = async () => {
+      return { data: 'test' };
+    };
+
+    const result = await fetchData();
+    expect(result).toEqual({ data: 'test' });
+
+    // 或直接
+    await expect(fetchData()).resolves.toEqual({ data: 'test' });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">10.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>toBe 用于基本类型严格相等，toEqual 用于对象深度比较</li>
+            <li>浮点数比较使用 toBeCloseTo</li>
+            <li>字符串匹配使用 toMatch 支持正则表达式</li>
+            <li>对象部分匹配使用 toMatchObject 或 toHaveProperty</li>
+            <li>异常测试使用 toThrow，Promise 使用 resolves/rejects</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-1-describe-test-it.html">← 上一节：describe、test、it</a>
+      <a href="69-3-匹配器Matchers.html">下一节：匹配器 Matchers →</a>
+    </div>
+  </div>
+</body>
+</html>

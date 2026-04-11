@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>53.4 JWT 安全最佳实践 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="53-1-JWT原理.html">第五十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>53.4 JWT 安全最佳实践</h1>
+      <p class="subtitle">构建安全的 JWT 认证系统</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解 JWT 常见安全风险</li>
+        <li>掌握密钥管理最佳实践</li>
+        <li>学会防护常见攻击手段</li>
+        <li>理解 Token 安全存储策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 密钥管理</h2>
+      <div class="code-block">
+// .env（不要提交到版本控制）
+JWT_SECRET=your-super-secret-key-at-least-32-characters-long!
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+// src/config/jwt.ts
+export const jwtConfig = {
+  // 密钥应该：
+  // 1. 足够长（至少 256 位 / 32 字符）
+  // 2. 随机生成
+  // 3. 存储在环境变量中
+  // 4. 定期轮换
+  secret: process.env.JWT_SECRET!,
+
+  // 生产环境使用 RS256（非对称加密）
+  // 私钥签名，公钥验证
+  privateKey: process.env.JWT_PRIVATE_KEY,
+  publicKey: process.env.JWT_PUBLIC_KEY,
+
+  accessTokenExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  refreshTokenExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+};
+
+// 生成密钥命令
+// HS256: openssl rand -base64 32
+// RS256:
+//   openssl genrsa -out private.pem 2048
+//   openssl rsa -in private.pem -pubout -out public.pem
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">重要提醒</div>
+          <p>永远不要在代码中硬编码密钥，不要将 .env 文件提交到版本控制系统，生产环境使用强密钥或非对称加密。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> Token 存储安全</h2>
+      <div class="code-block">
+// 存储方式对比
+┌─────────────────┬──────────────┬──────────────┬──────────────┐
+│     存储位置    │   XSS 风险   │  CSRF 风险   │    推荐度    │
+├─────────────────┼──────────────┼──────────────┼──────────────┤
+│ localStorage    │     高       │     无       │     低       │
+│ sessionStorage  │     高       │     无       │     低       │
+│ 普通 Cookie     │     无       │     高       │     中       │
+│ httpOnly Cookie │     无       │     中       │     高       │
+│ httpOnly + SameSite Cookie │ 无 │   低    │     最佳     │
+│ 内存中          │     无       │     无       │  最佳但丢失  │
+└─────────────────┴──────────────┴──────────────┴──────────────┘
+
+// 推荐方案：Access Token 存内存 + Refresh Token 存 httpOnly Cookie
+// 后端设置 Cookie
+res.cookie('refreshToken', refreshToken, {
+  httpOnly: true,       // 防止 JavaScript 访问
+  secure: true,         // 仅 HTTPS 传输
+  sameSite: 'strict',   // 防止 CSRF
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7天
+  path: '/api/auth/refresh', // 仅在刷新接口发送
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚨</span> 常见攻击与防护</h2>
+      <div class="code-block">
+// 1. XSS 攻击防护
+// - 使用 httpOnly Cookie 存储 Token
+// - 对用户输入进行转义
+// - 设置 Content-Security-Policy 响应头
+
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self'"
+  );
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+
+// 2. CSRF 攻击防护
+// - 使用 SameSite Cookie 属性
+// - 检查 Origin 和 Referer 头
+// - 使用 CSRF Token（双重提交）
+
+const csrf = require('csurf');
+const csrfProtection = csrf({ cookie: true });
+
+app.post('/api/transfer', csrfProtection, (req, res) => {
+  // 需要 CSRF Token 才能访问
+});
+
+// 3. Token 窃取防护
+// - 检测异常登录（IP、设备变化）
+// - 实现 Token 黑名单
+// - 敏感操作要求重新认证
+
+// Token 黑名单实现
+const tokenBlacklist = new Set<string>();
+
+// Redis 实现（生产环境推荐）
+import Redis from 'ioredis';
+const redis = new Redis();
+
+async function addToBlacklist(token: string, expiresIn: number) {
+  await redis.setex(`blacklist:${token}`, expiresIn, '1');
+}
+
+async function isBlacklisted(token: string): Promise<boolean> {
+  const result = await redis.get(`blacklist:${token}`);
+  return result !== null;
+}
+
+// 4. 算法混淆攻击
+// - 明确指定算法，不使用 none
+// - 不要接受 token 中的 alg 字段
+
+const decoded = jwt.verify(token, secret, {
+  algorithms: ['HS256'], // 明确指定允许的算法
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏰</span> Token 过期策略</h2>
+      <div class="code-block">
+// 合理设置过期时间
+const tokenExpiryConfig = {
+  // Access Token：短期有效（15分钟 - 1小时）
+  accessToken: '15m',
+
+  // Refresh Token：长期有效（7天 - 30天）
+  refreshToken: '7d',
+
+  // 敏感操作：需要最近认证（如修改密码）
+  sensitiveOperation: '5m',
+};
+
+// 实现"最近认证"检查
+function requireRecentAuth(maxAgeMinutes: number = 5) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+
+    if (!user || !user.iat) {
+      return res.status(401).json({ message: '需要认证' });
+    }
+
+    const tokenAge = Date.now() / 1000 - user.iat;
+
+    if (tokenAge > maxAgeMinutes * 60) {
+      return res.status(403).json({
+        message: '需要重新认证',
+        requireReauth: true,
+      });
+    }
+
+    next();
+  };
+}
+
+// 使用：修改密码需要 5 分钟内的 Token
+app.put('/api/password',
+  authenticate,
+  requireRecentAuth(5),
+  changePassword
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 安全审计日志</h2>
+      <div class="code-block">
+// src/models/AuthLog.ts
+import mongoose, { Document, Schema } from 'mongoose';
+
+interface IAuthLog extends Document {
+  userId?: mongoose.Types.ObjectId;
+  action: 'login' | 'logout' | 'refresh' | 'failed_login' | 'password_change';
+  ipAddress: string;
+  userAgent: string;
+  success: boolean;
+  failureReason?: string;
+  createdAt: Date;
+}
+
+const AuthLogSchema = new Schema<IAuthLog>({
+  userId: { type: Schema.Types.ObjectId, ref: 'User' },
+  action: { type: String, required: true, enum: [
+    'login', 'logout', 'refresh', 'failed_login', 'password_change'
+  ]},
+  ipAddress: { type: String, required: true },
+  userAgent: { type: String },
+  success: { type: Boolean, required: true },
+  failureReason: { type: String },
+}, {
+  timestamps: { createdAt: true, updatedAt: false }
+});
+
+export const AuthLog = mongoose.model<IAuthLog>('AuthLog', AuthLogSchema);
+
+// 记录认证日志
+async function logAuthAction(
+  action: IAuthLog['action'],
+  req: Request,
+  userId?: Types.ObjectId,
+  success: boolean = true,
+  failureReason?: string
+) {
+  await AuthLog.create({
+    userId,
+    action,
+    ipAddress: req.ip || req.connection.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    success,
+    failureReason,
+  });
+}
+
+// 检测异常登录
+async function detectSuspiciousLogin(userId: Types.ObjectId, currentIp: string) {
+  const recentLogins = await AuthLog.find({
+    userId,
+    action: 'login',
+    success: true,
+    createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+  });
+
+  const knownIps = recentLogins.map(log => log.ipAddress);
+
+  // 检测新 IP 登录
+  if (!knownIps.includes(currentIp) && knownIps.length > 0) {
+    // 发送警告邮件/短信
+    console.log('New IP login detected for user:', userId);
+    return true;
+  }
+
+  return false;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 安全检查清单</h2>
+      <div class="code-block">
+// JWT 安全检查清单
+
+□ 密钥管理
+  ✓ 使用强密钥（至少 32 字符）
+  ✓ 密钥存储在环境变量
+  ✓ 定期轮换密钥
+  ✓ 生产环境使用非对称加密（RS256）
+
+□ Token 配置
+  ✓ Access Token 短期有效（15分钟 - 1小时）
+  ✓ 设置合理的过期时间
+  ✓ 不在 Payload 中存储敏感信息
+  ✓ 明确指定签名算法
+
+□ 存储与传输
+  ✓ Refresh Token 使用 httpOnly Cookie
+  ✓ 设置 Secure 和 SameSite 属性
+  ✓ 仅在 HTTPS 下传输
+  ✓ 不在 URL 中传递 Token
+
+□ 防护措施
+  ✓ 实现 Token 黑名单
+  ✓ 检测异常登录
+  ✓ 记录安全审计日志
+  ✓ 敏感操作要求重新认证
+  ✓ 实现 CSRF 防护
+
+□ 监控告警
+  ✓ 监控失败登录尝试
+  ✓ 异常 IP 登录告警
+  ✓ Token 滥用检测
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 密钥使用环境变量，生产环境考虑 RS256</li>
+            <li>• Access Token 存内存，Refresh Token 存 httpOnly Cookie</li>
+            <li>• 防护 XSS、CSRF、Token 窃取等攻击</li>
+            <li>• 敏感操作需要最近认证</li>
+            <li>• 记录安全审计日志，检测异常行为</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="53-3-刷新Token.html">← 上一节：刷新 Token</a>
+      <a href="../chapter54/54-1-Passport简介.html">下一章：Passport 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.4 虚拟字段 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="28-1-schema定义.html">第二十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>28.4 虚拟字段</h1>
+      <p class="subtitle">计算属性和派生数据</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解虚拟字段的概念</li>
+        <li>掌握 getter 和 setter 定义</li>
+        <li>学会虚拟填充的用法</li>
+        <li>了解实例方法和静态方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 虚拟字段概述</h2>
+      <p>虚拟字段（Virtual）是不会存储到数据库的计算属性。每次访问时动态计算，适合用于派生数据、格式化输出等场景。</p>
+
+      <div class="code-block">
+虚拟字段特点：
+
+1. 不存储在数据库
+   ├── 不占用存储空间
+   ├── 不能用于查询条件
+   └── 不能用于排序
+
+2. 动态计算
+   ├── 每次访问时重新计算
+   └── 总是返回最新值
+
+3. 支持 getter 和 setter
+   ├── getter: 读取时计算
+   └── setter: 写入时转换
+
+使用场景：
+├── 全名：firstName + lastName
+├── 年龄：从生日计算
+├── URL：拼接基础路径
+├── 统计：关联数据计数
+└── 格式化：日期、金额等
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义虚拟字段</h2>
+      <div class="code-block">
+const userSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  email: String,
+  birthDate: Date,
+});
+
+// 简单 getter
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+// 使用
+const user = new User({
+  firstName: 'Alice',
+  lastName: 'Smith',
+});
+
+console.log(user.fullName);  // 'Alice Smith'
+
+// 带 setter 的虚拟字段
+userSchema.virtual('fullName')
+  .get(function() {
+    return `${this.firstName} ${this.lastName}`;
+  })
+  .set(function(v) {
+    const [firstName, lastName] = v.split(' ');
+    this.firstName = firstName;
+    this.lastName = lastName || '';
+  });
+
+// 使用
+user.fullName = 'Bob Johnson';
+console.log(user.firstName);  // 'Bob'
+console.log(user.lastName);   // 'Johnson'
+
+// 计算年龄
+userSchema.virtual('age').get(function() {
+  if (!this.birthDate) return null;
+  const today = new Date();
+  const age = today.getFullYear() - this.birthDate.getFullYear();
+  const monthDiff = today.getMonth() - this.birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < this.birthDate.getDate())) {
+    return age - 1;
+  }
+  return age;
+});
+
+// URL 生成
+const articleSchema = new mongoose.Schema({
+  slug: String,
+  title: String,
+});
+
+articleSchema.virtual('url').get(function() {
+  return `/articles/${this.slug}`;
+});
+
+// 要在 JSON 输出中包含虚拟字段
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
+
+// 使用
+const user = await User.findOne();
+const json = user.toJSON();
+console.log(json.fullName);  // 包含虚拟字段
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">虚拟字段与 JSON</div>
+          <p>默认情况下，虚拟字段不会包含在 toJSON() 和 toObject() 输出中。需要在 Schema 设置 virtuals: true 或在调用时指定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 虚拟填充</h2>
+      <div class="code-block">
+// 虚拟填充：通过虚拟字段加载关联数据
+
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+});
+
+const postSchema = new mongoose.Schema({
+  title: String,
+  content: String,
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+});
+
+// 定义虚拟字段加载用户的文章
+userSchema.virtual('posts', {
+  ref: 'Post',          // 关联的 Model
+  localField: '_id',    // 本地字段
+  foreignField: 'author', // 外键字段
+  justOne: false,       // 返回数组还是单个文档
+});
+
+// 使用
+const user = await User.findOne().populate('posts');
+console.log(user.posts);  // Post[]
+
+// 文章数量虚拟字段
+userSchema.virtual('postCount', {
+  ref: 'Post',
+  localField: '_id',
+  foreignField: 'author',
+  count: true,  // 返回数量而非文档
+});
+
+const user = await User.findOne().populate('postCount');
+console.log(user.postCount);  // 数字
+
+// 匹配条件
+userSchema.virtual('publishedPosts', {
+  ref: 'Post',
+  localField: '_id',
+  foreignField: 'author',
+  match: { status: 'published' },
+});
+
+const user = await User.findOne().populate('publishedPosts');
+
+// 限制数量
+userSchema.virtual('recentPosts', {
+  ref: 'Post',
+  localField: '_id',
+  foreignField: 'author',
+  options: {
+    limit: 5,
+    sort: { createdAt: -1 },
+  },
+});
+
+// 选择字段
+userSchema.virtual('postTitles', {
+  ref: 'Post',
+  localField: '_id',
+  foreignField: 'author',
+  select: 'title',
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 实例方法和静态方法</h2>
+      <div class="code-block">
+// 实例方法 - 在 Document 实例上调用
+userSchema.methods.getFullName = function() {
+  return `${this.firstName} ${this.lastName}`;
+};
+
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  const bcrypt = require('bcrypt');
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+userSchema.methods.toJSON = function() {
+  const user = this.toObject();
+  delete user.password;  // 不返回密码
+  return user;
+};
+
+// 使用
+const user = await User.findOne();
+const fullName = user.getFullName();
+const isMatch = await user.comparePassword('password123');
+const json = user.toJSON();
+
+// 静态方法 - 在 Model 上调用
+userSchema.statics.findByEmail = function(email) {
+  return this.findOne({ email });
+};
+
+userSchema.statics.findActive = function() {
+  return this.find({ status: 'active' });
+};
+
+userSchema.statics.getStats = async function() {
+  const total = await this.countDocuments();
+  const active = await this.countDocuments({ status: 'active' });
+  return { total, active, activeRate: active / total };
+};
+
+// 使用
+const user = await User.findByEmail('alice@mail.com');
+const activeUsers = await User.findActive();
+const stats = await User.getStats();
+
+// 静态方法 vs 实例方法
+// 静态方法：Model.methodName()，this 指向 Model
+// 实例方法：document.methodName()，this 指向 Document
+
+// 查询助手 - 扩展 Query 方法
+userSchema.query.byEmail = function(email) {
+  return this.where({ email });
+};
+
+userSchema.query.active = function() {
+  return this.where({ status: 'active' });
+};
+
+// 使用
+const user = await User.findOne().byEmail('alice@mail.com');
+const activeUsers = await User.find().active().sort('-createdAt');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 虚拟字段是计算属性，不存储在数据库</li>
+            <li>• 支持 getter 和 setter</li>
+            <li>• 虚拟填充可加载关联数据</li>
+            <li>• 实例方法在 Document 上调用，静态方法在 Model 上调用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="28-3-中间件.html">← 上一节：中间件</a>
+      <a href="../chapter29/29-1-redis简介.html">下一章：Redis 简介 →</a>
+    </div>
+  </div>
+</body>
+</html>

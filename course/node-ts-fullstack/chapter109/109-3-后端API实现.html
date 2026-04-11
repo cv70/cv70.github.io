@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>109.3 后端 API 实现 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="109-1-需求分析.html">第109章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>109.3 后端 API 实现</h1>
+      <p class="subtitle">使用NestJS实现博客API</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握NestJS模块化开发</li>
+        <li>学会实现RESTful API</li>
+        <li>理解DTO和验证</li>
+        <li>了解认证授权实现</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 项目结构</h2>
+      <div class="code-block">
+// NestJS项目目录结构
+
+src/
+├── modules/
+│   ├── auth/
+│   │   ├── auth.controller.ts
+│   │   ├── auth.service.ts
+│   │   ├── auth.module.ts
+│   │   ├── jwt.strategy.ts
+│   │   └── dto/
+│   │       ├── login.dto.ts
+│   │       └── register.dto.ts
+│   ├── user/
+│   │   ├── user.controller.ts
+│   │   ├── user.service.ts
+│   │   ├── user.module.ts
+│   │   └── entities/
+│   │       └── user.entity.ts
+│   ├── article/
+│   │   ├── article.controller.ts
+│   │   ├── article.service.ts
+│   │   ├── article.module.ts
+│   │   ├── dto/
+│   │   │   ├── create-article.dto.ts
+│   │   │   └── update-article.dto.ts
+│   │   └── entities/
+│   │       └── article.entity.ts
+│   └── comment/
+│       ├── comment.controller.ts
+│       ├── comment.service.ts
+│       └── comment.module.ts
+├── common/
+│   ├── decorators/
+│   ├── filters/
+│   ├── guards/
+│   ├── interceptors/
+│   └── pipes/
+├── config/
+│   └── configuration.ts
+├── app.module.ts
+└── main.ts
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 文章服务实现</h2>
+      <div class="code-block">
+// article.controller.ts
+import {
+  Controller, Get, Post, Put, Delete,
+  Body, Param, Query, UseGuards, Request
+} from '@nestjs/common';
+import { ArticleService } from './article.service';
+import { CreateArticleDto, UpdateArticleDto } from './dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+@Controller('articles')
+export class ArticleController {
+  constructor(private readonly articleService: ArticleService) {}
+
+  // 创建文章
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  async create(@Body() createArticleDto: CreateArticleDto, @Request() req) {
+    return this.articleService.create(createArticleDto, req.user.id);
+  }
+
+  // 获取文章列表
+  @Get()
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('categoryId') categoryId?: string,
+    @Query('tagId') tagId?: string
+  ) {
+    return this.articleService.findAll({ page, limit, categoryId, tagId });
+  }
+
+  // 获取文章详情
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.articleService.findOne(id);
+  }
+
+  // 更新文章
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  async update(
+    @Param('id') id: string,
+    @Body() updateArticleDto: UpdateArticleDto,
+    @Request() req
+  ) {
+    return this.articleService.update(id, updateArticleDto, req.user.id);
+  }
+
+  // 删除文章
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async remove(@Param('id') id: string, @Request() req) {
+    return this.articleService.remove(id, req.user.id);
+  }
+
+  // 点赞文章
+  @Post(':id/like')
+  @UseGuards(JwtAuthGuard)
+  async like(@Param('id') id: string, @Request() req) {
+    return this.articleService.like(id, req.user.id);
+  }
+}
+
+// article.service.ts
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Article } from './entities/article.entity';
+import { CreateArticleDto, UpdateArticleDto } from './dto';
+
+@Injectable()
+export class ArticleService {
+  constructor(
+    @InjectRepository(Article)
+    private articleRepository: Repository<Article>,
+  ) {}
+
+  async create(dto: CreateArticleDto, authorId: string): Promise<Article> {
+    const article = this.articleRepository.create({
+      ...dto,
+      authorId,
+      slug: this.generateSlug(dto.title),
+    });
+
+    return this.articleRepository.save(article);
+  }
+
+  async findAll(options: {
+    page: number;
+    limit: number;
+    categoryId?: string;
+    tagId?: string;
+  }) {
+    const { page, limit, categoryId, tagId } = options;
+
+    const queryBuilder = this.articleRepository
+      .createQueryBuilder('article')
+      .leftJoinAndSelect('article.author', 'author')
+      .leftJoinAndSelect('article.category', 'category')
+      .leftJoinAndSelect('article.tags', 'tags')
+      .where('article.status = :status', { status: 'published' });
+
+    if (categoryId) {
+      queryBuilder.andWhere('article.categoryId = :categoryId', { categoryId });
+    }
+
+    if (tagId) {
+      queryBuilder
+        .innerJoin('article.tags', 'tag')
+        .andWhere('tag.id = :tagId', { tagId });
+    }
+
+    const [items, total] = await queryBuilder
+      .orderBy('article.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async findOne(id: string): Promise<Article> {
+    const article = await this.articleRepository.findOne({
+      where: { id },
+      relations: ['author', 'category', 'tags', 'comments', 'comments.user'],
+    });
+
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+
+    // 增加阅读量
+    await this.articleRepository.increment({ id }, 'viewCount', 1);
+
+    return article;
+  }
+
+  async update(id: string, dto: UpdateArticleDto, userId: string): Promise<Article> {
+    const article = await this.articleRepository.findOne({ where: { id } });
+
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+
+    if (article.authorId !== userId) {
+      throw new ForbiddenException('Not authorized to update this article');
+    }
+
+    Object.assign(article, dto);
+
+    return this.articleRepository.save(article);
+  }
+
+  async remove(id: string, userId: string): Promise<void> {
+    const article = await this.articleRepository.findOne({ where: { id } });
+
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+
+    if (article.authorId !== userId) {
+      throw new ForbiddenException('Not authorized to delete this article');
+    }
+
+    await this.articleRepository.softDelete(id);
+  }
+
+  async like(articleId: string, userId: string) {
+    // 实现点赞逻辑
+  }
+
+  private generateSlug(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔀</span> DTO验证</h2>
+      <div class="code-block">
+// dto/create-article.dto.ts
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsEnum, MaxLength } from 'class-validator';
+
+export class CreateArticleDto {
+  @IsString()
+  @IsNotEmpty({ message: '标题不能为空' })
+  @MaxLength(100, { message: '标题最长100个字符' })
+  title: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '内容不能为空' })
+  content: string;
+
+  @IsString()
+  @IsOptional()
+  summary?: string;
+
+  @IsEnum(['draft', 'published'], { message: '状态只能是draft或published' })
+  @IsOptional()
+  status?: 'draft' | 'published';
+
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tagIds?: string[];
+}
+
+// dto/update-article.dto.ts
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateArticleDto } from './create-article.dto';
+
+export class UpdateArticleDto extends PartialType(CreateArticleDto) {}
+
+// 使用ValidationPipe全局验证
+// main.ts
+app.useGlobalPipes(new ValidationPipe({
+  whitelist: true,
+  transform: true,
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用NestJS模块化组织代码</li>
+            <li>• Controller处理请求路由</li>
+            <li>• Service实现业务逻辑</li>
+            <li>• DTO配合class-validator进行验证</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="109-2-数据库设计.html">← 上一节：数据库设计</a>
+      <a href="109-4-前端页面开发.html">下一节：前端页面开发 →</a>
+    </div>
+  </div>
+</body>
+</html>

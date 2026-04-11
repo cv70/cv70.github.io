@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.2 一对多关系 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="24-1-一对一关系.html">第二十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>24.2 一对多关系</h1>
+      <p class="subtitle">定义实体间的一对多和多对一关联</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解一对多关系的概念</li>
+        <li>掌握 @OneToMany 和 @ManyToOne 装饰器</li>
+        <li>学会双向关系配置</li>
+        <li>了解关联数据的操作方法</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 一对多关系概述</h2>
+      <p>一对多关系是最常见的实体关系。例如：一个用户有多篇文章，一篇文章属于一个用户；一个部门有多个员工。</p>
+
+      <div class="code-block">
+数据库表结构：
+
+users 表                     posts 表
+┌─────┬──────────┬─────┐    ┌─────┬─────────┬──────────┬─────────┐
+│ id  │ username │ age │    │ id  │ title   │ content  │ user_id │
+├─────┼──────────┼─────┤    ├─────┼─────────┼──────────┼─────────┤
+│  1  │ alice    │ 25  │    │  1  │ Post 1  │ Content  │    1    │
+│  2  │ bob      │ 30  │    │  2  │ Post 2  │ Content  │    1    │
+└─────┴──────────┴─────┘    │  3  │ Post 3  │ Content  │    2    │
+                             └─────┴─────────┴──────────┴─────────┘
+                                       ↑
+                                 外键关联 users.id
+
+User (1) ──────► (N) Post
+      一对多
+
+Post (N) ◄────── (1) User
+      多对一
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 定义一对多关系</h2>
+      <div class="code-block">
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne } from 'typeorm';
+
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  username: string;
+
+  // 一对多：一个用户有多篇文章
+  @OneToMany(() => Post, (post) => post.user)
+  posts: Post[];
+}
+
+@Entity()
+export class Post {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  title: string;
+
+  @Column()
+  content: string;
+
+  // 多对一：多篇文章属于一个用户
+  @ManyToOne(() => User, (user) => user.posts)
+  user: User;
+}
+
+// 查询用户及其文章
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+});
+console.log(user.posts);  // Post[]
+
+// 查询文章及其作者
+const post = await postRepository.findOne({
+  where: { id: 1 },
+  relations: ['user'],
+});
+console.log(post.user);  // User
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">@ManyToOne 必须有</div>
+          <p>在一对多关系中，@ManyToOne 一方必须存在，因为外键在这一方。@OneToMany 是可选的，主要用于方便从"一"方访问"多"方。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 关联数据操作</h2>
+      <div class="code-block">
+// 创建带关联的数据
+const user = await userRepository.findOneBy({ id: 1 });
+
+const post1 = new Post();
+post1.title = 'Post 1';
+post1.content = 'Content 1';
+post1.user = user;
+
+const post2 = new Post();
+post2.title = 'Post 2';
+post2.content = 'Content 2';
+post2.user = user;
+
+await postRepository.save([post1, post2]);
+
+// 使用级联创建
+@Entity()
+export class User {
+  @OneToMany(() => Post, (post) => post.user, { cascade: true })
+  posts: Post[];
+}
+
+const user = new User();
+user.username = 'alice';
+
+user.posts = [
+  { title: 'Post 1', content: 'Content 1' } as Post,
+  { title: 'Post 2', content: 'Content 2' } as Post,
+];
+
+await userRepository.save(user);  // 级联保存文章
+
+// 添加新文章到用户
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: ['posts'],
+});
+
+const newPost = new Post();
+newPost.title = 'New Post';
+newPost.content = 'New Content';
+
+user.posts.push(newPost);
+await userRepository.save(user);
+
+// 移除关联（不删除文章）
+const post = await postRepository.findOneBy({ id: 1 });
+post.user = null;
+await postRepository.save(post);
+
+// 删除用户级联删除文章
+@Entity()
+export class Post {
+  @ManyToOne(() => User, {
+    onDelete: 'CASCADE',  // 数据库级别级联删除
+  })
+  user: User;
+}
+
+// 或者使用 TypeORM 级联
+@Entity()
+export class User {
+  @OneToMany(() => Post, (post) => post.user, {
+    orphanedRowAction: 'delete',  // 孤儿记录删除
+  })
+  posts: Post[];
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 关系选项详解</h2>
+      <div class="code-block">
+@Entity()
+export class User {
+  @OneToMany(() => Post, (post) => post.user, {
+    // 级联操作
+    cascade: true,  // 或 ['insert', 'update', 'remove']
+
+    // 渴望加载
+    eager: false,  // 建议关闭，按需加载
+
+    // 是否可为空
+    nullable: true,
+
+    // 孤儿记录处理
+    orphanedRowAction: 'delete',  // 'delete' | 'nullify' | 'soft-delete'
+
+    // 默认排序
+    orderBy: {
+      createdAt: 'DESC',
+    },
+  })
+  posts: Post[];
+}
+
+@Entity()
+export class Post {
+  @ManyToOne(() => User, (user) => user.posts, {
+    // 删除行为
+    onDelete: 'CASCADE',     // 数据库级别
+    onUpdate: 'CASCADE',
+
+    // 创建外键约束
+    createForeignKeyConstraints: true,
+
+    // 是否可为空
+    nullable: false,
+  })
+  @JoinColumn({ name: 'author_id' })  // 自定义外键列名
+  user: User;
+}
+
+// 查询时过滤关联数据
+const user = await userRepository.findOne({
+  where: { id: 1 },
+  relations: {
+    posts: {
+      comments: true,  // 嵌套关联
+    },
+  },
+});
+
+// 过滤关联数据
+const user = await userRepository.findOne({
+  where: {
+    id: 1,
+    posts: {
+      status: 'published',
+    },
+  },
+  relations: ['posts'],
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @OneToMany 和 @ManyToOne 必须成对使用</li>
+            <li>• 外键在 @ManyToOne 一方的表中</li>
+            <li>• cascade 选项支持级联保存和删除</li>
+            <li>• orphanedRowAction 处理孤儿记录</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="24-1-一对一关系.html">← 上一节：一对一关系</a>
+      <a href="24-3-多对多关系.html">下一节：多对多关系 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>79.2 Props 类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="79-1-组件类型定义.html">第七十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>79.2 Props 类型</h1>
+      <p class="subtitle">定义组件属性类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握基本 Props 类型定义</li>
+        <li>学会可选属性和默认值</li>
+        <li>理解 children 类型</li>
+        <li>掌握高级 Props 模式</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本 Props 类型</h2>
+      <div class="code-block">
+import { ReactNode, MouseEventHandler, ChangeEventHandler } from 'react';
+
+// 基本类型
+interface BasicProps {
+  string: string;
+  number: number;
+  boolean: boolean;
+  callback: () =&gt; void;
+  nullable: string | null;
+}
+
+// 可选属性
+interface OptionalProps {
+  required: string;      // 必需
+  optional?: string;     // 可选（undefined）
+  optionalWithDefault?: string;  // 有默认值
+}
+
+function Component({ required, optional, optionalWithDefault = 'default' }: OptionalProps) {
+  return &lt;div&gt;{required} {optional} {optionalWithDefault}&lt;/div&gt;;
+}
+
+// 函数类型
+interface FunctionProps {
+  onClick: () =&gt; void;                    // 无参数
+  onChange: (value: string) =&gt; void;       // 有参数
+  onSubmit: (event: React.FormEvent) =&gt; void;  // 事件参数
+
+  // 或使用 React 提供的类型
+  onClick2: MouseEventHandler&lt;HTMLButtonElement&gt;;
+  onChange2: ChangeEventHandler&lt;HTMLInputElement&gt;;
+}
+
+// 对象和数组
+interface DataProps {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  items: string[];
+  users: User[];  // 使用已定义的类型
+}
+
+interface User {
+  id: string;
+  name: string;
+}
+
+// 联合类型
+interface UnionProps {
+  status: 'loading' | 'success' | 'error';
+  size: 'sm' | 'md' | 'lg';
+  value: string | number;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> children 类型</h2>
+      <div class="code-block">
+import { ReactNode, ReactElement, ComponentType } from 'react';
+
+// ReactNode：最宽泛，包含所有可渲染内容
+interface CardProps {
+  children: ReactNode;  // string | number | JSX | null | undefined
+}
+
+function Card({ children }: CardProps) {
+  return &lt;div className="card"&gt;{children}&lt;/div&gt;;
+}
+
+// 使用
+&lt;Card&gt;
+  &lt;h1&gt;Title&lt;/h1&gt;
+  &lt;p&gt;Content&lt;/p&gt;
+&lt;/Card&gt;
+
+&lt;Card&gt;Just a string&lt;/Card&gt;
+
+&lt;Card&gt;{condition && &lt;span&gt;Conditional&lt;/span&gt;}&lt;/Card&gt;
+
+// ReactElement：只接受 JSX 元素
+interface StrictProps {
+  children: ReactElement;  // 只接受单个 JSX 元素
+}
+
+function Strict({ children }: StrictProps) {
+  return &lt;div&gt;{children}&lt;/div&gt;;
+}
+
+// 使用
+&lt;Strict&gt;&lt;span&gt;OK&lt;/span&gt;&lt;/Strict&gt;  // 正确
+&lt;Strict&gt;String&lt;/Strict&gt;  // 错误：不能是字符串
+
+// 多个 children slots
+interface LayoutProps {
+  header: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}
+
+function Layout({ header, children, footer }: LayoutProps) {
+  return (
+    &lt;div&gt;
+      &lt;header&gt;{header}&lt;/header&gt;
+      &lt;main&gt;{children}&lt;/main&gt;
+      {footer && &lt;footer&gt;{footer}&lt;/footer&gt;}
+    &lt;/div&gt;
+  );
+}
+
+// 使用
+&lt;Layout
+  header={&lt;Header /&gt;}
+  footer={&lt;Footer /&gt;}
+&gt;
+  &lt;Main /&gt;
+&lt;/Layout&gt;
+
+// 组件作为 Props
+interface WrapperProps {
+  component: ComponentType&lt;{ data: string }&gt;;
+  data: string;
+}
+
+function Wrapper({ component: Component, data }: WrapperProps) {
+  return &lt;Component data={data} /&gt;;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 高级 Props 模式</h2>
+      <div class="code-block">
+// 条件 Props：根据一个属性决定另一个属性是否必需
+interface BaseButtonProps {
+  variant?: 'primary' | 'secondary';
+}
+
+// 如果 variant 是 'icon'，则 icon 必需
+type ButtonProps = BaseButtonProps &amp; (
+  | { variant?: 'primary' | 'secondary'; icon?: never }
+  | { variant: 'icon'; icon: ReactNode }
+);
+
+function Button({ variant = 'primary', icon }: ButtonProps) {
+  if (variant === 'icon') {
+    return &lt;button className="icon-btn"&gt;{icon}&lt;/button&gt;;
+  }
+  return &lt;button className={`btn-${variant}`} /&gt;;
+}
+
+// 使用
+&lt;Button variant="primary" /&gt;  // 正确
+&lt;Button variant="icon" icon={&lt;Icon /&gt;} /&gt;  // 正确
+&lt;Button variant="icon" /&gt;  // 错误：缺少 icon
+
+// 工具类型
+// Partial&lt;T&gt;：所有属性可选
+type PartialProps = Partial&lt;RequiredProps&gt;;
+
+// Required&lt;T&gt;：所有属性必需
+type RequiredProps = Required&lt;OptionalProps&gt;;
+
+// Pick&lt;T, K&gt;：选取部分属性
+type OnlyIdAndName = Pick&lt;User, 'id' | 'name'&gt;;
+
+// Omit&lt;T, K&gt;：排除部分属性
+type WithoutEmail = Omit&lt;User, 'email'&gt;;
+
+// 扩展 HTML 元素属性
+interface InputProps extends React.InputHTMLAttributes&lt;HTMLInputElement&gt; {
+  label?: string;
+}
+
+function Input({ label, ...props }: InputProps) {
+  return (
+    &lt;div&gt;
+      {label && &lt;label&gt;{label}&lt;/label&gt;}
+      &lt;input {...props} /&gt;
+    &lt;/div&gt;
+  );
+}
+
+// 使用
+&lt;Input
+  label="Username"
+  type="text"
+  placeholder="Enter username"
+  onChange={(e) =&gt; console.log(e.target.value)}
+/&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 interface 定义 Props</li>
+            <li>• ? 表示可选属性</li>
+            <li>• ReactNode 是最宽泛的 children 类型</li>
+            <li>• 使用工具类型和条件类型实现高级模式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="79-1-组件类型定义.html">← 上一节：组件类型定义</a>
+      <a href="79-3-Hooks类型.html">下一节：Hooks 类型 →</a>
+    </div>
+  </div>
+</body>
+</html>

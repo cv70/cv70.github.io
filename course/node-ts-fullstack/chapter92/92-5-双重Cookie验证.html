@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>92.5 双重 Cookie 验证 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="92-1-CSRF攻击原理.html">第九十二章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>92.5 双重 Cookie 验证</h1>
+      <p class="subtitle">无状态 CSRF 防护方案</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解双重 Cookie 验证原理</li>
+        <li>掌握实现方法</li>
+        <li>了解优缺点</li>
+        <li>学会选择合适的防护方案</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 双重 Cookie 验证原理</h2>
+      <div class="code-block">
+# 工作原理
+
+1. 服务器生成随机 Token
+2. Token 同时设置到 Cookie 和返回给前端
+3. 前端发送请求时，从 Cookie 读取 Token
+4. 将 Token 放入请求参数或请求头
+5. 服务器验证 Cookie 和请求中的 Token 是否一致
+
+# 为什么有效
+
+## CSRF 攻击的限制
+- 攻击者可以发送 Cookie（浏览器自动携带）
+- 攻击者无法读取 Cookie（同源策略）
+- 攻击者无法获取正确的 Token 值
+
+## 双重 Cookie 验证
+- Cookie 中的 Token：浏览器自动发送
+- 请求中的 Token：前端代码读取后发送
+- 两者必须匹配，攻击者无法满足
+
+# 与 Session CSRF Token 的区别
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│      对比项      │   Session Token  │   双重 Cookie    │
+├─────────────────┼──────────────────┼──────────────────┤
+│ 服务端存储      │ 需要             │ 不需要           │
+│ 无状态          │ 否               │ 是               │
+│ 实现复杂度      │ 中等             │ 简单             │
+│ 安全性          │ 高               │ 中高             │
+│ 子域名支持      │ 需要共享 Session │ 天然支持         │
+└─────────────────┴──────────────────┴──────────────────┘
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">适用场景</div>
+          <p>双重 Cookie 验证适合无状态 API、跨子域应用。对于高安全要求的应用，推荐使用 Session Token 方式。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实现 Double Cookie</h2>
+      <div class="code-block">
+# 服务端实现
+
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
+
+const app = express();
+app.use(cookieParser());
+
+// 生成 CSRF Token
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// 设置 CSRF Token 中间件
+function csrfMiddleware(req, res, next) {
+  // 检查是否已有 Token
+  if (!req.cookies.csrfToken) {
+    const token = generateCsrfToken();
+    res.cookie('csrfToken', token, {
+      httpOnly: false,  // 允许 JavaScript 读取
+      secure: true,
+      sameSite: 'strict',
+    });
+    res.locals.csrfToken = token;
+  } else {
+    res.locals.csrfToken = req.cookies.csrfToken;
+  }
+  next();
+}
+
+// 验证 CSRF Token 中间件
+function validateCsrf(req, res, next) {
+  const cookieToken = req.cookies.csrfToken;
+  const requestToken = req.headers['x-csrf-token'] ||
+                       req.body._csrf ||
+                       req.query._csrf;
+
+  if (!cookieToken || !requestToken) {
+    return res.status(403).json({ error: 'CSRF token missing' });
+  }
+
+  if (cookieToken !== requestToken) {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  next();
+}
+
+// 获取 Token 接口
+app.get('/api/csrf-token', csrfMiddleware, (req, res) => {
+  res.json({ csrfToken: res.locals.csrfToken });
+});
+
+// 受保护的路由
+app.post('/api/transfer', csrfMiddleware, validateCsrf, (req, res) => {
+  // 处理请求
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 前端实现</h2>
+      <div class="code-block">
+# 方式一：从 Cookie 读取
+
+// 读取 Cookie
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(
+    new RegExp('(^| )' + name + '=([^;]+)')
+  );
+  return match ? match[2] : null;
+}
+
+// 发送请求
+async function transfer(to: string, amount: number) {
+  const csrfToken = getCookie('csrfToken');
+
+  const response = await fetch('/api/transfer', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken || '',
+    },
+    body: JSON.stringify({ to, amount }),
+  });
+
+  return response.json();
+}
+
+# 方式二：axios 拦截器
+
+import axios from 'axios';
+
+// 读取 Cookie
+function getCsrfFromCookie(): string {
+  const match = document.cookie.match(/csrfToken=([^;]+)/);
+  return match ? match[1] : '';
+}
+
+// 请求拦截器
+axios.interceptors.request.use((config) => {
+  const method = config.method?.toLowerCase();
+
+  if (['post', 'put', 'delete', 'patch'].includes(method || '')) {
+    config.headers['X-CSRF-Token'] = getCsrfFromCookie();
+  }
+
+  return config;
+});
+
+# 方式三：表单提交
+// 服务端渲染
+&lt;form action="/api/transfer" method="POST"&gt;
+  &lt;input type="hidden" name="_csrf" id="csrfToken"&gt;
+  &lt;!-- 其他字段 --&gt;
+&lt;/form&gt;
+
+&lt;script&gt;
+  // 从 Cookie 读取并填充
+  const csrfToken = getCookie('csrfToken');
+  document.getElementById('csrfToken').value = csrfToken;
+&lt;/script&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 安全注意事项</h2>
+      <div class="code-block">
+# 潜在风险
+
+## 1. Cookie 可被读取
+- httpOnly: false 允许 JS 读取
+- 如果存在 XSS 漏洞，Token 可被窃取
+- 应确保 XSS 防护到位
+
+## 2. 子域名风险
+- Cookie 可能被子域名访问
+- 确保子域名安全
+
+## 3. HTTPS 必需
+- secure: true 必须配置
+- 防止中间人攻击
+
+# 增强安全性
+
+// 1. 使用独立的 CSRF Cookie
+res.cookie('csrfToken', token, {
+  httpOnly: false,
+  secure: true,
+  sameSite: 'strict',
+  path: '/api',  // 限制路径
+});
+
+// 2. 添加过期时间
+res.cookie('csrfToken', token, {
+  httpOnly: false,
+  secure: true,
+  sameSite: 'strict',
+  maxAge: 3600000,  // 1 小时
+});
+
+// 3. Token 签名（可选）
+const signedToken = signToken(token, secret);
+
+// 4. 定期轮换 Token
+// 在敏感操作后重新生成
+
+# 最佳实践推荐
+
+## 简单应用
+双重 Cookie 验证 + SameSite Cookie
+
+## 企业应用
+Session CSRF Token + SameSite Cookie + Origin 验证
+
+## 高安全应用
+多重验证 + 二次验证 + 监控告警
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 双重 Cookie 验证不需要服务端存储</li>
+            <li>• 利用同源策略阻止攻击者读取 Cookie</li>
+            <li>• 需要确保 XSS 防护到位</li>
+            <li>• 适合无状态 API 和跨子域场景</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="92-4-Referer验证.html">← 上一节：Referer 验证</a>
+      <a href="../chapter93/93-1-SQL注入原理.html">下一章：SQL 注入原理 →</a>
+    </div>
+  </div>
+</body>
+</html>

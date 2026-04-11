@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>67.1 @WebSocketGateway 装饰器 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="67-1-WebSocketGateway装饰器.html">第六十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>67.1 @WebSocketGateway 装饰器</h1>
+      <p class="subtitle">NestJS WebSocket 网关配置</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 NestJS WebSocket 网关的概念</li>
+        <li>掌握 @WebSocketGateway 装饰器的使用</li>
+        <li>学会配置网关选项</li>
+        <li>了解网关的生命周期</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是 WebSocket Gateway</h3>
+      <p class="card-text">
+        <strong>WebSocket Gateway</strong> 是 NestJS 提供的 WebSocket 抽象层，基于 Socket.IO 实现。它使用装饰器模式，让 WebSocket 开发更加优雅和模块化。
+      </p>
+      <p class="card-text">
+        Gateway 本质上是一个类，使用 <code>@WebSocketGateway()</code> 装饰器标记，类似于 Controller，但处理的是 WebSocket 连接和事件。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装与配置</h2>
+
+      <div class="card">
+        <h3 class="card-title">安装依赖</h3>
+        <div class="code-block">
+# 安装 Socket.IO 适配器
+npm install @nestjs/platform-socket.io socket.io
+
+# 安装 WebSocket 包
+npm install @nestjs/websockets
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">基本配置</h3>
+        <div class="code-block">
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // 启用 WebSocket 适配器
+  app.useWebSocketAdapter(new IoAdapter(app));
+
+  // 启用 CORS
+  app.enableCors({
+    origin: 'http://localhost:3000',
+    credentials: true
+  });
+
+  await app.listen(3000);
+}
+bootstrap();
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> @WebSocketGateway 装饰器</h2>
+
+      <div class="card">
+        <h3 class="card-title">基本用法</h3>
+        <div class="code-block">
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+
+// 基本网关
+@WebSocketGateway()
+export class ChatGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
+  @WebSocketServer()
+  server: Server;
+
+  // 初始化后调用
+  afterInit(server: Server) {
+    console.log('WebSocket Gateway 初始化完成');
+  }
+
+  // 客户端连接时调用
+  handleConnection(client: Socket) {
+    console.log(`客户端连接: ${client.id}`);
+  }
+
+  // 客户端断开时调用
+  handleDisconnect(client: Socket) {
+    console.log(`客户端断开: ${client.id}`);
+  }
+
+  // 处理消息事件
+  @SubscribeMessage('message')
+  handleMessage(client: Socket, payload: any): void {
+    console.log('收到消息:', payload);
+    this.server.emit('message', payload);
+  }
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">网关选项配置</h3>
+        <div class="code-block">
+// 完整配置示例
+@WebSocketGateway({
+  // 命名空间
+  namespace: 'chat',
+
+  // 端口（独立端口）
+  port: 8080,
+
+  // 路径
+  path: '/socket.io',
+
+  // CORS 配置
+  cors: {
+    origin: ['http://localhost:3000', 'https://example.com'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+
+  // 传输方式
+  transports: ['websocket', 'polling'],
+
+  // 心跳配置
+  pingInterval: 10000,
+  pingTimeout: 5000,
+
+  // 其他 Socket.IO 选项
+  allowUpgrades: true,
+  cookie: {
+    name: 'io',
+    httpOnly: true,
+    sameSite: 'strict'
+  }
+})
+export class ChatGateway {
+  // ...
+}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">命名空间配置</h3>
+        <div class="code-block">
+// 方式一：字符串命名空间
+@WebSocketGateway('chat')
+export class ChatGateway {}
+
+@WebSocketGateway('notifications')
+export class NotificationGateway {}
+
+// 方式二：对象配置
+@WebSocketGateway({ namespace: 'game' })
+export class GameGateway {}
+
+// 客户端连接
+// const chatSocket = io('http://localhost:3000/chat');
+// const notificationSocket = io('http://localhost:3000/notifications');
+// const gameSocket = io('http://localhost:3000/game');
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">独立端口</h3>
+        <div class="code-block">
+// WebSocket 使用独立端口
+@WebSocketGateway(8080, {
+  namespace: 'chat',
+  cors: {
+    origin: '*',
+  }
+})
+export class ChatGateway {
+  @WebSocketServer()
+  server: Server;
+}
+
+// 客户端连接到独立端口
+// const socket = io('http://localhost:8080/chat');
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 网关生命周期</h2>
+
+      <div class="code-block">
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+
+@WebSocketGateway()
+export class AppGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
+  @WebSocketServer()
+  server: Server;
+
+  // 生命周期钩子
+
+  // 1. 网关初始化后调用（只调用一次）
+  afterInit(server: Server) {
+    console.log('Gateway initialized');
+    // 可以在这里做初始化工作
+    // 例如：加载配置、初始化服务等
+  }
+
+  // 2. 客户端连接时调用
+  handleConnection(client: Socket, ...args: any[]) {
+    console.log(`Client connected: ${client.id}`);
+
+    // 可以访问握手信息
+    const token = client.handshake.auth.token;
+    const query = client.handshake.query;
+
+    // 验证连接
+    if (!this.validateConnection(client)) {
+      client.disconnect(true);
+      return;
+    }
+
+    // 发送欢迎消息
+    client.emit('connected', { message: 'Welcome!' });
+  }
+
+  // 3. 客户端断开时调用
+  handleDisconnect(client: Socket) {
+    console.log(`Client disconnected: ${client.id}`);
+    // 清理资源
+  }
+
+  private validateConnection(client: Socket): boolean {
+    // 验证逻辑
+    return true;
+  }
+}
+        </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 注册网关到模块</h2>
+
+      <div class="code-block">
+// chat.module.ts
+import { Module } from '@nestjs/common';
+import { ChatGateway } from './chat.gateway';
+import { ChatService } from './chat.service';
+
+@Module({
+  providers: [ChatGateway, ChatService],
+  exports: [ChatService]
+})
+export class ChatModule {}
+
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { ChatModule } from './chat/chat.module';
+
+@Module({
+  imports: [ChatModule]
+})
+export class AppModule {}
+        </div>
+
+      <div class="tip-box info" style="margin-top: 1rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Gateway 必须在模块的 providers 中注册才能生效</li>
+            <li>一个应用可以有多个 Gateway，分别处理不同的命名空间</li>
+            <li>Gateway 可以注入其他 Service，实现业务逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• @WebSocketGateway 装饰器标记 WebSocket 网关类</li>
+            <li>• 支持命名空间、端口、CORS 等配置</li>
+            <li>• 生命周期接口：OnGatewayInit、OnGatewayConnection、OnGatewayDisconnect</li>
+            <li>• @WebSocketServer 装饰器注入 Server 实例</li>
+            <li>• Gateway 需要在模块中注册才能使用</li>
+            <li>• 支持依赖注入，可以注入 Service</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter66/66-5-实时游戏.html">← 上一节</a>
+      <a href="67-2-网关实现.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

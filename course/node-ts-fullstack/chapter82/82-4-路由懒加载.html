@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>82.4 路由懒加载 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>82.4 路由懒加载</h1>
+      <p class="subtitle">优化应用加载性能</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>路由懒加载是一种将路由对应的组件分割成不同的代码块，然后在路由被访问时才加载对应组件的技术。这可以显著提高首屏加载速度，优化用户体验。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解路由懒加载的原理和好处</li>
+        <li>掌握动态导入的语法</li>
+        <li>学会使用命名 chunk 和分组</li>
+        <li>了解预加载和预取策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 静态导入 vs 动态导入</h2>
+
+      <h3>静态导入（不推荐）</h3>
+      <div class="code-block"><span class="comment">// 静态导入 - 所有组件打包在一起</span>
+<span class="keyword">import</span> Home <span class="keyword">from</span> <span class="string">'@/views/Home.vue'</span>;
+<span class="keyword">import</span> About <span class="keyword">from</span> <span class="string">'@/views/About.vue'</span>;
+<span class="keyword">import</span> Users <span class="keyword">from</span> <span class="string">'@/views/Users.vue'</span>;
+
+<span class="keyword">const</span> routes = [
+  { path: <span class="string">'/'</span>, component: Home },
+  { path: <span class="string">'/about'</span>, component: About },
+  { path: <span class="string">'/users'</span>, component: Users }
+];
+
+<span class="comment">// 问题：</span>
+<span class="comment">// 1. 首次加载时下载所有组件代码</span>
+<span class="comment">// 2. 首屏加载时间长</span>
+<span class="comment">// 3. 用户可能不会访问所有页面</span></div>
+
+      <h3>动态导入（推荐）</h3>
+      <div class="code-block"><span class="comment">// 动态导入 - 按需加载</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/Home.vue'</span>)
+  },
+  {
+    path: <span class="string">'/about'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/About.vue'</span>)
+  },
+  {
+    path: <span class="string">'/users'</span>,
+    component: () => <span class="keyword">import</span>(<span class="string">'@/views/Users.vue'</span>)
+  }
+];
+
+<span class="comment">// 优点：</span>
+<span class="comment">// 1. 每个路由生成独立的代码块</span>
+<span class="comment">// 2. 首屏只加载需要的代码</span>
+<span class="comment">// 3. 减少首屏加载时间</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> 命名 Chunk</h2>
+      <p>使用 webpack 的魔法注释可以为 chunk 命名。</p>
+      <div class="code-block"><span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "home" */</span>
+      <span class="string">'@/views/Home.vue'</span>
+    )
+  },
+  {
+    path: <span class="string">'/about'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "about" */</span>
+      <span class="string">'@/views/About.vue'</span>
+    )
+  },
+  {
+    path: <span class="string">'/users'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "users" */</span>
+      <span class="string">'@/views/Users.vue'</span>
+    )
+  }
+];</div>
+
+      <h3>Vite 的命名方式</h3>
+      <div class="code-block"><span class="comment">// Vite 使用不同的语法</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* @vite-ignore */</span>
+      <span class="string">'/src/views/Home.vue'</span>
+    )
+  }
+];
+
+<span class="comment">// 或者使用 vite-plugin-pages 插件自动生成路由</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> 分组打包</h2>
+      <p>将相关的路由打包到同一个 chunk 中。</p>
+      <div class="code-block"><span class="keyword">const</span> routes = [
+  <span class="comment">// 用户相关页面打包在一起</span>
+  {
+    path: <span class="string">'/users'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "user" */</span>
+      <span class="string">'@/views/Users.vue'</span>
+    ),
+    children: [
+      {
+        path: <span class="string">':id'</span>,
+        component: () => <span class="keyword">import</span>(
+          <span class="comment">/* webpackChunkName: "user" */</span>
+          <span class="string">'@/views/UserDetail.vue'</span>
+        )
+      },
+      {
+        path: <span class="string">'profile'</span>,
+        component: () => <span class="keyword">import</span>(
+          <span class="comment">/* webpackChunkName: "user" */</span>
+          <span class="string">'@/views/UserProfile.vue'</span>
+        )
+      }
+    ]
+  },
+
+  <span class="comment">// 管理后台页面打包在一起</span>
+  {
+    path: <span class="string">'/admin'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "admin" */</span>
+      <span class="string">'@/views/Admin.vue'</span>
+    ),
+    children: [
+      {
+        path: <span class="string">'users'</span>,
+        component: () => <span class="keyword">import</span>(
+          <span class="comment">/* webpackChunkName: "admin" */</span>
+          <span class="string">'@/views/AdminUsers.vue'</span>
+        )
+      },
+      {
+        path: <span class="string">'settings'</span>,
+        component: () => <span class="keyword">import</span>(
+          <span class="comment">/* webpackChunkName: "admin" */</span>
+          <span class="string">'@/views/AdminSettings.vue'</span>
+        )
+      }
+    ]
+  }
+];</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 预加载策略</h2>
+
+      <h3>webpack 预取</h3>
+      <div class="code-block"><span class="comment">// 预取（Prefetch）- 空闲时加载</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/about'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackPrefetch: true */</span>
+      <span class="comment">/* webpackChunkName: "about" */</span>
+      <span class="string">'@/views/About.vue'</span>
+    )
+  }
+];
+
+<span class="comment">// 预加载（Preload）- 立即加载</span>
+<span class="keyword">const</span> routes = [
+  {
+    path: <span class="string">'/'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackPreload: true */</span>
+      <span class="string">'@/views/Home.vue'</span>
+    )
+  }
+];</div>
+
+      <h3>Vue Router 的预加载</h3>
+      <div class="code-block"><span class="comment">// 使用 onBeforeRouteLeave 预加载下一个可能访问的页面</span>
+<span class="keyword">import</span> { onBeforeRouteLeave } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+
+<span class="comment">// 在 Home 组件中</span>
+onBeforeRouteLeave((to, from, next) => {
+  <span class="keyword">if</span> (to.name === <span class="string">'About'</span>) {
+    <span class="comment">// 预加载 About 组件</span>
+    <span class="keyword">import</span>(<span class="string">'@/views/About.vue'</span>);
+  }
+  next();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 加载状态处理</h2>
+
+      <h3>全局加载指示器</h3>
+      <div class="code-block"><span class="comment">// router/index.ts</span>
+<span class="keyword">import</span> { createRouter } <span class="keyword">from</span> <span class="string">'vue-router'</span>;
+<span class="keyword">import</span> { useLoadingStore } <span class="keyword">from</span> <span class="string">'@/stores/loading'</span>;
+
+<span class="keyword">const</span> router = createRouter({ /* ... */ });
+
+router.beforeEach(() => {
+  useLoadingStore().startLoading();
+});
+
+router.afterEach(() => {
+  useLoadingStore().stopLoading();
+});</div>
+
+      <h3>Suspense 配合异步组件</h3>
+      <div class="code-block"><span class="comment">// 定义异步组件</span>
+<span class="keyword">const</span> AsyncHome = defineAsyncComponent({
+  loader: () => <span class="keyword">import</span>(<span class="string">'@/views/Home.vue'</span>),
+  loadingComponent: LoadingSpinner,
+  errorComponent: ErrorComponent,
+  delay: <span class="number">200</span>,
+  timeout: <span class="number">10000</span>
+});
+
+<span class="comment">// 在模板中使用 Suspense</span>
+&lt;template&gt;
+  &lt;router-view v-slot=<span class="string">"{ Component }"</span>&gt;
+    &lt;Suspense&gt;
+      &lt;template #default&gt;
+        &lt;component :is=<span class="string">"Component"</span> /&gt;
+      &lt;/template&gt;
+      &lt;template #fallback&gt;
+        &lt;LoadingSpinner /&gt;
+      &lt;/template&gt;
+    &lt;/Suspense&gt;
+  &lt;/router-view&gt;
+&lt;/template&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 打包分析</h2>
+      <div class="code-block"><span class="comment"># 使用 webpack-bundle-analyzer 分析打包结果</span>
+npm install --save-dev webpack-bundle-analyzer
+
+<span class="comment"># vite 使用 rollup-plugin-visualizer</span>
+npm install --save-dev rollup-plugin-visualizer
+
+<span class="comment">// vite.config.ts</span>
+<span class="keyword">import</span> { visualizer } <span class="keyword">from</span> <span class="string">'rollup-plugin-visualizer'</span>;
+
+<span class="keyword">export default</span> defineConfig({
+  plugins: [
+    visualizer({
+      open: <span class="keyword">true</span>,
+      gzipSize: <span class="keyword">true</span>
+    })
+  ]
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 最佳实践</h2>
+      <ul class="feature-list">
+        <li>首屏必需的组件使用静态导入</li>
+        <li>其他页面使用动态导入按需加载</li>
+        <li>相关页面分组打包减少请求数</li>
+        <li>高频访问的页面使用预取策略</li>
+        <li>配置加载状态提升用户体验</li>
+      </ul>
+      <div class="code-block"><span class="comment">// 推荐的路由配置结构</span>
+<span class="keyword">const</span> routes = [
+  <span class="comment">// 首页 - 静态导入或预加载</span>
+  {
+    path: <span class="string">'/'</span>,
+    name: <span class="string">'Home'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "home" */</span>
+      <span class="comment">/* webpackPreload: true */</span>
+      <span class="string">'@/views/Home.vue'</span>
+    )
+  },
+
+  <span class="comment">// 常规页面 - 动态导入</span>
+  {
+    path: <span class="string">'/about'</span>,
+    name: <span class="string">'About'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "about" */</span>
+      <span class="string">'@/views/About.vue'</span>
+    )
+  },
+
+  <span class="comment">// 管理后台 - 分组打包</span>
+  {
+    path: <span class="string">'/admin'</span>,
+    name: <span class="string">'Admin'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "admin-group" */</span>
+      <span class="string">'@/views/admin/Admin.vue'</span>
+    ),
+    children: [
+      {
+        path: <span class="string">'users'</span>,
+        component: () => <span class="keyword">import</span>(
+          <span class="comment">/* webpackChunkName: "admin-group" */</span>
+          <span class="string">'@/views/admin/Users.vue'</span>
+        )
+      }
+    ]
+  },
+
+  <span class="comment">// 404 页面</span>
+  {
+    path: <span class="string">'/:pathMatch(.*)*'</span>,
+    name: <span class="string">'NotFound'</span>,
+    component: () => <span class="keyword">import</span>(
+      <span class="comment">/* webpackChunkName: "error" */</span>
+      <span class="string">'@/views/NotFound.vue'</span>
+    )
+  }
+];</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>路由懒加载使用动态 import() 语法</li>
+        <li>命名 chunk 便于调试和分析</li>
+        <li>分组打包减少请求数量</li>
+        <li>预取策略优化用户体验</li>
+        <li>配合 Suspense 处理加载状态</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="82-3-导航守卫.html">← 上一节：导航守卫</a>
+      <a href="../chapter83/83-1-Pinia简介.html">下一章：Pinia 状态管理 →</a>
+    </div>
+  </div>
+</body>
+</html>

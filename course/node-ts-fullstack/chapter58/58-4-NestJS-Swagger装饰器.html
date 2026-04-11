@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>58.4 NestJS Swagger 装饰器 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="58-1-API文档的重要性.html">第58章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>58.4 NestJS Swagger 装饰器</h1>
+      <p class="subtitle">使用装饰器丰富 API 文档内容</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 装饰器概述</h2>
+      <p>@nestjs/swagger 提供了丰富的装饰器，通过在控制器和 DTO 上添加装饰器，自动生成详细的 API 文档。</p>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">装饰器优势</div>
+          <p>装饰器与代码紧密结合，文档即代码，易于维护和同步更新。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏷️</span> 控制器装饰器</h2>
+
+      <h3>@ApiTags - 接口分组</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiTags } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@ApiTags(<span class="string">'用户管理'</span>)
+@Controller(<span class="string">'users'</span>)
+<span class="keyword">export class</span> <span class="function">UserController</span> {
+  <span class="comment">// 所有方法都属于 "用户管理" 分组</span>
+}
+      </div>
+
+      <h3>@ApiBearerAuth - Bearer 认证</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiBearerAuth } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@ApiBearerAuth(<span class="string">'JWT-auth'</span>)  <span class="comment">// 对应 DocumentBuilder 中的名称</span>
+@Controller(<span class="string">'users'</span>)
+<span class="keyword">export class</span> <span class="function">UserController</span> {
+  <span class="comment">// 所有接口需要认证</span>
+}
+      </div>
+
+      <h3>@ApiSecurity - 自定义认证</h3>
+      <div class="code-block">
+@ApiSecurity(<span class="string">'api-key'</span>)
+@Controller(<span class="string">'admin'</span>)
+<span class="keyword">export class</span> <span class="function">AdminController</span> {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 方法装饰器</h2>
+
+      <h3>@ApiOperation - 接口描述</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiOperation } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@Get()
+@ApiOperation({
+  summary: <span class="string">'获取用户列表'</span>,
+  description: <span class="string">'获取所有用户的分页列表，支持筛选和排序'</span>,
+})
+<span class="function">findAll</span>() {
+  <span class="keyword">return this</span>.userService.findAll();
+}
+      </div>
+
+      <h3>@ApiResponse - 响应说明</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiResponse, ApiOkResponse, ApiCreatedResponse, ApiNotFoundResponse } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@Get(<span class="string">':id'</span>)
+@ApiOkResponse({ description: <span class="string">'获取成功'</span>, type: User })
+@ApiNotFoundResponse({ description: <span class="string">'用户不存在'</span> })
+@ApiUnauthorizedResponse({ description: <span class="string">'未授权'</span> })
+<span class="function">findOne</span>(@Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>) {
+  <span class="keyword">return this</span>.userService.findOne(+id);
+}
+
+@Post()
+@ApiCreatedResponse({
+  description: <span class="string">'创建成功'</span>,
+  type: User,
+  <span class="comment">// 或使用数组类型</span>
+  type: [User],
+})
+<span class="function">create</span>(@Body() createUserDto: CreateUserDto) {
+  <span class="keyword">return this</span>.userService.create(createUserDto);
+}
+
+<span class="comment">// 通用响应装饰器</span>
+@ApiResponse({
+  status: <span class="number">200</span>,
+  description: <span class="string">'成功响应'</span>,
+  type: User,
+  headers: {
+    <span class="string">'X-Total-Count'</span>: {
+      description: <span class="string">'总数'</span>,
+      schema: { type: <span class="string">'integer'</span> },
+    },
+  },
+})
+      </div>
+
+      <h3>响应装饰器汇总</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>装饰器</th>
+            <th>状态码</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@ApiOkResponse</code></td>
+            <td>200</td>
+            <td>成功响应</td>
+          </tr>
+          <tr>
+            <td><code>@ApiCreatedResponse</code></td>
+            <td>201</td>
+            <td>创建成功</td>
+          </tr>
+          <tr>
+            <td><code>@ApiNoContentResponse</code></td>
+            <td>204</td>
+            <td>无内容响应</td>
+          </tr>
+          <tr>
+            <td><code>@ApiBadRequestResponse</code></td>
+            <td>400</td>
+            <td>参数错误</td>
+          </tr>
+          <tr>
+            <td><code>@ApiUnauthorizedResponse</code></td>
+            <td>401</td>
+            <td>未认证</td>
+          </tr>
+          <tr>
+            <td><code>@ApiForbiddenResponse</code></td>
+            <td>403</td>
+            <td>禁止访问</td>
+          </tr>
+          <tr>
+            <td><code>@ApiNotFoundResponse</code></td>
+            <td>404</td>
+            <td>资源不存在</td>
+          </tr>
+          <tr>
+            <td><code>@ApiConflictResponse</code></td>
+            <td>409</td>
+            <td>冲突</td>
+          </tr>
+          <tr>
+            <td><code>@ApiTooManyRequestsResponse</code></td>
+            <td>429</td>
+            <td>请求过多</td>
+          </tr>
+          <tr>
+            <td><code>@ApiInternalServerErrorResponse</code></td>
+            <td>500</td>
+            <td>服务器错误</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 参数装饰器</h2>
+
+      <h3>@ApiParam - 路径参数</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiParam } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@Get(<span class="string">':id'</span>)
+@ApiParam({
+  name: <span class="string">'id'</span>,
+  type: <span class="string">'integer'</span>,
+  description: <span class="string">'用户 ID'</span>,
+  example: <span class="number">123</span>,
+  required: <span class="keyword">true</span>,
+})
+<span class="function">findOne</span>(@Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>) {}
+
+<span class="comment">// 多个参数</span>
+@Get(<span class="string">':userId/posts/:postId'</span>)
+@ApiParam({ name: <span class="string">'userId'</span>, description: <span class="string">'用户 ID'</span> })
+@ApiParam({ name: <span class="string">'postId'</span>, description: <span class="string">'文章 ID'</span> })
+<span class="function">getUserPost</span>(@Param() params: { userId: <span class="keyword">string</span>; postId: <span class="keyword">string</span> }) {}
+      </div>
+
+      <h3>@ApiQuery - 查询参数</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiQuery } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@Get()
+@ApiQuery({
+  name: <span class="string">'page'</span>,
+  required: <span class="keyword">false</span>,
+  type: <span class="keyword">Number</span>,
+  description: <span class="string">'页码'</span>,
+  example: <span class="number">1</span>,
+})
+@ApiQuery({
+  name: <span class="string">'pageSize'</span>,
+  required: <span class="keyword">false</span>,
+  type: <span class="keyword">Number</span>,
+  description: <span class="string">'每页数量'</span>,
+  example: <span class="number">10</span>,
+})
+@ApiQuery({
+  name: <span class="string">'status'</span>,
+  required: <span class="keyword">false</span>,
+  enum: [<span class="string">'active'</span>, <span class="string">'inactive'</span>],
+  description: <span class="string">'用户状态'</span>,
+})
+@ApiQuery({
+  name: <span class="string">'sort'</span>,
+  required: <span class="keyword">false</span>,
+  type: <span class="keyword">String</span>,
+  description: <span class="string">'排序字段'</span>,
+  example: <span class="string">'-createdAt'</span>,
+})
+<span class="function">findAll</span>(
+  @Query(<span class="string">'page'</span>) page = <span class="number">1</span>,
+  @Query(<span class="string">'pageSize'</span>) pageSize = <span class="number">10</span>,
+) {}
+      </div>
+
+      <h3>@ApiBody - 请求体</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiBody } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@Post()
+@ApiBody({
+  type: CreateUserDto,
+  description: <span class="string">'用户创建数据'</span>,
+  examples: {
+    example1: {
+      summary: <span class="string">'基本示例'</span>,
+      value: {
+        name: <span class="string">'张三'</span>,
+        email: <span class="string">'zhangsan@example.com'</span>,
+        password: <span class="string">'Password123!'</span>,
+      },
+    },
+  },
+})
+<span class="function">create</span>(@Body() createUserDto: CreateUserDto) {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> DTO 装饰器</h2>
+
+      <h3>@ApiProperty - 属性定义</h3>
+      <div class="code-block">
+<span class="keyword">import</span> { ApiProperty, ApiPropertyOptional, OmitType, PartialType } <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+<span class="keyword">export class</span> <span class="function">UserDto</span> {
+  @ApiProperty({
+    description: <span class="string">'用户 ID'</span>,
+    example: <span class="number">1</span>,
+    type: <span class="keyword">Number</span>,
+  })
+  id: <span class="keyword">number</span>;
+
+  @ApiProperty({
+    description: <span class="string">'用户名'</span>,
+    example: <span class="string">'张三'</span>,
+    minLength: <span class="number">2</span>,
+    maxLength: <span class="number">50</span>,
+  })
+  name: <span class="keyword">string</span>;
+
+  @ApiProperty({
+    description: <span class="string">'邮箱'</span>,
+    example: <span class="string">'zhangsan@example.com'</span>,
+    format: <span class="string">'email'</span>,
+  })
+  email: <span class="keyword">string</span>;
+
+  @ApiPropertyOptional({
+    description: <span class="string">'年龄'</span>,
+    example: <span class="number">25</span>,
+    minimum: <span class="number">0</span>,
+    maximum: <span class="number">150</span>,
+  })
+  age?: <span class="keyword">number</span>;
+
+  @ApiPropertyOptional({
+    description: <span class="string">'用户状态'</span>,
+    enum: UserStatus,
+    enumName: <span class="string">'UserStatus'</span>,
+    default: UserStatus.ACTIVE,
+  })
+  status?: UserStatus;
+
+  @ApiPropertyOptional({
+    description: <span class="string">'角色列表'</span>,
+    type: [String],
+    example: [<span class="string">'user'</span>, <span class="string">'admin'</span>],
+  })
+  roles?: <span class="keyword">string</span>[];
+
+  @ApiProperty({
+    description: <span class="string">'创建时间'</span>,
+    format: <span class="string">'date-time'</span>,
+    example: <span class="string">'2024-01-15T10:30:00Z'</span>,
+  })
+  createdAt: Date;
+}
+
+<span class="comment">// 可选属性装饰器</span>
+<span class="keyword">export class</span> <span class="function">UpdateUserDto</span> <span class="keyword">extends</span> PartialType(UserDto) {
+  <span class="comment">// 所有属性变为可选</span>
+}
+
+<span class="comment">// 排除某些属性</span>
+<span class="keyword">export class</span> <span class="function">CreateUserDto</span> <span class="keyword">extends</span> OmitType(UserDto, [<span class="string">'id'</span>, <span class="string">'createdAt'</span>]) {
+  @ApiProperty({ description: <span class="string">'密码'</span> })
+  password: <span class="keyword">string</span>;
+}
+      </div>
+
+      <h3>DTO 工具类型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>工具类型</th>
+            <th>说明</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>PartialType</code></td>
+            <td>所有属性变为可选</td>
+            <td>更新 DTO</td>
+          </tr>
+          <tr>
+            <td><code>OmitType</code></td>
+            <td>排除指定属性</td>
+            <td>创建 DTO（排除 id）</td>
+          </tr>
+          <tr>
+            <td><code>PickType</code></td>
+            <td>选取指定属性</td>
+            <td>部分字段更新</td>
+          </tr>
+          <tr>
+            <td><code>IntersectionType</code></td>
+            <td>合并多个类型</td>
+            <td>组合 DTO</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 其他实用装饰器</h2>
+
+      <h3>@ApiExcludeEndpoint - 隐藏接口</h3>
+      <div class="code-block">
+@Get(<span class="string">'internal'</span>)
+@ApiExcludeEndpoint()  <span class="comment">// 不在文档中显示</span>
+<span class="function">internalMethod</span>() {}
+      </div>
+
+      <h3>@ApiHeader - 请求头</h3>
+      <div class="code-block">
+@ApiHeader({
+  name: <span class="string">'X-Custom-Header'</span>,
+  description: <span class="string">'自定义请求头'</span>,
+  required: <span class="keyword">true</span>,
+})
+@Get()
+<span class="function">findAll</span>() {}
+      </div>
+
+      <h3>@ApiProduces/@ApiConsumes - 内容类型</h3>
+      <div class="code-block">
+@ApiProduces(<span class="string">'application/json'</span>)
+@ApiConsumes(<span class="string">'application/json'</span>, <span class="string">'multipart/form-data'</span>)
+@Post(<span class="string">'upload'</span>)
+<span class="function">uploadFile</span>() {}
+      </div>
+
+      <h3>@ApiExtension - 自定义扩展</h3>
+      <div class="code-block">
+@ApiExtension(<span class="string">'x-my-extension'</span>, { custom: <span class="string">'value'</span> })
+@Get()
+<span class="function">findAll</span>() {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整示例</h2>
+
+      <div class="code-block">
+<span class="keyword">import</span> {
+  Controller, Get, Post, Put, Delete, Param, Body, Query
+} <span class="keyword">from</span> <span class="string">'@nestjs/common'</span>;
+<span class="keyword">import</span> {
+  ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody,
+  ApiOkResponse, ApiCreatedResponse, ApiNotFoundResponse,
+  ApiBearerAuth,
+} <span class="keyword">from</span> <span class="string">'@nestjs/swagger'</span>;
+
+@ApiTags(<span class="string">'用户管理'</span>)
+@ApiBearerAuth()
+@Controller(<span class="string">'users'</span>)
+<span class="keyword">export class</span> <span class="function">UserController</span> {
+  <span class="keyword">constructor</span>(<span class="keyword">private readonly</span> userService: UserService) {}
+
+  @Get()
+  @ApiOperation({ summary: <span class="string">'获取用户列表'</span> })
+  @ApiQuery({ name: <span class="string">'page'</span>, required: <span class="keyword">false</span>, type: <span class="keyword">Number</span> })
+  @ApiQuery({ name: <span class="string">'pageSize'</span>, required: <span class="keyword">false</span>, type: <span class="keyword">Number</span> })
+  @ApiOkResponse({
+    description: <span class="string">'成功获取列表'</span>,
+    type: [UserDto],
+  })
+  <span class="function">findAll</span>(
+    @Query(<span class="string">'page'</span>) page = <span class="number">1</span>,
+    @Query(<span class="string">'pageSize'</span>) pageSize = <span class="number">10</span>,
+  ) {
+    <span class="keyword">return this</span>.userService.findAll({ page, pageSize });
+  }
+
+  @Get(<span class="string">':id'</span>)
+  @ApiOperation({ summary: <span class="string">'获取用户详情'</span> })
+  @ApiParam({ name: <span class="string">'id'</span>, description: <span class="string">'用户 ID'</span> })
+  @ApiOkResponse({ description: <span class="string">'获取成功'</span>, type: UserDto })
+  @ApiNotFoundResponse({ description: <span class="string">'用户不存在'</span> })
+  <span class="function">findOne</span>(@Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>) {
+    <span class="keyword">return this</span>.userService.findOne(+id);
+  }
+
+  @Post()
+  @ApiOperation({ summary: <span class="string">'创建用户'</span> })
+  @ApiBody({ type: CreateUserDto })
+  @ApiCreatedResponse({ description: <span class="string">'创建成功'</span>, type: UserDto })
+  <span class="function">create</span>(@Body() createUserDto: CreateUserDto) {
+    <span class="keyword">return this</span>.userService.create(createUserDto);
+  }
+
+  @Put(<span class="string">':id'</span>)
+  @ApiOperation({ summary: <span class="string">'更新用户'</span> })
+  @ApiParam({ name: <span class="string">'id'</span> })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiOkResponse({ type: UserDto })
+  <span class="function">update</span>(
+    @Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    <span class="keyword">return this</span>.userService.update(+id, updateUserDto);
+  }
+
+  @Delete(<span class="string">':id'</span>)
+  @ApiOperation({ summary: <span class="string">'删除用户'</span> })
+  @ApiParam({ name: <span class="string">'id'</span> })
+  @ApiOkResponse({ description: <span class="string">'删除成功'</span> })
+  <span class="function">remove</span>(@Param(<span class="string">'id'</span>) id: <span class="keyword">string</span>) {
+    <span class="keyword">return this</span>.userService.remove(+id);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 小结</h2>
+      <ul class="feature-list">
+        <li>@ApiTags 用于接口分组</li>
+        <li>@ApiOperation 描述接口功能</li>
+        <li>@ApiParam/@ApiQuery/@ApiBody 描述参数</li>
+        <li>@ApiResponse 系列装饰器描述响应</li>
+        <li>@ApiProperty/@ApiPropertyOptional 定义 DTO 属性</li>
+        <li>使用 PartialType、OmitType 等工具类型复用 DTO</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="58-3-Swagger-UI集成.html">← 上一节：Swagger UI 集成</a>
+      <a href="58-5-API文档自动生成.html">下一节：API 文档自动生成 →</a>
+    </div>
+  </div>
+</body>
+</html>

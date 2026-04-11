@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>48.3 响应转换 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="48-1-拦截器概念.html">第四十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>48.3 响应转换</h1>
+      <p class="subtitle">使用拦截器统一响应格式</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解统一响应格式的意义</li>
+        <li>实现响应转换拦截器</li>
+        <li>处理分页数据格式化</li>
+        <li>掌握异常情况处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 统一响应格式</h2>
+      <p>统一的响应格式使 API 更规范，便于前端处理和错误追踪。</p>
+
+      <div class="code-block">
+// 标准响应格式
+{
+  "code": 200,
+  "message": "Success",
+  "data": { ... },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+
+// 分页响应格式
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "items": [...],
+    "total": 100,
+    "page": 1,
+    "pageSize": 10,
+    "totalPages": 10
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+
+// 错误响应格式
+{
+  "code": 400,
+  "message": "Validation failed",
+  "error": "Bad Request",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 响应转换拦截器</h2>
+      <div class="code-block">
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+export interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
+  timestamp: string;
+}
+
+@Injectable()
+export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
+    return next.handle().pipe(
+      map((data) => ({
+        code: 200,
+        message: 'Success',
+        data,
+        timestamp: new Date().toISOString(),
+      })),
+    );
+  }
+}
+
+// 全局注册
+@Module({
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
+  ],
+})
+export class AppModule {}
+
+// 控制器返回原始数据
+@Controller('users')
+export class UsersController {
+  @Get()
+  findAll() {
+    return [{ id: 1, name: 'John' }];
+  }
+}
+
+// 自动转换为：
+// {
+//   code: 200,
+//   message: 'Success',
+//   data: [{ id: 1, name: 'John' }],
+//   timestamp: '...'
+// }
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">拦截器 vs 过滤器</div>
+          <p>拦截器处理正常响应，过滤器处理异常响应。两者配合使用实现完整的响应格式化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 分页响应处理</h2>
+      <div class="code-block">
+// pagination.interceptor.ts
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+interface PaginatedData<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+@Injectable()
+export class PaginationInterceptor<T> implements NestInterceptor<PaginatedData<T>, any> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    return next.handle().pipe(
+      map((result: PaginatedData<T>) => ({
+        code: 200,
+        message: 'Success',
+        data: {
+          items: result.items,
+          pagination: {
+            total: result.total,
+            page: result.page,
+            pageSize: result.pageSize,
+            totalPages: Math.ceil(result.total / result.pageSize),
+          },
+        },
+        timestamp: new Date().toISOString(),
+      })),
+    );
+  }
+}
+
+// 服务返回分页数据
+@Injectable()
+export class UsersService {
+  async findAll(page: number, pageSize: number) {
+    const [items, total] = await this.userRepository.findAndCount({
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+    };
+  }
+}
+
+// 使用
+@Controller('users')
+export class UsersController {
+  @Get()
+  @UseInterceptors(PaginationInterceptor)
+  findAll(@Query('page') page: number, @Query('pageSize') pageSize: number) {
+    return this.usersService.findAll(page, pageSize);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 条件性转换</h2>
+      <div class="code-block">
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { Reflector } from '@nestjs/core';
+
+export const SKIP_TRANSFORM_KEY = 'skipTransform';
+export const SkipTransform = () => SetMetadata(SKIP_TRANSFORM_KEY, true);
+
+@Injectable()
+export class TransformInterceptor implements NestInterceptor {
+  constructor(private reflector: Reflector) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const skipTransform = this.reflector.getAllAndOverride<boolean>(
+      SKIP_TRANSFORM_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (skipTransform) {
+      return next.handle();
+    }
+
+    return next.handle().pipe(
+      map((data) => ({
+        code: 200,
+        message: 'Success',
+        data,
+        timestamp: new Date().toISOString(),
+      })),
+    );
+  }
+}
+
+// 跳过转换
+@Controller('export')
+export class ExportController {
+  @SkipTransform()
+  @Get('csv')
+  exportCsv() {
+    return 'id,name\n1,John';  // 直接返回 CSV 字符串
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 统一响应格式便于前端处理</li>
+            <li>• map 操作符修改响应数据</li>
+            <li>• 可针对分页数据特殊处理</li>
+            <li>• 使用装饰器控制是否转换</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="48-2-创建拦截器.html">← 上一节：创建拦截器</a>
+      <a href="48-4-日志拦截.html">下一节：日志拦截 →</a>
+    </div>
+  </div>
+</body>
+</html>

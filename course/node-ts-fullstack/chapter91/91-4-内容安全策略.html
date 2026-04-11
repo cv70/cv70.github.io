@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>91.4 内容安全策略 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="91-1-XSS攻击原理.html">第九十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>91.4 内容安全策略</h1>
+      <p class="subtitle">CSP 配置详解</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>深入理解 CSP 的工作原理</li>
+        <li>掌握 CSP 指令配置</li>
+        <li>学会配置报告模式</li>
+        <li>了解 CSP 最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> CSP 概述</h2>
+      <p>Content Security Policy (CSP) 是一个 HTTP 响应头，用于限制浏览器可以加载的资源来源，有效防止 XSS 攻击。</p>
+      <div class="code-block">
+# CSP 的作用
+
+## 防止 XSS
+禁止执行内联脚本和未授权的脚本
+
+## 防止数据注入
+限制资源加载来源
+
+## 防止点击劫持
+限制页面被嵌入的方式
+
+## 报告违规
+监控策略违规情况
+
+# CSP 响应头
+Content-Security-Policy: default-src 'self'
+
+# 两种模式
+
+## 强制模式
+Content-Security-Policy: ...
+
+## 报告模式（仅报告不阻止）
+Content-Security-Policy-Report-Only: ...
+
+# 检测 CSP
+curl -I https://example.com | grep -i content-security
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> CSP 指令详解</h2>
+      <div class="code-block">
+# 主要指令
+
+## default-src
+默认资源来源，其他指令未指定时使用
+
+## script-src
+JavaScript 脚本来源
+
+## style-src
+CSS 样式来源
+
+## img-src
+图片来源
+
+## font-src
+字体来源
+
+## connect-src
+XMLHttpRequest、WebSocket 连接目标
+
+## frame-src
+iframe 来源
+
+## object-src
+object、embed 来源
+
+## media-src
+音视频来源
+
+## frame-ancestors
+允许嵌入的父页面（替代 X-Frame-Options）
+
+## base-uri
+&lt;base&gt; 标签允许的 URL
+
+## form-action
+表单提交目标
+
+## upgrade-insecure-requests
+自动将 HTTP 请求升级为 HTTPS
+
+# 源值
+'self'           - 同源
+'none'           - 禁止
+'unsafe-inline'  - 允许内联（不安全）
+'unsafe-eval'    - 允许 eval（不安全）
+'strict-dynamic' - 信任动态添加的脚本
+data:            - 允许 data URI
+blob:            - 允许 blob URI
+https:           - 允许 HTTPS
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">CSP 推荐</div>
+          <p>尽量避免使用 'unsafe-inline' 和 'unsafe-eval'，它们会削弱 CSP 的防护能力。使用 nonce 或 hash 代替。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> CSP 配置示例</h2>
+      <div class="code-block">
+# Express + Helmet 配置
+
+import helmet from 'helmet';
+
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: [
+      "'self'",
+      "'nonce-abc123'",  // 使用 nonce
+      "https://cdn.jsdelivr.net",
+    ],
+    styleSrc: [
+      "'self'",
+      "'nonce-abc123'",
+      "https://fonts.googleapis.com",
+    ],
+    imgSrc: ["'self'", "data:", "https:"],
+    fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    connectSrc: ["'self'", "https://api.example.com"],
+    frameSrc: ["'none'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+    upgradeInsecureRequests: [],
+  },
+}));
+
+# 使用 nonce
+
+// 服务端生成 nonce
+import crypto from 'crypto';
+
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
+// 在 CSP 中使用
+scriptSrc: ["'self'", `'nonce-${res.locals.nonce}'`]
+
+// HTML 中使用
+&lt;script nonce="abc123"&gt;
+  console.log('This is allowed');
+&lt;/script&gt;
+
+# 使用 hash
+
+// 计算脚本内容的 hash
+const hash = crypto
+  .createHash('sha256')
+  .update('console.log("Hello");')
+  .digest('base64');
+
+// CSP 中使用
+scriptSrc: ["'self'", "'sha256-abc123...'"]
+
+# 报告模式配置
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    reportUri: '/csp-report',
+  },
+  reportOnly: true,
+}));
+
+// 处理报告
+app.post('/csp-report', express.json(), (req, res) => {
+  console.log('CSP Violation:', req.body);
+  res.status(204).end();
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 实际项目配置</h2>
+      <div class="code-block">
+# 完整 CSP 配置示例
+
+// 严格 CSP 配置
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  scriptSrc: [
+    "'self'",
+    // 使用 nonce 替代 unsafe-inline
+  ],
+  styleSrc: [
+    "'self'",
+    // 使用 nonce 替代 unsafe-inline
+  ],
+  imgSrc: [
+    "'self'",
+    "data:",
+    "https://cdn.example.com",
+  ],
+  fontSrc: ["'self'", "data:"],
+  connectSrc: [
+    "'self'",
+    "https://api.example.com",
+    "wss://ws.example.com",
+  ],
+  frameSrc: ["'none'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+  frameAncestors: ["'none'"],
+  upgradeInsecureRequests: [],
+};
+
+// React 应用 CSP 示例
+Content-Security-Policy:
+  default-src 'self';
+  script-src 'self' 'nonce-xxx' https://cdn.jsdelivr.net;
+  style-src 'self' 'nonce-xxx' https://fonts.googleapis.com;
+  img-src 'self' data: https:;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self' https://api.example.com;
+  frame-src 'none';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'self';
+  frame-ancestors 'none';
+  upgrade-insecure-requests;
+
+# 分步实施 CSP
+
+1. 先使用 Report-Only 模式
+2. 收集违规报告
+3. 逐步修复问题
+4. 最终启用强制模式
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• CSP 是防止 XSS 的有效手段</li>
+            <li>• 使用 nonce 或 hash 代替 unsafe-inline</li>
+            <li>• 先用 Report-Only 模式测试</li>
+            <li>• 配合其他防护措施形成纵深防御</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="91-3-XSS防护策略.html">← 上一节：XSS 防护策略</a>
+      <a href="91-5-输入过滤与输出编码.html">下一节：输入过滤与输出编码 →</a>
+    </div>
+  </div>
+</body>
+</html>

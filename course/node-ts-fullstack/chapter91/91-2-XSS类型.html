@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>91.2 XSS 类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="91-1-XSS攻击原理.html">第九十一章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>91.2 XSS 类型</h1>
+      <p class="subtitle">XSS 攻击类型分类</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 XSS 的三种主要类型</li>
+        <li>理解各类型的攻击方式</li>
+        <li>了解各类型的特点和危害</li>
+        <li>学会识别不同类型的 XSS</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> XSS 类型概览</h2>
+      <div class="code-block">
+# XSS 三种主要类型
+
+┌─────────────────┬────────────────────────────────────┐
+│     类型         │              特点                  │
+├─────────────────┼────────────────────────────────────┤
+│ 反射型 XSS      │ URL 参数直接反射到页面            │
+│ 存储型 XSS      │ 恶意脚本存储在服务器数据库        │
+│ DOM 型 XSS      │ 前端 JavaScript 动态渲染          │
+└─────────────────┴────────────────────────────────────┘
+
+# 对比分析
+
+┌─────────────────┬──────────┬──────────┬──────────┐
+│     对比项       │ 反射型   │ 存储型   │ DOM 型   │
+├─────────────────┼──────────┼──────────┼──────────┤
+│ 持久性          │ 临时     │ 持久     │ 临时     │
+│ 攻击范围        │ 单用户   │ 多用户   │ 单用户   │
+│ 危害程度        │ 中       │ 高       │ 中高     │
+│ 发现难度        │ 容易     │ 中等     │ 较难     │
+│ 攻击传播        │ 需诱骗   │ 自动传播 │ 需诱骗   │
+└─────────────────┴──────────┴──────────┴──────────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 反射型 XSS</h2>
+      <div class="code-block">
+# 定义
+恶意脚本通过 URL 参数传递，服务器将其反射到响应页面
+
+# 攻击流程
+1. 攻击者构造恶意 URL
+2. 诱骗受害者点击链接
+3. 服务器接收参数并反射到页面
+4. 脚本在受害者浏览器执行
+
+# 示例场景：搜索功能
+
+## 漏洞代码
+app.get('/search', (req, res) => {
+  res.send(`搜索结果: ${req.query.q}`);
+});
+
+## 攻击 URL
+https://example.com/search?q=&lt;script&gt;steal(document.cookie)&lt;/script&gt;
+
+## 攻击者发送钓鱼链接
+&lt;a href="https://example.com/search?q=&lt;script&gt;...&lt;/script&gt;"&gt;
+  点击领取奖品
+&lt;/a&gt;
+
+# 特点
+- 不持久，攻击需要诱骗用户点击
+- URL 中可见恶意代码
+- 容易被检测
+
+# 常见场景
+- 搜索结果页面
+- 错误消息显示
+- 重定向页面
+- 任何显示用户输入的地方
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">反射型 XSS 特点</div>
+          <p>反射型 XSS 需要诱骗用户点击恶意链接，攻击一次有效。通常通过钓鱼邮件、社交媒体等方式传播。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 存储型 XSS</h2>
+      <div class="code-block">
+# 定义
+恶意脚本被存储在服务器（数据库、文件等），每次访问都会执行
+
+# 攻击流程
+1. 攻击者提交包含恶意脚本的表单
+2. 服务器将脚本存储到数据库
+3. 其他用户访问相关页面
+4. 服务器读取并输出恶意脚本
+5. 脚本在所有访问者浏览器执行
+
+# 示例场景：评论系统
+
+## 漏洞代码
+app.post('/comment', (req, res) => {
+  db.query('INSERT INTO comments VALUES (?)', [req.body.content]);
+});
+
+app.get('/comments', (req, res) => {
+  db.query('SELECT * FROM comments', (err, rows) => {
+    res.send(rows.map(r => `&lt;div&gt;${r.content}&lt;/div&gt;`).join(''));
+  });
+});
+
+## 攻击者提交评论
+内容: &lt;script&gt;steal(document.cookie)&lt;/script&gt;
+
+# 特点
+- 持久存储，危害最大
+- 影响所有访问该页面的用户
+- 无需诱骗用户点击特殊链接
+- 难以发现和清除
+
+# 常见场景
+- 评论系统
+- 论坛帖子
+- 用户资料
+- 消息系统
+- 日志记录
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> DOM 型 XSS</h2>
+      <div class="code-block">
+# 定义
+恶意脚本通过修改 DOM 环境执行，不经过服务器
+
+# 攻击流程
+1. 攻击者构造恶意 URL
+2. 诱骗受害者点击链接
+3. 页面 JavaScript 读取 URL 参数
+4. JavaScript 将参数写入 DOM
+5. 脚本在受害者浏览器执行
+
+# 示例场景：前端路由
+
+## 漏洞代码
+// 不安全的 DOM 操作
+document.getElementById('content').innerHTML =
+  location.hash.slice(1);
+
+## 攻击 URL
+https://example.com/#&lt;script&gt;alert(1)&lt;/script&gt;
+
+## 另一个示例
+// 使用 location.search
+const params = new URLSearchParams(location.search);
+document.write(params.get('name'));
+
+// 攻击 URL
+https://example.com/?name=&lt;script&gt;alert(1)&lt;/script&gt;
+
+# 危险的 DOM 操作
+document.write()
+element.innerHTML = ...
+element.outerHTML = ...
+element.insertAdjacentHTML()
+eval()
+setTimeout("code", 1000)
+setInterval("code", 1000)
+
+# 特点
+- 完全在客户端执行
+- 不经过服务器处理
+- 更难检测和防护
+- 现代框架中常见
+
+# 安全的 DOM 操作
+element.textContent = ...    // 自动转义
+element.innerText = ...      // 自动转义
+document.createTextNode()    // 创建文本节点
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 反射型 XSS：URL 参数反射，需要诱骗点击</li>
+            <li>• 存储型 XSS：存储在服务器，危害最大</li>
+            <li>• DOM 型 XSS：前端处理不当导致</li>
+            <li>• 理解类型有助于针对性防护</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="91-1-XSS攻击原理.html">← 上一节：XSS 攻击原理</a>
+      <a href="91-3-XSS防护策略.html">下一节：XSS 防护策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

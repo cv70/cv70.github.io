@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>44.1 Provider 概念 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="44-1-Provider概念.html">第四十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>44.1 Provider 概念</h1>
+      <p class="subtitle">理解 NestJS 依赖注入的核心</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Provider 的概念和作用</li>
+        <li>掌握 @Injectable() 装饰器</li>
+        <li>了解 Provider 的类型</li>
+        <li>理解依赖注入原理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 什么是 Provider？</h2>
+      <p>Provider 是 NestJS 中可以被注入的类，通常用于封装业务逻辑、数据访问等功能。使用 @Injectable() 装饰器声明一个类为 Provider。</p>
+
+      <div class="code-block">
+import { Injectable } from '@nestjs/common';
+
+@Injectable()  // 声明这是一个可注入的 Provider
+export class UsersService {
+  private users = [
+    { id: 1, name: 'John' },
+    { id: 2, name: 'Jane' },
+  ];
+
+  findAll() {
+    return this.users;
+  }
+
+  findOne(id: number) {
+    return this.users.find(user => user.id === id);
+  }
+}
+
+// 在控制器中注入使用
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Provider 特点</div>
+          <p>Provider 通过依赖注入机制管理，NestJS 自动创建实例并处理依赖关系。默认情况下 Provider 是单例的。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Provider 注册</h2>
+      <div class="code-block">
+// 在模块中注册 Provider
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService],  // 注册 Provider
+  exports: [UsersService],    // 可选：导出供其他模块使用
+})
+export class UsersModule {}
+
+// Provider 会在模块中自动可用
+// 控制器和其他 Provider 可以通过构造函数注入
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> Provider 类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>说明</th>
+            <th>使用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Service</td>
+            <td>业务逻辑服务</td>
+            <td>数据处理、业务规则</td>
+          </tr>
+          <tr>
+            <td>Repository</td>
+            <td>数据访问层</td>
+            <td>数据库操作</td>
+          </tr>
+          <tr>
+            <td>Factory</td>
+            <td>工厂提供者</td>
+            <td>动态创建实例</td>
+          </tr>
+          <tr>
+            <td>Value</td>
+            <td>值提供者</td>
+            <td>配置值、常量</td>
+          </tr>
+          <tr>
+            <td>Alias</td>
+            <td>别名提供者</td>
+            <td>创建 Provider 别名</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 依赖注入原理</h2>
+      <div class="code-block">
+// NestJS 使用 TypeScript 的反射机制实现依赖注入
+// 编译后需要在 tsconfig.json 启用 emitDecoratorMetadata
+
+{
+  "compilerOptions": {
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
+  }
+}
+
+// 注入流程：
+// 1. NestJS 扫描模块中的 providers
+// 2. 分析每个 Provider 的构造函数依赖
+// 3. 按依赖顺序创建实例
+// 4. 将实例注入到需要的地方
+
+@Injectable()
+export class UsersService {
+  // 注入其他 Provider
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly logger: LoggerService,
+  ) {}
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">循环依赖</div>
+          <p>如果两个 Provider 相互依赖，会导致循环依赖问题。可以使用 forwardRef() 解决，但最好通过重构避免。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Provider 是可注入的服务类</li>
+            <li>• @Injectable() 声明 Provider</li>
+            <li>• 在模块 providers 中注册</li>
+            <li>• 通过构造函数注入依赖</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter43/43-5-路由参数.html">← 上一章：路由参数</a>
+      <a href="44-2-Service创建.html">下一节：Service 创建 →</a>
+    </div>
+  </div>
+</body>
+</html>

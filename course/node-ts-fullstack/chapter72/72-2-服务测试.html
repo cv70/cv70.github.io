@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>72.2 服务测试 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="72-1-测试模块配置.html">上一节</a></li>
+      <li><a href="72-3-控制器测试.html">下一节</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>72.2 服务测试</h1>
+      <p class="subtitle">第十部分：测试篇 - NestJS 服务层测试</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">1.</span> 服务测试示例</h2>
+
+      <div class="code-block">// src/users/users.service.ts
+import { Injectable } from '@nestjs/common';
+import { User } from './user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly userRepository: Repository&lt;User&gt;
+  ) {}
+
+  async findAll(): Promise&lt;User[]&gt; {
+    return this.userRepository.find();
+  }
+
+  async findById(id: string): Promise&lt;User | null&gt; {
+    return this.userRepository.findOne({ where: { id } });
+  }
+
+  async create(createUserDto: CreateUserDto): Promise&lt;User&gt; {
+    const user = this.userRepository.create(createUserDto);
+    return this.userRepository.save(user);
+  }
+
+  async update(id: string, updateData: Partial&lt;User&gt;): Promise&lt;User&gt; {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    Object.assign(user, updateData);
+    return this.userRepository.save(user);
+  }
+
+  async delete(id: string): Promise&lt;void&gt; {
+    const result = await this.userRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException('User not found');
+    }
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">2.</span> 完整测试文件</h2>
+
+      <div class="code-block">// src/users/users.service.spec.ts
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { NotFoundException } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { User } from './user.entity';
+import { Repository } from 'typeorm';
+
+describe('UsersService', () => {
+  let service: UsersService;
+  let repository: jest.Mocked&lt;Repository&lt;User&gt;&gt;;
+
+  const mockUser: User = {
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com',
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+
+  beforeEach(async () => {
+    const mockRepository = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      delete: jest.fn()
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockRepository
+        }
+      ]
+    }).compile();
+
+    service = module.get&lt;UsersService&gt;(UsersService);
+    repository = module.get(getRepositoryToken(User));
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('findAll', () => {
+    it('should return an array of users', async () => {
+      repository.find.mockResolvedValue([mockUser]);
+
+      const result = await service.findAll();
+
+      expect(result).toEqual([mockUser]);
+      expect(repository.find).toHaveBeenCalled();
+    });
+
+    it('should return empty array when no users', async () => {
+      repository.find.mockResolvedValue([]);
+
+      const result = await service.findAll();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('findById', () => {
+    it('should return a user by id', async () => {
+      repository.findOne.mockResolvedValue(mockUser);
+
+      const result = await service.findById('1');
+
+      expect(result).toEqual(mockUser);
+      expect(repository.findOne).toHaveBeenCalledWith({ where: { id: '1' } });
+    });
+
+    it('should return null if user not found', async () => {
+      repository.findOne.mockResolvedValue(null);
+
+      const result = await service.findById('999');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('create', () => {
+    it('should create a new user', async () => {
+      const createDto = { name: 'John', email: 'john@example.com' };
+      repository.create.mockReturnValue(mockUser);
+      repository.save.mockResolvedValue(mockUser);
+
+      const result = await service.create(createDto);
+
+      expect(result).toEqual(mockUser);
+      expect(repository.create).toHaveBeenCalledWith(createDto);
+      expect(repository.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('should update an existing user', async () => {
+      const updateData = { name: 'Updated Name' };
+      const updatedUser = { ...mockUser, ...updateData };
+
+      repository.findOne.mockResolvedValue(mockUser);
+      repository.save.mockResolvedValue(updatedUser);
+
+      const result = await service.update('1', updateData);
+
+      expect(result.name).toBe('Updated Name');
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      repository.findOne.mockResolvedValue(null);
+
+      await expect(service.update('999', {})).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete a user', async () => {
+      repository.delete.mockResolvedValue({ affected: 1 } as any);
+
+      await service.delete('1');
+
+      expect(repository.delete).toHaveBeenCalledWith('1');
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      repository.delete.mockResolvedValue({ affected: 0 } as any);
+
+      await expect(service.delete('999')).rejects.toThrow(NotFoundException);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">3.</span> 测试依赖其他服务的服务</h2>
+
+      <div class="code-block">// src/auth/auth.service.ts
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+    private readonly passwordService: PasswordService
+  ) {}
+
+  async validateUser(email: string, password: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      return null;
+    }
+
+    const isValid = await this.passwordService.compare(password, user.password);
+    if (!isValid) {
+      return null;
+    }
+
+    return user;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const token = this.jwtService.sign({ userId: user.id });
+    return { access_token: token, user };
+  }
+}</div>
+
+      <div class="code-block">// tests/auth/auth.service.spec.ts
+describe('AuthService', () => {
+  let service: AuthService;
+  let usersService: jest.Mocked&lt;UsersService&gt;;
+  let jwtService: jest.Mocked&lt;JwtService&gt;;
+  let passwordService: jest.Mocked&lt;PasswordService&gt;;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: UsersService,
+          useValue: {
+            findByEmail: jest.fn(),
+          }
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            sign: jest.fn()
+          }
+        },
+        {
+          provide: PasswordService,
+          useValue: {
+            compare: jest.fn(),
+            hash: jest.fn()
+          }
+        }
+      ]
+    }).compile();
+
+    service = module.get(AuthService);
+    usersService = module.get(UsersService);
+    jwtService = module.get(JwtService);
+    passwordService = module.get(PasswordService);
+  });
+
+  describe('login', () => {
+    it('should return token on valid credentials', async () => {
+      const mockUser = { id: '1', email: 'test@example.com', password: 'hashed' };
+
+      usersService.findByEmail.mockResolvedValue(mockUser);
+      passwordService.compare.mockResolvedValue(true);
+      jwtService.sign.mockReturnValue('mock-token');
+
+      const result = await service.login('test@example.com', 'password');
+
+      expect(result.access_token).toBe('mock-token');
+      expect(result.user).toEqual(mockUser);
+    });
+
+    it('should throw UnauthorizedException on invalid credentials', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        service.login('test@example.com', 'wrong')
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">4.</span> 使用 jest.createMock</h2>
+
+      <div class="code-block">// 创建类型安全的 Mock
+import { createMock } from '@golevelup/ts-jest';
+
+describe('With createMock', () => {
+  let service: UsersService;
+  let repository: jest.Mocked&lt;Repository&lt;User&gt;&gt;;
+
+  beforeEach(async () => {
+    // 自动 Mock 所有方法
+    repository = createMock&lt;Repository&lt;User&gt;&gt;();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        {
+          provide: getRepositoryToken(User),
+          useValue: repository
+        }
+      ]
+    }).compile();
+
+    service = module.get(UsersService);
+  });
+
+  it('works with auto-mocked repository', async () => {
+    repository.find.mockResolvedValue([mockUser]);
+
+    const result = await service.findAll();
+
+    expect(result).toEqual([mockUser]);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">5.</span> 测试异步操作</h2>
+
+      <div class="code-block">describe('Async Operations', () => {
+  it('should handle async errors', async () => {
+    repository.save.mockRejectedValue(new Error('Database error'));
+
+    await expect(service.create({ name: 'Test' }))
+      .rejects.toThrow('Database error');
+  });
+
+  it('should handle concurrent operations', async () => {
+    repository.find.mockResolvedValue([mockUser]);
+
+    const [result1, result2] = await Promise.all([
+      service.findAll(),
+      service.findAll()
+    ]);
+
+    expect(result1).toEqual(result2);
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">6.</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">关键要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>Mock 所有外部依赖（Repository、其他服务）</li>
+            <li>测试成功和失败两种情况</li>
+            <li>使用 getRepositoryToken 获取 TypeORM Repository 的 token</li>
+            <li>在 afterEach 中清理 Mock</li>
+            <li>使用 createMock 简化 Mock 创建</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="72-1-测试模块配置.html">← 上一节：测试模块配置</a>
+      <a href="72-3-控制器测试.html">下一节：控制器测试 →</a>
+    </div>
+  </div>
+</body>
+</html>

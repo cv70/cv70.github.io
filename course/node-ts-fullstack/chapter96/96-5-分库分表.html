@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>96.5 分库分表 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="96-1-索引优化.html">第九十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>96.5 分库分表</h1>
+      <p class="subtitle">数据库分片策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解分库分表的必要性</li>
+        <li>掌握分片策略选择</li>
+        <li>学会使用分片中间件</li>
+        <li>了解分布式事务处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 分库分表概述</h2>
+      <div class="code-block">
+# 为什么需要分库分表
+
+## 单表瓶颈
+- 数据量过大，查询变慢
+- 单机存储容量限制
+- 写入性能下降
+- 备份恢复时间长
+
+## 解决方案
+
+### 垂直分表
+将大表按列拆分
+用户表 → 用户基础信息表 + 用户扩展信息表
+
+### 水平分表
+将数据按行拆分到多个表
+用户表 → 用户表1 + 用户表2 + 用户表3
+
+### 垂直分库
+按业务拆分数据库
+单库 → 用户库 + 订单库 + 商品库
+
+### 水平分库
+将数据分散到多个数据库实例
+用户库 → 用户库1 + 用户库2 + 用户库3
+
+# 架构示例
+
+                应用层
+                  │
+                  ▼
+           ┌──────────────┐
+           │ 分片中间件    │
+           │ ShardingSphere│
+           └──────┬───────┘
+                  │
+    ┌─────────────┼─────────────┐
+    │             │             │
+    ▼             ▼             ▼
+┌───────┐   ┌───────┐   ┌───────┐
+│  DB1  │   │  DB2  │   │  DB3  │
+│Table0 │   │Table0 │   │Table0 │
+│Table1 │   │Table1 │   │Table1 │
+└───────┘   └───────┘   └───────┘
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 分片策略</h2>
+      <div class="code-block">
+# 分片键选择
+
+## 好的分片键
+- 数据分布均匀
+- 查询命中率高
+- 业务关联性强
+
+## 常见分片键
+- 用户 ID
+- 订单 ID
+- 时间（按月/年）
+- 地区
+
+# 分片算法
+
+## 1. Hash 分片
+// 根据 ID hash 取模
+function getTable(userId: number): string {
+  const tableCount = 16;
+  const index = userId % tableCount;
+  return `users_${index}`;
+}
+
+## 2. 范围分片
+// 按范围分表
+function getTable(userId: number): string {
+  if (userId < 1000000) return 'users_1';
+  if (userId < 2000000) return 'users_2';
+  if (userId < 3000000) return 'users_3';
+  return 'users_4';
+}
+
+## 3. 时间分片
+// 按月份分表
+function getTable(date: Date): string {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  return `orders_${year}_${month.toString().padStart(2, '0')}`;
+}
+
+## 4. 一致性 Hash
+import { ConsistentHash } from 'consistent-hash';
+
+const ring = new ConsistentHash();
+ring.add('db1');
+ring.add('db2');
+ring.add('db3');
+
+const targetDb = ring.get(userId.toString());
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">分片键选择</div>
+          <p>选择分片键时要考虑查询模式。如果大部分查询都带分片键，效率最高。避免跨分片查询。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 分片中间件</h2>
+      <div class="code-block">
+# Prisma 多数据库配置
+
+// schema.prisma
+datasource db1 {
+  provider = "mysql"
+  url      = env("DATABASE_URL_1")
+}
+
+datasource db2 {
+  provider = "mysql"
+  url      = env("DATABASE_URL_2")
+}
+
+# 自定义分片路由
+
+class ShardingRouter {
+  private shards: Map&lt;string, PrismaClient&gt;;
+
+  constructor() {
+    this.shards = new Map();
+    // 初始化多个数据库连接
+    this.shards.set('shard1', new PrismaClient({ datasources: { db: { url: process.env.DB_URL_1 } } }));
+    this.shards.set('shard2', new PrismaClient({ datasources: { db: { url: process.env.DB_URL_2 } } }));
+  }
+
+  getShard(userId: string): PrismaClient {
+    const index = parseInt(userId) % 2;
+    return this.shards.get(`shard${index + 1}`)!;
+  }
+
+  async getUser(userId: string) {
+    const shard = this.getShard(userId);
+    return shard.user.findUnique({ where: { id: userId } });
+  }
+
+  async createUser(data: any) {
+    const shard = this.getShard(data.id);
+    return shard.user.create({ data });
+  }
+}
+
+# 使用 ShardingSphere-JDBC
+
+// application.yml
+spring:
+  shardingsphere:
+    datasource:
+      names: ds0,ds1
+      ds0:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/db0
+      ds1:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/db1
+    rules:
+      sharding:
+        tables:
+          t_order:
+            actual-data-nodes: ds$->{0..1}.t_order_$->{0..1}
+            table-strategy:
+              standard:
+                sharding-column: order_id
+                sharding-algorithm-name: t-order-inline
+            key-generate-strategy:
+              column: order_id
+              key-generator-name: snowflake
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 分布式事务</h2>
+      <div class="code-block">
+# 跨分片事务处理
+
+## 1. 两阶段提交 (2PC)
+
+async function transfer(fromId: string, toId: string, amount: number) {
+  const fromShard = router.getShard(fromId);
+  const toShard = router.getShard(toId);
+
+  // 阶段1：准备
+  await fromShard.$executeRaw`PREPARE TRANSACTION 'tx1'`;
+  await toShard.$executeRaw`PREPARE TRANSACTION 'tx2'`;
+
+  try {
+    // 阶段2：提交
+    await fromShard.$executeRaw`COMMIT PREPARED 'tx1'`;
+    await toShard.$executeRaw`COMMIT PREPARED 'tx2'`;
+  } catch (error) {
+    // 回滚
+    await fromShard.$executeRaw`ROLLBACK PREPARED 'tx1'`;
+    await toShard.$executeRaw`ROLLBACK PREPARED 'tx2'`;
+    throw error;
+  }
+}
+
+## 2. 最终一致性（Saga 模式）
+
+async function createOrder(orderData: any) {
+  // 1. 创建订单（订单库）
+  const order = await orderShard.order.create({ data: orderData });
+
+  // 2. 发送消息到库存服务
+  await messageQueue.publish('inventory.deduct', {
+    orderId: order.id,
+    items: orderData.items,
+  });
+
+  // 库存服务消费消息，扣减库存
+  // 如果失败，发送补偿消息回滚订单
+}
+
+## 3. 本地消息表
+
+async function transferWithLocalMessage(fromId: string, toId: string, amount: number) {
+  const fromShard = router.getShard(fromId);
+
+  // 在同一个事务中写入业务数据和消息
+  await fromShard.$transaction(async (tx) => {
+    // 扣减余额
+    await tx.account.update({
+      where: { id: fromId },
+      data: { balance: { decrement: amount } },
+    });
+
+    // 写入本地消息表
+    await tx.outbox.create({
+      data: {
+        eventType: 'TRANSFER',
+        payload: { toId, amount },
+        status: 'PENDING',
+      },
+    });
+  });
+}
+
+// 后台任务轮询发送消息
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 分库分表解决单表瓶颈问题</li>
+            <li>• 选择合适的分片键是关键</li>
+            <li>• 跨分片事务需要特殊处理</li>
+            <li>• 优先考虑垂直拆分，再考虑水平拆分</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="96-4-读写分离.html">← 上一节：读写分离</a>
+      <a href="../chapter97/97-1-接口缓存.html">下一章：接口缓存 →</a>
+    </div>
+  </div>
+</body>
+</html>

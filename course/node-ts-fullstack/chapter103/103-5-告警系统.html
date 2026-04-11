@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>103.5 告警系统 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="103-1-日志收集.html">第103章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>103.5 告警系统</h1>
+      <p class="subtitle">构建高效可靠的告警体系</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解告警系统设计原则</li>
+        <li>学会配置 Alertmanager</li>
+        <li>掌握多渠道告警通知</li>
+        <li>了解告警分级与处理流程</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="Alert System" class="card-image">
+      <h3 class="card-title">告警系统概述</h3>
+      <p class="card-text">
+        告警系统是运维的眼睛，好的告警系统能在问题发生时及时通知相关人员，
+        同时避免过多的噪音造成"告警疲劳"。设计合理的告警体系是保障服务稳定的关键。
+      </p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 告警分级</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>级别</th>
+            <th>说明</th>
+            <th>响应时间</th>
+            <th>通知方式</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>P0 - Critical</strong></td>
+            <td>服务不可用</td>
+            <td>立即响应</td>
+            <td>电话 + 短信 + 即时通讯</td>
+          </tr>
+          <tr>
+            <td><strong>P1 - High</strong></td>
+            <td>核心功能受损</td>
+            <td>15 分钟内</td>
+            <td>短信 + 即时通讯</td>
+          </tr>
+          <tr>
+            <td><strong>P2 - Medium</strong></td>
+            <td>性能下降/非核心问题</td>
+            <td>1 小时内</td>
+            <td>即时通讯 + 邮件</td>
+          </tr>
+          <tr>
+            <td><strong>P3 - Low</strong></td>
+            <td>需要关注的问题</td>
+            <td>工作时间处理</td>
+            <td>邮件</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Alertmanager 配置</h2>
+      <div class="code-block">
+<span class="comment"># alertmanager.yml</span>
+global:
+  resolve_timeout: 5m
+  <span class="comment"># Slack 配置</span>
+  slack_api_url: 'https://hooks.slack.com/services/xxx'
+  <span class="comment"># 邮件配置</span>
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@example.com'
+  smtp_auth_username: 'alertmanager@example.com'
+  smtp_auth_password: 'password'
+
+<span class="comment"># 告警路由</span>
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'team-default'
+  routes:
+    <span class="comment"># P0 级别告警</span>
+    - match:
+        severity: critical
+      receiver: 'team-critical'
+      continue: true
+
+    <span class="comment"># 数据库相关告警</span>
+    - match:
+        component: database
+      receiver: 'team-database'
+
+<span class="comment"># 接收器配置</span>
+receivers:
+  - name: 'team-default'
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+
+  - name: 'team-critical'
+    webhook_configs:
+      - url: 'http://webhook-server/alert'
+        send_resolved: true
+    slack_configs:
+      - channel: '#critical-alerts'
+        send_resolved: true
+    email_configs:
+      - to: 'oncall@example.com'
+        send_resolved: true
+
+  - name: 'team-database'
+    email_configs:
+      - to: 'dba@example.com'
+
+<span class="comment"># 抑制规则</span>
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📱</span> 多渠道通知实现</h2>
+      <div class="code-block">
+<span class="comment">// src/services/alertService.ts</span>
+import axios from 'axios';
+import nodemailer from 'nodemailer';
+
+interface Alert {
+  name: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  message: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+class AlertService {
+  private emailTransporter;
+
+  constructor() {
+    this.emailTransporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: 587,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+  }
+
+  <span class="comment"># 发送钉钉通知</span>
+  async sendDingTalk(alert: Alert) {
+    const webhook = process.env.DINGTALK_WEBHOOK;
+    const text = this.formatAlertText(alert);
+
+    await axios.post(webhook, {
+      msgtype: 'markdown',
+      markdown: {
+        title: `【${alert.severity.toUpperCase()}】${alert.name}`,
+        text: text
+      }
+    });
+  }
+
+  <span class="comment"># 发送企业微信通知</span>
+  async sendWeChat(alert: Alert) {
+    const webhook = process.env.WECHAT_WEBHOOK;
+    const text = this.formatAlertText(alert);
+
+    await axios.post(webhook, {
+      msgtype: 'markdown',
+      markdown: { content: text }
+    });
+  }
+
+  <span class="comment"># 发送邮件通知</span>
+  async sendEmail(alert: Alert, recipients: string[]) {
+    await this.emailTransporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: recipients.join(','),
+      subject: `【${alert.severity.toUpperCase()}】${alert.name}`,
+      html: this.formatAlertHtml(alert)
+    });
+  }
+
+  <span class="comment"># 发送 Slack 通知</span>
+  async sendSlack(alert: Alert) {
+    const webhook = process.env.SLACK_WEBHOOK;
+
+    await axios.post(webhook, {
+      text: `【${alert.severity.toUpperCase()}】${alert.name}`,
+      attachments: [{
+        color: this.getSeverityColor(alert.severity),
+        fields: [
+          { title: 'Alert', value: alert.name, short: true },
+          { title: 'Severity', value: alert.severity, short: true },
+          { title: 'Message', value: alert.message, short: false }
+        ]
+      }]
+    });
+  }
+
+  private formatAlertText(alert: Alert): string {
+    return `
+### ${alert.name}
+- **级别**: ${alert.severity}
+- **消息**: ${alert.message}
+- **时间**: ${new Date().toISOString()}
+- **标签**: ${JSON.stringify(alert.labels)}
+    `.trim();
+  }
+
+  private getSeverityColor(severity: string): string {
+    const colors = {
+      critical: 'danger',
+      high: 'warning',
+      medium: '#ff9900',
+      low: 'good'
+    };
+    return colors[severity] || 'good';
+  }
+}
+
+export default new AlertService();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 值班轮换</h2>
+      <div class="code-block">
+<span class="comment"># PagerDuty 集成示例</span>
+receivers:
+  - name: 'pagerduty'
+    pagerduty_configs:
+      - service_key: 'your-service-key'
+        description: '{{ .GroupLabels.alertname }}'
+        details:
+          severity: '{{ .GroupLabels.severity }}'
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+
+<span class="comment"># OpsGenie 集成</span>
+receivers:
+  - name: 'opsgenie'
+    opsgenie_configs:
+      - api_key: 'your-api-key'
+        priority: '{{ .GroupLabels.severity }}'
+        description: '{{ .GroupLabels.alertname }}'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔇</span> 告警静默</h2>
+      <div class="code-block">
+<span class="comment"># 计划维护期间静默告警</span>
+<span class="comment"># 通过 API 创建静默规则</span>
+curl -X POST http://alertmanager:9093/api/v2/silences \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "matchers": [
+      {
+        "name": "instance",
+        "value": "server-1",
+        "isRegex": false
+      }
+    ],
+    "startsAt": "2024-01-15T10:00:00Z",
+    "endsAt": "2024-01-15T12:00:00Z",
+    "createdBy": "admin@example.com",
+    "comment": "Planned maintenance"
+  }'
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 告警最佳实践</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">告警原则</h3>
+          <ul class="feature-list">
+            <li>可操作性：每个告警都要能处理</li>
+            <li>明确性：告警信息清晰准确</li>
+            <li>及时性：问题发生后快速通知</li>
+            <li>去重：避免重复告警骚扰</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">避免的问题</h3>
+          <ul class="feature-list">
+            <li>告警风暴：短时间内大量告警</li>
+            <li>误报频繁：降低信任度</li>
+            <li>无主告警：没人负责处理</li>
+            <li>疲劳轰炸：过多低级别告警</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">告警系统设计建议</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>使用分组和聚合减少告警数量</li>
+          <li>设置合理的持续时间和重复间隔</li>
+          <li>不同级别使用不同通知渠道</li>
+          <li>建立清晰的值班和升级机制</li>
+          <li>定期复盘告警有效性并优化</li>
+          <li>维护期间使用静默功能</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 告警分为 P0-P3 四个级别，响应方式不同</li>
+            <li>• Alertmanager 是 Prometheus 的告警组件</li>
+            <li>• 支持多渠道通知：邮件、Slack、钉钉、企业微信等</li>
+            <li>• 遵循可操作性、明确性原则，避免告警疲劳</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="103-4-性能监控.html">← 上一节</a>
+      <a href="../chapter104/104-1-微服务架构.html">下一章 →</a>
+    </div>
+  </div>
+</body>
+</html>

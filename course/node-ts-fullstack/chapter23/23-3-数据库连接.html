@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23.3 数据库连接 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="23-1-typeorm简介.html">第二十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>23.3 数据库连接</h1>
+      <p class="subtitle">管理数据库连接和生命周期</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 DataSource 配置方法</li>
+        <li>学会连接池配置</li>
+        <li>了解多数据库连接</li>
+        <li>熟悉连接生命周期管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> DataSource 配置</h2>
+      <div class="code-block">
+// src/data-source.ts
+import { DataSource, DataSourceOptions } from 'typeorm';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+export const dataSourceOptions: DataSourceOptions = {
+  type: 'mysql',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT) || 3306,
+  username: process.env.DB_USERNAME || 'root',
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE || 'myapp',
+  entities: ['dist/**/*.entity.js'],  // 生产环境使用编译后的文件
+  migrations: ['dist/migrations/*.js'],
+  synchronize: false,  // 生产环境必须为 false
+  logging: process.env.NODE_ENV === 'development',
+};
+
+export const AppDataSource = new DataSource(dataSourceOptions);
+
+// 连接池配置
+export const poolOptions: DataSourceOptions = {
+  type: 'mysql',
+  // ...其他配置
+  extra: {
+    connectionLimit: 10,     // 最大连接数
+    waitForConnections: true,
+    queueLimit: 0,           // 无限排队
+    acquireTimeout: 30000,   // 获取连接超时
+  },
+  poolSize: 10,              // TypeORM 连接池大小
+};
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">synchronize 警告</div>
+          <p>synchronize: true 会自动同步实体定义到数据库表结构，这在开发环境很方便，但在生产环境可能导致数据丢失。生产环境务必使用 migrations。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 连接初始化</h2>
+      <div class="code-block">
+// 方式一：直接初始化
+import { AppDataSource } from './data-source';
+
+async function bootstrap() {
+  try {
+    await AppDataSource.initialize();
+    console.log('Database connected successfully');
+
+    // 启动应用
+    app.listen(3000, () => {
+      console.log('Server running on port 3000');
+    });
+  } catch (error) {
+    console.error('Database connection failed:', error);
+    process.exit(1);
+  }
+}
+
+bootstrap();
+
+// 方式二：使用依赖注入（推荐）
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { dataSourceOptions } from './data-source';
+
+@Module({
+  imports: [
+    TypeOrmModule.forRoot(dataSourceOptions),
+  ],
+})
+export class AppModule {}
+
+// 方式三：Express 集成
+import express from 'express';
+import { AppDataSource } from './data-source';
+
+const app = express();
+
+AppDataSource.initialize().then(() => {
+  app.listen(3000);
+});
+
+// 优雅关闭
+process.on('SIGINT', async () => {
+  await AppDataSource.destroy();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  await AppDataSource.destroy();
+  process.exit(0);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 多数据库连接</h2>
+      <div class="code-block">
+// 配置多个数据源
+import { DataSource } from 'typeorm';
+
+// 主数据库
+export const PrimaryDataSource = new DataSource({
+  name: 'primary',
+  type: 'mysql',
+  host: 'primary-db.example.com',
+  username: 'root',
+  password: 'password',
+  database: 'primary_db',
+  entities: ['src/entity/*.ts'],
+});
+
+// 只读副本
+export const ReadOnlyDataSource = new DataSource({
+  name: 'readonly',
+  type: 'mysql',
+  host: 'readonly-db.example.com',
+  username: 'readonly',
+  password: 'password',
+  database: 'primary_db',
+  entities: ['src/entity/*.ts'],
+});
+
+// 使用指定数据源
+async function getUser(id: number) {
+  const repo = PrimaryDataSource.getRepository(User);
+  return repo.findOne({ where: { id } });
+}
+
+async function searchUsers(query: string) {
+  const repo = ReadOnlyDataSource.getRepository(User);
+  return repo.find({ where: { name: Like(`%${query}%`) } });
+}
+
+// NestJS 多数据库配置
+@Module({
+  imports: [
+    TypeOrmModule.forRoot({
+      name: 'primary',
+      type: 'mysql',
+      host: 'primary-db.example.com',
+      entities: [User],
+    }),
+    TypeOrmModule.forRoot({
+      name: 'readonly',
+      type: 'mysql',
+      host: 'readonly-db.example.com',
+      entities: [User],
+    }),
+    TypeOrmModule.forFeature([User], 'primary'),
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 连接状态管理</h2>
+      <div class="code-block">
+import { AppDataSource } from './data-source';
+
+class DatabaseService {
+  private static instance: DatabaseService;
+  private isConnected = false;
+
+  private constructor() {}
+
+  static getInstance(): DatabaseService {
+    if (!DatabaseService.instance) {
+      DatabaseService.instance = new DatabaseService();
+    }
+    return DatabaseService.instance;
+  }
+
+  async connect(): Promise<void> {
+    if (this.isConnected) return;
+
+    try {
+      await AppDataSource.initialize();
+      this.isConnected = true;
+      console.log('Database connected');
+    } catch (error) {
+      this.isConnected = false;
+      throw error;
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (!this.isConnected) return;
+
+    await AppDataSource.destroy();
+    this.isConnected = false;
+    console.log('Database disconnected');
+  }
+
+  isReady(): boolean {
+    return this.isConnected && AppDataSource.isInitialized;
+  }
+
+  // 健康检查
+  async healthCheck(): Promise<boolean> {
+    try {
+      await AppDataSource.query('SELECT 1');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+export const databaseService = DatabaseService.getInstance();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• DataSource 用于配置和管理数据库连接</li>
+            <li>• 生产环境使用 migrations 替代 synchronize</li>
+            <li>• 配置连接池优化性能</li>
+            <li>• 多数据库连接通过 name 区分</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="23-2-实体定义.html">← 上一节：实体定义</a>
+      <a href="23-4-基本crud.html">下一节：基本 CRUD →</a>
+    </div>
+  </div>
+</body>
+</html>

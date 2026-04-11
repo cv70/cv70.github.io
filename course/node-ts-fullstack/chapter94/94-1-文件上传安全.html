@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>94.1 文件上传安全 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="94-1-文件上传安全.html">第九十四章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>94.1 文件上传安全</h1>
+      <p class="subtitle">安全处理用户上传文件</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解文件上传的安全风险</li>
+        <li>掌握文件验证方法</li>
+        <li>学会安全存储配置</li>
+        <li>了解常见攻击防护</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 文件上传风险</h2>
+      <div class="code-block">
+# 常见攻击方式
+
+## 1. 恶意文件上传
+- 上传可执行脚本（PHP、JSP）
+- 上传病毒、木马
+- 上传钓鱼页面
+
+## 2. 路径遍历
+- 文件名包含 ../
+- 覆盖系统文件
+- 写入敏感目录
+
+## 3. 文件类型欺骗
+- 修改扩展名
+- 伪造 MIME 类型
+- 双扩展名攻击
+
+## 4. DoS 攻击
+- 上传超大文件
+- 大量上传请求
+- 填满磁盘空间
+
+## 5. 文件包含
+- 结合文件包含漏洞
+- 执行恶意代码
+
+# 攻击示例
+
+## 上传 PHP 木马
+恶意文件: shell.php
+内容: &lt;?php system($_GET['cmd']); ?&gt;
+访问: /uploads/shell.php?cmd=ls
+
+## 双扩展名绕过
+文件名: shell.php.jpg
+某些服务器按第一个扩展名处理
+
+## MIME 类型欺骗
+恶意文件改名为 image.jpg
+修改 Content-Type: image/jpeg
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">严重风险</div>
+          <p>文件上传漏洞可能导致服务器被完全控制，攻击者可以执行任意代码，窃取数据，甚至横向移动攻击其他系统。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 文件验证策略</h2>
+      <div class="code-block">
+# 多层验证
+
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+const app = express();
+
+// 允许的文件类型
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+];
+
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+// 文件过滤器
+const fileFilter = (req: any, file: Express.Multer.File, cb: any) => {
+  // 1. 检查 MIME 类型
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    return cb(new Error('Invalid file type'), false);
+  }
+
+  // 2. 检查扩展名
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return cb(new Error('Invalid file extension'), false);
+  }
+
+  cb(null, true);
+};
+
+// Multer 配置
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: './uploads/',
+    filename: (req, file, cb) => {
+      // 重命名文件
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, uniqueName + ext);
+    },
+  }),
+  fileFilter,
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+    files: 5, // 最多 5 个文件
+  },
+});
+
+# 验证文件内容
+
+import { fileTypeFromBuffer } from 'file-type';
+
+// 验证真实文件类型
+async function validateFileType(buffer: Buffer): Promise&lt;boolean&gt; {
+  const type = await fileTypeFromBuffer(buffer);
+
+  if (!type) return false;
+
+  return ALLOWED_MIME_TYPES.includes(type.mime);
+}
+
+// 在上传后验证
+app.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  // 读取文件内容验证类型
+  const buffer = fs.readFileSync(req.file.path);
+  const isValid = await validateFileType(buffer);
+
+  if (!isValid) {
+    // 删除无效文件
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Invalid file content' });
+  }
+
+  res.json({ success: true, file: req.file.filename });
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 安全存储配置</h2>
+      <div class="code-block">
+# 存储安全策略
+
+## 1. 目录隔离
+上传目录不应在 Web 根目录下
+或设置禁止执行权限
+
+## 2. 文件重命名
+使用随机文件名
+防止覆盖和猜测
+
+## 3. 权限控制
+上传目录只允许写入
+禁止执行权限
+
+# 目录结构
+
+uploads/
+├── images/         # 图片文件
+├── documents/      # 文档文件
+└── temp/           # 临时文件（定期清理）
+
+# Nginx 配置 - 禁止执行
+
+location /uploads/ {
+  # 禁止执行 PHP
+  location ~* \.php$ {
+    deny all;
+  }
+
+  # 禁止执行其他脚本
+  location ~* \.(php|jsp|asp|aspx|cgi|pl|py|sh)$ {
+    deny all;
+  }
+
+  # 只允许静态文件访问
+  alias /var/www/uploads/;
+}
+
+# 权限设置
+
+# 上传目录权限（Linux）
+chmod 755 /var/www/uploads
+# 文件权限（只读）
+chmod 644 /var/www/uploads/*
+
+# Node.js 创建安全目录
+
+import fs from 'fs';
+
+const uploadDir = './uploads';
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { mode: 0o755 });
+}
+
+// 设置目录权限
+fs.chmodSync(uploadDir, 0o755);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 完整上传实现</h2>
+      <div class="code-block">
+# 安全的文件上传服务
+
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+import sharp from 'sharp';
+
+class FileUploadService {
+  private uploadDir: string;
+  private allowedTypes: string[];
+
+  constructor() {
+    this.uploadDir = './uploads';
+    this.allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    this.ensureUploadDir();
+  }
+
+  private ensureUploadDir() {
+    if (!fs.existsSync(this.uploadDir)) {
+      fs.mkdirSync(this.uploadDir, { recursive: true, mode: 0o755 });
+    }
+  }
+
+  private generateSafeFilename(originalName: string): string {
+    const ext = path.extname(originalName).toLowerCase();
+    const hash = crypto.randomBytes(16).toString('hex');
+    return `${hash}${ext}`;
+  }
+
+  private sanitizeFilename(filename: string): string {
+    // 移除路径遍历字符
+    return filename.replace(/[\/\\]/g, '').replace(/\.\./g, '');
+  }
+
+  async processImage(file: Express.Multer.File): Promise&lt;string&gt; {
+    const safeName = this.generateSafeFilename(file.originalname);
+    const outputPath = path.join(this.uploadDir, safeName);
+
+    // 使用 sharp 处理图片
+    await sharp(file.buffer)
+      .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
+
+    // 设置只读权限
+    fs.chmodSync(outputPath, 0o644);
+
+    return safeName;
+  }
+
+  getMiddleware() {
+    return multer({
+      storage: multer.memoryStorage(),
+      fileFilter: (req, file, cb) => {
+        const sanitizedName = this.sanitizeFilename(file.originalname);
+
+        if (!this.allowedTypes.includes(file.mimetype)) {
+          return cb(new Error('Invalid file type'), false);
+        }
+
+        file.originalname = sanitizedName;
+        cb(null, true);
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: 1,
+      },
+    });
+  }
+}
+
+const uploadService = new FileUploadService();
+
+app.post('/upload',
+  uploadService.getMiddleware().single('file'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file' });
+      }
+
+      const filename = await uploadService.processImage(req.file);
+      res.json({ success: true, filename });
+
+    } catch (error) {
+      res.status(500).json({ error: 'Upload failed' });
+    }
+  }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 验证 MIME 类型、扩展名和文件内容</li>
+            <li>• 使用随机文件名防止覆盖和猜测</li>
+            <li>• 上传目录禁止执行脚本</li>
+            <li>• 限制文件大小和数量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter93/93-5-最小权限原则.html">← 上一章：最小权限原则</a>
+      <a href="94-2-敏感数据加密.html">下一节：敏感数据加密 →</a>
+    </div>
+  </div>
+</body>
+</html>

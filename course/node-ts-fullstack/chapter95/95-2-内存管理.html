@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>95.2 内存管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="95-1-性能分析方法.html">第九十五章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>95.2 内存管理</h1>
+      <p class="subtitle">Node.js 内存优化与泄漏排查</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 V8 内存管理机制</li>
+        <li>掌握内存泄漏排查方法</li>
+        <li>学会内存优化技巧</li>
+        <li>了解内存限制与配置</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> V8 内存模型</h2>
+      <div class="code-block">
+# V8 内存结构
+
+┌─────────────────────────────────────────────────────┐
+│                    堆内存 (Heap)                     │
+├─────────────────┬───────────────────────────────────┤
+│  新生代         │  短生命周期对象                   │
+│  (New Space)    │  Scavenge 算法快速回收            │
+├─────────────────┼───────────────────────────────────┤
+│  老生代         │  长生命周期对象                   │
+│  (Old Space)    │  标记-清除算法回收                │
+├─────────────────┼───────────────────────────────────┤
+│  大对象区       │  大型对象（直接分配）             │
+│  (Large Object) │  不复制，直接回收                 │
+├─────────────────┼───────────────────────────────────┤
+│  代码区         │  JIT 编译的代码                   │
+└─────────────────┴───────────────────────────────────┘
+
+# 垃圾回收算法
+
+## Scavenge（新生代）
+- 复制存活对象到新空间
+- 速度快，但只能使用一半空间
+
+## Mark-Sweep-Compact（老生代）
+- 标记存活对象
+- 清除未标记对象
+- 整理碎片（可选）
+
+# 内存限制
+# 64 位系统：约 1.4GB
+# 32 位系统：约 700MB
+
+# 调整内存限制
+node --max-old-space-size=4096 app.js  # 设置为 4GB
+node --max-new-space-size=256 app.js   # 新生代 256MB
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">内存限制原因</div>
+          <p>V8 限制内存是为了保证垃圾回收的效率。内存越大，GC 停顿时间越长。对于需要更多内存的应用，可以调高限制。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 内存泄漏排查</h2>
+      <div class="code-block">
+# 常见内存泄漏原因
+
+## 1. 全局变量
+global.myData = largeArray;  // 永远不会被回收
+
+## 2. 闭包
+function createClosure() {
+  const largeData = new Array(1000000);
+
+  return function() {
+    // largeData 被闭包引用，无法回收
+    return largeData.length;
+  };
+}
+
+## 3. 事件监听器
+// 重复添加监听器，不移除
+element.addEventListener('click', handler);
+// 应该在不需要时移除
+element.removeEventListener('click', handler);
+
+## 4. 定时器
+const data = largeData;
+setInterval(() => {
+  console.log(data.length);  // data 永远不会被回收
+}, 1000);
+
+## 5. 缓存
+const cache = {};
+function getData(key) {
+  if (!cache[key]) {
+    cache[key] = fetchData(key);  // 无限增长
+  }
+  return cache[key];
+}
+
+# 使用 Chrome DevTools 排查
+
+# 1. 启动带调试的应用
+node --inspect app.js
+
+# 2. 打开 Chrome DevTools
+chrome://inspect
+
+# 3. 获取堆快照
+# Memory -> Take heap snapshot
+
+# 4. 对比快照
+# 执行操作后再次获取快照
+# 对比两个快照找出增长的对象
+
+# 使用 heapdump 模块
+
+import heapdump from 'heapdump';
+
+// 手动生成堆快照
+heapdump.writeSnapshot('/path/to/snapshot.heapsnapshot');
+
+// 通过信号触发
+process.on('SIGUSR2', () => {
+  heapdump.writeSnapshot(
+    `./heapdump-${Date.now()}.heapsnapshot`
+  );
+});
+
+// 在终端发送信号
+// kill -USR2 &lt;pid&gt;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 内存监控</h2>
+      <div class="code-block">
+# 实时内存监控
+
+import v8 from 'v8';
+
+// 定期输出内存使用
+setInterval(() => {
+  const usage = process.memoryUsage();
+  const stats = v8.getHeapStatistics();
+
+  console.log({
+    rss: `${(usage.rss / 1024 / 1024).toFixed(2)} MB`,
+    heapTotal: `${(usage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+    heapUsed: `${(usage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
+    external: `${(usage.external / 1024 / 1024).toFixed(2)} MB`,
+    heapUsage: `${((stats.used_heap_size / stats.total_heap_size) * 100).toFixed(2)}%`,
+  });
+}, 60000);
+
+# 内存预警
+
+const MEMORY_THRESHOLD = 0.9; // 90%
+
+setInterval(() => {
+  const stats = v8.getHeapStatistics();
+  const usage = stats.used_heap_size / stats.heap_size_limit;
+
+  if (usage > MEMORY_THRESHOLD) {
+    console.error(`Memory usage critical: ${(usage * 100).toFixed(2)}%`);
+    // 发送告警
+    // 可以重启进程或清理缓存
+  }
+}, 10000);
+
+# GC 监控
+
+node --trace-gc app.js
+
+# 或使用日志
+import v8 from 'v8';
+
+v8.setFlagsFromString('--trace-gc');
+
+# 输出示例
+# [1396:0x110000000]  12345 ms: Mark-sweep 100 MB -> 50 MB (200 MB) ...
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 内存优化技巧</h2>
+      <div class="code-block">
+# 1. 避免不必要的对象创建
+
+// 不好的做法
+function processData(data) {
+  const result = {};  // 每次调用都创建新对象
+  // ...
+  return result;
+}
+
+// 更好的做法：复用对象
+const result = {};
+function processData(data) {
+  Object.keys(result).forEach(key => delete result[key]);
+  // ...
+  return result;
+}
+
+# 2. 使用流处理大数据
+
+// 不好的做法：加载整个文件到内存
+const data = fs.readFileSync('large.json');
+const result = JSON.parse(data);
+
+// 更好的做法：使用流
+import { createReadStream } from 'fs';
+import { pipeline } from 'stream';
+
+pipeline(
+  createReadStream('large.json'),
+  jsonParser,
+  processWritable,
+  (err) => console.log('done')
+);
+
+# 3. 限制缓存大小
+
+class LRUCache&lt;K, V&gt; {
+  private cache = new Map&lt;K, V&gt;();
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // 移到最后（最近使用）
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.size >= this.maxSize) {
+      // 删除最旧的（第一个）
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+}
+
+# 4. 及时释放引用
+
+let largeData = loadData();
+
+// 处理完成后释放
+largeData = null;  // 允许 GC 回收
+
+# 5. 使用 WeakMap/WeakSet
+
+// WeakMap 不会阻止垃圾回收
+const cache = new WeakMap&lt;object, any&gt;();
+
+function cacheData(obj: object, data: any) {
+  cache.set(obj, data);
+}
+
+// 当 obj 被回收时，缓存自动清除
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• V8 使用分代垃圾回收机制</li>
+            <li>• 常见内存泄漏：全局变量、闭包、事件监听器</li>
+            <li>• 使用 Chrome DevTools 排查内存泄漏</li>
+            <li>• 使用流处理大数据，限制缓存大小</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="95-1-性能分析方法.html">← 上一节：性能分析方法</a>
+      <a href="95-3-事件循环优化.html">下一节：事件循环优化 →</a>
+    </div>
+  </div>
+</body>
+</html>

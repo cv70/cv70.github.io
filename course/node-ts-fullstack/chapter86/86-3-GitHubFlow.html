@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>86.3 GitHub Flow - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="86-1-Git分支策略.html">第八十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>86.3 GitHub Flow</h1>
+      <p class="subtitle">简洁高效的分支策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 GitHub Flow 工作流模型</li>
+        <li>掌握 GitHub Flow 的核心原则</li>
+        <li>学会与 CI/CD 集成</li>
+        <li>了解与 Git Flow 的区别</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> GitHub Flow 概述</h2>
+      <p>GitHub Flow 是 GitHub 推荐的一种简化的工作流，适合持续部署的项目，只需要一个长期分支 main。</p>
+      <div class="code-block">
+GitHub Flow 核心原则：
+1. main 分支永远可部署
+2. 从 main 创建功能分支
+3. 功能分支提交 Pull Request
+4. Code Review 后合并到 main
+5. 合并后立即部署
+
+                      main
+                        │
+    ────────────────────┼──────────────────
+                        │
+    feature/login ──────┼────── PR ────→ main
+                        │         │
+                        │     Review
+                        │         │
+    feature/cart ───────┼────── PR ────→ main
+                        │
+    ────────────────────┼──────────────────
+                        │
+                     Deploy
+
+# 特点
+- 只有一个长期分支 main
+- 所有开发都在功能分支进行
+- 通过 PR 进行代码审查
+- 合并后自动部署
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> GitHub Flow 操作流程</h2>
+      <div class="code-block">
+# 1. 从 main 创建功能分支
+git checkout main
+git pull origin main
+git checkout -b feature/user-dashboard
+
+# 2. 开发并提交代码
+# ... 编写代码 ...
+git add .
+git commit -m "feat: 添加用户仪表盘组件"
+
+# 3. 推送到远程
+git push -u origin feature/user-dashboard
+
+# 4. 在 GitHub 创建 Pull Request
+# - 访问仓库页面
+# - 点击 "Compare & pull request"
+# - 填写 PR 标题和描述
+# - 指定审查者
+# - 创建 PR
+
+# 5. Code Review 通过后合并
+# - 使用 GitHub 界面合并
+# - 或使用命令行
+git checkout main
+git pull origin main
+git merge --no-ff feature/user-dashboard
+git push origin main
+
+# 6. 删除功能分支
+git branch -d feature/user-dashboard
+git push origin --delete feature/user-dashboard
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> CI/CD 集成</h2>
+      <div class="code-block">
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:coverage
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to Production
+        run: |
+          # 部署脚本
+          echo "Deploying to production..."
+
+# 环境部署
+# main 分支 → 生产环境
+# PR 预览 → 测试环境
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">持续部署</div>
+          <p>GitHub Flow 非常适合持续部署场景。每次合并到 main 后自动触发部署流程，实现快速迭代。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> Git Flow vs GitHub Flow</h2>
+      <div class="code-block">
+┌─────────────────┬────────────────────┬────────────────────┐
+│     对比项       │     Git Flow       │    GitHub Flow     │
+├─────────────────┼────────────────────┼────────────────────┤
+│ 长期分支数量     │ 2 (main + develop) │ 1 (main)           │
+│ 发布周期         │ 计划发布           │ 持续部署           │
+│ 复杂度           │ 较高               │ 简单               │
+│ release 分支    │ 有                 │ 无                 │
+│ hotfix 分支     │ 从 main 创建       │ 直接从 main 创建   │
+│ 适用场景         │ 版本化产品         │ SaaS/Web 应用      │
+│ 部署频率         │ 较低               │ 很高               │
+│ 团队规模         │ 中大型团队         │ 小型敏捷团队       │
+└─────────────────┴────────────────────┴────────────────────┘
+
+# GitHub Flow 优势
+- 流程简单，易于理解
+- 适合持续部署
+- 减少分支管理成本
+
+# GitHub Flow 劣势
+- 不适合需要维护多版本的项目
+- 缺乏发布准备阶段
+- 紧急修复流程不够明确
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• GitHub Flow 只有一个长期分支 main</li>
+            <li>• 所有开发通过 Pull Request 进行</li>
+            <li>• 适合持续部署的 Web 应用</li>
+            <li>• 比 Git Flow 更简洁但功能较少</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="86-2-GitFlow.html">← 上一节：Git Flow</a>
+      <a href="86-4-代码合并策略.html">下一节：代码合并策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

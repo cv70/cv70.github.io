@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>110.3 商品模块 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="110-1-需求分析.html">第110章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>110.3 商品模块</h1>
+      <p class="subtitle">商品与SKU的设计与实现</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解SPU/SKU模型</li>
+        <li>掌握商品数据表设计</li>
+        <li>学会商品搜索实现</li>
+        <li>了解库存管理策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> SPU/SKU模型</h2>
+      <div class="code-block">
+// SPU (Standard Product Unit) - 标准产品单位
+// SKU (Stock Keeping Unit) - 库存量单位
+
+// 示例：iPhone 15
+const example = {
+  SPU: {
+    id: 'spu-001',
+    name: 'iPhone 15',
+    brand: 'Apple',
+    category: '手机',
+    description: 'iPhone 15 全新设计...',
+    attributes: {
+      brand: 'Apple',
+      model: 'iPhone 15',
+      releaseYear: 2023
+    }
+  },
+  SKUs: [
+    {
+      id: 'sku-001',
+      spuId: 'spu-001',
+      name: 'iPhone 15 黑色 128GB',
+      price: 5999,
+      stock: 100,
+      specs: {
+        color: '黑色',
+        storage: '128GB'
+      }
+    },
+    {
+      id: 'sku-002',
+      spuId: 'spu-001',
+      name: 'iPhone 15 黑色 256GB',
+      price: 6999,
+      stock: 50,
+      specs: {
+        color: '黑色',
+        storage: '256GB'
+      }
+    },
+    {
+      id: 'sku-003',
+      spuId: 'spu-001',
+      name: 'iPhone 15 白色 128GB',
+      price: 5999,
+      stock: 80,
+      specs: {
+        color: '白色',
+        storage: '128GB'
+      }
+    }
+  ]
+};
+
+// 规格属性定义
+interface SpecDefinition {
+  name: string;
+  values: string[];
+}
+
+const specDefinitions: SpecDefinition[] = [
+  { name: '颜色', values: ['黑色', '白色', '蓝色', '粉色'] },
+  { name: '存储', values: ['128GB', '256GB', '512GB'] }
+];
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">SPU与SKU关系</div>
+          <p>一个SPU对应多个SKU，SKU是具体的库存单位，包含规格、价格、库存信息。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实体设计</h2>
+      <div class="code-block">
+// spu.entity.ts
+@Entity('spu')
+export class SPU {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column()
+  brandId: string;
+
+  @ManyToOne(() => Category)
+  category: Category;
+
+  @Column()
+  categoryId: string;
+
+  @Column({ type: 'text' })
+  description: string;
+
+  @Column({ type: 'json' })
+  attributes: Record<string, any>;
+
+  @Column({ type: 'json' })
+  specDefinitions: SpecDefinition[];
+
+  @Column({ default: true })
+  active: boolean;
+
+  @OneToMany(() => SKU, sku => sku.spu)
+  skus: SKU[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+// sku.entity.ts
+@Entity('sku')
+export class SKU {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  spuId: string;
+
+  @ManyToOne(() => SPU, spu => spu.skus)
+  spu: SPU;
+
+  @Column()
+  name: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  price: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  originalPrice: number;
+
+  @Column({ type: 'json' })
+  specs: Record<string, string>;
+
+  @Column({ default: 0 })
+  stock: number;
+
+  @Column({ default: 0 })
+  frozenStock: number;  // 冻结库存（已下单未支付）
+
+  @Column({ nullable: true })
+  image: string;
+
+  @Column({ default: true })
+  active: boolean;
+
+  // 可用库存
+  get availableStock(): number {
+    return this.stock - this.frozenStock;
+  }
+}
+
+// 商品服务
+@Injectable()
+export class ProductService {
+  constructor(
+    @InjectRepository(SPU) private spuRepo: Repository<SPU>,
+    @InjectRepository(SKU) private skuRepo: Repository<SKU>,
+  ) {}
+
+  // 创建商品（包含SKU）
+  async createProduct(dto: CreateProductDto): Promise<SPU> {
+    const spu = this.spuRepo.create({
+      name: dto.name,
+      description: dto.description,
+      brandId: dto.brandId,
+      categoryId: dto.categoryId,
+      attributes: dto.attributes,
+      specDefinitions: dto.specDefinitions,
+    });
+
+    // 生成所有SKU组合
+    const skuCombinations = this.generateSkuCombinations(
+      dto.specDefinitions,
+      dto.skuData
+    );
+
+    spu.skus = skuCombinations.map(skuData =>
+      this.skuRepo.create({
+        name: `${spu.name} ${this.formatSpecs(skuData.specs)}`,
+        price: skuData.price,
+        specs: skuData.specs,
+        stock: skuData.stock,
+      })
+    );
+
+    return this.spuRepo.save(spu);
+  }
+
+  // 搜索商品
+  async searchProducts(query: SearchQuery) {
+    const { keyword, categoryId, minPrice, maxPrice, page, limit } = query;
+
+    const queryBuilder = this.spuRepo.createQueryBuilder('spu')
+      .leftJoinAndSelect('spu.skus', 'sku')
+      .where('spu.active = true');
+
+    if (keyword) {
+      queryBuilder.andWhere(
+        'spu.name LIKE :keyword OR spu.description LIKE :keyword',
+        { keyword: `%${keyword}%` }
+      );
+    }
+
+    if (categoryId) {
+      queryBuilder.andWhere('spu.categoryId = :categoryId', { categoryId });
+    }
+
+    return queryBuilder
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SPU表示商品，SKU表示具体规格</li>
+            <li>• 规格属性定义生成SKU组合</li>
+            <li>• 库存需要区分总库存和冻结库存</li>
+            <li>• Elasticsearch支持复杂搜索</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="110-2-架构设计.html">← 上一节：架构设计</a>
+      <a href="110-4-订单模块.html">下一节：订单模块 →</a>
+    </div>
+  </div>
+</body>
+</html>

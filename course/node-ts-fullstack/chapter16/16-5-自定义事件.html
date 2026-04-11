@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.5 自定义事件 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="16-1-EventEmitter基础.html">第十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>16.5 自定义事件</h1>
+      <p class="subtitle">构建事件驱动的应用程序</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会设计自定义事件系统</li>
+        <li>掌握事件命名规范</li>
+        <li>实现完整的事件驱动模块</li>
+        <li>了解事件的解耦作用</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 事件命名规范</h2>
+      <div class="code-block">
+// 事件命名最佳实践
+
+// 1. 使用小写和短横线
+emitter.emit('user-created', user);     // ✅ 推荐
+emitter.emit('userCreated', user);      // ❌ 不推荐
+
+// 2. 使用动词-名词结构
+emitter.emit('data-received', data);
+emitter.emit('file-uploaded', file);
+emitter.emit('connection-closed');
+
+// 3. 表示状态变化使用过去式
+emitter.emit('user-logged-in');
+emitter.emit('order-completed');
+emitter.emit('task-finished');
+
+// 4. 表示即将发生使用将来式
+emitter.emit('will-shutdown');
+emitter.emit('about-to-restart');
+
+// 5. 内部事件使用下划线前缀
+emitter.emit('_internal-sync');
+emitter.emit('_heartbeat');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 实现事件驱动类</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 文件下载器
+class Downloader extends EventEmitter {
+  constructor() {
+    super();
+    this.downloads = new Map();
+  }
+
+  async download(url, filename) {
+    const id = Date.now().toString(36);
+
+    this.emit('download-started', { id, url, filename });
+
+    try {
+      const response = await fetch(url);
+      const total = parseInt(response.headers.get('content-length'), 10);
+      let downloaded = 0;
+
+      const file = fs.createWriteStream(filename);
+      const reader = response.body.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        file.write(value);
+        downloaded += value.length;
+
+        this.emit('download-progress', {
+          id,
+          downloaded,
+          total,
+          percent: ((downloaded / total) * 100).toFixed(2)
+        });
+      }
+
+      file.end();
+      this.emit('download-completed', { id, filename, size: downloaded });
+
+    } catch (err) {
+      this.emit('download-error', { id, error: err.message });
+    }
+  }
+
+  cancel(id) {
+    this.emit('download-cancelled', { id });
+  }
+}
+
+// 使用
+const downloader = new Downloader();
+
+downloader.on('download-started', (info) => {
+  console.log(`开始下载: ${info.filename}`);
+});
+
+downloader.on('download-progress', (info) => {
+  process.stdout.write(`\r下载进度: ${info.percent}%`);
+});
+
+downloader.on('download-completed', (info) => {
+  console.log(`\n下载完成: ${info.filename}`);
+});
+
+downloader.on('download-error', (info) => {
+  console.error(`下载失败: ${info.error}`);
+});
+
+downloader.download('https://example.com/file.zip', 'file.zip');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 事件总线模式</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 全局事件总线
+class EventBus extends EventEmitter {
+  constructor() {
+    super();
+    this.setMaxListeners(100);  // 增加监听器上限
+  }
+
+  // 订阅事件
+  subscribe(event, listener) {
+    this.on(event, listener);
+    return () => this.off(event, listener);  // 返回取消订阅函数
+  }
+
+  // 发布事件
+  publish(event, data) {
+    this.emit(event, data);
+  }
+
+  // 一次性订阅
+  once(event, listener) {
+    return super.once(event, listener);
+  }
+}
+
+// 全局单例
+const eventBus = new EventBus();
+
+// 模块 A - 发布事件
+class UserService {
+  login(username, password) {
+    // 登录逻辑...
+    eventBus.publish('user-logged-in', { username, time: Date.now() });
+  }
+
+  logout() {
+    eventBus.publish('user-logged-out', { time: Date.now() });
+  }
+}
+
+// 模块 B - 订阅事件（无需知道模块 A 的存在）
+class AnalyticsService {
+  constructor() {
+    eventBus.subscribe('user-logged-in', (data) => {
+      this.track('login', data);
+    });
+
+    eventBus.subscribe('user-logged-out', (data) => {
+      this.track('logout', data);
+    });
+  }
+
+  track(event, data) {
+    console.log(`[Analytics] ${event}:`, data);
+  }
+}
+
+// 模块 C - 订阅事件
+class NotificationService {
+  constructor() {
+    eventBus.subscribe('user-logged-in', ({ username }) => {
+      this.sendWelcome(username);
+    });
+  }
+
+  sendWelcome(username) {
+    console.log(`欢迎回来，${username}！`);
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">事件总线的作用</div>
+          <p>事件总线实现模块间解耦，发布者和订阅者互不依赖，适合大型应用的模块通信。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 状态机示例</h2>
+      <div class="code-block">
+const EventEmitter = require('events');
+
+// 订单状态机
+class OrderStateMachine extends EventEmitter {
+  constructor(orderId) {
+    super();
+    this.orderId = orderId;
+    this.state = 'pending';
+    this.history = [];
+  }
+
+  // 状态转换
+  transitions = {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['shipped', 'cancelled'],
+    shipped: ['delivered', 'returned'],
+    delivered: ['returned'],
+    cancelled: [],
+    returned: []
+  };
+
+  canTransitionTo(newState) {
+    return this.transitions[this.state].includes(newState);
+  }
+
+  transition(newState, metadata = {}) {
+    if (!this.canTransitionTo(newState)) {
+      this.emit('transition-failed', {
+        from: this.state,
+        to: newState,
+        reason: 'Invalid transition'
+      });
+      return false;
+    }
+
+    const oldState = this.state;
+    this.state = newState;
+    this.history.push({ from: oldState, to: newState, time: Date.now(), ...metadata });
+
+    this.emit('state-changed', {
+      orderId: this.orderId,
+      from: oldState,
+      to: newState,
+      metadata
+    });
+
+    return true;
+  }
+
+  confirm() { return this.transition('confirmed'); }
+  ship() { return this.transition('shipped'); }
+  deliver() { return this.transition('delivered'); }
+  cancel() { return this.transition('cancelled'); }
+  return() { return this.transition('returned'); }
+}
+
+// 使用
+const order = new OrderStateMachine('ORDER-123');
+
+order.on('state-changed', (data) => {
+  console.log(`订单 ${data.orderId}: ${data.from} -> ${data.to}`);
+});
+
+order.on('transition-failed', (data) => {
+  console.error(`状态转换失败: ${data.from} -> ${data.to}, 原因: ${data.reason}`);
+});
+
+order.confirm();  // pending -> confirmed
+order.deliver();  // 失败：confirmed 不能直接到 delivered
+order.ship();     // confirmed -> shipped
+order.deliver();  // shipped -> delivered
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 事件命名使用小写和短横线</li>
+            <li>• 继承 EventEmitter 创建事件驱动类</li>
+            <li>• 事件总线实现模块解耦</li>
+            <li>• 状态机是事件驱动的典型应用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="16-4-错误处理.html">← 上一节：错误处理</a>
+      <a href="../chapter17/17-1-流的概念.html">下一章：流的概念 →</a>
+    </div>
+  </div>
+</body>
+</html>

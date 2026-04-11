@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>39.4 静态文件服务 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="39-1-文件上传.html">第三十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>39.4 静态文件服务</h1>
+      <p class="subtitle">配置静态资源服务</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>学会使用 koa-static 配置静态文件服务</li>
+        <li>理解静态文件的缓存策略</li>
+        <li>掌握多目录静态文件配置</li>
+        <li>了解虚拟路径映射</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 安装 koa-static</h2>
+      <div class="code-block">
+# 安装 koa-static
+npm install koa-static
+      </div>
+
+      <div class="code-block">
+const Koa = require('koa');
+const serve = require('koa-static');
+const path = require('path');
+
+const app = new Koa();
+
+// 提供静态文件服务
+app.use(serve(path.join(__dirname, 'public')));
+
+app.listen(3000);
+
+// 访问 http://localhost:3000/images/logo.png
+// 对应 public/images/logo.png 文件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 目录结构</h2>
+      <div class="code-block">
+project/
+├── public/                 # 静态文件目录
+│   ├── index.html         # 首页
+│   ├── css/
+│   │   └── style.css
+│   ├── js/
+│   │   └── main.js
+│   ├── images/
+│   │   └── logo.png
+│   └── uploads/           # 用户上传文件
+│       └── photo.jpg
+├── views/                 # 模板文件
+├── routes/                # 路由
+└── app.js
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置选项</h2>
+      <div class="code-block">
+app.use(serve(path.join(__dirname, 'public'), {
+  // 最大缓存时间（毫秒）
+  maxage: 86400000,           // 1 天
+
+  // 浏览器缓存控制
+  maxage: 0,                  // 禁用缓存
+
+  // 是否启用 gzip 压缩
+  gzip: true,
+
+  // 是否使用浏览器协商缓存
+  setHeaders: (res, path, stats) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+  },
+
+  // 默认文件
+  index: 'index.html',        // 访问目录时返回的默认文件
+
+  // 是否延迟响应
+  defer: false                // 如果为 true，等待下游中间件处理
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📂</span> 多静态目录</h2>
+      <div class="code-block">
+// 多个静态目录（按优先级）
+app.use(serve(path.join(__dirname, 'public')));
+app.use(serve(path.join(__dirname, 'uploads')));
+app.use(serve(path.join(__dirname, 'assets')));
+
+// 不同路径映射
+app.use(serve(path.join(__dirname, 'public')));
+app.use('/static', serve(path.join(__dirname, 'static')));
+app.use('/uploads', serve(path.join(__dirname, 'uploads')));
+
+// 访问示例：
+// http://localhost:3000/style.css          -> public/style.css
+// http://localhost:3000/static/app.js      -> static/app.js
+// http://localhost:3000/uploads/photo.jpg  -> uploads/photo.jpg
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🕐</span> 缓存策略</h2>
+      <div class="code-block">
+// 根据文件类型设置不同缓存策略
+app.use(async (ctx, next) => {
+  await next();
+
+  const ext = path.extname(ctx.path);
+
+  // 图片等静态资源长期缓存
+  if (['.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'].includes(ext)) {
+    ctx.set('Cache-Control', 'public, max-age=31536000'); // 1 年
+  }
+
+  // CSS/JS 中期缓存
+  if (['.css', '.js'].includes(ext)) {
+    ctx.set('Cache-Control', 'public, max-age=86400'); // 1 天
+  }
+
+  // HTML 不缓存
+  if (ext === '.html' || ext === '') {
+    ctx.set('Cache-Control', 'no-cache');
+  }
+});
+
+// 或者使用 koa-static 的 setHeaders
+app.use(serve(path.join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 文件访问控制</h2>
+      <div class="code-block">
+// 限制访问特定目录
+const protectedServe = serve(path.join(__dirname, 'private'), {
+  setHeaders: (res, path, stats) => {
+    // 不允许直接访问
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+});
+
+// 只允许登录用户访问
+app.use('/private', async (ctx, next) => {
+  if (!ctx.session.user) {
+    ctx.status = 403;
+    ctx.body = 'Forbidden';
+    return;
+  }
+  await next();
+}, protectedServe);
+
+// 隐藏敏感文件
+app.use(serve(path.join(__dirname, 'public'), {
+  hidden: false  // 不返回隐藏文件（以 . 开头的文件）
+}));
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> 文件下载</h2>
+      <div class="code-block">
+const fs = require('fs');
+const path = require('path');
+
+// 文件下载接口
+router.get('/download/:filename', async ctx => {
+  const filename = ctx.params.filename;
+  const filepath = path.join(__dirname, 'uploads', filename);
+
+  // 检查文件是否存在
+  try {
+    await fs.promises.access(filepath);
+  } catch {
+    ctx.status = 404;
+    ctx.body = 'File not found';
+    return;
+  }
+
+  // 设置下载头
+  ctx.attachment(filename);
+  ctx.body = fs.createReadStream(filepath);
+});
+
+// 重命名下载
+router.get('/download/:id', async ctx => {
+  const file = await File.findById(ctx.params.id);
+  const filepath = file.path;
+  const downloadName = file.originalName;
+
+  ctx.attachment(downloadName);
+  ctx.body = fs.createReadStream(filepath);
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> SPA 应用支持</h2>
+      <div class="code-block">
+// 单页应用：所有路由返回 index.html
+const history = require('koa-connect-history-api-fallback');
+
+// 静态文件
+app.use(serve(path.join(__dirname, 'dist')));
+
+// History 模式路由回退
+app.use(history({
+  index: '/index.html',
+  whiteList: ['/api']  // API 路由不重写
+}));
+
+// 或者手动实现
+app.use(async ctx => {
+  // API 路由不处理
+  if (ctx.path.startsWith('/api')) {
+    return;
+  }
+
+  // 静态文件不存在时返回 index.html
+  await ctx.render('index');
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化</h2>
+      <div class="code-block">
+// 1. 启用 gzip 压缩
+const compress = require('koa-compress');
+
+app.use(compress({
+  filter: contentType => {
+    return /text|javascript|css|json/i.test(contentType);
+  },
+  threshold: 1024
+}));
+
+// 2. 长期缓存 + 文件哈希
+// 打包时生成带哈希的文件名
+// app.abc123.js
+
+// 3. 使用 CDN
+// 静态资源上传到 CDN
+const cdnUrl = 'https://cdn.example.com';
+
+app.use(async (ctx, next) => {
+  ctx.state.cdn = cdnUrl;
+  await next();
+});
+
+// 模板中使用
+// <script src="<%= cdn %>/js/app.abc123.js"></script>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整配置示例</h2>
+      <div class="code-block">
+const Koa = require('koa');
+const serve = require('koa-static');
+const compress = require('koa-compress');
+const mount = require('koa-mount');
+const path = require('path');
+
+const app = new Koa();
+
+// 1. 压缩中间件
+app.use(compress());
+
+// 2. 静态文件服务
+// 公共资源（长期缓存）
+app.use(serve(path.join(__dirname, 'public'), {
+  maxage: 31536000,  // 1 年
+  immutable: true
+}));
+
+// 上传文件（中期缓存）
+app.use(mount('/uploads', serve(path.join(__dirname, 'uploads'), {
+  maxage: 86400
+})));
+
+// 3. 其他中间件和路由
+// ...
+
+app.listen(3000);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 koa-static 提供静态文件服务</li>
+            <li>• 合理设置缓存策略提高性能</li>
+            <li>• 使用 mount 映射不同路径</li>
+            <li>• 配合压缩中间件减少传输量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="39-3-模板引擎.html">← 上一节：模板引擎</a>
+      <a href="39-5-安全配置.html">下一节：安全配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

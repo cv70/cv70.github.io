@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.1 URL 解析 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="19-1-URL解析.html">第十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>19.1 URL 解析</h1>
+      <p class="subtitle">解析和处理 URL 地址</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 URL 对象的使用</li>
+        <li>理解 URL 各组成部分</li>
+        <li>学会解析相对 URL</li>
+        <li>了解 legacy url 模块</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> URL 对象</h2>
+      <div class="code-block">
+// 全局 URL 类（WHATWG URL Standard）
+const url = new URL('https://user:pass@example.com:8080/path/name?foo=bar&baz=qux#hash');
+
+// URL 组成部分
+console.log(url.href);      // 完整 URL
+console.log(url.origin);    // https://example.com:8080
+console.log(url.protocol);  // https:
+console.log(url.username);  // user
+console.log(url.password);  // pass
+console.log(url.host);      // example.com:8080
+console.log(url.hostname);  // example.com
+console.log(url.port);      // 8080
+console.log(url.pathname);  // /path/name
+console.log(url.search);    // ?foo=bar&baz=qux
+console.log(url.searchParams); // URLSearchParams 对象
+console.log(url.hash);      // #hash
+
+// 修改 URL 各部分
+url.protocol = 'http:';
+url.port = '3000';
+url.pathname = '/api/users';
+url.searchParams.set('page', '1');
+url.hash = '#section';
+
+console.log(url.href);  // http://user:pass@example.com:3000/api/users?foo=bar&baz=qux&page=1#section
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> URLSearchParams</h2>
+      <div class="code-block">
+const url = new URL('https://example.com?name=Alice&age=25&tags=a&tags=b');
+
+// 获取查询参数
+console.log(url.searchParams.get('name'));      // 'Alice'
+console.log(url.searchParams.get('age'));       // '25'
+console.log(url.searchParams.get('unknown'));   // null
+
+// 获取所有同名参数
+console.log(url.searchParams.getAll('tags'));   // ['a', 'b']
+
+// 检查参数是否存在
+console.log(url.searchParams.has('name'));      // true
+console.log(url.searchParams.has('email'));     // false
+
+// 设置参数
+url.searchParams.set('page', '1');
+url.searchParams.set('name', 'Bob');
+
+// 追加参数
+url.searchParams.append('filter', 'active');
+url.searchParams.append('filter', 'verified');
+
+// 删除参数
+url.searchParams.delete('age');
+url.searchParams.delete('tags');  // 删除所有同名参数
+
+// 遍历参数
+for (const [key, value] of url.searchParams) {
+  console.log(`${key}: ${value}`);
+}
+
+// 转换为对象
+const params = Object.fromEntries(url.searchParams);
+console.log(params);
+
+// 转换为字符串
+console.log(url.searchParams.toString());  // name=Bob&page=1&filter=active&filter=verified
+
+// 单独创建 URLSearchParams
+const params = new URLSearchParams({
+  name: 'Alice',
+  age: 25
+});
+console.log(params.toString());  // name=Alice&age=25
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 解析相对 URL</h2>
+      <div class="code-block">
+// 使用 base URL 解析相对 URL
+const baseUrl = 'https://example.com/path/page.html';
+
+// 相对路径解析
+const url1 = new URL('/api/users', baseUrl);
+console.log(url1.href);  // https://example.com/api/users
+
+const url2 = new URL('../other', baseUrl);
+console.log(url2.href);  // https://example.com/other
+
+const url3 = new URL('./sub/page', baseUrl);
+console.log(url3.href);  // https://example.com/path/sub/page
+
+// 在 HTTP 服务器中解析请求 URL
+const http = require('http');
+
+http.createServer((req, res) => {
+  const baseUrl = `http://${req.headers.host}`;
+  const url = new URL(req.url, baseUrl);
+
+  console.log('路径:', url.pathname);
+  console.log('查询参数:', url.searchParams.get('q'));
+
+  res.end('OK');
+}).listen(3000);
+
+// 获取 URL 各部分
+function parseRequestUrl(req) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  return {
+    pathname: url.pathname,
+    query: Object.fromEntries(url.searchParams),
+    params: url.searchParams
+  };
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> url 模块（Legacy）</h2>
+      <div class="code-block">
+// 旧版 url 模块（仍可用，但推荐使用全局 URL）
+const url = require('url');
+
+const urlString = 'https://example.com:8080/path?foo=bar#hash';
+
+// url.parse（已弃用但仍在使用）
+const parsedUrl = url.parse(urlString, true);  // true 解析查询参数
+
+console.log(parsedUrl);
+// {
+//   protocol: 'https:',
+//   slashes: true,
+//   host: 'example.com:8080',
+//   port: '8080',
+//   hostname: 'example.com',
+//   pathname: '/path',
+//   search: '?foo=bar',
+//   query: { foo: 'bar' },
+//   hash: '#hash',
+//   href: 'https://example.com:8080/path?foo=bar#hash'
+// }
+
+// url.format（已弃用）
+const formattedUrl = url.format({
+  protocol: 'https',
+  hostname: 'example.com',
+  port: '8080',
+  pathname: '/path',
+  query: { foo: 'bar' }
+});
+console.log(formattedUrl);  // https://example.com:8080/path?foo=bar
+
+// url.resolve（已弃用）
+const resolvedUrl = url.resolve('https://example.com/path/', '../other');
+console.log(resolvedUrl);  // https://example.com/other
+
+// 推荐使用新版 API
+// url.resolve() -> new URL(relative, base).href
+const newUrl = new URL('../other', 'https://example.com/path/');
+console.log(newUrl.href);  // https://example.com/other
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意</div>
+          <p>url.parse/format/resolve 已标记为 Legacy，推荐使用全局 URL 类。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 new URL() 解析 URL</li>
+            <li>• searchParams 操作查询参数</li>
+            <li>• 第二个参数作为 base URL</li>
+            <li>• 推荐使用全局 URL 类而非 url 模块</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter18/18-5-路由实现.html">← 上一章：路由实现</a>
+      <a href="19-2-URL构造.html">下一节：URL 构造 →</a>
+    </div>
+  </div>
+</body>
+</html>

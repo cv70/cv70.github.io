@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.2 数据类型 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="29-1-redis简介.html">第二十九章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>29.2 数据类型</h1>
+      <p class="subtitle">掌握 Redis 的五种基础数据类型</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 String 类型的操作</li>
+        <li>学会 Hash 类型的使用</li>
+        <li>理解 List、Set、ZSet 的特点</li>
+        <li>了解各类型的适用场景</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> String 字符串</h2>
+      <div class="code-block">
+// String 是最基础的类型，可存储字符串、数字、二进制数据
+
+// 基本操作
+await redis.set('name', 'Alice');
+const name = await redis.get('name');  // 'Alice'
+
+await redis.del('name');
+const value = await redis.get('name');  // null
+
+// 设置过期时间
+await redis.set('session', 'abc123', 'EX', 3600);  // 1 小时后过期
+await redis.setex('session', 3600, 'abc123');  // 等价写法
+
+// 不存在时设置（分布式锁常用）
+const result = await redis.set('lock', '1', 'NX', 'EX', 30);
+// 返回 'OK' 表示设置成功，null 表示 key 已存在
+
+// 批量操作
+await redis.mset('key1', 'value1', 'key2', 'value2');
+const values = await redis.mget('key1', 'key2');  // ['value1', 'value2']
+
+// 数值操作
+await redis.set('counter', 0);
+await redis.incr('counter');     // 1
+await redis.incrby('counter', 5);  // 6
+await redis.decr('counter');     // 5
+await redis.decrby('counter', 2);  // 3
+
+// 字符串操作
+await redis.set('text', 'Hello World');
+const len = await redis.strlen('text');  // 11
+const range = await redis.getrange('text', 0, 4);  // 'Hello'
+await redis.append('text', '!');  // 追加
+
+// 应用场景
+// - 缓存：缓存 JSON 数据
+// - 计数器：文章阅读量、点赞数
+// - 分布式锁：set nx ex
+// - 会话：存储 session token
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Hash 哈希</h2>
+      <div class="code-block">
+// Hash 是键值对集合，适合存储对象
+
+// 基本操作
+await redis.hset('user:1', 'name', 'Alice');
+await redis.hset('user:1', 'email', 'alice@mail.com');
+await redis.hset('user:1', 'age', 25);
+
+// 批量设置
+await redis.hmset('user:2', {
+  name: 'Bob',
+  email: 'bob@mail.com',
+  age: 30,
+});
+
+// 获取单个字段
+const name = await redis.hget('user:1', 'name');  // 'Alice'
+
+// 获取多个字段
+const values = await redis.hmget('user:1', 'name', 'email');  // ['Alice', 'alice@mail.com']
+
+// 获取所有字段
+const user = await redis.hgetall('user:1');  // { name: 'Alice', email: '...', age: '25' }
+
+// 判断字段是否存在
+const exists = await redis.hexists('user:1', 'name');  // 1
+
+// 删除字段
+await redis.hdel('user:1', 'age');
+
+// 数值操作
+await redis.hincrby('user:1', 'age', 1);
+
+// 获取所有字段名/值
+const keys = await redis.hkeys('user:1');   // ['name', 'email']
+const vals = await redis.hvals('user:1');   // ['Alice', 'alice@mail.com']
+
+// 字段数量
+const count = await redis.hlen('user:1');  // 2
+
+// 应用场景
+// - 用户信息：存储用户属性
+// - 商品详情：存储商品信息
+// - 购物车：用户ID为key，商品ID为field，数量为value
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Hash vs String</div>
+          <p>存储对象时，Hash 可以单独更新某个字段，而 String 需要整体更新。Hash 更适合存储多字段的对象数据。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> List 列表</h2>
+      <div class="code-block">
+// List 是有序可重复的字符串列表
+
+// 基本操作
+await redis.lpush('queue', 'task1', 'task2', 'task3');  // 从左边推入
+await redis.rpush('queue', 'task4', 'task5');           // 从右边推入
+
+// 弹出元素
+const task = await redis.lpop('queue');   // 从左边弹出
+const task = await redis.rpop('queue');   // 从右边弹出
+
+// 阻塞弹出（队列常用）
+const task = await redis.blpop('queue', 5);  // 5秒超时
+const task = await redis.brpop('queue', 5);
+
+// 获取列表元素
+const element = await redis.lindex('queue', 0);  // 获取索引位置的元素
+const len = await redis.llen('queue');           // 列表长度
+
+// 获取范围
+const items = await redis.lrange('queue', 0, -1);  // 获取所有元素
+const items = await redis.lrange('queue', 0, 9);   // 获取前10个
+
+// 修改列表
+await redis.lset('queue', 0, 'new-task');  // 设置指定位置
+await redis.lrem('queue', 1, 'task1');     // 删除元素
+
+// 裁剪列表（保留指定范围）
+await redis.ltrim('queue', 0, 99);  // 只保留前100个
+
+// 应用场景
+// - 消息队列：lpush + brpop
+// - 最新列表：文章、评论列表
+// - 历史记录：最近浏览记录
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> Set 和 ZSet</h2>
+      <div class="code-block">
+// Set - 无序不重复集合
+await redis.sadd('tags', 'nodejs', 'typescript', 'redis');
+await redis.sadd('tags', 'nodejs');  // 重复元素不会添加
+
+// 判断是否成员
+const isMember = await redis.sismember('tags', 'nodejs');  // 1
+
+// 获取所有成员
+const members = await redis.smembers('tags');  // ['nodejs', 'typescript', 'redis']
+
+// 删除成员
+await redis.srem('tags', 'nodejs');
+
+// 集合运算
+await redis.sadd('set1', 'a', 'b', 'c');
+await redis.sadd('set2', 'b', 'c', 'd');
+
+const inter = await redis.sinter('set1', 'set2');  // 交集: ['b', 'c']
+const union = await redis.sunion('set1', 'set2');  // 并集: ['a', 'b', 'c', 'd']
+const diff = await redis.sdiff('set1', 'set2');    // 差集: ['a']
+
+// 应用场景：标签、点赞用户、共同好友
+
+// ZSet - 有序不重复集合（每个元素关联分数）
+await redis.zadd('leaderboard', 100, 'Alice');
+await redis.zadd('leaderboard', 200, 'Bob');
+await redis.zadd('leaderboard', 150, 'Charlie');
+
+// 获取排名（升序，索引从0开始）
+const rank = await redis.zrank('leaderboard', 'Bob');  // 2
+
+// 获取分数
+const score = await redis.zscore('leaderboard', 'Bob');  // 200
+
+// 获取范围（按分数）
+const top3 = await redis.zrange('leaderboard', 0, 2, 'WITHSCORES', 'DESC');
+
+// 按分数范围获取
+const high = await redis.zrangebyscore('leaderboard', 150, 200);
+
+// 增加分数
+await redis.zincrby('leaderboard', 50, 'Alice');
+
+// 统计分数范围内的元素数量
+const count = await redis.zcount('leaderboard', 100, 200);
+
+// 删除元素
+await redis.zrem('leaderboard', 'Charlie');
+
+// 应用场景
+// - 排行榜：游戏积分、热门内容
+// - 延迟队列：时间戳作为分数
+// - 范围查询：价格区间、时间范围
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• String 适合缓存、计数器、分布式锁</li>
+            <li>• Hash 适合存储对象数据</li>
+            <li>• List 适合消息队列、列表数据</li>
+            <li>• ZSet 适合排行榜、范围查询</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="29-1-redis简介.html">← 上一节：Redis 简介</a>
+      <a href="29-3-缓存策略.html">下一节：缓存策略 →</a>
+    </div>
+  </div>
+</body>
+</html>

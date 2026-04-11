@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>96.2 查询优化 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="96-1-索引优化.html">第九十六章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>96.2 查询优化</h1>
+      <p class="subtitle">SQL 查询性能优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握查询优化技巧</li>
+        <li>学会避免常见性能问题</li>
+        <li>理解查询执行过程</li>
+        <li>了解 ORM 查询优化</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 查询优化原则</h2>
+      <div class="code-block">
+# 查询优化的核心原则
+
+## 1. 减少数据访问量
+- 只查询需要的列
+- 使用 LIMIT 限制结果
+- 添加合理的 WHERE 条件
+
+## 2. 减少计算量
+- 避免复杂计算
+- 利用索引排序
+- 避免重复计算
+
+## 3. 减少交互次数
+- 批量操作
+- 合并查询
+- 使用 JOIN 替代子查询
+
+# 查询执行过程
+
+客户端 → 查询解析 → 查询优化 → 执行计划 → 存储引擎 → 返回结果
+
+# 慢查询日志
+
+-- MySQL 配置
+SET GLOBAL slow_query_log = ON;
+SET GLOBAL long_query_time = 1;  -- 1 秒以上为慢查询
+
+-- 查看慢查询
+SELECT * FROM mysql.slow_log ORDER BY start_time DESC LIMIT 10;
+
+-- 使用 mysqldumpslow 分析
+mysqldumpslow -s t /var/log/mysql/slow.log
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 常见优化技巧</h2>
+      <div class="code-block">
+# 1. 避免 SELECT *
+
+-- 不好的做法
+SELECT * FROM users WHERE id = 1;
+
+-- 好的做法
+SELECT id, name, email FROM users WHERE id = 1;
+
+# 2. 使用 LIMIT
+
+-- 分页查询
+SELECT * FROM orders
+WHERE user_id = 1
+ORDER BY created_at DESC
+LIMIT 10 OFFSET 0;
+
+-- 优化大偏移量
+SELECT o.* FROM orders o
+INNER JOIN (
+  SELECT id FROM orders
+  WHERE user_id = 1
+  ORDER BY created_at DESC
+  LIMIT 10 OFFSET 10000
+) tmp ON o.id = tmp.id;
+
+# 3. 避免 OR 条件
+
+-- 不好的做法（可能导致索引失效）
+SELECT * FROM users WHERE id = 1 OR id = 2 OR id = 3;
+
+-- 好的做法
+SELECT * FROM users WHERE id IN (1, 2, 3);
+
+# 4. 避免 LIKE 前缀通配符
+
+-- 不好的做法
+SELECT * FROM users WHERE name LIKE '%john%';
+
+-- 好的做法
+SELECT * FROM users WHERE name LIKE 'john%';
+
+-- 或使用全文索引
+SELECT * FROM users WHERE MATCH(name) AGAINST('john');
+
+# 5. 避免在 WHERE 中使用函数
+
+-- 不好的做法
+SELECT * FROM orders WHERE DATE(created_at) = '2024-01-01';
+
+-- 好的做法
+SELECT * FROM orders
+WHERE created_at >= '2024-01-00:00:00'
+AND created_at < '2024-01-02 00:00:00';
+
+# 6. 避免 NULL 比较
+
+-- 不好的做法
+SELECT * FROM users WHERE name != NULL;
+
+-- 好的做法
+SELECT * FROM users WHERE name IS NOT NULL;
+
+# 7. 使用 EXISTS 替代 IN
+
+-- 对于大表
+SELECT * FROM orders o
+WHERE EXISTS (
+  SELECT 1 FROM users u WHERE u.id = o.user_id AND u.status = 'active'
+);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">索引失效情况</div>
+          <p>以下情况可能导致索引失效：使用函数、类型转换、LIKE 前缀通配符、OR 条件、NOT 操作、NULL 比较。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> JOIN 优化</h2>
+      <div class="code-block">
+# JOIN 优化原则
+
+## 1. 小表驱动大表
+-- 小表在左边，大表在右边
+SELECT * FROM small_table s
+JOIN large_table l ON s.id = l.foreign_id;
+
+## 2. 确保关联字段有索引
+CREATE INDEX idx_large_foreign_id ON large_table(foreign_id);
+
+## 3. 避免 JOIN 过多表
+-- 建议 JOIN 不超过 5 个表
+-- 可以分步查询，在应用层组装
+
+## 4. 使用合适的 JOIN 类型
+-- INNER JOIN: 只返回匹配的行
+-- LEFT JOIN: 返回左表所有行
+-- 避免 RIGHT JOIN，改用 LEFT JOIN
+
+# 子查询优化
+
+-- 不好的做法
+SELECT * FROM orders
+WHERE user_id IN (SELECT id FROM users WHERE status = 'active');
+
+-- 好的做法：使用 JOIN
+SELECT o.* FROM orders o
+JOIN users u ON o.user_id = u.id
+WHERE u.status = 'active';
+
+# 分页查询优化
+
+-- 传统分页（偏移量大时性能差）
+SELECT * FROM orders ORDER BY id LIMIT 10000, 10;
+
+-- 游标分页（推荐）
+SELECT * FROM orders
+WHERE id > 10000  -- 上次查询的最大 ID
+ORDER BY id
+LIMIT 10;
+
+-- Prisma 游标分页
+const result = await prisma.order.findMany({
+  take: 10,
+  skip: 1,  // 跳过游标本身
+  cursor: { id: lastId },
+  orderBy: { id: 'asc' },
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> ORM 查询优化</h2>
+      <div class="code-block">
+# Prisma 查询优化
+
+// 选择需要的字段
+const user = await prisma.user.findFirst({
+  where: { email },
+  select: {
+    id: true,
+    name: true,
+    email: true,
+  },
+});
+
+// 避免 N+1 问题：使用 include
+const users = await prisma.user.findMany({
+  include: {
+    posts: true,  // 一次性获取关联数据
+  },
+});
+
+// 批量操作
+await prisma.order.createMany({
+  data: orders,
+});
+
+// 原生查询优化
+const result = await prisma.$queryRaw`
+  SELECT u.id, u.name, COUNT(o.id) as order_count
+  FROM users u
+  LEFT JOIN orders o ON u.id = o.user_id
+  GROUP BY u.id
+`;
+
+# TypeORM 查询优化
+
+// 使用 queryBuilder
+const users = await userRepository
+  .createQueryBuilder('user')
+  .leftJoinAndSelect('user.posts', 'post')
+  .where('user.status = :status', { status: 'active' })
+  .select(['user.id', 'user.name', 'post.title'])
+  .getMany();
+
+// 批量插入
+await userRepository
+  .createQueryBuilder()
+  .insert()
+  .into(User)
+  .values(users)
+  .execute();
+
+// 使用索引提示
+await userRepository
+  .createQueryBuilder('user')
+  .useIndex('idx_user_email')
+  .where('user.email = :email', { email })
+  .getOne();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 避免 SELECT *，只查询需要的列</li>
+            <li>• 避免在 WHERE 条件中使用函数</li>
+            <li>• 小表驱动大表进行 JOIN</li>
+            <li>• 使用游标分页替代 OFFSET 分页</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="96-1-索引优化.html">← 上一节：索引优化</a>
+      <a href="96-3-连接池配置.html">下一节：连接池配置 →</a>
+    </div>
+  </div>
+</body>
+</html>

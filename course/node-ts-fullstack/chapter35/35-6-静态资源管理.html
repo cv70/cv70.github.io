@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>35.6 静态资源管理 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter35.html">第35章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>35.6 静态资源管理</h1>
+      <p class="subtitle">学习 Express 静态文件服务和资源优化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 express.static 的配置</li>
+        <li>学会静态资源缓存策略</li>
+        <li>理解静态资源目录组织</li>
+        <li>了解 CDN 和构建工具集成</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 静态资源目录结构</h2>
+
+      <div class="code-block">
+project/
+├── public/
+│   ├── css/
+│   │   ├── main.css
+│   │   └── admin.css
+│   ├── js/
+│   │   ├── main.js
+│   │   └── admin.js
+│   ├── images/
+│   │   ├── logo.png
+│   │   └── icons/
+│   ├── fonts/
+│   └── uploads/
+│       └── user-avatars/
+└── views/</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> express.static 配置</h2>
+
+      <div class="code-block">
+const express = require('express');
+const app = express();
+
+// 基本配置
+app.use(express.static('public'));
+
+// 带路径前缀
+app.use('/static', express.static('public'));
+// 访问: /static/css/main.css
+
+// 多个静态目录
+app.use(express.static('public'));
+app.use(express.static('uploads'));
+
+// 完整配置
+app.use('/assets', express.static('public', {
+  dotfiles: 'ignore',       // 隐藏文件处理
+  etag: true,               // 启用 ETag
+  extensions: ['html'],     // 默认扩展名
+  fallthrough: true,        // 404 时继续
+  immutable: false,         // immutable 缓存
+  index: 'index.html',      // 默认索引文件
+  lastModified: true,       // Last-Modified 头
+  maxAge: 0,                // 缓存时间
+  redirect: true,           // 目录重定向
+  setHeaders: (res, path) => {
+    // 自定义响应头
+    if (path.endsWith('.js')) {
+      res.set('X-Content-Type-Options', 'nosniff');
+    }
+  }
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 缓存策略</h2>
+
+      <div class="code-block">
+// 开发环境 - 禁用缓存
+if (process.env.NODE_ENV === 'development') {
+  app.use(express.static('public', {
+    maxAge: 0,
+    etag: false,
+    lastModified: false
+  }));
+}
+
+// 生产环境 - 启用缓存
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static('public', {
+    maxAge: '1y',           // 缓存一年
+    immutable: true,        // 文件内容不变
+    etag: true
+  }));
+}
+
+// 按文件类型设置不同缓存
+app.use(express.static('public', {
+  setHeaders: (res, path) => {
+    // HTML 不缓存
+    if (path.endsWith('.html')) {
+      res.set('Cache-Control', 'no-cache');
+    }
+    // CSS/JS 长期缓存
+    else if (path.match(/\.(css|js)$/)) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+    // 图片中期缓存
+    else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)) {
+      res.set('Cache-Control', 'public, max-age=2592000');  // 30天
+    }
+    // 字体长期缓存
+    else if (path.match(/\.(woff|woff2|ttf|eot)$/)) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> CDN 集成</h2>
+
+      <div class="code-block">
+// 模板中使用 CDN
+app.locals.assetUrl = (path) => {
+  if (process.env.NODE_ENV === 'production') {
+    return `https://cdn.example.com${path}`;
+  }
+  return path;
+};
+
+// EJS 模板
+&lt;link rel="stylesheet" href="&lt;%= assetUrl('/css/main.css') %&gt;"&gt;
+&lt;script src="&lt;%= assetUrl('/js/main.js') %&gt;"&gt;&lt;/script&gt;
+
+// 使用版本号防止缓存
+app.locals.assetVersion = Date.now();
+
+// 或使用文件 hash
+const getAssetHash = () => {
+  // 构建时生成的 hash
+  return process.env.ASSET_HASH || '';
+};
+
+// 模板
+&lt;link rel="stylesheet" href="/css/main.css?v=&lt;%= assetVersion %&gt;"&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 构建工具集成</h2>
+
+      <div class="code-block">
+// 使用 Webpack/Vite 生成的 manifest
+const manifest = require('./public/manifest.json');
+
+app.locals.getAssetPath = (name) => {
+  return manifest[name] || name;
+};
+
+// manifest.json 示例
+{
+  "main.css": "/css/main.a1b2c3.css",
+  "main.js": "/js/main.x1y2z3.js"
+}
+
+// 模板中使用
+&lt;link rel="stylesheet" href="&lt;%= getAssetPath('main.css') %&gt;"&gt;
+&lt;script src="&lt;%= getAssetPath('main.js') %&gt;"&gt;&lt;/script&gt;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>使用 express.static 提供静态文件服务</li>
+            <li>生产环境启用缓存提升性能</li>
+            <li>按文件类型设置不同的缓存策略</li>
+            <li>CDN + 文件 hash 解决缓存更新问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="35-5-模板继承与布局.html">← 上一节：模板继承与布局</a>
+      <a href="../chapter36/36-1-项目初始化.html">下一章：Express + TypeScript →</a>
+    </div>
+  </div>
+</body>
+</html>

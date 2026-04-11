@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.4 文件下载 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter34.html">第34章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>34.4 文件下载</h1>
+      <p class="subtitle">掌握 Express 文件下载和发送的方法</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 res.download() 下载文件</li>
+        <li>学会 res.sendFile() 发送文件</li>
+        <li>理解文件下载的错误处理</li>
+        <li>掌握动态生成文件下载</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📥</span> res.download() 下载文件</h2>
+
+      <div class="code-block">
+const path = require('path');
+
+// 基本下载
+app.get('/download/:filename', (req, res) => {
+  const filepath = path.join(__dirname, 'files', req.params.filename);
+  res.download(filepath);
+});
+
+// 指定下载文件名
+app.get('/download/report', (req, res) => {
+  const filepath = path.join(__dirname, 'reports', 'report-2024.pdf');
+  res.download(filepath, '年度报告.pdf');
+});
+
+// 带错误处理
+app.get('/download/:filename', (req, res) => {
+  const filepath = path.join(__dirname, 'files', req.params.filename);
+
+  res.download(filepath, (err) => {
+    if (err) {
+      // 文件不存在或其他错误
+      if (!res.headersSent) {
+        res.status(404).json({ error: 'File not found' });
+      }
+    }
+  });
+});
+
+// 带选项
+app.get('/download/options', (req, res) => {
+  res.download('/report.pdf', 'report.pdf', {
+    root: path.join(__dirname, 'files'),
+    dotfiles: 'ignore',
+    headers: {
+      'X-Sent': 'true',
+      'X-Custom-Header': 'value'
+    }
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📄</span> res.sendFile() 发送文件</h2>
+
+      <div class="code-block">
+const path = require('path');
+
+// 基本发送
+app.get('/file/:name', (req, res) => {
+  const filepath = path.join(__dirname, 'public', req.params.name);
+  res.sendFile(filepath);
+});
+
+// 使用 root 选项
+app.get('/document/:name', (req, res) => {
+  res.sendFile(req.params.name, {
+    root: path.join(__dirname, 'documents'),
+    dotfiles: 'deny',
+    headers: {
+      'X-Timestamp': Date.now()
+    }
+  }, (err) => {
+    if (err) {
+      res.status(404).json({ error: 'File not found' });
+    }
+  });
+});
+
+// 发送 HTML 页面
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 发送图片（浏览器内显示）
+app.get('/images/:name', (req, res) => {
+  res.sendFile(req.params.name, {
+    root: path.join(__dirname, 'images')
+  });
+});</div>
+
+      <h3>res.download vs res.sendFile</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>行为</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>res.download()</td>
+            <td>触发浏览器下载</td>
+            <td>下载文件</td>
+          </tr>
+          <tr>
+            <td>res.sendFile()</td>
+            <td>在浏览器中显示/播放</td>
+            <td>图片、视频、HTML</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 动态生成文件下载</h2>
+
+      <div class="code-block">
+// 生成 CSV 下载
+app.get('/export/csv', (req, res) => {
+  const data = [
+    { name: 'Alice', age: 25 },
+    { name: 'Bob', age: 30 }
+  ];
+
+  // 生成 CSV 内容
+  let csv = 'Name,Age\n';
+  data.forEach(row => {
+    csv += `${row.name},${row.age}\n`;
+  });
+
+  // 设置响应头
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=users.csv');
+
+  res.send(csv);
+});
+
+// 生成 JSON 下载
+app.get('/export/json', (req, res) => {
+  const data = { users: [...] };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename=data.json');
+
+  res.send(JSON.stringify(data, null, 2));
+});
+
+// 使用 ExcelJS 生成 Excel
+const ExcelJS = require('exceljs');
+
+app.get('/export/excel', async (req, res) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Users');
+
+  worksheet.columns = [
+    { header: 'Name', key: 'name' },
+    { header: 'Age', key: 'age' }
+  ];
+
+  worksheet.addRows([
+    { name: 'Alice', age: 25 },
+    { name: 'Bob', age: 30 }
+  ]);
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
+
+  await workbook.xlsx.write(res);
+  res.end();
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 大文件流式下载</h2>
+
+      <div class="code-block">
+const fs = require('fs');
+
+// 流式下载大文件
+app.get('/download/large/:filename', (req, res) => {
+  const filepath = path.join(__dirname, 'large-files', req.params.filename);
+  const stat = fs.statSync(filepath);
+
+  res.setHeader('Content-Length', stat.size);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
+
+  const fileStream = fs.createReadStream(filepath);
+  fileStream.pipe(res);
+
+  fileStream.on('error', (err) => {
+    res.status(500).json({ error: 'Download failed' });
+  });
+});
+
+// 支持断点续传
+app.get('/download/resumable/:filename', (req, res) => {
+  const filepath = path.join(__dirname, 'files', req.params.filename);
+  const stat = fs.statSync(filepath);
+  const range = req.headers.range;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0]);
+    const end = parts[1] ? parseInt(parts[1]) : stat.size - 1;
+    const chunkSize = end - start + 1;
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+    res.setHeader('Content-Length', chunkSize);
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    fs.createReadStream(filepath, { start, end }).pipe(res);
+  } else {
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    fs.createReadStream(filepath).pipe(res);
+  }
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>res.download() 触发浏览器下载</li>
+            <li>res.sendFile() 在浏览器中显示文件</li>
+            <li>动态生成文件通过设置 Content-Disposition 头</li>
+            <li>大文件使用流式传输，支持断点续传</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="34-3-状态码设置.html">← 上一节：状态码设置</a>
+      <a href="34-5-重定向.html">下一节：重定向 →</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>53.3 刷新 Token - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="53-1-JWT原理.html">第五十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>53.3 刷新 Token</h1>
+      <p class="subtitle">实现 Access Token 与 Refresh Token 双令牌机制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解双令牌机制的作用</li>
+        <li>掌握 Refresh Token 的实现</li>
+        <li>学会 Token 刷新流程</li>
+        <li>了解 Token 撤销策略</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 为什么需要刷新 Token？</h2>
+      <p>Access Token 通常有效期较短（如 1 小时），为了用户体验，我们引入 Refresh Token 机制，让用户无需频繁登录。</p>
+
+      <div class="code-block">
+┌─────────────────────────────────────────────────────────────┐
+│                    双令牌机制                                │
+├─────────────────────────────────────────────────────────────┤
+│  Access Token:                                              │
+│  - 有效期短（15分钟 ~ 1小时）                                │
+│  - 用于访问受保护资源                                        │
+│  - 泄露风险较低                                              │
+│                                                             │
+│  Refresh Token:                                             │
+│  - 有效期长（7天 ~ 30天）                                    │
+│  - 仅用于刷新 Access Token                                   │
+│  - 存储更安全，可被撤销                                      │
+└─────────────────────────────────────────────────────────────┘
+
+// 工作流程：
+// 1. 登录返回 Access Token + Refresh Token
+// 2. 使用 Access Token 访问资源
+// 3. Access Token 过期后，用 Refresh Token 获取新的 Access Token
+// 4. Refresh Token 过期则需要重新登录
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">安全考虑</div>
+          <p>Refresh Token 应该存储在安全的地方（如 httpOnly cookie），并且服务端应该维护 Refresh Token 的黑名单或白名单。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Refresh Token 存储模型</h2>
+      <div class="code-block">
+// src/models/RefreshToken.ts
+import mongoose, { Document, Schema } from 'mongoose';
+
+interface IRefreshToken extends Document {
+  token: string;
+  userId: mongoose.Types.ObjectId;
+  userAgent?: string;
+  ipAddress?: string;
+  expiresAt: Date;
+  createdAt: Date;
+  isRevoked: boolean;
+}
+
+const RefreshTokenSchema = new Schema<IRefreshToken>({
+  token: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  userAgent: { type: String },
+  ipAddress: { type: String },
+  expiresAt: {
+    type: Date,
+    required: true,
+    index: { expires: 0 } // TTL 索引，自动删除过期记录
+  },
+  isRevoked: {
+    type: Boolean,
+    default: false
+  }
+}, {
+  timestamps: { createdAt: true, updatedAt: false }
+});
+
+// 索引
+RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+export const RefreshToken = mongoose.model<IRefreshToken>(
+  'RefreshToken',
+  RefreshTokenSchema
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> Token 刷新服务</h2>
+      <div class="code-block">
+// src/services/token.service.ts
+import { JwtService, TokenPayload } from '../utils/jwt';
+import { RefreshToken } from '../models/RefreshToken';
+import crypto from 'crypto';
+import { Types } from 'mongoose';
+
+export class TokenService {
+  /**
+   * 生成刷新令牌（随机字符串）
+   */
+  static generateRefreshTokenString(): string {
+    return crypto.randomBytes(40).toString('hex');
+  }
+
+  /**
+   * 保存刷新令牌到数据库
+   */
+  static async saveRefreshToken(
+    userId: Types.ObjectId,
+    userAgent?: string,
+    ipAddress?: string
+  ): Promise<string> {
+    // 删除该用户之前的刷新令牌（可选：支持多设备登录）
+    // await RefreshToken.deleteMany({ userId });
+
+    const tokenString = this.generateRefreshTokenString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7天
+
+    await RefreshToken.create({
+      token: tokenString,
+      userId,
+      userAgent,
+      ipAddress,
+      expiresAt,
+    });
+
+    return tokenString;
+  }
+
+  /**
+   * 刷新令牌
+   */
+  static async refreshAccessToken(
+    refreshTokenString: string,
+    userAgent?: string,
+    ipAddress?: string
+  ): Promise<{ accessToken: string; refreshToken: string } | null> {
+    // 1. 查找刷新令牌
+    const storedToken = await RefreshToken.findOne({
+      token: refreshTokenString,
+      isRevoked: false,
+    }).populate('userId');
+
+    if (!storedToken) {
+      return null;
+    }
+
+    // 2. 检查是否过期
+    if (storedToken.expiresAt < new Date()) {
+      await RefreshToken.deleteOne({ _id: storedToken._id });
+      return null;
+    }
+
+    // 3. 获取用户信息
+    const user = storedToken.userId as any;
+    if (!user) {
+      return null;
+    }
+
+    // 4. 撤销旧的刷新令牌
+    storedToken.isRevoked = true;
+    await storedToken.save();
+
+    // 5. 生成新的令牌
+    const payload: TokenPayload = {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+    };
+
+    const accessToken = JwtService.generateAccessToken(payload);
+    const newRefreshToken = await this.saveRefreshToken(
+      user._id,
+      userAgent,
+      ipAddress
+    );
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
+  /**
+   * 撤销刷新令牌
+   */
+  static async revokeRefreshToken(token: string): Promise<boolean> {
+    const result = await RefreshToken.updateOne(
+      { token },
+      { isRevoked: true }
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * 撤销用户所有刷新令牌（用于登出所有设备）
+   */
+  static async revokeAllUserTokens(userId: Types.ObjectId): Promise<void> {
+    await RefreshToken.updateMany(
+      { userId, isRevoked: false },
+      { isRevoked: true }
+    );
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 刷新接口实现</h2>
+      <div class="code-block">
+// src/controllers/auth.controller.ts
+import { Request, Response } from 'express';
+import { TokenService } from '../services/token.service';
+import { JwtService, TokenPayload } from '../utils/jwt';
+
+export class AuthController {
+  // 刷新令牌
+  async refreshToken(req: Request, res: Response) {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少刷新令牌',
+        });
+      }
+
+      const userAgent = req.headers['user-agent'];
+      const ipAddress = req.ip;
+
+      const tokens = await TokenService.refreshAccessToken(
+        refreshToken,
+        userAgent,
+        ipAddress
+      );
+
+      if (!tokens) {
+        return res.status(401).json({
+          success: false,
+          message: '刷新令牌无效或已过期',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          tokenType: 'Bearer',
+          expiresIn: 3600,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: '服务器错误',
+      });
+    }
+  }
+
+  // 登出
+  async logout(req: Request, res: Response) {
+    try {
+      const { refreshToken } = req.body;
+
+      if (refreshToken) {
+        await TokenService.revokeRefreshToken(refreshToken);
+      }
+
+      res.json({
+        success: true,
+        message: '登出成功',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: '服务器错误',
+      });
+    }
+  }
+
+  // 登出所有设备
+  async logoutAll(req: Request, res: Response) {
+    try {
+      const userId = req.user?.userId;
+
+      if (userId) {
+        await TokenService.revokeAllUserTokens(userId);
+      }
+
+      res.json({
+        success: true,
+        message: '已登出所有设备',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: '服务器错误',
+      });
+    }
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌐</span> 客户端处理</h2>
+      <div class="code-block">
+// 前端：拦截器处理 Token 刷新
+// src/api/interceptor.ts
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+
+const api = axios.create({
+  baseURL: '/api',
+});
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+// 订阅刷新
+function subscribeTokenRefresh(callback: (token: string) => void) {
+  refreshSubscribers.push(callback);
+}
+
+// 通知所有订阅者
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach(callback => callback(token));
+  refreshSubscribers = [];
+}
+
+// 响应拦截器
+api.interceptors.response.use(
+  response => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // 正在刷新，等待新 token
+        return new Promise(resolve => {
+          subscribeTokenRefresh(token => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        const response = await axios.post('/api/auth/refresh', {
+          refreshToken,
+        });
+
+        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', newRefreshToken);
+
+        onRefreshed(accessToken);
+        isRefreshing = false;
+
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // 刷新失败，跳转登录
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Access Token 短期有效，Refresh Token 长期有效</li>
+            <li>• Refresh Token 存储在数据库，可被撤销</li>
+            <li>• 刷新时返回新的 Access Token 和新的 Refresh Token</li>
+            <li>• 前端使用拦截器自动处理 Token 过期</li>
+            <li>• 支持"登出所有设备"功能</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="53-2-JWT生成与验证.html">← 上一节：JWT 生成与验证</a>
+      <a href="53-4-JWT安全最佳实践.html">下一节：JWT 安全最佳实践 →</a>
+    </div>
+  </div>
+</body>
+</html>

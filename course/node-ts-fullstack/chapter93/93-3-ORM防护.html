@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>93.3 ORM 防护 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="93-1-SQL注入原理.html">第九十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>93.3 ORM 防护</h1>
+      <p class="subtitle">使用 ORM 防止 SQL 注入</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 ORM 的安全优势</li>
+        <li>掌握常见 ORM 的安全用法</li>
+        <li>了解 ORM 中的潜在风险</li>
+        <li>学会安全使用原生查询</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> ORM 安全优势</h2>
+      <div class="code-block">
+# ORM 自动防护 SQL 注入
+
+## 自动参数化
+ORM 自动将用户输入作为参数处理
+不直接拼接 SQL 字符串
+
+## 类型安全
+数据类型自动验证和转换
+不合法的类型被拒绝
+
+## 抽象层
+开发者不需要手写 SQL
+减少人为错误
+
+# ORM 的安全性对比
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│      方式        │      安全性      │       说明       │
+├─────────────────┼──────────────────┼──────────────────┤
+│ 字符串拼接       │ 不安全           │ 容易注入         │
+│ 参数化查询       │ 安全             │ 需要手动处理     │
+│ ORM 查询        │ 安全             │ 自动参数化       │
+│ ORM 原生查询     │ 取决于实现       │ 需要小心         │
+└─────────────────┴──────────────────┴──────────────────┘
+
+# 为什么 ORM 相对安全
+- 使用预编译语句
+- 参数自动绑定
+- 类型自动转换
+- 避免 SQL 字符串拼接
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Prisma 安全用法</h2>
+      <div class="code-block">
+# Prisma 安全查询
+
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// 安全 - 自动参数化
+const user = await prisma.user.findFirst({
+  where: {
+    email: userInput,  // 自动转义
+  },
+});
+
+// 安全 - 复杂查询
+const users = await prisma.user.findMany({
+  where: {
+    name: {
+      contains: keyword,  // 安全
+    },
+    role: roleInput,
+  },
+});
+
+// 安全 - 关联查询
+const posts = await prisma.post.findMany({
+  where: {
+    author: {
+      email: userEmail,
+    },
+  },
+});
+
+# 原生查询 - 需要注意
+
+// 安全 - 使用参数化
+const result = await prisma.$queryRaw`
+  SELECT * FROM users WHERE id = ${userId}
+`;
+
+// 不安全 - 模板字符串拼接
+const result = await prisma.$queryRawUnsafe(
+  `SELECT * FROM users WHERE id = ${userId}`  // 危险！
+);
+
+// 安全 - 使用 Prisma.sql
+const result = await prisma.$queryRaw`
+  SELECT * FROM users WHERE name LIKE ${'%' + keyword + '%'}
+`;
+
+// 批量查询
+const result = await prisma.$queryRaw`
+  SELECT * FROM users WHERE id IN (${Prisma.join(ids)})
+`;
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">Prisma 注意事项</div>
+          <p>使用 $queryRaw 时，确保使用模板字符串语法（反引号），它会自动参数化。避免使用 $queryRawUnsafe。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> TypeORM 安全用法</h2>
+      <div class="code-block">
+# TypeORM 安全查询
+
+import { getRepository, Like } from 'typeorm';
+import { User } from './entities/User';
+
+const userRepo = getRepository(User);
+
+// 安全 - 使用 QueryBuilder
+const user = await userRepo
+  .createQueryBuilder('user')
+  .where('user.email = :email', { email: userEmail })
+  .getOne();
+
+// 安全 - 使用 find 选项
+const users = await userRepo.find({
+  where: {
+    name: Like(`%${keyword}%`),  // 安全
+  },
+});
+
+// 安全 - 动态条件
+const users = await userRepo.find({
+  where: {
+    ...(role && { role }),
+    ...(status && { status }),
+  },
+});
+
+# 原生查询 - 需要注意
+
+// 安全 - 参数化
+const result = await userRepo.query(
+  'SELECT * FROM users WHERE id = $1',
+  [userId]
+);
+
+// 不安全 - 字符串拼接
+const result = await userRepo.query(
+  `SELECT * FROM users WHERE id = ${userId}`  // 危险！
+);
+
+// QueryBuilder 参数化
+const users = await userRepo
+  .createQueryBuilder('user')
+  .where('user.id IN (:...ids)', { ids: [1, 2, 3] })
+  .getMany();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> Sequelize 安全用法</h2>
+      <div class="code-block">
+# Sequelize 安全查询
+
+import { User } from './models';
+
+// 安全 - 使用模型方法
+const user = await User.findOne({
+  where: {
+    email: userEmail,  // 自动转义
+  },
+});
+
+// 安全 - 使用 Op 操作符
+import { Op } from 'sequelize';
+
+const users = await User.findAll({
+  where: {
+    name: {
+      [Op.like]: `%${keyword}%`,
+    },
+  },
+});
+
+// 安全 - 关联查询
+const users = await User.findAll({
+  include: [{
+    model: Post,
+    where: { status: 'published' },
+  }],
+});
+
+# 原生查询 - 需要注意
+
+// 安全 - 参数化
+const result = await sequelize.query(
+  'SELECT * FROM users WHERE id = ?',
+  {
+    replacements: [userId],
+    type: QueryTypes.SELECT,
+  }
+);
+
+// 安全 - 命名参数
+const result = await sequelize.query(
+  'SELECT * FROM users WHERE email = :email AND status = :status',
+  {
+    replacements: { email, status },
+    type: QueryTypes.SELECT,
+  }
+);
+
+// 不安全 - 字符串拼接
+const result = await sequelize.query(
+  `SELECT * FROM users WHERE id = ${userId}`,  // 危险！
+  { type: QueryTypes.SELECT }
+);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• ORM 自动参数化查询，防止 SQL 注入</li>
+            <li>• 优先使用 ORM 的查询方法</li>
+            <li>• 原生查询务必使用参数化</li>
+            <li>• 避免使用不安全的原生查询方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="93-2-参数化查询.html">← 上一节：参数化查询</a>
+      <a href="93-4-输入验证.html">下一节：输入验证 →</a>
+    </div>
+  </div>
+</body>
+</html>

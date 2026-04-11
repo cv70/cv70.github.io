@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.2 处理请求与响应 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-创建HTTP服务器.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.2 处理请求与响应</h1>
+      <p class="subtitle">深入理解请求处理和响应发送</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握请求体解析</li>
+        <li>学会处理不同类型请求</li>
+        <li>掌握响应发送技巧</li>
+        <li>了解 Cookie 和 Session</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 解析请求体</h2>
+      <div class="code-block">
+const http = require('http');
+const querystring = require('querystring');
+
+const server = http.createServer((req, res) => {
+  // 解析 JSON 请求体
+  if (req.headers['content-type'] === 'application/json') {
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    req.on('end', () => {
+      const data = JSON.parse(body);
+      console.log('JSON 数据:', data);
+      res.end(JSON.stringify({ received: data }));
+    });
+  }
+
+  // 解析表单数据
+  if (req.headers['content-type'] === 'application/x-www-form-urlencoded') {
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    req.on('end', () => {
+      const data = querystring.parse(body);
+      console.log('表单数据:', data);
+      res.end('表单已接收');
+    });
+  }
+
+  // 处理大文件上传
+  if (req.headers['content-type']?.startsWith('multipart/form-data')) {
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      console.log(`已接收 ${size} 字节`);
+    });
+    req.on('end', () => {
+      res.end(`上传完成，大小: ${size} 字节`);
+    });
+  }
+});
+
+// 通用请求体解析函数
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    req.on('end', () => {
+      try {
+        const contentType = req.headers['content-type'];
+        if (contentType?.includes('application/json')) {
+          resolve(JSON.parse(body));
+        } else if (contentType?.includes('form-urlencoded')) {
+          resolve(querystring.parse(body));
+        } else {
+          resolve(body);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 处理不同请求方法</h2>
+      <div class="code-block">
+const http = require('http');
+
+const server = http.createServer(async (req, res) => {
+  const method = req.method;
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // 根据方法分发
+  switch (method) {
+    case 'GET':
+      handleGet(req, res, url);
+      break;
+    case 'POST':
+      handlePost(req, res);
+      break;
+    case 'PUT':
+      handlePut(req, res);
+      break;
+    case 'DELETE':
+      handleDelete(req, res);
+      break;
+    default:
+      res.writeHead(405);
+      res.end('Method Not Allowed');
+  }
+});
+
+function handleGet(req, res, url) {
+  const path = url.pathname;
+  const query = Object.fromEntries(url.searchParams);
+
+  if (path === '/users') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ users: [], query }));
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+}
+
+async function handlePost(req, res) {
+  const body = await parseBody(req);
+  res.writeHead(201, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ created: body }));
+}
+
+async function handlePut(req, res) {
+  const body = await parseBody(req);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ updated: body }));
+}
+
+function handleDelete(req, res) {
+  res.writeHead(204);
+  res.end();
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 发送响应</h2>
+      <div class="code-block">
+const http = require('http');
+const fs = require('fs');
+
+const server = http.createServer((req, res) => {
+  // 发送 JSON 响应
+  function sendJson(data, status = 200) {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  }
+
+  // 发送 HTML 响应
+  function sendHtml(html, status = 200) {
+    res.writeHead(status, {
+      'Content-Type': 'text/html; charset=utf-8'
+    });
+    res.end(html);
+  }
+
+  // 发送文件
+  function sendFile(filepath) {
+    const stream = fs.createReadStream(filepath);
+    stream.on('error', () => {
+      res.writeHead(404);
+      res.end('File Not Found');
+    });
+    stream.pipe(res);
+  }
+
+  // 设置 Cookie
+  function setCookie(name, value, options = {}) {
+    let cookie = `${name}=${encodeURIComponent(value)}`;
+    if (options.maxAge) cookie += `; Max-Age=${options.maxAge}`;
+    if (options.path) cookie += `; Path=${options.path}`;
+    if (options.httpOnly) cookie += '; HttpOnly';
+    if (options.secure) cookie += '; Secure';
+
+    res.setHeader('Set-Cookie', cookie);
+  }
+
+  // 读取 Cookie
+  function getCookies() {
+    const cookies = {};
+    req.headers.cookie?.split(';').forEach(cookie => {
+      const [name, value] = cookie.trim().split('=');
+      cookies[name] = decodeURIComponent(value);
+    });
+    return cookies;
+  }
+
+  // 使用示例
+  if (req.url === '/') {
+    sendHtml('<h1>Hello World</h1>');
+  } else if (req.url === '/api/data') {
+    sendJson({ message: 'Hello API' });
+  } else if (req.url === '/cookie') {
+    setCookie('sessionId', 'abc123', { maxAge: 3600, httpOnly: true });
+    sendJson({ message: 'Cookie set' });
+  }
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> CORS 处理</h2>
+      <div class="code-block">
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  // 设置 CORS 头
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+
+  // 处理预检请求
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // 正常处理请求
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ message: 'Hello CORS' }));
+});
+
+// 指定允许的域名
+function setCORS(res, origin) {
+  const allowedOrigins = ['http://localhost:3000', 'https://example.com'];
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+}
+
+// 带凭证的 CORS
+function setCORSWithCredentials(res, origin) {
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 请求体通过 data/end 事件流式读取</li>
+            <li>• 根据请求方法分发处理逻辑</li>
+            <li>• 使用 Set-Cookie 头设置 Cookie</li>
+            <li>• CORS 需要设置相关响应头</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="18-1-创建HTTP服务器.html">← 上一节：创建 HTTP 服务器</a>
+      <a href="18-3-HTTP客户端.html">下一节：HTTP 客户端 →</a>
+    </div>
+  </div>
+</body>
+</html>

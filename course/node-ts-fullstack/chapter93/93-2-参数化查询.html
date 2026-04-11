@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>93.2 参数化查询 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="93-1-SQL注入原理.html">第九十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>93.2 参数化查询</h1>
+      <p class="subtitle">防止 SQL 注入的最佳实践</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解参数化查询的原理</li>
+        <li>掌握各数据库的参数化方法</li>
+        <li>学会使用预处理语句</li>
+        <li>了解参数化查询的优势</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 参数化查询原理</h2>
+      <div class="code-block">
+# 什么是参数化查询
+
+将 SQL 语句与参数分离
+SQL 语句使用占位符
+参数单独传递
+数据库引擎分别处理
+
+# 工作流程
+
+## 普通拼接（不安全）
+1. 用户输入: admin' --
+2. 拼接 SQL: SELECT * FROM users WHERE name = 'admin' --'
+3. 执行: SQL 语义被改变
+
+## 参数化查询（安全）
+1. 预编译 SQL: SELECT * FROM users WHERE name = ?
+2. 用户输入: admin' --
+3. 参数绑定: ? = "admin' --"
+4. 执行: 作为字符串字面值处理
+
+# 为什么安全
+
+## SQL 语句预编译
+SQL 结构在参数绑定前确定
+参数不会改变 SQL 语义
+
+## 类型安全
+参数被视为数据，不是代码
+特殊字符被正确转义
+
+# 对比示例
+// 不安全 - 字符串拼接
+const sql = `SELECT * FROM users WHERE id = ${userId}`;
+
+// 安全 - 参数化查询
+const sql = 'SELECT * FROM users WHERE id = ?';
+db.query(sql, [userId]);
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">核心原理</div>
+          <p>参数化查询的关键是 SQL 语句先预编译，参数后绑定。参数永远不会被当作 SQL 代码执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> MySQL 参数化查询</h2>
+      <div class="code-block">
+# 使用 mysql2
+
+import mysql from 'mysql2/promise';
+
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  password: 'password',
+  database: 'mydb',
+});
+
+// 查询单条
+async function getUserById(id: number) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM users WHERE id = ?',
+    [id]
+  );
+  return rows[0];
+}
+
+// 查询多条
+async function searchUsers(keyword: string) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM users WHERE name LIKE ?',
+    [`%${keyword}%`]
+  );
+  return rows;
+}
+
+// 插入数据
+async function createUser(user: { name: string; email: string }) {
+  const [result] = await pool.execute(
+    'INSERT INTO users (name, email) VALUES (?, ?)',
+    [user.name, user.email]
+  );
+  return result.insertId;
+}
+
+// 更新数据
+async function updateUser(id: number, data: { name?: string }) {
+  await pool.execute(
+    'UPDATE users SET name = ? WHERE id = ?',
+    [data.name, id]
+  );
+}
+
+// 多参数查询
+async function getUsersByRoleAndStatus(role: string, status: string) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM users WHERE role = ? AND status = ?',
+    [role, status]
+  );
+  return rows;
+}
+
+// IN 查询
+async function getUsersByIds(ids: number[]) {
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.execute(
+    `SELECT * FROM users WHERE id IN (${placeholders})`,
+    ids
+  );
+  return rows;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> PostgreSQL 参数化查询</h2>
+      <div class="code-block">
+# 使用 pg
+
+import pg from 'pg';
+
+const { Pool } = pg;
+const pool = new Pool({
+  host: 'localhost',
+  user: 'postgres',
+  password: 'password',
+  database: 'mydb',
+});
+
+// PostgreSQL 使用 $1, $2 作为占位符
+async function getUserById(id: number) {
+  const result = await pool.query(
+    'SELECT * FROM users WHERE id = $1',
+    [id]
+  );
+  return result.rows[0];
+}
+
+// 多参数
+async function searchUsers(name: string, email: string) {
+  const result = await pool.query(
+    'SELECT * FROM users WHERE name LIKE $1 OR email LIKE $2',
+    [`%${name}%`, `%${email}%`]
+  );
+  return result.rows;
+}
+
+// 插入返回
+async function createUser(user: { name: string; email: string }) {
+  const result = await pool.query(
+    'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *',
+    [user.name, user.email]
+  );
+  return result.rows[0];
+}
+
+# 使用命名参数（某些库支持）
+
+import { Pool } from 'pg';
+import { namedParams } from 'pg-named';
+
+const pool = new Pool({ /* ... */ });
+
+async function updateUser(data: { id: number; name: string; email: string }) {
+  const result = await pool.query(
+    'UPDATE users SET name = :name, email = :email WHERE id = :id',
+    data
+  );
+  return result.rows;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 其他数据库参数化</h2>
+      <div class="code-block">
+# SQLite (better-sqlite3)
+import Database from 'better-sqlite3';
+
+const db = new Database('mydb.db');
+
+// 使用 ? 占位符
+const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+
+// 命名参数
+const users = db.prepare('SELECT * FROM users WHERE status = :status')
+  .all({ status: 'active' });
+
+# MongoDB
+import { MongoClient } from 'mongodb';
+
+const client = new MongoClient('mongodb://localhost:27017');
+const db = client.db('mydb');
+
+// MongoDB 自动转义，但仍需注意 $where 等危险操作
+const user = await db.collection('users').findOne({
+  _id: userId,
+});
+
+// 避免 $where 注入
+// 危险！
+await db.collection('users').find({
+  $where: `this.name === '${name}'`  // 不安全
+});
+
+// 安全
+await db.collection('users').find({
+  name: name  // 安全
+});
+
+# SQL Server (mssql)
+import sql from 'mssql';
+
+const pool = await sql.connect(config);
+
+// 使用 @param 形式
+const result = await pool.request()
+  .input('id', sql.Int, userId)
+  .input('name', sql.VarChar(100), userName)
+  .query('SELECT * FROM users WHERE id = @id AND name = @name');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 参数化查询是防止 SQL 注入的最佳方式</li>
+            <li>• SQL 先预编译，参数后绑定</li>
+            <li>• 不同数据库占位符不同：?, $1, :name</li>
+            <li>• 永远不要直接拼接用户输入到 SQL</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="93-1-SQL注入原理.html">← 上一节：SQL 注入原理</a>
+      <a href="93-3-ORM防护.html">下一节：ORM 防护 →</a>
+    </div>
+  </div>
+</body>
+</html>

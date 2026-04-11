@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>63.3 原生 WebSocket API - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📚 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="63-1-WebSocket协议.html">第六十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>63.3 原生 WebSocket API</h1>
+      <p class="subtitle">浏览器端 WebSocket 编程</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握浏览器原生 WebSocket API 使用</li>
+        <li>理解 WebSocket 连接状态管理</li>
+        <li>学会处理各种 WebSocket 事件</li>
+        <li>实现一个简单的 WebSocket 聊天客户端</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">WebSocket 构造函数</h3>
+      <p class="card-text">浏览器提供原生的 <code>WebSocket</code> 构造函数来创建 WebSocket 连接：</p>
+      <div class="code-block">
+// 创建 WebSocket 连接
+const ws = new WebSocket('ws://localhost:8080');
+
+// 使用安全连接
+const wss = new WebSocket('wss://example.com/socket');
+
+// 支持指定子协议
+const wsWithProtocol = new WebSocket('ws://localhost:8080', ['chat', 'json']);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 连接状态</h2>
+      <p class="card-text">WebSocket 有四个连接状态，通过 <code>readyState</code> 属性获取：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>状态值</th>
+            <th>常量</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td>WebSocket.CONNECTING</td>
+            <td>正在连接</td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>WebSocket.OPEN</td>
+            <td>已连接，可以通信</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>WebSocket.CLOSING</td>
+            <td>正在关闭</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>WebSocket.CLOSED</td>
+            <td>已关闭或连接失败</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+// 检查连接状态
+if (ws.readyState === WebSocket.OPEN) {
+  console.log('连接已建立，可以发送数据');
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> 事件处理</h2>
+      <p class="card-text">WebSocket 提供四个核心事件来处理不同的状态变化：</p>
+
+      <div class="card">
+        <h3 class="card-title">onopen - 连接成功</h3>
+        <div class="code-block">
+ws.onopen = function(event) {
+  console.log('WebSocket 连接已建立');
+  // 连接成功后发送数据
+  ws.send('Hello Server!');
+};
+
+// 或者使用 addEventListener
+ws.addEventListener('open', (event) => {
+  console.log('连接成功');
+});
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">onmessage - 接收消息</h3>
+        <div class="code-block">
+ws.onmessage = function(event) {
+  // event.data 包含接收到的数据
+  console.log('收到消息:', event.data);
+
+  // 判断数据类型
+  if (typeof event.data === 'string') {
+    // 文本数据
+    const message = JSON.parse(event.data);
+    console.log('文本消息:', message);
+  } else if (event.data instanceof Blob) {
+    // 二进制数据 (Blob)
+    console.log('二进制数据 (Blob):', event.data);
+  } else if (event.data instanceof ArrayBuffer) {
+    // 二进制数据 (ArrayBuffer)
+    console.log('二进制数据 (ArrayBuffer):', event.data);
+  }
+};
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">onerror - 发生错误</h3>
+        <div class="code-block">
+ws.onerror = function(error) {
+  console.error('WebSocket 错误:', error);
+  // 注意：error 对象可能没有详细的错误信息
+  // 需要通过 onclose 事件获取更多细节
+};
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">onclose - 连接关闭</h3>
+        <div class="code-block">
+ws.onclose = function(event) {
+  console.log('WebSocket 连接已关闭');
+
+  // 关闭代码
+  console.log('关闭代码:', event.code);
+  // 关闭原因
+  console.log('关闭原因:', event.reason);
+  // 是否为正常关闭
+  console.log('是否正常关闭:', event.wasClean);
+
+  // 常见关闭代码
+  // 1000 - 正常关闭
+  // 1001 - 端点离开
+  // 1002 - 协议错误
+  // 1003 - 不支持的数据类型
+  // 1006 - 异常关闭（没有收到关闭帧）
+  // 1008 - 策略违规
+  // 1011 - 服务器遇到意外情况
+};
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 发送数据</h2>
+      <p class="card-text">使用 <code>send()</code> 方法发送数据，支持多种数据类型：</p>
+
+      <div class="code-block">
+// 发送文本数据
+ws.send('Hello World!');
+
+// 发送 JSON 数据
+const message = {
+  type: 'chat',
+  content: '你好',
+  timestamp: Date.now()
+};
+ws.send(JSON.stringify(message));
+
+// 发送二进制数据 (ArrayBuffer)
+const buffer = new ArrayBuffer(4);
+const view = new DataView(buffer);
+view.setInt32(0, 12345);
+ws.send(buffer);
+
+// 发送二进制数据 (Blob)
+const blob = new Blob(['Hello'], { type: 'text/plain' });
+ws.send(blob);
+
+// 发送前检查连接状态
+function safeSend(data) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(data);
+    return true;
+  }
+  console.warn('WebSocket 未连接，无法发送数据');
+  return false;
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔒</span> 关闭连接</h2>
+      <div class="code-block">
+// 正常关闭
+ws.close();
+
+// 指定关闭代码和原因
+ws.close(1000, '正常关闭');
+
+// 自定义关闭代码
+ws.close(4000, '自定义原因');
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整示例：聊天客户端</h2>
+      <div class="code-block">
+class ChatClient {
+  private ws: WebSocket | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+
+  constructor(private url: string) {}
+
+  connect(): void {
+    this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      console.log('已连接到聊天服务器');
+      this.reconnectAttempts = 0;
+    };
+
+    this.ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      this.handleMessage(message);
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('连接错误:', error);
+    };
+
+    this.ws.onclose = (event) => {
+      console.log('连接关闭:', event.code, event.reason);
+      this.handleReconnect();
+    };
+  }
+
+  private handleMessage(message: any): void {
+    switch (message.type) {
+      case 'chat':
+        console.log(`${message.user}: ${message.content}`);
+        break;
+      case 'system':
+        console.log(`系统消息: ${message.content}`);
+        break;
+      case 'users':
+        console.log(`在线用户: ${message.users.join(', ')}`);
+        break;
+    }
+  }
+
+  send(content: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'chat',
+        content,
+        timestamp: Date.now()
+      }));
+    }
+  }
+
+  private handleReconnect(): void {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      console.log(`尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+      setTimeout(() => this.connect(), this.reconnectDelay);
+      this.reconnectDelay *= 2; // 指数退避
+    }
+  }
+
+  disconnect(): void {
+    this.ws?.close(1000, '用户主动断开');
+  }
+}
+
+// 使用示例
+const client = new ChatClient('ws://localhost:8080/chat');
+client.connect();
+client.send('大家好！');
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">浏览器兼容性</div>
+        <p>WebSocket API 在所有现代浏览器中都有良好支持。对于不支持 WebSocket 的旧浏览器，可以使用 <code>sockjs</code> 等库进行降级处理，自动回退到轮询等方式。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用 <code>new WebSocket(url)</code> 创建连接</li>
+            <li>• <code>readyState</code> 表示连接状态（0-3）</li>
+            <li>• 四个核心事件：open、message、error、close</li>
+            <li>• <code>send()</code> 可发送文本、Blob、ArrayBuffer</li>
+            <li>• 需要处理重连逻辑以应对网络不稳定</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="63-2-WebSocket-vs-HTTP.html">← 上一节</a>
+      <a href="63-4-Socket-IO-简介.html">下一节 →</a>
+    </div>
+  </div>
+</body>
+</html>

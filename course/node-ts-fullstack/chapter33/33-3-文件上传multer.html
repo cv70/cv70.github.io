@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.3 文件上传 multer - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="chapter33.html">第33章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>33.3 文件上传 multer</h1>
+      <p class="subtitle">使用 multer 中间件处理文件上传</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 multer 的基本配置和使用</li>
+        <li>学会单文件和多文件上传</li>
+        <li>理解文件存储策略</li>
+        <li>掌握文件类型和大小验证</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> multer 简介</h2>
+      <p>multer 是 Express 官方推荐的文件上传中间件，用于处理 multipart/form-data 类型的表单数据。</p>
+
+      <div class="code-block">
+# 安装 multer
+npm install multer</div>
+
+      <h3>基本概念</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>.single(fieldname)</code></td>
+            <td>单个文件上传</td>
+          </tr>
+          <tr>
+            <td><code>.array(fieldname[, maxCount])</code></td>
+            <td>多个文件上传（同名字段）</td>
+          </tr>
+          <tr>
+            <td><code>.fields(fields)</code></td>
+            <td>多个文件上传（不同字段）</td>
+          </tr>
+          <tr>
+            <td><code>.none()</code></td>
+            <td>只接受文本字段</td>
+          </tr>
+          <tr>
+            <td><code>.any()</code></td>
+            <td>接受所有文件</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📤</span> 基本使用</h2>
+
+      <h3>单文件上传</h3>
+      <div class="code-block">
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+
+const app = express();
+
+// 基本配置 - 保存到临时目录
+const upload = multer({ dest: 'uploads/' });
+
+// 单文件上传
+app.post('/upload/avatar', upload.single('avatar'), (req, res) => {
+  // req.file - 文件信息
+  // req.body - 其他表单字段
+
+  console.log(req.file);
+  /*
+  {
+    fieldname: 'avatar',
+    originalname: 'photo.jpg',
+    encoding: '7bit',
+    mimetype: 'image/jpeg',
+    destination: 'uploads/',
+    filename: 'abc123',
+    path: 'uploads/abc123',
+    size: 102400
+  }
+  */
+
+  res.json({
+    message: 'File uploaded',
+    file: req.file
+  });
+});</div>
+
+      <h3>多文件上传（同名字段）</h3>
+      <div class="code-block">
+// 最多上传 5 张图片
+app.post('/upload/photos', upload.array('photos', 5), (req, res) => {
+  // req.files - 文件数组
+
+  console.log(req.files);
+  /*
+  [
+    { fieldname: 'photos', originalname: '1.jpg', ... },
+    { fieldname: 'photos', originalname: '2.jpg', ... },
+    ...
+  ]
+  */
+
+  res.json({
+    message: `${req.files.length} files uploaded`,
+    files: req.files
+  });
+});</div>
+
+      <h3>多字段文件上传</h3>
+      <div class="code-block">
+// 不同字段上传不同文件
+const uploadFields = upload.fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'gallery', maxCount: 8 }
+]);
+
+app.post('/upload/profile', uploadFields, (req, res) => {
+  // req.files - 对象，键为字段名
+  /*
+  {
+    avatar: [{ ... }],
+    gallery: [{ ... }, { ... }]
+  }
+  */
+
+  console.log(req.files);
+  console.log(req.body);  // 其他表单字段
+
+  res.json({
+    message: 'Files uploaded',
+    avatar: req.files['avatar']?.[0],
+    gallery: req.files['gallery']
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 自定义存储配置</h2>
+
+      <div class="code-block">
+const multer = require('multer');
+const path = require('path');
+
+// 自定义存储配置
+const storage = multer.diskStorage({
+  // 目标目录
+  destination: (req, file, cb) => {
+    // 可以根据文件类型分目录
+    const dir = file.mimetype.startsWith('image/')
+      ? 'uploads/images'
+      : 'uploads/files';
+
+    // 确保目录存在
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+
+  // 文件名
+  filename: (req, file, cb) => {
+    // 保留原始扩展名
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// 内存存储（用于处理后直接上传到云存储）
+const memoryStorage = multer.memoryStorage();
+const uploadToMemory = multer({ storage: memoryStorage });
+
+app.post('/upload/memory', uploadToMemory.single('file'), (req, res) => {
+  // req.file.buffer - 文件 Buffer
+  // 适合直接上传到 S3、OSS 等
+  console.log(req.file.buffer);
+  res.send('File in memory');
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 文件过滤和限制</h2>
+
+      <div class="code-block">
+const upload = multer({
+  storage: storage,
+
+  // 文件过滤器
+  fileFilter: (req, file, cb) => {
+    // 允许的文件类型
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+
+  // 大小限制
+  limits: {
+    fileSize: 5 * 1024 * 1024,   // 5MB
+    files: 10,                    // 最多 10 个文件
+    fields: 20,                   // 最多 20 个文本字段
+    fieldNameSize: 100,           // 字段名最大长度
+    fieldSize: 1024 * 1024        // 字段值最大 1MB
+  }
+});</div>
+
+      <h3>不同类型文件的过滤</h3>
+      <div class="code-block">
+// 图片文件过滤器
+const imageFilter = (req, file, cb) => {
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed'));
+  }
+};
+
+// 文档文件过滤器
+const documentFilter = (req, file, cb) => {
+  const allowedMimes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only document files are allowed'));
+  }
+};
+
+// 使用不同过滤器
+const uploadImage = multer({ storage, fileFilter: imageFilter });
+const uploadDoc = multer({ storage, fileFilter: documentFilter });</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 错误处理</h2>
+
+      <div class="code-block">
+// multer 错误处理
+app.post('/upload', upload.single('file'), (req, res) => {
+  res.json(req.file);
+});
+
+// 错误处理中间件
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    // Multer 错误
+    switch (err.code) {
+      case 'LIMIT_FILE_SIZE':
+        return res.status(400).json({
+          error: 'File too large',
+          message: 'Maximum file size is 5MB'
+        });
+      case 'LIMIT_FILE_COUNT':
+        return res.status(400).json({
+          error: 'Too many files',
+          message: 'Maximum 10 files allowed'
+        });
+      case 'LIMIT_UNEXPECTED_FILE':
+        return res.status(400).json({
+          error: 'Unexpected field',
+          message: err.message
+        });
+      default:
+        return res.status(400).json({
+          error: 'Upload error',
+          message: err.message
+        });
+    }
+  }
+
+  // 其他错误
+  if (err.message === 'Only image files are allowed') {
+    return res.status(400).json({
+      error: 'Invalid file type',
+      message: 'Only image files (jpeg, png, gif, webp) are allowed'
+    });
+  }
+
+  next(err);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">☁️</span> 上传到云存储</h2>
+
+      <div class="code-block">
+const AWS = require('aws-sdk');
+const multer = require('multer');
+const multerS3 = require('multer-s3');
+
+// 配置 S3
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY,
+  secretAccessKey: process.env.AWS_SECRET_KEY,
+  region: process.env.AWS_REGION
+});
+
+// S3 存储
+const uploadS3 = multer({
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.S3_BUCKET,
+    acl: 'public-read',
+    metadata: (req, file, cb) => {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: (req, file, cb) => {
+      const fileName = `${Date.now()}-${file.originalname}`;
+      cb(null, fileName);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+// 上传路由
+app.post('/upload/s3', uploadS3.single('file'), (req, res) => {
+  res.json({
+    message: 'File uploaded to S3',
+    url: req.file.location
+  });
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 完整示例</h2>
+
+      <div class="code-block">
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+
+// 确保上传目录存在
+const uploadDir = 'uploads';
+fs.mkdirSync(uploadDir, { recursive: true });
+
+// 存储配置
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const typeDir = path.join(uploadDir, file.mimetype.split('/')[0]);
+    fs.mkdirSync(typeDir, { recursive: true });
+    cb(null, typeDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, uniqueSuffix + ext);
+  }
+});
+
+// 文件过滤器
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type ${file.mimetype} is not allowed`));
+  }
+};
+
+// multer 实例
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 10
+  }
+});
+
+// 路由
+app.post('/upload/single', upload.single('file'), (req, res) => {
+  res.json({ file: req.file });
+});
+
+app.post('/upload/multiple', upload.array('files', 5), (req, res) => {
+  res.json({ files: req.files });
+});
+
+// 错误处理
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError || err.message.includes('not allowed')) {
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
+});
+
+module.exports = app;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 小结</h2>
+      <div class="tip-box success">
+        <span class="icon">📌</span>
+        <div class="content">
+          <div class="title">本节要点</div>
+          <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+            <li>multer 专门处理 multipart/form-data 文件上传</li>
+            <li>single/array/fields 处理不同的上传场景</li>
+            <li>diskStorage 本地存储，memoryStorage 内存存储</li>
+            <li>fileFilter 过滤文件类型，limits 限制大小</li>
+            <li>需要正确处理上传错误</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="33-2-获取请求体body.html">← 上一节：获取请求体 body</a>
+      <a href="33-4-Cookie处理.html">下一节：Cookie 处理 →</a>
+    </div>
+  </div>
+</body>
+</html>

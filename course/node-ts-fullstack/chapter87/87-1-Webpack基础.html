@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>87.1 Webpack 基础 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="87-1-Webpack基础.html">第八十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>87.1 Webpack 基础</h1>
+      <p class="subtitle">前端模块打包工具</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Webpack 的核心概念</li>
+        <li>掌握基本配置方法</li>
+        <li>学会使用常用命令</li>
+        <li>了解打包流程</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> Webpack 简介</h2>
+      <p>Webpack 是一个现代 JavaScript 应用程序的静态模块打包工具，它可以将各种资源（JS、CSS、图片等）打包成浏览器可识别的格式。</p>
+      <div class="code-block">
+# 安装 Webpack
+npm install --save-dev webpack webpack-cli
+
+# 项目结构
+project/
+├── src/
+│   ├── index.js        # 入口文件
+│   └── utils.js
+├── dist/               # 输出目录
+├── webpack.config.js   # 配置文件
+└── package.json
+
+# 基本命令
+npx webpack             # 开发模式打包
+npx webpack --mode production  # 生产模式
+npx webpack --watch     # 监听模式
+npx webpack --config webpack.prod.js  # 指定配置文件
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 核心概念</h2>
+      <div class="code-block">
+# Webpack 五大核心概念
+
+## 1. Entry (入口)
+打包的起点，Webpack 从这里开始构建依赖图。
+
+## 2. Output (输出)
+打包后的文件输出位置和命名规则。
+
+## 3. Loader (加载器)
+处理非 JavaScript 文件，将其转换为模块。
+
+## 4. Plugin (插件)
+扩展 Webpack 功能，执行更复杂的任务。
+
+## 5. Mode (模式)
+development 或 production，影响优化行为。
+
+# 工作流程
+Entry → 依赖分析 → Loader 转换 → Plugin 处理 → Output
+
+# 示例流程
+src/index.js
+  ↓ (import './style.css')
+Loader: css-loader, style-loader
+  ↓
+Plugin: MiniCssExtractPlugin
+  ↓
+dist/main.js + dist/style.css
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">模块化打包</div>
+          <p>Webpack 将所有资源都视为模块，通过 import/require 引入，最终打包成浏览器可执行的文件。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 基础配置</h2>
+      <div class="code-block">
+// webpack.config.js
+const path = require('path');
+
+module.exports = {
+  // 模式
+  mode: 'development', // 'production'
+
+  // 入口
+  entry: './src/index.js',
+
+  // 输出
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'bundle.js',
+    clean: true, // 清理 dist 目录
+  },
+
+  // 模块规则
+  module: {
+    rules: [
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
+      {
+        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        type: 'asset/resource',
+      },
+    ],
+  },
+
+  // 插件
+  plugins: [],
+
+  // 开发服务器
+  devServer: {
+    static: './dist',
+    hot: true,
+    port: 3000,
+  },
+};
+
+// package.json
+{
+  "scripts": {
+    "build": "webpack",
+    "build:prod": "webpack --mode production",
+    "dev": "webpack serve --mode development"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> 开发与生产模式</h2>
+      <div class="code-block">
+// webpack.common.js - 公共配置
+const path = require('path');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+
+module.exports = {
+  entry: './src/index.js',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: '[name].[contenthash].js',
+  },
+  plugins: [new CleanWebpackPlugin()],
+};
+
+// webpack.dev.js - 开发配置
+const { merge } = require('webpack-merge');
+const common = require('./webpack.common.js');
+
+module.exports = merge(common, {
+  mode: 'development',
+  devtool: 'inline-source-map',
+  devServer: {
+    static: './dist',
+    hot: true,
+  },
+});
+
+// webpack.prod.js - 生产配置
+const { merge } = require('webpack-merge');
+const common = require('./webpack.common.js');
+
+module.exports = merge(common, {
+  mode: 'production',
+  devtool: 'source-map',
+});
+
+// package.json
+{
+  "scripts": {
+    "dev": "webpack serve --config webpack.dev.js",
+    "build": "webpack --config webpack.prod.js"
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Webpack 是前端模块打包工具</li>
+            <li>• 核心概念：入口、出口、Loader、Plugin、模式</li>
+            <li>• 使用配置文件定制打包行为</li>
+            <li>• 开发和生产环境可分别配置</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter86/86-5-版本发布流程.html">← 上一章：版本发布流程</a>
+      <a href="87-2-入口与出口.html">下一节：入口与出口 →</a>
+    </div>
+  </div>
+</body>
+</html>

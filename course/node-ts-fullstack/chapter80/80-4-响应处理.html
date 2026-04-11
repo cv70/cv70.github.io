@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>80.4 响应处理 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>80.4 响应处理</h1>
+      <p class="subtitle">正确处理 HTTP 响应和错误</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>正确处理 HTTP 响应是前端开发中的重要技能。本节将介绍如何处理成功响应、各种类型的错误，以及如何设计统一的响应处理机制。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Axios 响应对象的结构</li>
+        <li>掌握不同类型错误的处理方式</li>
+        <li>学会设计统一的响应处理机制</li>
+        <li>了解响应数据的类型定义</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 响应对象结构</h2>
+      <div class="code-block"><span class="keyword">interface</span> AxiosResponse<T = <span class="keyword">any</span>, D = <span class="keyword">any</span>> {
+  data: T;              <span class="comment">// 服务器响应的数据</span>
+  status: <span class="keyword">number</span>;        <span class="comment">// HTTP 状态码 (200, 404, 500...)</span>
+  statusText: <span class="keyword">string</span>;  <span class="comment">// HTTP 状态文本 ('OK', 'Not Found'...)</span>
+  headers: RawAxiosResponseHeaders; <span class="comment">// 响应头</span>
+  config: InternalAxiosRequestConfig<D>; <span class="comment">// 请求配置</span>
+  request?: <span class="keyword">any</span>;       <span class="comment">// 原始请求对象</span>
+}
+
+<span class="comment">// 使用示例</span>
+axios.get&lt;User&gt;(<span class="string">'/api/users/1'</span>).then(<span class="function">response</span> => {
+  console.log(<span class="string">'数据:'</span>, response.data);     <span class="comment">// User 对象</span>
+  console.log(<span class="string">'状态码:'</span>, response.status);  <span class="comment">// 200</span>
+  console.log(<span class="string">'状态文本:'</span>, response.statusText); <span class="comment">// 'OK'</span>
+  console.log(<span class="string">'响应头:'</span>, response.headers);
+});</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 成功响应处理</h2>
+      <div class="code-block"><span class="keyword">interface</span> ApiResponse&lt;T&gt; {
+  code: <span class="keyword">number</span>;
+  message: <span class="keyword">string</span>;
+  data: T;
+}
+
+<span class="keyword">interface</span> User {
+  id: <span class="keyword">number</span>;
+  name: <span class="keyword">string</span>;
+  email: <span class="keyword">string</span>;
+}
+
+<span class="comment">// 基本处理</span>
+<span class="keyword">async function</span> <span class="function">getUser</span>(id: <span class="keyword">number</span>): Promise&lt;User&gt; {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> axios.get&lt;ApiResponse&lt;User&gt;&gt;(
+    <span class="string">`/api/users/${id}`</span>
+  );
+  <span class="keyword">return</span> response.data.data;
+}
+
+<span class="comment">// 带状态检查的处理</span>
+<span class="keyword">async function</span> <span class="function">fetchUser</span>(id: <span class="keyword">number</span>): Promise&lt;User&gt; {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> axios.get&lt;ApiResponse&lt;User&gt;&gt;(
+    <span class="string">`/api/users/${id}`</span>
+  );
+
+  <span class="keyword">if</span> (response.status !== <span class="number">200</span>) {
+    <span class="keyword">throw new</span> Error(<span class="string">`请求失败: ${response.status}`</span>);
+  }
+
+  <span class="keyword">if</span> (response.data.code !== <span class="number">0</span>) {
+    <span class="keyword">throw new</span> Error(response.data.message);
+  }
+
+  <span class="keyword">return</span> response.data.data;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">❌</span> 错误处理</h2>
+
+      <h3>错误类型</h3>
+      <div class="code-block"><span class="keyword">interface</span> AxiosError&lt;T = <span class="keyword">any</span>, D = <span class="keyword">any</span>> <span class="keyword">extends</span> Error {
+  config: AxiosRequestConfig&lt;D&gt;;
+  code?: <span class="keyword">string</span>;
+  request?: <span class="keyword">any</span>;
+  response?: AxiosResponse&lt;T, D&gt;;
+  isAxiosError: <span class="keyword">boolean</span>;
+  status?: <span class="keyword">number</span>;
+}
+
+<span class="comment">// 完整的错误处理</span>
+<span class="keyword">async function</span> <span class="function">handleRequest</span>&lt;T&gt;(
+  request: () => Promise&lt;AxiosResponse&lt;T&gt;&gt;
+): Promise&lt;{ data?: T; error?: <span class="keyword">string</span> }&gt; {
+  <span class="keyword">try</span> {
+    <span class="keyword">const</span> response = <span class="keyword">await</span> request();
+    <span class="keyword">return</span> { data: response.data };
+  } <span class="keyword">catch</span> (error) {
+    <span class="keyword">if</span> (axios.isAxiosError(error)) {
+      <span class="comment">// Axios 错误</span>
+      <span class="keyword">if</span> (error.response) {
+        <span class="comment">// 服务器返回了响应，但状态码表示错误</span>
+        <span class="keyword">switch</span> (error.response.status) {
+          <span class="keyword">case</span> <span class="number">400</span>:
+            <span class="keyword">return</span> { error: <span class="string">'请求参数错误'</span> };
+          <span class="keyword">case</span> <span class="number">401</span>:
+            <span class="keyword">return</span> { error: <span class="string">'未授权，请重新登录'</span> };
+          <span class="keyword">case</span> <span class="number">403</span>:
+            <span class="keyword">return</span> { error: <span class="string">'拒绝访问'</span> };
+          <span class="keyword">case</span> <span class="number">404</span>:
+            <span class="keyword">return</span> { error: <span class="string">'请求的资源不存在'</span> };
+          <span class="keyword">case</span> <span class="number">500</span>:
+            <span class="keyword">return</span> { error: <span class="string">'服务器内部错误'</span> };
+          <span class="keyword">default</span>:
+            <span class="keyword">return</span> { error: <span class="string">`请求失败: ${error.response.status}`</span> };
+        }
+      } <span class="keyword">else if</span> (error.request) {
+        <span class="comment">// 请求已发出但没有收到响应</span>
+        <span class="keyword">return</span> { error: <span class="string">'网络错误，请检查网络连接'</span> };
+      } <span class="keyword">else</span> {
+        <span class="comment">// 设置请求时出错</span>
+        <span class="keyword">return</span> { error: error.message || <span class="string">'请求失败'</span> };
+      }
+    }
+    <span class="comment">// 非 Axios 错误</span>
+    <span class="keyword">return</span> { error: <span class="string">'未知错误'</span> };
+  }
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 统一响应处理</h2>
+      <div class="code-block"><span class="comment">// 定义通用响应类型</span>
+<span class="keyword">interface</span> BaseResponse&lt;T = <span class="keyword">any</span>&gt; {
+  code: <span class="keyword">number</span>;
+  message: <span class="keyword">string</span>;
+  data: T;
+}
+
+<span class="comment">// 创建带统一处理的实例</span>
+<span class="keyword">const</span> api = axios.create({
+  baseURL: <span class="string">'/api'</span>,
+  timeout: <span class="number">10000</span>
+});
+
+<span class="comment">// 响应拦截器统一处理</span>
+api.interceptors.response.use(
+  <span class="function">response</span> => {
+    <span class="keyword">const</span> { data } = response;
+
+    <span class="comment">// 根据业务状态码判断</span>
+    <span class="keyword">if</span> (data.code === <span class="number">0</span> || data.code === <span class="number">200</span>) {
+      <span class="keyword">return</span> data.data; <span class="comment">// 直接返回数据</span>
+    }
+
+    <span class="comment">// 业务错误</span>
+    <span class="keyword">return</span> Promise.reject(<span class="keyword">new</span> Error(data.message || <span class="string">'请求失败'</span>));
+  },
+  <span class="function">error</span> => {
+    <span class="comment">// 处理 HTTP 错误</span>
+    <span class="keyword">if</span> (error.response) {
+      <span class="keyword">const</span> { status } = error.response;
+
+      <span class="keyword">switch</span> (status) {
+        <span class="keyword">case</span> <span class="number">401</span>:
+          <span class="comment">// 跳转登录</span>
+          window.location.href = <span class="string">'/login'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">403</span>:
+          error.message = <span class="string">'没有权限访问'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">404</span>:
+          error.message = <span class="string">'请求资源不存在'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">case</span> <span class="number">500</span>:
+          error.message = <span class="string">'服务器错误'</span>;
+          <span class="keyword">break</span>;
+        <span class="keyword">default</span>:
+          error.message = <span class="string">`请求失败 (${status})`</span>;
+      }
+    } <span class="keyword">else if</span> (error.request) {
+      error.message = <span class="string">'网络连接失败'</span>;
+    }
+
+    <span class="keyword">return</span> Promise.reject(error);
+  }
+);</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📁</span> 特殊响应处理</h2>
+
+      <h3>文件下载</h3>
+      <div class="code-block"><span class="keyword">async function</span> <span class="function">downloadFile</span>(url: <span class="keyword">string</span>, filename: <span class="keyword">string</span>) {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> axios.get(url, {
+    responseType: <span class="string">'blob'</span>
+  });
+
+  <span class="comment">// 创建下载链接</span>
+  <span class="keyword">const</span> blob = <span class="keyword">new</span> Blob([response.data]);
+  <span class="keyword">const</span> downloadUrl = URL.createObjectURL(blob);
+  <span class="keyword">const</span> link = document.createElement(<span class="string">'a'</span>);
+  link.href = downloadUrl;
+  link.download = filename;
+  link.click();
+
+  <span class="comment">// 清理</span>
+  URL.revokeObjectURL(downloadUrl);
+}
+
+<span class="comment">// 带进度的文件下载</span>
+<span class="keyword">async function</span> <span class="function">downloadWithProgress</span>(
+  url: <span class="keyword">string</span>,
+  onProgress: (percent: <span class="keyword">number</span>) => <span class="keyword">void</span>
+) {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> axios.get(url, {
+    responseType: <span class="string">'blob'</span>,
+    onDownloadProgress: (progressEvent) => {
+      <span class="keyword">if</span> (progressEvent.total) {
+        <span class="keyword">const</span> percent = Math.round(
+          (progressEvent.loaded * <span class="number">100</span>) / progressEvent.total
+        );
+        onProgress(percent);
+      }
+    }
+  });
+
+  <span class="keyword">return</span> response.data;
+}</div>
+
+      <h3>文件上传</h3>
+      <div class="code-block"><span class="keyword">async function</span> <span class="function">uploadFile</span>(
+  url: <span class="keyword">string</span>,
+  file: File,
+  onProgress?: (percent: <span class="keyword">number</span>) => <span class="keyword">void</span>
+) {
+  <span class="keyword">const</span> formData = <span class="keyword">new</span> FormData();
+  formData.append(<span class="string">'file'</span>, file);
+
+  <span class="keyword">const</span> response = <span class="keyword">await</span> axios.post(url, formData, {
+    headers: {
+      <span class="string">'Content-Type'</span>: <span class="string">'multipart/form-data'</span>
+    },
+    onUploadProgress: (progressEvent) => {
+      <span class="keyword">if</span> (onProgress &amp;&amp; progressEvent.total) {
+        <span class="keyword">const</span> percent = Math.round(
+          (progressEvent.loaded * <span class="number">100</span>) / progressEvent.total
+        );
+        onProgress(percent);
+      }
+    }
+  });
+
+  <span class="keyword">return</span> response.data;
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> 类型安全处理</h2>
+      <div class="code-block"><span class="comment">// 定义 API 响应类型</span>
+<span class="keyword">interface</span> ApiSuccess&lt;T&gt; {
+  success: <span class="keyword">true</span>;
+  data: T;
+}
+
+<span class="keyword">interface</span> ApiError {
+  success: <span class="keyword">false</span>;
+  error: <span class="keyword">string</span>;
+}
+
+<span class="keyword">type</span> ApiResult&lt;T&gt; = ApiSuccess&lt;T&gt; | ApiError;
+
+<span class="comment">// 类型安全的请求函数</span>
+<span class="keyword">async function</span> <span class="function">safeRequest</span>&lt;T&gt;(
+  config: AxiosRequestConfig
+): Promise&lt;ApiResult&lt;T&gt;&gt; {
+  <span class="keyword">try</span> {
+    <span class="keyword">const</span> response = <span class="keyword">await</span> axios.request&lt;T&gt;(config);
+    <span class="keyword">return</span> {
+      success: <span class="keyword">true</span>,
+      data: response.data
+    };
+  } <span class="keyword">catch</span> (error) {
+    <span class="keyword">return</span> {
+      success: <span class="keyword">false</span>,
+      error: error <span class="keyword">instanceof</span> Error ? error.message : <span class="string">'未知错误'</span>
+    };
+  }
+}
+
+<span class="comment">// 使用示例</span>
+<span class="keyword">const</span> result = <span class="keyword">await</span> safeRequest&lt;User[]&gt;({
+  method: <span class="string">'GET'</span>,
+  url: <span class="string">'/api/users'</span>
+});
+
+<span class="keyword">if</span> (result.success) {
+  console.log(<span class="string">'用户列表:'</span>, result.data);
+} <span class="keyword">else</span> {
+  console.error(<span class="string">'错误:'</span>, result.error);
+}</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>响应对象包含 data、status、headers 等信息</li>
+        <li>需要区分 HTTP 错误和业务错误分别处理</li>
+        <li>使用响应拦截器实现统一的响应处理</li>
+        <li>文件下载使用 blob 响应类型，上传使用 FormData</li>
+        <li>使用 TypeScript 泛型实现类型安全的请求</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="80-3-请求配置.html">← 上一节：请求配置</a>
+      <a href="80-5-拦截器.html">下一节：拦截器 →</a>
+    </div>
+  </div>
+</body>
+</html>

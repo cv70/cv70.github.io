@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>81.3 响应式系统 - Node.js + TypeScript 全栈开发</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">课程首页</a></li>
+      <li><a href="#">第十一部分：前端基础篇</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>81.3 响应式系统</h1>
+      <p class="subtitle">Vue 3 响应式原理与 API</p>
+    </header>
+
+    <div class="content-block">
+      <h2><span class="icon">📖</span> 本节概述</h2>
+      <p>Vue 3 使用 Proxy 重写了响应式系统，相比 Vue 2 的 Object.defineProperty，Proxy 提供了更强大的拦截能力，支持更多数据类型，并解决了 Vue 2 中的一些限制。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 Vue 3 响应式系统的工作原理</li>
+        <li>掌握 Proxy 与 Object.defineProperty 的区别</li>
+        <li>学会使用响应式工具函数</li>
+        <li>了解响应式系统的限制和最佳实践</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 响应式原理</h2>
+
+      <h3>Vue 2: Object.defineProperty</h3>
+      <div class="code-block"><span class="comment">// Vue 2 响应式实现（简化版）</span>
+<span class="keyword">function</span> <span class="function">defineReactive</span>(obj, key, val) {
+  Object.defineProperty(obj, key, {
+    <span class="function">get</span>() {
+      console.log(<span class="string">`获取 ${key}`</span>);
+      <span class="keyword">return</span> val;
+    },
+    <span class="function">set</span>(newVal) {
+      console.log(<span class="string">`设置 ${key} = ${newVal}`</span>);
+      val = newVal;
+    }
+  });
+}
+
+<span class="comment">// 局限性：</span>
+<span class="comment">// 1. 无法检测对象属性的添加/删除</span>
+<span class="comment">// 2. 无法检测数组索引和 length 变化</span>
+<span class="comment">// 3. 需要递归遍历对象的所有属性</span></div>
+
+      <h3>Vue 3: Proxy</h3>
+      <div class="code-block"><span class="comment">// Vue 3 响应式实现（简化版）</span>
+<span class="keyword">function</span> <span class="function">reactive</span>(target) {
+  <span class="keyword">return new</span> Proxy(target, {
+    <span class="function">get</span>(target, key, receiver) {
+      console.log(<span class="string">`获取 ${String(key)}`</span>);
+      track(target, key); <span class="comment">// 收集依赖</span>
+      <span class="keyword">return</span> Reflect.get(target, key, receiver);
+    },
+    <span class="function">set</span>(target, key, value, receiver) {
+      console.log(<span class="string">`设置 ${String(key)} = ${value}`</span>);
+      <span class="keyword">const</span> result = Reflect.set(target, key, value, receiver);
+      trigger(target, key); <span class="comment">// 触发更新</span>
+      <span class="keyword">return</span> result;
+    },
+    <span class="function">deleteProperty</span>(target, key) {
+      console.log(<span class="string">`删除 ${String(key)}`</span>);
+      <span class="keyword">const</span> result = Reflect.deleteProperty(target, key);
+      trigger(target, key);
+      <span class="keyword">return</span> result;
+    }
+  });
+}
+
+<span class="comment">// Proxy 优势：</span>
+<span class="comment">// 1. 可以检测属性的添加/删除</span>
+<span class="comment">// 2. 可以检测数组索引和 length 变化</span>
+<span class="comment">// 3. 惰性响应式，只有访问时才代理</span>
+<span class="comment">// 4. 支持 Map、Set、WeakMap、WeakSet</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 响应式 API</h2>
+
+      <h3>ref</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref, shallowRef, triggerRef } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 创建响应式 ref</span>
+<span class="keyword">const</span> count = ref(<span class="number">0</span>);
+
+<span class="comment">// ref 内部实现</span>
+<span class="keyword">class</span> RefImpl {
+  <span class="keyword">private</span> _value;
+  <span class="keyword">private</span> _rawValue;
+
+  <span class="keyword">constructor</span>(value) {
+    <span class="keyword">this</span>._rawValue = value;
+    <span class="keyword">this</span>._value = reactive(value); <span class="comment">// 如果是对象则转为 reactive</span>
+  }
+
+  <span class="keyword">get</span> value() {
+    track(<span class="keyword">this</span>, <span class="string">'value'</span>);
+    <span class="keyword">return this</span>._value;
+  }
+
+  <span class="keyword">set</span> value(newVal) {
+    <span class="keyword">this</span>._value = newVal;
+    trigger(<span class="keyword">this</span>, <span class="string">'value'</span>);
+  }
+}
+
+<span class="comment">// shallowRef - 浅层响应式</span>
+<span class="keyword">const</span> shallow = shallowRef({ a: { b: <span class="number">1</span> } });
+shallow.value.a.b = <span class="number">2</span>; <span class="comment">// 不会触发更新</span>
+shallow.value = { a: { b: <span class="number">2</span> } }; <span class="comment">// 会触发更新</span>
+
+<span class="comment">// 手动触发更新</span>
+triggerRef(shallow);</div>
+
+      <h3>reactive</h3>
+      <div class="code-block"><span class="keyword">import</span> {
+  reactive,
+  shallowReactive,
+  readonly,
+  shallowReadonly
+} <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 创建响应式对象</span>
+<span class="keyword">const</span> state = reactive({
+  count: <span class="number">0</span>,
+  nested: {
+    value: <span class="number">1</span>
+  }
+});
+
+<span class="comment">// shallowReactive - 浅层响应式</span>
+<span class="keyword">const</span> shallow = shallowReactive({
+  count: <span class="number">0</span>,
+  nested: { value: <span class="number">1</span> }
+});
+shallow.count++; <span class="comment">// 触发更新</span>
+shallow.nested.value++; <span class="comment">// 不触发更新</span>
+
+<span class="comment">// readonly - 只读代理</span>
+<span class="keyword">const</span> readonlyState = readonly(state);
+<span class="comment">// readonlyState.count = 1; // 警告并失败</span>
+
+<span class="comment">// shallowReadonly - 浅层只读</span>
+<span class="keyword">const</span> shallowReadonlyState = shallowReadonly(state);
+shallowReadonlyState.count = <span class="number">1</span>; <span class="comment">// 警告</span>
+shallowReadonlyState.nested.value = <span class="number">2</span>; <span class="comment">// 允许修改</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 响应式工具函数</h2>
+
+      <h3>toRef 和 toRefs</h3>
+      <div class="code-block"><span class="keyword">import</span> { reactive, toRef, toRefs } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> state = reactive({
+  name: <span class="string">'Vue'</span>,
+  version: <span class="number">3</span>
+});
+
+<span class="comment">// toRef - 为单个属性创建 ref</span>
+<span class="keyword">const</span> nameRef = toRef(state, <span class="string">'name'</span>);
+nameRef.value = <span class="string">'Vue 3'</span>;
+console.log(state.name); <span class="comment">// 'Vue 3'</span>
+
+<span class="comment">// toRefs - 为所有属性创建 ref</span>
+<span class="keyword">const</span> { name, version } = toRefs(state);
+name.value = <span class="string">'Vue 4'</span>;
+console.log(state.name); <span class="comment">// 'Vue 4'</span>
+
+<span class="comment">// 在组合函数中返回响应式对象</span>
+<span class="keyword">function</span> <span class="function">useFeature</span>() {
+  <span class="keyword">const</span> state = reactive({
+    count: <span class="number">0</span>,
+    name: <span class="string">''</span>
+  });
+
+  <span class="keyword">return</span> toRefs(state); <span class="comment">// 保持响应性</span>
+}</div>
+
+      <h3>isRef, isReactive, isProxy, isReadonly</h3>
+      <div class="code-block"><span class="keyword">import</span> {
+  ref,
+  reactive,
+  readonly,
+  isRef,
+  isReactive,
+  isProxy,
+  isReadonly
+} <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> count = ref(<span class="number">0</span>);
+<span class="keyword">const</span> state = reactive({ name: <span class="string">''</span> });
+<span class="keyword">const</span> readonlyState = readonly(state);
+
+console.log(isRef(count));        <span class="comment">// true</span>
+console.log(isReactive(state));   <span class="comment">// true</span>
+console.log(isProxy(state));      <span class="comment">// true</span>
+console.log(isReadonly(readonlyState)); <span class="comment">// true</span></div>
+
+      <h3>unref</h3>
+      <div class="code-block"><span class="keyword">import</span> { ref, unref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> count = ref(<span class="number">10</span>);
+
+<span class="comment">// 如果是 ref 则返回 .value，否则返回本身</span>
+console.log(unref(count));  <span class="comment">// 10</span>
+console.log(unref(<span class="number">20</span>));    <span class="comment">// 20</span>
+
+<span class="comment">// 等价于</span>
+<span class="keyword">const</span> val = isRef(count) ? count.value : count;</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 响应式转换</h2>
+
+      <h3>响应式丢失问题</h3>
+      <div class="code-block"><span class="keyword">import</span> { reactive } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="keyword">const</span> state = reactive({ count: <span class="number">0</span> });
+
+<span class="comment">// 解构会丢失响应性</span>
+<span class="keyword">let</span> { count } = state;
+count++; <span class="comment">// 不会触发更新，count 只是普通数字</span>
+
+<span class="comment">// 正确方式：使用 toRefs</span>
+<span class="keyword">import</span> { toRefs } <span class="keyword">from</span> <span class="string">'vue'</span>;
+<span class="keyword">const</span> { count } = toRefs(state);
+count.value++; <span class="comment">// 正确触发更新</span>
+
+<span class="comment">// 赋值会断开连接</span>
+state = reactive({ count: <span class="number">0</span> }); <span class="comment">// 错误！</span>
+
+<span class="comment">// 正确方式：使用 ref 或 Object.assign</span>
+<span class="keyword">const</span> stateRef = ref({ count: <span class="number">0</span> });
+stateRef.value = { count: <span class="number">1</span> }; <span class="comment">// 正确</span>
+
+<span class="comment">// 或者</span>
+Object.assign(state, { count: <span class="number">1</span>, newProp: <span class="string">'value'</span> });</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 响应式限制</h2>
+
+      <h3>reactive 的限制</h3>
+      <div class="code-block"><span class="keyword">import</span> { reactive, ref } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 1. 只能用于对象类型</span>
+<span class="keyword">const</span> num = reactive(<span class="number">0</span>); <span class="comment">// 错误！</span>
+<span class="keyword">const</span> str = reactive(<span class="string">'hello'</span>); <span class="comment">// 错误！</span>
+
+<span class="comment">// 2. 不能替换整个对象</span>
+<span class="keyword">let</span> state = reactive({ count: <span class="number">0</span> });
+state = reactive({ count: <span class="number">1</span> }); <span class="comment">// 断开响应性</span>
+
+<span class="comment">// 3. 解构会丢失响应性</span>
+<span class="keyword">const</span> { count } = state; <span class="comment">// 不是响应式的</span>
+
+<span class="comment">// 正确做法</span>
+<span class="keyword">const</span> countRef = ref(<span class="number">0</span>); <span class="comment">// 基本类型用 ref</span>
+<span class="keyword">const</span> stateRef = ref({ count: <span class="number">0</span> }); <span class="comment">// 需要替换时用 ref</span>
+<span class="keyword">const</span> { count } = toRefs(reactive({ count: <span class="number">0</span> })); <span class="comment">// 解构时用 toRefs</span></div>
+
+      <h3>不可代理的值</h3>
+      <div class="code-block"><span class="keyword">import</span> { reactive, markRaw, shallowReactive } <span class="keyword">from</span> <span class="string">'vue'</span>;
+
+<span class="comment">// 这些值不会被代理</span>
+<span class="comment">// 1. 基本类型（number, string, boolean, null, undefined）</span>
+<span class="comment">// 2. symbol</span>
+<span class="comment">// 3. 使用 markRaw 标记的对象</span>
+
+<span class="keyword">const</span> obj = markRaw({ a: <span class="number">1</span> });
+<span class="keyword">const</span> state = reactive({ obj });
+<span class="comment">// state.obj 不会被代理</span>
+
+<span class="comment">// 避免 markRaw 的场景</span>
+<span class="comment">// - 不应该被代理的第三方库对象</span>
+<span class="comment">// - 不需要响应式的复杂对象</span></div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <ul class="feature-list">
+        <li>Vue 3 使用 Proxy 实现响应式，功能更强大</li>
+        <li>ref 用于基本类型，reactive 用于对象</li>
+        <li>toRefs 解决 reactive 解构丢失响应性的问题</li>
+        <li>shallowRef/shallowReactive 提供浅层响应式</li>
+        <li>了解响应式限制，避免常见陷阱</li>
+      </ul>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="81-2-组合式API.html">← 上一节：组合式 API</a>
+      <a href="81-4-组件基础.html">下一节：组件基础 →</a>
+    </div>
+  </div>
+</body>
+</html>

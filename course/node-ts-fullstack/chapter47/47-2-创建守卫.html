@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.2 创建守卫 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="47-1-守卫概念.html">第四十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>47.2 创建守卫</h1>
+      <p class="subtitle">实现自定义守卫</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握守卫的创建方式</li>
+        <li>学会使用 Reflector 获取元数据</li>
+        <li>了解守卫的作用范围</li>
+        <li>掌握自定义装饰器与守卫配合</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 基本守卫实现</h2>
+      <div class="code-block">
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Request } from 'express';
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(private readonly authService: AuthService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const token = this.extractTokenFromHeader(request);
+
+    if (!token) {
+      throw new UnauthorizedException('No token provided');
+    }
+
+    try {
+      const user = await this.authService.validateToken(token);
+      // 将用户信息附加到请求对象
+      request['user'] = user;
+      return true;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  private extractTokenFromHeader(request: Request): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">抛出异常</div>
+          <p>守卫返回 false 时返回 403 Forbidden。如果需要自定义错误响应，可以抛出异常，如 UnauthorizedException。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 使用 Reflector 获取元数据</h2>
+      <div class="code-block">
+import { Injectable, CanActivate, ExecutionContext, Reflector } from '@nestjs/common';
+import { IS_PUBLIC_KEY } from './public.decorator';
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    // 检查是否标记为公开
+    const isPublic = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (isPublic) {
+      return true;
+    }
+
+    // 执行认证检查
+    const request = context.switchToHttp().getRequest();
+    return this.validateRequest(request);
+  }
+
+  private validateRequest(request: Request): boolean {
+    // 认证逻辑
+    return !!request.headers.authorization;
+  }
+}
+
+// 公开路由装饰器
+import { SetMetadata } from '@nestjs/common';
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+// 使用
+@Controller('auth')
+export class AuthController {
+  @Public()  // 标记为公开，不需要认证
+  @Post('login')
+  login() {}
+
+  @Post('logout')  // 需要认证
+  logout() {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 守卫的作用范围</h2>
+      <div class="code-block">
+// 1. 方法级
+@Controller('users')
+export class UsersController {
+  @UseGuards(AuthGuard)
+  @Get('profile')
+  getProfile() {}
+}
+
+// 2. 控制器级
+@Controller('admin')
+@UseGuards(AuthGuard, AdminGuard)  // 可以应用多个守卫
+export class AdminController {
+  @Get('dashboard')
+  getDashboard() {}
+
+  @Get('users')
+  getUsers() {}
+}
+
+// 3. 全局级
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalGuards(new AuthGuard());
+  await app.listen(3000);
+}
+
+// 4. 模块级提供者
+@Module({
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+  ],
+})
+export class AppModule {}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 多个守卫执行</h2>
+      <div class="code-block">
+@Controller('admin')
+@UseGuards(AuthGuard)      // 第一个执行
+@UseGuards(AdminGuard)     // 第二个执行
+export class AdminController {
+
+  @UseGuards(SuperAdminGuard)  // 第三个执行
+  @Get('sensitive')
+  getSensitiveData() {}
+}
+
+// 执行顺序：AuthGuard -> AdminGuard -> SuperAdminGuard
+// 任何一个守卫返回 false 或抛出异常，后续守卫不会执行
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">守卫执行顺序</div>
+          <p>守卫按顺序执行：全局守卫 -> 控制器守卫 -> 方法守卫。任何一个守卫拒绝请求，后续守卫都不会执行。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 实现 CanActivate 接口创建守卫</li>
+            <li>• Reflector 获取装饰器元数据</li>
+            <li>• 支持方法级、控制器级、全局级</li>
+            <li>• 多个守卫按顺序执行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="47-1-守卫概念.html">← 上一节：守卫概念</a>
+      <a href="47-3-角色守卫.html">下一节：角色守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

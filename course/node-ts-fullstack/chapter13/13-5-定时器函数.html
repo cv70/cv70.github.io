@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.5 定时器函数 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="13-1-global对象.html">第十三章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>13.5 定时器函数</h1>
+      <p class="subtitle">定时任务与延迟执行</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 setTimeout 和 setInterval</li>
+        <li>理解 setImmediate 的作用</li>
+        <li>了解 process.nextTick 的执行时机</li>
+        <li>学会取消定时器</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> setTimeout</h2>
+      <div class="code-block">
+// 延迟执行（毫秒）
+const timeoutId = setTimeout(() => {
+  console.log('1 秒后执行');
+}, 1000);
+
+// 传递参数
+setTimeout((name, age) => {
+  console.log(`${name} is ${age} years old`);
+}, 1000, 'Alice', 25);
+
+// 立即执行（最小延迟 1ms）
+setTimeout(() => {
+  console.log('立即执行');
+}, 0);
+
+// 取消定时器
+clearTimeout(timeoutId);
+
+// 检查定时器是否存在
+// Node.js 返回 Timeout 对象
+console.log(timeoutId);  // Timeout { ... }
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> setInterval</h2>
+      <div class="code-block">
+// 重复执行
+let count = 0;
+const intervalId = setInterval(() => {
+  count++;
+  console.log(`执行第 ${count} 次`);
+
+  if (count >= 5) {
+    clearInterval(intervalId);  // 执行 5 次后停止
+    console.log('定时器已停止');
+  }
+}, 1000);
+
+// 带参数
+setInterval((message) => {
+  console.log(message);
+}, 2000, '每 2 秒打印一次');
+
+// 实现倒计时
+function countdown(seconds) {
+  const timer = setInterval(() => {
+    console.log(`剩余 ${seconds} 秒`);
+    seconds--;
+    if (seconds < 0) {
+      clearInterval(timer);
+      console.log('倒计时结束！');
+    }
+  }, 1000);
+}
+
+countdown(5);
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> setImmediate</h2>
+      <div class="code-block">
+// 在 I/O 事件回调之后执行
+setImmediate(() => {
+  console.log('setImmediate 执行');
+});
+
+// 对比 setTimeout
+setTimeout(() => {
+  console.log('setTimeout 0ms 执行');
+}, 0);
+
+// 在 I/O 回调中的执行顺序
+const fs = require('fs');
+
+fs.readFile(__filename, () => {
+  console.log('I/O 回调');
+
+  setTimeout(() => {
+    console.log('I/O 回调中的 setTimeout');
+  }, 0);
+
+  setImmediate(() => {
+    console.log('I/O 回调中的 setImmediate');
+  });
+});
+
+// 在 I/O 回调中，setImmediate 一定先于 setTimeout 执行
+// 输出顺序：
+// I/O 回调
+// I/O 回调中的 setImmediate
+// I/O 回调中的 setTimeout
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">setImmediate vs setTimeout</div>
+          <p>在 I/O 回调中，setImmediate 总是先执行。在主模块中，执行顺序不确定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚀</span> process.nextTick</h2>
+      <div class="code-block">
+// 在当前操作完成后立即执行（微任务）
+process.nextTick(() => {
+  console.log('nextTick');
+});
+
+// 执行顺序对比
+console.log('同步代码 1');
+
+setTimeout(() => {
+  console.log('setTimeout');
+}, 0);
+
+setImmediate(() => {
+  console.log('setImmediate');
+});
+
+process.nextTick(() => {
+  console.log('nextTick');
+});
+
+Promise.resolve().then(() => {
+  console.log('Promise');
+});
+
+console.log('同步代码 2');
+
+// 输出顺序：
+// 同步代码 1
+// 同步代码 2
+// nextTick
+// Promise
+// setTimeout 或 setImmediate
+// setTimeout 或 setImmediate
+
+// nextTick 优先级最高，在所有异步操作之前执行
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 定时器注意事项</h2>
+      <div class="code-block">
+// 1. 定时器时间不精确
+const start = Date.now();
+setTimeout(() => {
+  const elapsed = Date.now() - start;
+  console.log(`实际经过: ${elapsed}ms`);  // 可能 > 100ms
+}, 100);
+
+// 2. 阻塞会影响定时器
+setTimeout(() => {
+  console.log('我会被阻塞');
+}, 100);
+
+// 阻塞事件循环
+const start = Date.now();
+while (Date.now() - start < 1000) {
+  // 同步阻塞 1 秒
+}
+
+// 3. 定时器在 Node.js 中返回 Timeout 对象
+const timer = setTimeout(() => {}, 1000);
+console.log(typeof timer);  // 'object'
+
+// 4. hasRef 检查是否保持事件循环
+console.log(timer.hasRef());  // true
+
+// 取消引用（不阻止程序退出）
+timer.unref();
+
+// 恢复引用
+timer.ref();
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>定时器时间只是最小延迟，事件循环阻塞时会被推迟。不要依赖定时器做精确计时。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• setTimeout 延迟执行，setInterval 重复执行</li>
+            <li>• setImmediate 在 I/O 回调后执行</li>
+            <li>• process.nextTick 是微任务，优先级最高</li>
+            <li>• 定时器时间不精确，不要依赖精确计时</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="13-4-Buffer类.html">← 上一节：Buffer 类</a>
+      <a href="../chapter14/14-1-path基础方法.html">下一章：path 基础方法 →</a>
+    </div>
+  </div>
+</body>
+</html>

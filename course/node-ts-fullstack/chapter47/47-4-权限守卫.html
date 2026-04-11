@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.4 权限守卫 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="47-1-守卫概念.html">第四十七章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>47.4 权限守卫</h1>
+      <p class="subtitle">实现细粒度的权限控制</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解权限控制的概念</li>
+        <li>学会定义权限装饰器</li>
+        <li>实现权限守卫</li>
+        <li>了解动态权限验证</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 权限 vs 角色</h2>
+      <p>角色是权限的集合。角色控制较粗粒度，权限控制更细粒度。例如：ADMIN 角色包含 user:read、user:write、product:read 等权限。</p>
+
+      <div class="code-block">
+// 权限定义
+enum Permission {
+  USER_READ = 'user:read',
+  USER_WRITE = 'user:write',
+  USER_DELETE = 'user:delete',
+  PRODUCT_READ = 'product:read',
+  PRODUCT_WRITE = 'product:write',
+}
+
+// 用户对象
+interface User {
+  id: number;
+  username: string;
+  permissions: Permission[];
+}
+
+// 角色权限映射
+const ROLE_PERMISSIONS = {
+  [Role.USER]: [Permission.USER_READ],
+  [Role.ADMIN]: [
+    Permission.USER_READ,
+    Permission.USER_WRITE,
+    Permission.PRODUCT_READ,
+    Permission.PRODUCT_WRITE,
+  ],
+  [Role.SUPER_ADMIN]: Object.values(Permission),
+};
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 权限装饰器</h2>
+      <div class="code-block">
+// permissions.decorator.ts
+import { SetMetadata } from '@nestjs/common';
+
+export const PERMISSIONS_KEY = 'permissions';
+export const RequirePermissions = (...permissions: Permission[]) =>
+  SetMetadata(PERMISSIONS_KEY, permissions);
+
+// 使用
+@Controller('users')
+export class UsersController {
+
+  @Get()
+  @RequirePermissions(Permission.USER_READ)
+  findAll() {}
+
+  @Post()
+  @RequirePermissions(Permission.USER_WRITE)
+  create() {}
+
+  @Delete(':id')
+  @RequirePermissions(Permission.USER_DELETE)
+  remove() {}
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 实现权限守卫</h2>
+      <div class="code-block">
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { PERMISSIONS_KEY } from './permissions.decorator';
+
+@Injectable()
+export class PermissionsGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredPermissions = this.reflector.getAllAndOverride<Permission[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (!requiredPermissions) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user?.permissions) {
+      throw new ForbiddenException('No permissions found');
+    }
+
+    // 检查用户是否具有所有所需权限
+    const hasAllPermissions = requiredPermissions.every((permission) =>
+      user.permissions.includes(permission),
+    );
+
+    if (!hasAllPermissions) {
+      throw new ForbiddenException(
+        `Missing permissions: ${requiredPermissions.join(', ')}`,
+      );
+    }
+
+    return true;
+  }
+}
+      </div>
+
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">权限存储</div>
+          <p>权限可以存储在数据库中，用户登录时加载。也可以根据角色动态计算权限，减少数据库查询。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 数据库权限验证</h2>
+      <div class="code-block">
+@Injectable()
+export class PermissionsGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    private permissionsService: PermissionsService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const requiredPermissions = this.reflector.getAllAndOverride<Permission[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (!requiredPermissions) return true;
+
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    // 从数据库获取用户权限
+    const userPermissions = await this.permissionsService.getUserPermissions(user.id);
+
+    return requiredPermissions.every(p => userPermissions.includes(p));
+  }
+}
+
+// 权限服务
+@Injectable()
+export class PermissionsService {
+  constructor(
+    @InjectRepository(UserRole)
+    private userRoleRepo: Repository<UserRole>,
+    @InjectRepository(RolePermission)
+    private rolePermissionRepo: Repository<RolePermission>,
+  ) {}
+
+  async getUserPermissions(userId: number): Promise<Permission[]> {
+    // 获取用户的所有角色
+    const userRoles = await this.userRoleRepo.find({ where: { userId } });
+    const roleIds = userRoles.map(ur => ur.roleId);
+
+    // 获取角色的所有权限
+    const rolePermissions = await this.rolePermissionRepo
+      .createQueryBuilder('rp')
+      .where('rp.roleId IN (:...roleIds)', { roleIds })
+      .getMany();
+
+    // 去重
+    return [...new Set(rolePermissions.map(rp => rp.permission))];
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✨</span> 资源级权限控制</h2>
+      <div class="code-block">
+// 检查用户是否有权访问特定资源
+@Injectable()
+export class ResourceOwnerGuard implements CanActivate {
+  constructor(private usersService: UsersService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const userId = request.params.id;
+    const currentUser = request.user;
+
+    // 管理员可以访问所有资源
+    if (currentUser.roles.includes(Role.ADMIN)) {
+      return true;
+    }
+
+    // 用户只能访问自己的资源
+    return currentUser.id === Number(userId);
+  }
+}
+
+// 使用
+@Controller('users')
+export class UsersController {
+  @Get(':id')
+  @UseGuards(AuthGuard, ResourceOwnerGuard)
+  findOne(@Param('id') id: string) {
+    // 只有用户本人或管理员可以访问
+  }
+}
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">性能考虑</div>
+          <p>频繁的数据库权限查询会影响性能。建议使用缓存或 JWT 存储权限信息，减少数据库访问。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 权限控制比角色更细粒度</li>
+            <li>• @RequirePermissions() 声明所需权限</li>
+            <li>• PermissionsGuard 验证用户权限</li>
+            <li>• 可从数据库或缓存获取权限</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="47-3-角色守卫.html">← 上一节：角色守卫</a>
+      <a href="47-5-全局守卫.html">下一节：全局守卫 →</a>
+    </div>
+  </div>
+</body>
+</html>

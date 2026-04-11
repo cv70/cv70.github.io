@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.3 HTTP 客户端 - Node.js + TypeScript 全栈开发课程</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">📘 Node.js + TypeScript 全栈开发</div>
+    <ul class="navbar-nav">
+      <li><a href="../index.html">首页</a></li>
+      <li><a href="18-1-创建HTTP服务器.html">第十八章</a></li>
+    </ul>
+  </nav>
+
+  <div class="container">
+    <header class="page-header">
+      <h1>18.3 HTTP 客户端</h1>
+      <p class="subtitle">发起 HTTP 请求</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 http.request 方法</li>
+        <li>学会发送 GET 和 POST 请求</li>
+        <li>理解请求选项配置</li>
+        <li>掌握异步请求处理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> GET 请求</h2>
+      <div class="code-block">
+const http = require('http');
+
+// 方式一：http.get 简化方法
+http.get('http://localhost:3000/api/users', (res) => {
+  let data = '';
+
+  res.on('data', (chunk) => {
+    data += chunk;
+  });
+
+  res.on('end', () => {
+    console.log('响应:', data);
+    const json = JSON.parse(data);
+    console.log('用户列表:', json);
+  });
+}).on('error', (err) => {
+  console.error('请求错误:', err.message);
+});
+
+// 方式二：http.request 完整方法
+const options = {
+  hostname: 'localhost',
+  port: 3000,
+  path: '/api/users',
+  method: 'GET',
+  headers: {
+    'Accept': 'application/json'
+  }
+};
+
+const req = http.request(options, (res) => {
+  console.log('状态码:', res.statusCode);
+  console.log('响应头:', res.headers);
+
+  let data = '';
+  res.on('data', (chunk) => data += chunk);
+  res.on('end', () => console.log(data));
+});
+
+req.on('error', (err) => {
+  console.error('请求错误:', err);
+});
+
+req.end();  // 必须调用
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> POST 请求</h2>
+      <div class="code-block">
+const http = require('http');
+
+// 发送 JSON 数据
+const postData = JSON.stringify({
+  name: 'Alice',
+  age: 25
+});
+
+const options = {
+  hostname: 'localhost',
+  port: 3000,
+  path: '/api/users',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(postData)
+  }
+};
+
+const req = http.request(options, (res) => {
+  let data = '';
+  res.on('data', (chunk) => data += chunk);
+  res.on('end', () => {
+    console.log('响应:', data);
+  });
+});
+
+req.on('error', (err) => {
+  console.error('请求错误:', err);
+});
+
+// 写入请求体
+req.write(postData);
+req.end();
+
+// 发送表单数据
+const querystring = require('querystring');
+const formData = querystring.stringify({
+  username: 'alice',
+  password: 'secret'
+});
+
+const formOptions = {
+  hostname: 'localhost',
+  port: 3000,
+  path: '/login',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Content-Length': Buffer.byteLength(formData)
+  }
+};
+
+const formReq = http.request(formOptions, (res) => {
+  // 处理响应
+});
+formReq.write(formData);
+formReq.end();
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 请求选项详解</h2>
+      <div class="code-block">
+const options = {
+  // 基本选项
+  protocol: 'http:',         // 协议
+  hostname: 'example.com',   // 主机名
+  port: 80,                  // 端口
+  path: '/api/data?foo=bar', // 路径（含查询参数）
+  method: 'GET',             // 方法
+
+  // 请求头
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token123',
+    'User-Agent': 'MyApp/1.0',
+    'Accept': 'application/json'
+  },
+
+  // 认证
+  auth: 'username:password', // Basic 认证
+
+  // 超时
+  timeout: 5000,             // 5 秒超时
+
+  // 代理
+  // agent: false,           // 禁用连接池
+
+  // 其他
+  family: 4,                 // IPv4
+  localAddress: '127.0.0.1', // 本地地址
+};
+
+// 使用 URL 对象
+const url = new URL('http://example.com:3000/api/data');
+
+const req = http.request({
+  hostname: url.hostname,
+  port: url.port,
+  path: url.pathname + url.search,
+  method: 'GET'
+}, (res) => {
+  // ...
+});
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 封装请求函数</h2>
+      <div class="code-block">
+const http = require('http');
+const https = require('https');
+
+// Promise 封装
+function request(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const client = isHttps ? https : http;
+
+    const reqOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      timeout: options.timeout || 10000
+    };
+
+    const req = client.request(reqOptions, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          body: data
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('请求超时'));
+    });
+
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
+
+// 使用
+async function main() {
+  try {
+    // GET 请求
+    const getRes = await request('http://localhost:3000/api/users');
+    console.log('用户:', JSON.parse(getRes.body));
+
+    // POST 请求
+    const postRes = await request('http://localhost:3000/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Bob' })
+    });
+    console.log('创建用户:', postRes);
+  } catch (err) {
+    console.error('请求失败:', err);
+  }
+}
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• http.get() 简化 GET 请求</li>
+            <li>• http.request() 可配置所有选项</li>
+            <li>• POST 请求需要 write() 和 end()</li>
+            <li>• 推荐 Promise 封装提高可读性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="18-2-处理请求与响应.html">← 上一节：处理请求与响应</a>
+      <a href="18-4-静态文件服务.html">下一节：静态文件服务 →</a>
+    </div>
+  </div>
+</body>
+</html>
