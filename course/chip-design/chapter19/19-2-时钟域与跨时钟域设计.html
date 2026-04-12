@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.2 时钟域与跨时钟域设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>19.2 时钟域与跨时钟域设计</h1>
+      <p class="subtitle">RTL 设计方法论</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解时钟域的概念和重要性</li>
+        <li>掌握跨时钟域数据传输的方法</li>
+        <li>了解亚稳态的产生原因和处理方法</li>
+        <li>能够设计可靠的跨时钟域电路</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">时钟域概念</h3>
+      <p class="card-text"><strong>时钟域（Clock Domain）</strong>是指由同一个时钟信号或相位相关的时钟信号驱动的所有同步元件（触发器）的集合。在现代SoC设计中，通常存在多个时钟域，不同模块工作在不同时钟频率下。</p>
+      <p class="card-text">跨时钟域设计是芯片设计中最具挑战性的问题之一，处理不当会导致系统功能错误甚至芯片失效。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 亚稳态问题</h2>
+      <div class="card">
+        <h3 class="card-title">什么是亚稳态</h3>
+        <p class="card-text">当信号在时钟边沿附近变化时，触发器可能进入不稳定状态，输出在0和1之间震荡。这种现象称为<strong>亚稳态</strong>，是跨时钟域设计必须解决的核心问题。</p>
+      </div>
+      <table>
+        <thead>
+          <tr><th>参数</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>建立时间（Setup Time）</td><td>数据在时钟沿前必须稳定的时间</td></tr>
+          <tr><td>保持时间（Hold Time）</td><td>数据在时钟沿后必须保持稳定的时间</td></tr>
+          <tr><td>MTBF</td><td>平均故障间隔时间，衡量亚稳态可靠性</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 跨时钟域处理方法</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">单比特信号</h3>
+          <ul>
+            <li><strong>打两拍</strong>：使用两级触发器同步</li>
+            <li><strong>脉冲同步器</strong>：用于脉冲信号传递</li>
+            <li>适用于控制信号、标志位</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多比特数据</h3>
+          <ul>
+            <li><strong>握手协议</strong>：请求/应答机制</li>
+            <li><strong>FIFO</strong>：异步FIFO缓冲</li>
+            <li><strong>格雷码</strong>：减少同时变化位数</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 两级同步器示例</h2>
+      <div class="code-block">
+        <pre><code>// 两级同步器 - 打两拍
+module sync_2stage (
+    input  wire clk_dst,    // 目标时钟
+    input  wire rst_n,
+    input  wire sig_src,    // 源域信号
+    output reg  sig_dst     // 同步后的信号
+);
+    reg sig_mid;            // 中间级
+
+    always @(posedge clk_dst or negedge rst_n) begin
+        if (!rst_n) begin
+            sig_mid <= 1'b0;
+            sig_dst <= 1'b0;
+        end else begin
+            sig_mid <= sig_src;
+            sig_dst <= sig_mid;
+        end
+    end
+endmodule</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">设计注意要点</div>
+        <p>1. 跨时钟域信号必须经过同步处理<br>
+        2. 多比特数据不能直接打两拍<br>
+        3. 使用CDC检查工具验证设计<br>
+        4. 在规格书中明确时钟域边界</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 时钟域是由同一时钟驱动的所有触发器集合</li>
+            <li>• 亚稳态是跨时钟域设计的核心问题</li>
+            <li>• 单比特信号使用打两拍方式同步</li>
+            <li>• 多比特数据使用握手或FIFO方式传输</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="19-1-RTL级设计概述.html">← 上一节</a>
+      <a href="19-3-异步FIFO设计.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

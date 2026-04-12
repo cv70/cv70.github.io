@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.4 Verilog 中的时序控制 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>14.4 Verilog 中的时序控制：延迟与事件</h1>
+          <p class="subtitle">Verilog HDL 进阶</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解 Verilog 中时序控制的概念与用途</li>
+            <li>掌握延迟控制（#）的使用方法</li>
+            <li>掌握事件控制（@）的各种形式</li>
+            <li>了解 wait 语句与电平敏感控制</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">时序控制概述</h3>
+          <p class="card-text">Verilog 提供了多种时序控制机制，用于描述时间行为和事件响应。这些控制主要用于<strong>仿真</strong>，在可综合代码中需谨慎使用。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 延迟控制</h2>
+          <p class="card-text">延迟控制使用 <code>#</code> 符号指定仿真时间延迟。</p>
+          <div class="code-block">// 简单延迟
+#10 a = b;          // 等待10个时间单位后赋值
+
+// 惯性延迟（用于信号跳变过滤）
+assign #5 out = in; // 输出延迟5个时间单位
+
+// 传输延迟
+out <= #3 in;       // 非阻塞赋值带延迟</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 事件控制类型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>语法</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>边沿敏感</td>
+                <td>@(posedge clk)</td>
+                <td>等待时钟上升沿</td>
+              </tr>
+              <tr>
+                <td>边沿敏感</td>
+                <td>@(negedge clk)</td>
+                <td>等待时钟下降沿</td>
+              </tr>
+              <tr>
+                <td>信号敏感</td>
+                <td>@(a or b)</td>
+                <td>等待a或b变化</td>
+              </tr>
+              <tr>
+                <td>事件变量</td>
+                <td>@(event_var)</td>
+                <td>等待事件触发</td>
+              </tr>
+              <tr>
+                <td>永远等待</td>
+                <td>@(*)</td>
+                <td>等待任意信号变化</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">事件控制示例</div>
+            <div class="code-block">// 测试时钟生成
+initial begin
+  clk = 0;
+  forever #5 clk = ~clk;  // 周期为10的时钟
+end
+
+// 同步时序逻辑
+always @(posedge clk or negedge rst_n) begin
+  if (!rst_n) q <= 0;
+  else        q <= d;
+end
+
+// 组合逻辑敏感列表
+always @(a or b or c) begin
+  out = a & b | c;
+end
+
+// 使用 @(*) 自动推断敏感列表
+always @(*) begin
+  out = a & b | c;  // 编译器自动添加敏感信号
+end</div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> wait 语句</h2>
+          <p class="card-text"><code>wait</code> 语句用于电平敏感的条件等待，当条件为真时继续执行。</p>
+          <div class="code-block">// 等待条件成立
+initial begin
+  wait(enable);        // 等待enable为高
+  wait(counter == 10); // 等待counter等于10
+  $display("Counter reached 10");
+end
+
+// 与事件控制对比
+initial begin
+  @(posedge enable);   // 等待enable上升沿
+  wait(enable);        // 等待enable为高电平
+end</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">可综合性注意</div>
+            <p>延迟控制 <code>#</code> 通常不可综合，仅用于仿真。事件控制 <code>@(posedge clk)</code> 是可综合的标准形式，用于描述同步时序逻辑。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 延迟控制用于仿真时序建模</li>
+                <li>• 事件控制用于响应信号变化</li>
+                <li>• wait 用于电平敏感的条件等待</li>
+                <li>• 可综合代码中主要使用 @(posedge clk)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="14-3-generate语句与条件生成.html">← 上一节</a>
+          <a href="14-5-组合逻辑的Verilog建模.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

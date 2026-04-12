@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.8 FSM 设计的最佳实践与常见陷阱 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>10.8 FSM 设计的最佳实践与常见陷阱</h1>
+      <p class="subtitle">有限状态机（FSM）设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握FSM设计的最佳实践</li>
+        <li>了解常见设计陷阱及避免方法</li>
+        <li>理解三段式FSM的编码风格</li>
+        <li>能够编写高质量的状态机代码</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> FSM设计最佳实践</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">使用三段式编码</h3>
+          <ul>
+            <li><strong>第一段</strong>：状态寄存器（时序逻辑）</li>
+            <li><strong>第二段</strong>：次态逻辑（组合逻辑）</li>
+            <li><strong>第三段</strong>：输出逻辑（组合逻辑）</li>
+          </ul>
+          <p class="card-text">清晰分离时序和组合逻辑，便于综合和调试</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">使用参数定义状态</h3>
+          <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 8px; font-size: 0.9rem;">
+parameter IDLE = 3'b000;
+parameter S1   = 3'b001;
+parameter S2   = 3'b010;
+          </pre>
+          <p class="card-text">使用有意义的名称，便于阅读和维护</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">完整的case语句</h3>
+          <ul>
+            <li>覆盖所有状态</li>
+            <li>添加default分支</li>
+            <li>处理所有输入组合</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">异步复位</h3>
+          <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 8px; font-size: 0.9rem;">
+always @(posedge clk or posedge rst) begin
+  if (rst) state <= IDLE;
+  else     state <= next_state;
+end
+          </pre>
+          <p class="card-text">确保能恢复到已知状态</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见设计陷阱</h2>
+      <div class="card">
+        <h3 class="card-title">陷阱1：锁存器推断</h3>
+        <p class="card-text"><strong>问题</strong>：在组合逻辑中，if或case语句分支不完整，综合工具会推断出锁存器。</p>
+        <p class="card-text"><strong>解决</strong>：确保所有分支都有赋值，或使用default赋初值。</p>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">陷阱2：未处理的无效状态</h3>
+        <p class="card-text"><strong>问题</strong>：状态编码存在未定义的状态（如独热码的非独热值）。</p>
+        <p class="card-text"><strong>解决</strong>：在default分支中跳转到安全状态（如IDLE）。</p>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">陷阱3：多驱动冲突</h3>
+        <p class="card-text"><strong>问题</strong>：在多个always块中对同一信号赋值。</p>
+        <p class="card-text"><strong>解决</strong>：每个信号只在一个always块中赋值。</p>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">陷阱4：时序与组合逻辑混合</h3>
+        <p class="card-text"><strong>问题</strong>：在同一always块中混合时序和组合逻辑。</p>
+        <p class="card-text"><strong>解决</strong>：严格分离，使用三段式编码风格。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 状态机编码风格对比</h2>
+      <table>
+        <thead>
+          <tr><th>风格</th><th>优点</th><th>缺点</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>一段式</td><td>代码紧凑</td><td>难以综合优化</td></tr>
+          <tr><td>两段式</td><td>较清晰</td><td>输出可能有毛刺</td></tr>
+          <tr><td>三段式</td><td>清晰，易优化</td><td>代码较长</td></tr>
+        </tbody>
+      </table>
+      <p class="card-text"><strong>推荐</strong>：使用三段式编码风格</p>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✅</span>
+      <div class="content">
+        <div class="title">设计检查清单</div>
+        <p>1. 所有状态都有定义
+        <br>2. default分支跳转到安全状态
+        <br>3. 组合逻辑无锁存器推断
+        <br>4. 输出逻辑覆盖所有状态
+        <br>5. 有异步复位到初始状态
+        <br>6. 状态名称有意义
+        <br>7. 无多驱动冲突</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 使用三段式编码风格</li>
+            <li>• 状态使用参数定义</li>
+            <li>• 确保case完整，避免锁存器</li>
+            <li>• 处理所有无效状态</li>
+            <li>• 提供异步复位机制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-7-FSM 设计实例：自动售货机控制器.html">← 上一节</a>
+      <a href="../chapter11/11-1-存储器的分类：RAM、ROM、Flash.html">下一章 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

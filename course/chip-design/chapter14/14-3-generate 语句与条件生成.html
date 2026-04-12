@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.3 generate 语句与条件生成 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>14.3 generate 语句与条件生成</h1>
+      <p class="subtitle">Verilog HDL 进阶</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 generate 语句的作用与应用场景</li>
+        <li>掌握 generate-for、generate-if、generate-case 的语法</li>
+        <li>学会使用生成块创建可扩展的硬件结构</li>
+        <li>了解 generate 与普通循环语句的区别</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">generate 语句概述</h3>
+      <p class="card-text"><strong>generate 语句</strong>是 Verilog-2001 引入的强大特性，允许在编译时根据参数条件生成不同的硬件结构。与普通的过程语句不同，generate 语句在编译阶段执行，用于创建可参数化的硬件模块实例。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> generate-for 循环生成</h2>
+      <p class="card-text">generate-for 用于批量生成相同结构的模块或电路单元。</p>
+      <div class="code-block">// 生成 N 位寄存器
+module register_array #(
+  parameter WIDTH = 8,
+  parameter DEPTH = 4
+)(
+  input  wire               clk,
+  input  wire               rst_n,
+  input  wire [WIDTH-1:0]   din  [0:DEPTH-1],
+  output reg  [WIDTH-1:0]   dout [0:DEPTH-1]
+);
+
+  genvar i;
+  generate
+    for (i = 0; i < DEPTH; i = i + 1) begin : gen_reg
+      always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+          dout[i] <= 0;
+        else
+          dout[i] <= din[i];
+      end
+    end
+  endgenerate
+
+endmodule</div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">genvar 与 integer 的区别</div>
+        <p><strong>genvar</strong>：编译时变量，只用于 generate-for 循环，在仿真中不存在。<br>
+        <strong>integer</strong>：仿真时变量，用于过程块中的循环，占用仿真资源。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> generate-if 条件生成</h2>
+      <p class="card-text">generate-if 根据参数条件选择性地生成硬件结构。</p>
+      <div class="code-block">module multiplier #(
+  parameter WIDTH = 8,
+  parameter IMPLEMENTATION = "CARRY"  // "CARRY", "WALLACE", "DSP"
+)(
+  input  wire [WIDTH-1:0] a,
+  input  wire [WIDTH-1:0] b,
+  output wire [2*WIDTH-1:0] product
+);
+
+  generate
+    if (IMPLEMENTATION == "CARRY") begin : gen_carry
+      // 使用进位传播乘法器
+      carry_mult #(.WIDTH(WIDTH)) u_mult (.a(a), .b(b), .product(product));
+    end
+    else if (IMPLEMENTATION == "WALLACE") begin : gen_wallace
+      // 使用 Wallace 树乘法器
+      wallace_mult #(.WIDTH(WIDTH)) u_mult (.a(a), .b(b), .product(product));
+    end
+    else begin : gen_dsp
+      // 使用 DSP 原语
+      dsp_mult #(.WIDTH(WIDTH)) u_mult (.a(a), .b(b), .product(product));
+    end
+  endgenerate
+
+endmodule</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> generate-case 选择生成</h2>
+      <p class="card-text">generate-case 类似于 case 语句，用于多分支条件生成。</p>
+      <div class="code-block">module memory_wrapper #(
+  parameter TYPE = "RAM"  // "RAM", "ROM", "FIFO"
+)(
+  input  wire        clk,
+  input  wire        wr_en,
+  input  wire [7:0]  addr,
+  input  wire [31:0] wdata,
+  output wire [31:0] rdata
+);
+
+  generate
+    case (TYPE)
+      "RAM": begin : gen_ram
+        ram_single_port u_mem (.clk(clk), .wr_en(wr_en), 
+                              .addr(addr), .wdata(wdata), .rdata(rdata));
+      end
+      "ROM": begin : gen_rom
+        rom_async u_mem (.addr(addr), .rdata(rdata));
+      end
+      "FIFO": begin : gen_fifo
+        sync_fifo u_mem (.clk(clk), .wr_en(wr_en), 
+                         .wdata(wdata), .rdata(rdata));
+      end
+      default: begin : gen_default
+        assign rdata = 32'h0;
+      end
+    endcase
+  endgenerate
+
+endmodule</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 生成块的命名</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">重要提示</div>
+          <p>每个生成块都应该有唯一的名称（如 begin : block_name）。这不仅便于调试，也是某些工具正确处理生成层次结构所必需的。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• generate-for 用于批量生成相同结构</li>
+            <li>• generate-if 用于条件选择生成</li>
+            <li>• generate-case 用于多分支条件生成</li>
+            <li>• 必须给生成块命名以便调试和层次化引用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-2-参数化模块设计.html">← 上一节</a>
+      <a href="14-4-Verilog 中的时序控制：延迟与事件.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

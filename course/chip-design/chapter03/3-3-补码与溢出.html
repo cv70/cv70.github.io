@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3.3 补码与溢出 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>3.3 补码与溢出</h1>
+      <p class="subtitle">计算机中有符号数的表示与运算</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解原码、反码、补码的概念与表示方法</li>
+        <li>掌握补码的加减运算规则</li>
+        <li>理解溢出的概念与检测方法</li>
+        <li>认识补码在计算机系统中的重要性</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">为什么需要补码</h3>
+      <p class="card-text">在计算机中，我们需要表示正数和负数。如果直接用符号位加绝对值的方式（原码），在进行加减运算时会非常复杂。为了简化运算电路，计算机普遍采用<strong>补码（Two's Complement）</strong>来表示有符号整数。</p>
+      <p class="card-text">使用补码的好处是：减法可以转化为加法运算，加法和减法可以使用同一套电路实现，大大简化了ALU（算术逻辑单元）的设计。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 三种编码方式</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">原码（Sign-Magnitude）</h3>
+          <p class="card-text">最高位为符号位（0正1负），其余位表示绝对值。</p>
+          <div class="tip-box info">
+            <div class="content">
+              <p>+5 的8位原码：00000101<br>
+              -5 的8位原码：10000101</p>
+            </div>
+          </div>
+          <p class="card-text" style="color: #e74c3c;">缺点：0有两种表示，运算复杂</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">反码（One's Complement）</h3>
+          <p class="card-text">正数同原码；负数的符号位不变，数值位按位取反。</p>
+          <div class="tip-box info">
+            <div class="content">
+              <p>+5 的8位反码：00000101<br>
+              -5 的8位反码：11111010</p>
+            </div>
+          </div>
+          <p class="card-text" style="color: #e74c3c;">缺点：0仍有两种表示</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">补码（Two's Complement）</h3>
+          <p class="card-text">正数同原码；负数为反码加1。</p>
+          <div class="tip-box info">
+            <div class="content">
+              <p>+5 的8位补码：00000101<br>
+              -5 的8位补码：11111011</p>
+            </div>
+          </div>
+          <p class="card-text" style="color: #27ae60;">优点：0唯一，运算统一</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 8位有符号数编码对照表</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>十进制</th>
+            <th>原码</th>
+            <th>反码</th>
+            <th>补码</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>+127</td><td>01111111</td><td>01111111</td><td>01111111</td></tr>
+          <tr><td>+7</td><td>00000111</td><td>00000111</td><td>00000111</td></tr>
+          <tr><td>+1</td><td>00000001</td><td>00000001</td><td>00000001</td></tr>
+          <tr><td>+0</td><td>00000000</td><td>00000000</td><td>00000000</td></tr>
+          <tr><td>-0</td><td>10000000</td><td>11111111</td><td>--</td></tr>
+          <tr><td>-1</td><td>10000001</td><td>11111110</td><td>11111111</td></tr>
+          <tr><td>-7</td><td>10000111</td><td>11111000</td><td>11111001</td></tr>
+          <tr><td>-127</td><td>11111111</td><td>10000000</td><td>10000001</td></tr>
+          <tr><td>-128</td><td>--</td><td>--</td><td>10000000</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">补码的快速求法</div>
+        <p><strong>方法一</strong>：原码 → 符号位不变，数值位取反 → 加1<br>
+        <strong>方法二</strong>：从最低位开始，找到第一个1，该位及以下保持不变，以上位取反（不包括符号位）</p>
+        <p>示例：求-20的8位补码<br>
+        20的原码：00010100<br>
+        找到第一个1（第3位），该位及以下保持：xxx100<br>
+        以上位取反：11101100<br>
+        结果：11101100</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 补码运算</h2>
+      <div class="card">
+        <h3 class="card-title">补码加法</h3>
+        <p class="card-text">补码加法直接将两个补码相加，包括符号位在内，丢弃最高位的进位。</p>
+        <div class="tip-box success">
+          <div class="content">
+            <p>计算 5 + (-3) = 2：</p>
+            <p>&nbsp;&nbsp;00000101 (+5)<br>
+            + 11111101 (-3)<br>
+            -----------<br>
+            &nbsp;&nbsp;00000010 (+2) ✓</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">补码减法</h3>
+        <p class="card-text">补码减法通过"减去一个数等于加上这个数的补码"来实现。</p>
+        <div class="tip-box success">
+          <div class="content">
+            <p>计算 5 - 3 = 5 + (-3) = 2：</p>
+            <p>&nbsp;&nbsp;00000101 (+5)<br>
+            + 11111101 (-3)<br>
+            -----------<br>
+            &nbsp;&nbsp;00000010 (+2) ✓</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 溢出（Overflow）</h2>
+      <div class="card">
+        <h3 class="card-title">什么是溢出</h3>
+        <p class="card-text">当运算结果超出了数据类型所能表示的范围时，就会发生溢出。在补码运算中，两个正数相加得到负数，或两个负数相加得到正数，就是溢出的典型情况。</p>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">正溢出</h3>
+          <p class="card-text">两个正数相加结果超出最大正值</p>
+          <div class="tip-box warning">
+            <div class="content">
+              <p>4位补码：0101 (+5) + 0100 (+4)</p>
+              <p>&nbsp;&nbsp;0101<br>
+            + 0100<br>
+            ------<br>
+            &nbsp;&nbsp;1001 (-7) ✗ 溢出！</p>
+              <p>正确结果+9超出了4位补码范围(-8~+7)</p>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">负溢出</h3>
+          <p class="card-text">两个负数相加结果超出最小负值</p>
+          <div class="tip-box warning">
+            <div class="content">
+              <p>4位补码：1001 (-7) + 1000 (-8)</p>
+              <p>&nbsp;&nbsp;1001<br>
+            + 1000<br>
+            ------<br>
+            &nbsp;&nbsp;0001 (+1) ✗ 溢出！</p>
+              <p>正确结果-15超出了4位补码范围</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">溢出检测方法</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>方法</th>
+              <th>判断规则</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>双高位法</td>
+              <td>最高位进位 Cin ≠ 符号位进位 Cout 时发生溢出</td>
+            </tr>
+            <tr>
+              <td>符号位判断</td>
+              <td>两正数相加得负数，或两负数相加得正数时溢出</td>
+            </tr>
+            <tr>
+              <td>双符号位法</td>
+              <td>使用两位符号位，两符号位不同时溢出</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">补码的表示范围</div>
+        <p>n位补码的表示范围：<strong>-2ⁿ⁻¹ 到 +2ⁿ⁻¹-1</strong></p>
+        <p>例如：8位补码范围是 -128 到 +127<br>
+        16位补码范围是 -32768 到 +32767<br>
+        32位补码范围是 -2147483648 到 +2147483647</p>
+        <p>注意：负数的表示范围比正数多1，这是因为0属于正数。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 补码是计算机表示有符号数的标准方式</li>
+            <li>• 补码的优点：0唯一表示，加减运算统一</li>
+            <li>• 求负数补码：符号位不变，数值位取反加1</li>
+            <li>• 溢出检测是保证运算正确性的重要机制</li>
+            <li>• n位补码表示范围：-2ⁿ⁻¹ 到 +2ⁿ⁻¹-1</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="3-2-数制转换.html">← 上一节</a>
+      <a href="3-4-基本电路定律.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

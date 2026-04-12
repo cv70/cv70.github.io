@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.4 逻辑综合与形式验证 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>2.4 逻辑综合与形式验证</h1>
+      <p class="subtitle">从 RTL 到门级网表的转换</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解逻辑综合的基本原理与流程</li>
+        <li>掌握时序约束（SDC）的编写方法</li>
+        <li>了解综合优化的策略与技巧</li>
+        <li>学习形式验证的原理与应用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是逻辑综合</h3>
+      <p class="card-text"><strong>逻辑综合（Logic Synthesis）</strong>是将 RTL 代码转换为门级网表（Gate-level Netlist）的过程。综合工具根据设计约束，将 RTL 描述映射到目标工艺库的标准单元，生成满足功能和性能要求的门级电路。</p>
+      <p class="card-text">逻辑综合是前端设计的最后阶段，生成的网表将作为后端设计的输入。综合质量直接影响芯片的时序性能、功耗和面积。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 综合流程详解</h2>
+      <div class="tip-box success">
+        <span class="icon">📊</span>
+        <div class="content">
+          <table style="width: 100%; margin: 0;">
+            <thead>
+              <tr>
+                <th>步骤</th>
+                <th>主要工作</th>
+                <th>关键产出</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. 环境设置</strong></td>
+                <td>库文件配置、搜索路径设置</td>
+                <td>综合环境配置</td>
+              </tr>
+              <tr>
+                <td><strong>2. 读入设计</strong></td>
+                <td>读入 RTL 代码、库文件</td>
+                <td>设计数据库</td>
+              </tr>
+              <tr>
+                <td><strong>3. 约束设置</strong></td>
+                <td>时钟定义、I/O 约束、时序例外</td>
+                <td>SDC 约束文件</td>
+              </tr>
+              <tr>
+                <td><strong>4. 逻辑综合</strong></td>
+                <td>翻译、优化、映射</td>
+                <td>初步网表</td>
+              </tr>
+              <tr>
+                <td><strong>5. 优化</strong></td>
+                <td>时序优化、面积优化、功耗优化</td>
+                <td>优化后网表</td>
+              </tr>
+              <tr>
+                <td><strong>6. 分析报告</strong></td>
+                <td>时序报告、面积报告、功耗报告</td>
+                <td>综合报告</td>
+              </tr>
+              <tr>
+                <td><strong>7. 输出结果</strong></td>
+                <td>网表、约束、报告输出</td>
+                <td>交付物文件</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏱️</span> 时序约束（SDC）</h2>
+      <p class="card-text"><strong>SDC（Synopsys Design Constraints）</strong>是业界标准的时序约束格式，用于指导综合工具进行优化。</p>
+
+      <h3>常用约束命令</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>约束类型</th>
+            <th>命令示例</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>时钟定义</strong></td>
+            <td>create_clock -period 2 -name clk [get_ports clk]</td>
+            <td>定义主时钟，周期 2ns</td>
+          </tr>
+          <tr>
+            <td><strong>生成时钟</strong></td>
+            <td>create_generated_clock -divide_by 2 ...</td>
+            <td>定义分频/倍频时钟</td>
+          </tr>
+          <tr>
+            <td><strong>输入延迟</strong></td>
+            <td>set_input_delay -max 0.5 -clock clk [all_inputs]</td>
+            <td>输入端口相对时钟的延迟</td>
+          </tr>
+          <tr>
+            <td><strong>输出延迟</strong></td>
+            <td>set_output_delay -max 0.3 -clock clk [all_outputs]</td>
+            <td>输出端口相对时钟的延迟</td>
+          </tr>
+          <tr>
+            <td><strong>虚假路径</strong></td>
+            <td>set_false_path -from [get_clocks clk1] ...</td>
+            <td>不需要时序分析的路径</td>
+          </tr>
+          <tr>
+            <td><strong>多周期路径</strong></td>
+            <td>set_multicycle_path 2 -setup ...</td>
+            <td>多个周期完成传输的路径</td>
+          </tr>
+          <tr>
+            <td><strong>负载设置</strong></td>
+            <td>set_load 0.1 [all_outputs]</td>
+            <td>输出端口负载电容</td>
+          </tr>
+          <tr>
+            <td><strong>驱动设置</strong></td>
+            <td>set_driving_cell -lib_cell BUF ...</td>
+            <td>输入端口驱动单元</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">约束质量的重要性</div>
+        <p>约束是综合优化的指导方针。约束过松会导致设计无法满足实际需求；约束过紧会导致过度优化，增加面积和功耗，甚至无法收敛。约束必须准确反映芯片实际工作环境。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 综合优化策略</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">时序优化</h3>
+          <ul class="feature-list">
+            <li>逻辑重组减少逻辑级数</li>
+            <li>单元尺寸调整（Upsizing）</li>
+            <li>插入缓冲器减少负载</li>
+            <li>寄存器复制减少扇出</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">面积优化</h3>
+          <ul class="feature-list">
+            <li>资源共享减少冗余逻辑</li>
+            <li>状态机编码优化</li>
+            <li>单元尺寸缩小（Downsizing）</li>
+            <li>删除无用逻辑</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">功耗优化</h3>
+          <ul class="feature-list">
+            <li>门控时钟插入</li>
+            <li>低功耗单元替换</li>
+            <li>信号门控</li>
+            <li>功耗域划分</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 形式验证</h2>
+      <p class="card-text"><strong>形式验证（Formal Verification）</strong>是一种数学方法，用于证明两个设计在功能上等价。与仿真不同，形式验证不需要测试向量，可以完全证明等价性。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">等价性检查（EC）</h3>
+          <p class="card-text">验证两个设计在功能上是否等价，常用于：</p>
+          <ul class="feature-list">
+            <li>RTL vs 综合网表</li>
+            <li>综合网表 vs DFT 网表</li>
+            <li>网表 vs 物理设计后网表</li>
+            <li>ECO 前后网表对比</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">形式验证流程</h3>
+          <ul class="feature-list">
+            <li><strong>Setup：</strong>读入参考设计和实现设计</li>
+            <li><strong>Match：</strong>匹配关键点（端口、寄存器）</li>
+            <li><strong>Verify：</strong>验证等价性</li>
+            <li><strong>Debug：</strong>分析不匹配点</li>
+            <li><strong>Report：</strong>生成验证报告</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 主流综合与形式验证工具</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>工具类型</th>
+            <th>Synopsys</th>
+            <th>Cadence</th>
+            <th>其他</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>逻辑综合</strong></td>
+            <td>Design Compiler (DC)</td>
+            <td>Genus</td>
+            <td>Yosys（开源）</td>
+          </tr>
+          <tr>
+            <td><strong>物理综合</strong></td>
+            <td>DC-Topo / ICC</td>
+            <td>Genus + Innovus</td>
+            <td>-</td>
+          </tr>
+          <tr>
+            <td><strong>形式验证</strong></td>
+            <td>Formality</td>
+            <td>LEC (Conformal)</td>
+            <td>-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">综合后的检查清单</div>
+        <p>综合完成后需要检查：时序是否满足（无违例）、面积是否在预算内、是否有未约束的时钟/端口、是否有悬空端口、形式验证是否通过、是否有综合警告需要处理。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 逻辑综合将 RTL 转换为门级网表</li>
+            <li>• SDC 约束指导综合工具进行优化</li>
+            <li>• 优化目标需在时序、面积、功耗间权衡</li>
+            <li>• 形式验证数学证明设计等价性</li>
+            <li>• 每次设计变更后都应进行形式验证</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="2-3-RTL 编码与功能仿真.html">← 上一节</a>
+      <a href="2-5-可测性设计（DFT）.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

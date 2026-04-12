@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.6 物理设计（后端设计） - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>2.6 物理设计（后端设计）</h1>
+      <p class="subtitle">从网表到 GDSII 的实现之路</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解物理设计的整体流程与各阶段任务</li>
+        <li>掌握布局规划（Floorplan）的原则与方法</li>
+        <li>学习时钟树综合（CTS）的设计要点</li>
+        <li>了解布线（Routing）的基本策略</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">物理设计概述</h3>
+      <p class="card-text"><strong>物理设计（Physical Design）</strong>是将逻辑网表转换为物理版图的过程，是后端设计的核心内容。物理设计将抽象的逻辑连接转换为实际的几何图形，最终生成可供晶圆厂制造的 GDSII 文件。</p>
+      <p class="card-text">物理设计质量直接影响芯片的面积、时序、功耗和信号完整性。随着工艺节点的进步，物理设计面临的挑战越来越大，需要处理更多的物理效应和设计规则。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 物理设计流程</h2>
+      <div class="tip-box success">
+        <span class="icon">📈</span>
+        <div class="content">
+          <table style="width: 100%; margin: 0;">
+            <thead>
+              <tr>
+                <th style="width: 20%;">阶段</th>
+                <th style="width: 40%;">主要任务</th>
+                <th style="width: 40%;">关键产出</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>布局规划</strong></td>
+                <td>确定芯片面积、I/O 位置、宏单元位置、电源网络</td>
+                <td>面积估算、电源网络、I/O 分配</td>
+              </tr>
+              <tr>
+                <td><strong>放置</strong></td>
+                <td>确定标准单元的位置，优化时序和拥塞</td>
+                <td>优化后的单元位置</td>
+              </tr>
+              <tr>
+                <td><strong>时钟树综合</strong></td>
+                <td>构建时钟树，最小化时钟偏斜</td>
+                <td>平衡的时钟网络</td>
+              </tr>
+              <tr>
+                <td><strong>布线</strong></td>
+                <td>实现信号线连接，满足设计规则</td>
+                <td>完整的版图连接</td>
+              </tr>
+              <tr>
+                <td><strong>时序优化</strong></td>
+                <td>修复时序违例，优化关键路径</td>
+                <td>时序收敛的版图</td>
+              </tr>
+              <tr>
+                <td><strong>物理验证</strong></td>
+                <td>DRC/LVS 检查，天线效应检查</td>
+                <td>通过验证的 GDSII</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 布局规划（Floorplan）</h2>
+      <p class="card-text">布局规划是物理设计的第一步，决定了芯片的整体布局框架，对后续设计质量有决定性影响。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">布局规划内容</h3>
+          <ul class="feature-list">
+            <li><strong>芯片面积：</strong>确定 die size 和利用率</li>
+            <li><strong>I/O 规划：</strong>确定 I/O 位置和数量</li>
+            <li><strong>宏单元放置：</strong>确定存储器、IP 块位置</li>
+            <li><strong>电源网络：</strong>设计电源网格和环</li>
+            <li><strong>标准单元区域：</strong>划分可放置区域</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">布局规划原则</h3>
+          <ul class="feature-list">
+            <li><strong>最小化面积：</strong>在满足约束下最小化面积</li>
+            <li><strong>优化拥塞：</strong>避免布线拥塞区域</li>
+            <li><strong>降低时序：</strong>关键模块靠近相关模块</li>
+            <li><strong>电源完整：</strong>保证电源供应充足</li>
+            <li><strong>热分布：</strong>均匀分布功耗密度</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="tip-box info" style="margin-top: 1.5rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">利用率考量</div>
+          <p>利用率 = 标准单元面积 / 标准单元区域面积。典型利用率在 70-85% 之间。利用率过高会导致布线拥塞和时序问题；利用率过低会浪费面积成本。需要根据设计复杂度和布线层数选择合适的利用率。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 放置（Placement）</h2>
+      <p class="card-text">放置确定标准单元的具体位置，目标是在满足时序、功耗、拥塞约束的前提下，实现最优的单元布局。</p>
+
+      <h3>放置流程</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>任务</th>
+            <th>优化目标</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>全局放置</strong></td>
+            <td>粗略确定单元位置</td>
+            <td>最小化线长、优化拥塞</td>
+          </tr>
+          <tr>
+            <td><strong>时序优化</strong></td>
+            <td>调整关键路径单元位置</td>
+            <td>满足时序约束</td>
+          </tr>
+          <tr>
+            <td><strong>拥塞优化</strong></td>
+            <td>解决布线拥塞问题</td>
+            <td>确保可布线性</td>
+          </tr>
+          <tr>
+            <td><strong>详细放置</strong></td>
+            <td>合法化、对齐到格点</td>
+            <td>满足设计规则</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⏰</span> 时钟树综合（CTS）</h2>
+      <p class="card-text"><strong>时钟树综合（Clock Tree Synthesis）</strong>是构建平衡时钟网络的过程，目标是实现最小的时钟偏斜（Skew）和合理的时钟延迟（Latency）。</p>
+
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎯</div>
+          <h3 class="card-title">时钟偏斜</h3>
+          <p class="card-text">同一时钟到达不同寄存器的时间差</p>
+          <p class="card-text"><small>目标：最小化</small></p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⏱️</div>
+          <h3 class="card-title">时钟延迟</h3>
+          <p class="card-text">时钟从源端到达寄存器的时间</p>
+          <p class="card-text"><small>目标：合理范围</small></p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">时钟功耗</h3>
+          <p class="card-text">时钟网络消耗的动态功耗</p>
+          <p class="card-text"><small>目标：优化</small></p>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 1.5rem;">时钟树结构</h3>
+      <div class="tip-box warning">
+        <span class="icon">📋</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>H-Tree：</strong>对称结构，偏斜小，适合均匀分布的负载</li>
+            <li><strong>Mesh：</strong>网状结构，偏斜极小，但功耗高</li>
+            <li><strong>Multi-Source：</strong>多驱动源，适合大型设计</li>
+            <li><strong>Adaptive：</strong>自适应结构，根据负载分布优化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 布线（Routing）</h2>
+      <p class="card-text">布线是实现所有信号连接的过程，需要满足设计规则、避免短路和开路、最小化线长和拥塞。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">布线流程</h3>
+          <ul class="feature-list">
+            <li><strong>全局布线：</strong>规划布线通道和路径</li>
+            <li><strong>轨道分配：</strong>确定布线轨道位置</li>
+            <li><strong>详细布线：</strong>生成实际金属走线</li>
+            <li><strong>布线修复：</strong>修复设计规则违例</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">布线挑战</h3>
+          <ul class="feature-list">
+            <li><strong>拥塞：</strong>局部布线资源不足</li>
+            <li><strong>DRC：</strong>设计规则违例</li>
+            <li><strong>天线效应：</strong>制造过程中电荷积累</li>
+            <li><strong>串扰：</strong>相邻信号线干扰</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 物理设计工具</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>功能</th>
+            <th>Synopsys</th>
+            <th>Cadence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Place & Route</strong></td>
+            <td>IC Compiler (ICC/ICC2)</td>
+            <td>Innovus</td>
+          </tr>
+          <tr>
+            <td><strong>时钟树综合</strong></td>
+            <td>ICC CTS</td>
+            <td>CCOpt</td>
+          </tr>
+          <tr>
+            <td><strong>时序签核</strong></td>
+            <td>PrimeTime</td>
+            <td>Tempus</td>
+          </tr>
+          <tr>
+            <td><strong>功耗分析</strong></td>
+            <td>PrimeTime-PX</td>
+            <td>Voltus</td>
+          </tr>
+          <tr>
+            <td><strong>物理验证</strong></td>
+            <td>IC Validator</td>
+            <td>Calibre (Mentor)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 物理设计将逻辑网表转换为可制造的版图</li>
+            <li>• 布局规划决定芯片整体框架，影响后续所有设计</li>
+            <li>• 放置优化单元位置，平衡时序和拥塞</li>
+            <li>• 时钟树综合实现低偏斜的时钟分布网络</li>
+            <li>• 布线实现信号连接，需满足各种设计规则</li>
+            <li>• 各阶段迭代优化直到满足设计目标</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="2-5-可测性设计（DFT）.html">← 上一节</a>
+      <a href="2-7-时序分析与功耗分析.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

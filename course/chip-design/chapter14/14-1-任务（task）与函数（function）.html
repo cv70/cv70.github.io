@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.1 任务（task）与函数（function） - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>14.1 任务（task）与函数（function）</h1>
+      <p class="subtitle">Verilog HDL 进阶</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 task 和 function 的定义与用途</li>
+        <li>掌握 task 与 function 的语法规则和使用场景</li>
+        <li>了解两者的主要区别与选择依据</li>
+        <li>能够编写可复用的 task 和 function 模块</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">任务与函数概述</h3>
+      <p class="card-text">在 Verilog 中，<strong>任务（task）</strong>和<strong>函数（function）</strong>是两种用于代码复用和模块化的结构。它们允许将常用的功能封装起来，提高代码的可读性和可维护性，减少重复代码。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> Task 与 Function 对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>Task（任务）</th>
+            <th>Function（函数）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>返回值</td>
+            <td>无返回值</td>
+            <td>有且仅有一个返回值</td>
+          </tr>
+          <tr>
+            <td>参数类型</td>
+            <td>input、output、inout</td>
+            <td>至少一个 input，不能有 output/inout</td>
+          </tr>
+          <tr>
+            <td>时序控制</td>
+            <td>可包含时序控制（延时、事件）</td>
+            <td>不能包含时序控制，必须立即执行</td>
+          </tr>
+          <tr>
+            <td>调用位置</td>
+            <td>只能在 always/initial 块中调用</td>
+            <td>可在表达式中调用，类似函数调用</td>
+          </tr>
+          <tr>
+            <td>耗时特性</td>
+            <td>可能消耗仿真时间</td>
+            <td>不消耗仿真时间，立即返回</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> Task 语法详解</h2>
+      <div class="code-block">task task_name;
+  // 声明端口
+  input  [width-1:0] in_port;
+  output [width-1:0] out_port;
+  
+  // 声明局部变量
+  reg [width-1:0] temp_var;
+  
+  begin
+    // 任务主体
+    // 可以包含时序控制
+    #10 out_port = in_port + temp_var;
+  end
+endtask</div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">Task 使用示例</div>
+        <p>一个用于等待时钟边沿的任务：</p>
+      </div>
+    </div>
+
+    <div class="code-block">task wait_clock;
+  input integer cycles;
+  integer i;
+  begin
+    for (i = 0; i < cycles; i = i + 1)
+      @(posedge clk);
+  end
+endtask
+
+// 调用方式
+initial begin
+  wait_clock(5);  // 等待5个时钟周期
+end</div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> Function 语法详解</h2>
+      <div class="code-block">function [return_width-1:0] function_name;
+  input [width-1:0] in_port;
+  
+  // 声明局部变量
+  reg [width-1:0] temp_var;
+  
+  begin
+    // 函数主体
+    // 不能包含时序控制
+    function_name = in_port + temp_var;
+  end
+endfunction</div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">Function 使用示例</div>
+        <p>一个计算奇偶校验位的函数：</p>
+      </div>
+    </div>
+
+    <div class="code-block">function parity_even;
+  input [7:0] data;
+  integer i;
+  begin
+    parity_even = 1'b0;
+    for (i = 0; i < 8; i = i + 1)
+      parity_even = parity_even ^ data[i];
+  end
+endfunction
+
+// 在表达式中调用
+wire parity_bit = parity_even(data_bus);</div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 自动任务与函数</h2>
+      <p class="card-text">在 Verilog-2001 中引入了 automatic 关键字，用于声明自动任务和函数。自动任务/函数在每次调用时都会创建新的变量副本，支持递归调用和可重入设计。</p>
+      <div class="code-block">function automatic [31:0] factorial;
+  input [31:0] n;
+  begin
+    if (n <= 1)
+      factorial = 1;
+    else
+      factorial = n * factorial(n - 1);
+  end
+endfunction</div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">使用注意事项</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+          <li>Function 必须在表达式中使用，不能作为独立语句</li>
+          <li>Task 和 Function 中不能调用其他 task</li>
+          <li>Task 和 Function 内部不能声明 wire 类型变量</li>
+          <li>使用 automatic 时要注意仿真器支持情况</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• Task 无返回值，可包含时序控制，适合描述耗时操作</li>
+            <li>• Function 有返回值，不能包含时序控制，适合计算逻辑</li>
+            <li>• 使用 automatic 关键字可实现递归和可重入功能</li>
+            <li>• 合理使用 task/function 可提高代码复用性和可读性</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter13/13-10-Verilog 编码规范与风格指南.html">← 上一节</a>
+      <a href="14-2-参数化模块设计.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

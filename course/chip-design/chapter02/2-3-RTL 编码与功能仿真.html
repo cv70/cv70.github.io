@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.3 RTL 编码与功能仿真 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>2.3 RTL 编码与功能仿真</h1>
+      <p class="subtitle">前端设计的核心工作</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握 RTL 编码的基本规范与最佳实践</li>
+        <li>理解 Verilog/SystemVerilog 的核心语法特性</li>
+        <li>学习功能仿真的流程与方法</li>
+        <li>了解代码质量检查与审查流程</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">RTL 设计概述</h3>
+      <p class="card-text"><strong>RTL（Register Transfer Level，寄存器传输级）</strong>是数字芯片设计中最核心的抽象层次。RTL 代码描述了数据在寄存器之间的传输和处理逻辑，是连接架构设计与逻辑综合的桥梁。</p>
+      <p class="card-text">RTL 设计阶段的主要工作包括：模块划分与接口定义、RTL 编码、代码审查、静态检查、功能仿真验证。高质量的 RTL 代码是实现芯片功能和性能目标的基础。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Verilog vs SystemVerilog</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Verilog</h3>
+          <ul class="feature-list">
+            <li>1984 年诞生，IEEE 1364 标准</li>
+            <li>语法简洁，学习曲线平缓</li>
+            <li>适合 RTL 设计和简单验证</li>
+            <li>工业界广泛使用，生态成熟</li>
+            <li>面向硬件描述</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">SystemVerilog</h3>
+          <ul class="feature-list">
+            <li>2002 年发布，IEEE 1800 标准</li>
+            <li>Verilog 的超集，向下兼容</li>
+            <li>支持面向对象、断言、功能覆盖</li>
+            <li>现代验证方法论（UVM）的基础</li>
+            <li>设计与验证一体化</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tip-box info" style="margin-top: 1.5rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">语言选择建议</div>
+          <p>新项目建议采用 SystemVerilog，可以充分利用其高级特性提高设计和验证效率。对于设计部分，SystemVerilog 提供了更强大的数据类型和结构体支持；对于验证部分，SystemVerilog 是 UVM 方法论的基础。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> RTL 编码规范</h2>
+      <h3>基本编码原则</h3>
+      <div class="tip-box success">
+        <span class="icon">✓</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>可综合性：</strong>代码必须可综合，避免使用不可综合结构</li>
+            <li><strong>同步设计：</strong>采用同步时序设计，避免异步逻辑</li>
+            <li><strong>时钟域清晰：</strong>明确时钟域划分，跨时钟域正确处理</li>
+            <li><strong>复位策略：</strong>统一复位策略，明确同步/异步复位方式</li>
+            <li><strong>命名规范：</strong>信号命名清晰、有意义、遵循统一规则</li>
+            <li><strong>注释完整：</strong>关键逻辑必须有注释说明设计意图</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 1.5rem;">常见编码问题</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>问题类型</th>
+            <th>问题描述</th>
+            <th>正确做法</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>锁存器推断</td>
+            <td>条件分支不完整导致锁存器</td>
+            <td>确保 if-else、case 语句完整</td>
+          </tr>
+          <tr>
+            <td>多驱动</td>
+            <td>同一信号在多处被赋值</td>
+            <td>每个信号只有一个驱动源</td>
+          </tr>
+          <tr>
+            <td>组合逻辑环路</td>
+            <td>组合逻辑形成反馈环路</td>
+            <td>打断组合环路，插入寄存器</td>
+          </tr>
+          <tr>
+            <td>时序违例</td>
+            <td>逻辑级数过多，不满足时序</td>
+            <td>流水线设计，降低逻辑深度</td>
+          </tr>
+          <tr>
+            <td>跨时钟域问题</td>
+            <td>跨域信号未同步处理</td>
+            <td>使用同步器、FIFO、握手协议</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 代码质量检查</h2>
+      <p class="card-text">在功能仿真之前，需要进行静态代码检查，及早发现潜在问题：</p>
+
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔧</div>
+          <h3 class="card-title">Lint 检查</h3>
+          <p class="card-text">语法检查、编码规范、潜在问题</p>
+          <p class="card-text"><small>工具：SpyGlass、Leda</small></p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚡</div>
+          <h3 class="card-title">CDC 检查</h3>
+          <p class="card-text">跨时钟域分析、同步器验证</p>
+          <p class="card-text"><small>工具：SpyGlass CDC、Meridian</small></p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔒</div>
+          <h3 class="card-title">RDC 检查</h3>
+          <p class="card-text">跨复位域分析、复位序列验证</p>
+          <p class="card-text"><small>工具：SpyGlass RDC</small></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> 功能仿真流程</h2>
+      <p class="card-text">功能仿真是验证 RTL 设计功能正确性的关键环节，确保设计符合规格要求。</p>
+
+      <div class="tip-box info">
+        <span class="icon">📊</span>
+        <div class="content">
+          <table style="width: 100%; margin: 0;">
+            <thead>
+              <tr>
+                <th>仿真阶段</th>
+                <th>主要工作</th>
+                <th>验证重点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>单元验证</strong></td>
+                <td>模块级测试、接口验证</td>
+                <td>单个模块功能正确性</td>
+              </tr>
+              <tr>
+                <td><strong>集成验证</strong></td>
+                <td>子系统测试、接口交互</td>
+                <td>模块间交互正确性</td>
+              </tr>
+              <tr>
+                <td><strong>系统验证</strong></td>
+                <td>全芯片仿真、场景测试</td>
+                <td>系统级功能与性能</td>
+              </tr>
+              <tr>
+                <td><strong>回归测试</strong></td>
+                <td>自动化测试、覆盖率追踪</td>
+                <td>变更后功能一致性</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 验证覆盖率</h2>
+      <p class="card-text">覆盖率是衡量验证完整性的重要指标，包括以下类型：</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>覆盖率类型</th>
+            <th>说明</th>
+            <th>目标值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>代码覆盖率</strong></td>
+            <td>行覆盖、分支覆盖、条件覆盖、翻转覆盖</td>
+            <td>100%</td>
+          </tr>
+          <tr>
+            <td><strong>功能覆盖率</strong></td>
+            <td>功能点覆盖、状态机覆盖、断言覆盖</td>
+            <td>≥95%</td>
+          </tr>
+          <tr>
+            <td><strong>断言覆盖率</strong></td>
+            <td>SVA 断言触发情况</td>
+            <td>100%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box warning" style="margin-top: 1.5rem;">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">覆盖率≠验证完整性</div>
+          <p>100% 的代码覆盖率并不意味着验证完整。覆盖率只能说明代码被执行过，不能保证所有功能场景都被验证。需要结合功能覆盖率和定向测试用例来全面验证设计。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 主流仿真工具</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">仿真器</h3>
+          <ul class="feature-list">
+            <li><strong>VCS（Synopsys）</strong> - 业界主流，编译速度快</li>
+            <li><strong>Verdi（Synopsys）</strong> - 波形查看、调试利器</li>
+            <li><strong>Questasim（Siemens）</strong> - Modelsim 升级版</li>
+            <li><strong>Xcelium（Cadence）</strong> - 支持先进验证方法</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">验证方法学</h3>
+          <ul class="feature-list">
+            <li><strong>UVM</strong> - 通用验证方法学，业界标准</li>
+            <li><strong>OVM</strong> - UVM 前身，逐步淘汰</li>
+            <li><strong>VMM</strong> - Synopsys 早期方法学</li>
+            <li><strong>自定义</strong> - 小型项目可采用简化方案</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• RTL 是数字芯片设计的核心抽象层次</li>
+            <li>• SystemVerilog 是现代芯片设计的首选语言</li>
+            <li>• 遵循编码规范可避免常见设计问题</li>
+            <li>• 静态检查（Lint/CDC/RDC）在仿真前进行</li>
+            <li>• 功能仿真确保设计功能正确性</li>
+            <li>• 覆盖率是验证完整性的重要度量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="2-2-规格定义与架构设计.html">← 上一节</a>
+      <a href="2-4-逻辑综合与形式验证.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

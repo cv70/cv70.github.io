@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.2 参数化模块设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>14.2 参数化模块设计</h1>
+      <p class="subtitle">Verilog HDL 进阶</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解参数化模块设计的概念与优势</li>
+        <li>掌握 parameter 和 localparam 的使用方法</li>
+        <li>学会参数传递与覆盖的多种方式</li>
+        <li>能够设计可配置、可复用的通用模块</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">什么是参数化模块</h3>
+      <p class="card-text"><strong>参数化模块设计</strong>是指在模块中使用参数（parameter）来定义可配置的特性，如数据位宽、深度、延迟等。这样同一个模块可以根据不同的参数值生成不同规格的电路，大大提高了代码的复用性和灵活性。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> parameter 基本语法</h2>
+      <div class="code-block">module param_adder #(
+  parameter DATA_WIDTH = 8,      // 数据位宽
+  parameter PIPELINE   = 0       // 是否使用流水线
+)(
+  input  wire [DATA_WIDTH-1:0] a,
+  input  wire [DATA_WIDTH-1:0] b,
+  output wire [DATA_WIDTH:0]   sum
+);
+
+  if (PIPELINE) begin : gen_pipeline
+    reg [DATA_WIDTH:0] sum_reg;
+    always @(posedge clk)
+      sum_reg <= a + b;
+    assign sum = sum_reg;
+  end else begin : gen_comb
+    assign sum = a + b;
+  end
+
+endmodule</div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 参数传递方式</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方式</th>
+            <th>语法示例</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>位置传递</td>
+            <td>module_name #(8, 1) inst(...)</td>
+            <td>按顺序传递参数，不推荐</td>
+          </tr>
+          <tr>
+            <td>命名传递</td>
+            <td>module_name #(.DATA_WIDTH(16)) inst(...)</td>
+            <td>推荐方式，清晰明确</td>
+          </tr>
+          <tr>
+            <td>defparam</td>
+            <td>defparam inst.DATA_WIDTH = 16;</td>
+            <td>旧语法，不推荐使用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">参数传递示例</div>
+      </div>
+    </div>
+
+    <div class="code-block">// 实例化参数化模块
+param_adder #(
+  .DATA_WIDTH(16),  // 16位加法器
+  .PIPELINE(1)      // 启用流水线
+) u_adder_16bit (
+  .a(data_a),
+  .b(data_b),
+  .sum(result)
+);
+
+// 另一个不同配置的实例
+param_adder #(
+  .DATA_WIDTH(32)   // 32位加法器，无流水线
+) u_adder_32bit (
+  .a(addr_a),
+  .b(addr_b),
+  .sum(addr_sum)
+);</div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> parameter 与 localparam</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">parameter</h3>
+          <p class="card-text">可在模块实例化时被覆盖，用于外部可配置的参数。</p>
+          <div class="code-block">parameter WIDTH = 8;</div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">localparam</h3>
+          <p class="card-text">不能被外部覆盖，用于模块内部的常量定义。</p>
+          <div class="code-block">localparam FULL = WIDTH + 1;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">参数化 FIFO 示例</div>
+      </div>
+    </div>
+
+    <div class="code-block">module sync_fifo #(
+  parameter DATA_WIDTH = 8,
+  parameter DEPTH      = 16,
+  parameter ADDR_WIDTH = $clog2(DEPTH)
+)(
+  input  wire                  clk,
+  input  wire                  rst_n,
+  input  wire                  wr_en,
+  input  wire [DATA_WIDTH-1:0] wr_data,
+  input  wire                  rd_en,
+  output reg  [DATA_WIDTH-1:0] rd_data,
+  output wire                  full,
+  output wire                  empty
+);
+
+  // 存储数组
+  reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];
+  
+  // 读写指针
+  reg [ADDR_WIDTH:0] wr_ptr, rd_ptr;
+  
+  // 状态信号
+  assign full  = (wr_ptr[ADDR_WIDTH] != rd_ptr[ADDR_WIDTH]) && 
+                 (wr_ptr[ADDR_WIDTH-1:0] == rd_ptr[ADDR_WIDTH-1:0]);
+  assign empty = (wr_ptr == rd_ptr);
+  
+  // 写逻辑
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) wr_ptr <= 0;
+    else if (wr_en && !full) begin
+      mem[wr_ptr[ADDR_WIDTH-1:0]] <= wr_data;
+      wr_ptr <= wr_ptr + 1;
+    end
+  end
+  
+  // 读逻辑
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      rd_ptr <= 0;
+      rd_data <= 0;
+    end else if (rd_en && !empty) begin
+      rd_data <= mem[rd_ptr[ADDR_WIDTH-1:0]];
+      rd_ptr <= rd_ptr + 1;
+    end
+  end
+
+endmodule</div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 参数化设计可提高模块复用性和灵活性</li>
+            <li>• 使用命名方式传递参数，代码更清晰</li>
+            <li>• parameter 可被覆盖，localparam 不能被覆盖</li>
+            <li>• 合理使用 $clog2 等系统函数计算派生参数</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-1-任务（task）与函数（function）.html">← 上一节</a>
+      <a href="14-3-generate 语句与条件生成.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

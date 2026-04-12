@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.5 分支预测技术 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>45.5 分支预测技术</h1>
+      <p class="subtitle">计算机体系结构基础</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解分支预测的必要性与原理</li>
+        <li>掌握静态预测和动态预测方法</li>
+        <li>了解分支目标缓冲（BTB）的工作机制</li>
+        <li>认识现代处理器的高级预测技术</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">为什么需要分支预测</h3>
+      <p class="card-text">分支指令（如if-else、循环）在程序中频繁出现，约占指令总数的15-25%。在流水线处理器中，分支指令的目标地址需要等到执行阶段才能确定，若等待确定后再取指，会造成流水线断流。分支预测技术通过<strong>猜测分支方向</strong>，提前取指执行，减少流水线停顿。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 分支预测的性能影响</h2>
+      <div class="card">
+        <h3 class="card-title">分支预测失败代价</h3>
+        <p class="card-text">当预测错误时，需要清空流水线中错误路径的指令，从正确路径重新取指：</p>
+        <table>
+          <thead>
+            <tr><th>参数</th><th>典型值</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>分支频率</td><td>15-25%</td></tr>
+            <tr><td>预测准确率</td><td>90-99%</td></tr>
+            <tr><td>预测失败惩罚</td><td>10-20周期</td></tr>
+            <tr><td>性能损失</td><td>5-15%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 静态预测 vs 动态预测</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>静态预测</th>
+            <th>动态预测</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>依据</td>
+            <td>固定规则或编译时信息</td>
+            <td>运行时历史信息</td>
+          </tr>
+          <tr>
+            <td>硬件开销</td>
+            <td>极小</td>
+            <td>较大（预测表、计数器）</td>
+          </tr>
+          <tr>
+            <td>准确率</td>
+            <td>60-70%</td>
+            <td>90-99%</td>
+          </tr>
+          <tr>
+            <td>典型方法</td>
+            <td>总是跳转、后向跳转</td>
+            <td>两位计数器、相关预测</td>
+          </tr>
+          <tr>
+            <td>应用场景</td>
+            <td>简单处理器、预测表初始化</td>
+            <td>高性能处理器</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 静态预测方法</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">总是跳转 / 总是不跳转</h3>
+          <p class="card-text">最简单的策略，预测所有分支都跳转或都不跳转。</p>
+          <p class="card-text">准确率约50-60%，仅用于简单处理器。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">后向跳转、前向不跳转</h3>
+          <p class="card-text">基于循环特征：后向分支（循环）预测跳转，前向分支（if-else）预测不跳转。</p>
+          <p class="card-text">准确率可达65-85%，常用于编译器优化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 动态预测技术</h2>
+      <div class="card">
+        <h3 class="card-title">两位饱和计数器</h3>
+        <p class="card-text">最基础的动态预测方法，使用2位状态机记录分支历史：</p>
+        <table>
+          <thead>
+            <tr><th>状态</th><th>预测</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>强不跳转（00）</td><td>不跳转</td><td>连续两次不跳转</td></tr>
+            <tr><td>弱不跳转（01）</td><td>不跳转</td><td>上次跳转，整体偏不跳转</td></tr>
+            <tr><td>弱跳转（10）</td><td>跳转</td><td>上次不跳转，整体偏跳转</td></tr>
+            <tr><td>强跳转（11）</td><td>跳转</td><td>连续两次跳转</td></tr>
+          </tbody>
+        </table>
+        <p class="card-text">两位计数器能够容忍偶尔的分支行为变化，稳定性较好。</p>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">高级预测技术</div>
+        <p><strong>分支目标缓冲（BTB）</strong>：缓存分支指令地址和目标地址，实现快速目标地址预测。<br>
+        <strong>相关预测器</strong>：利用全局分支历史信息，提高预测准确率。<br>
+        <strong>神经网络预测器</strong>：使用感知机等机器学习方法，准确率可达99%以上。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 分支预测流程</h2>
+      <div class="tip-box success">
+        <span class="icon">📋</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>1. 取指阶段</strong>：查询BTB，判断当前PC是否为分支指令</li>
+            <li><strong>2. 预测方向</strong>：根据预测器状态预测跳转/不跳转</li>
+            <li><strong>3. 预测目标</strong>：从BTB获取预测的目标地址</li>
+            <li><strong>4. 执行阶段</strong>：计算实际分支结果</li>
+            <li><strong>5. 验证与修正</strong>：比较预测与实际结果，更新预测器，必要时恢复流水线</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">安全漏洞：幽灵（Spectre）</div>
+        <p>分支预测可能被恶意利用，通过诱导预测器进行错误预测，访问本不应访问的数据。这是现代处理器的重要安全挑战，需要软硬件协同解决。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 分支预测用于减少流水线控制冒险</li>
+            <li>• 静态预测：规则固定，实现简单，准确率有限</li>
+            <li>• 动态预测：利用历史信息，准确率高</li>
+            <li>• BTB缓存分支目标和历史，加速预测过程</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="45-4-Cache存储器原理.html">← 上一节</a>
+      <a href="../chapter46/46-1-RISC-V概述与发展历程.html">下一章 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

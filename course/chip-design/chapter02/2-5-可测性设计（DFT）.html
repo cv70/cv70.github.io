@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.5 可测性设计（DFT） - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>2.5 可测性设计（DFT）</h1>
+      <p class="subtitle">芯片测试的基石</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解 DFT 的必要性与核心目标</li>
+        <li>掌握扫描链设计原理与方法</li>
+        <li>了解 BIST 和 JTAG 技术</li>
+        <li>学习 ATPG 与故障模型</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">为什么需要 DFT</h3>
+      <p class="card-text"><strong>DFT（Design For Testability，可测性设计）</strong>是在芯片设计阶段就考虑测试需求，通过添加专门的测试结构，使得芯片在制造后能够被有效、高效地测试。随着芯片规模和复杂度的增加，测试已成为芯片开发中不可或缺的环节。</p>
+      <p class="card-text">没有 DFT 的芯片几乎无法进行有效的生产测试，缺陷芯片难以被筛选，将严重影响产品质量和可靠性。测试成本可能占到芯片总成本的 30-40%。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> DFT 的核心目标</h2>
+      <div class="grid grid-4">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔍</div>
+          <h3 class="card-title">高故障覆盖率</h3>
+          <p class="card-text">能检测到尽可能多的制造缺陷</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⏱️</div>
+          <h3 class="card-title">短测试时间</h3>
+          <p class="card-text">减少测试向量，缩短测试周期</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📈</div>
+          <h3 class="card-title">低成本测试</h3>
+          <p class="card-text">降低对测试设备的要求</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔧</div>
+          <h3 class="card-title">可诊断性</h3>
+          <p class="card-text">帮助定位缺陷位置</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 扫描链设计（Scan Chain）</h2>
+      <p class="card-text">扫描链是 DFT 的核心技术，通过将设计中的触发器替换为扫描触发器，并串联成链，实现对内部状态的控制和观察。</p>
+
+      <h3>扫描链工作原理</h3>
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>正常模式：</strong>扫描触发器作为普通触发器工作</li>
+            <li><strong>扫描模式：</strong>触发器串联，数据通过扫描链移入/移出</li>
+            <li><strong>测试过程：</strong>扫描输入测试数据 → 捕获响应 → 扫描输出结果</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 1.5rem;">扫描链设计要素</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>要素</th>
+            <th>说明</th>
+            <th>设计考虑</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>扫描触发器</strong></td>
+            <td>带扫描使能和扫描输入的触发器</td>
+            <td>面积开销、时序影响</td>
+          </tr>
+          <tr>
+            <td><strong>扫描链数量</strong></td>
+            <td>并行扫描链的数量</td>
+            <td>测试时间 vs IO 引脚</td>
+          </tr>
+          <tr>
+            <td><strong>扫描链长度</strong></td>
+            <td>每条扫描链的触发器数量</td>
+            <td>测试时间 vs 功耗</td>
+          </tr>
+          <tr>
+            <td><strong>扫描链排序</strong></td>
+            <td>触发器在链中的顺序</td>
+            <td>布线长度、功耗优化</td>
+          </tr>
+          <tr>
+            <td><strong>时钟域处理</strong></td>
+            <td>跨时钟域触发器的处理</td>
+            <td>避免跨域移位</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 内建自测试（BIST）</h2>
+      <p class="card-text"><strong>BIST（Built-In Self Test）</strong>是在芯片内部集成测试电路，使芯片能够自行产生测试激励并分析响应。</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Logic BIST</h3>
+          <ul class="feature-list">
+            <li>内部产生伪随机测试向量</li>
+            <li>使用 MISR 压缩响应</li>
+            <li>适合组合逻辑测试</li>
+            <li>减少外部测试向量存储</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Memory BIST</h3>
+          <ul class="feature-list">
+            <li>自动产生存储器测试算法</li>
+            <li>检测各种存储器故障</li>
+            <li>支持多种存储器类型</li>
+            <li>嵌入式存储器测试必备</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="tip-box warning" style="margin-top: 1.5rem;">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">BIST 的权衡</div>
+          <p>BIST 的优点是减少测试时间和外部测试数据，提高测试速度。缺点是增加芯片面积和功耗，BIST 电路本身也需要测试。需要根据芯片特点和测试需求选择合适的 BIST 方案。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> JTAG 边界扫描</h2>
+      <p class="card-text"><strong>JTAG（Joint Test Action Group）</strong>是 IEEE 1149.1 标准定义的边界扫描架构，用于测试芯片间互连和板级连接。</p>
+
+      <h3>JTAG 架构组成</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>组件</th>
+            <th>功能</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>TAP 控制器</strong></td>
+            <td>状态机，控制测试操作流程</td>
+          </tr>
+          <tr>
+            <td><strong>指令寄存器</strong></td>
+            <td>存储当前测试指令</td>
+          </tr>
+          <tr>
+            <td><strong>数据寄存器</strong></td>
+            <td>边界扫描寄存器、旁路寄存器等</td>
+          </tr>
+          <tr>
+            <td><strong>边界扫描单元</strong></td>
+            <td>包围 I/O，实现信号控制和观察</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 1.5rem;">JTAG 接口信号</h3>
+      <div class="tip-box success">
+        <span class="icon">📋</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>TCK（Test Clock）：</strong>测试时钟</li>
+            <li><strong>TMS（Test Mode Select）：</strong>测试模式选择</li>
+            <li><strong>TDI（Test Data In）：</strong>测试数据输入</li>
+            <li><strong>TDO（Test Data Out）：</strong>测试数据输出</li>
+            <li><strong>TRST（Test Reset）：</strong>测试复位（可选）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🧪</span> ATPG 与故障模型</h2>
+      <p class="card-text"><strong>ATPG（Automatic Test Pattern Generation）</strong>是自动生成测试向量的技术，基于故障模型产生能够检测特定故障的测试模式。</p>
+
+      <h3>常见故障模型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>故障模型</th>
+            <th>描述</th>
+            <th>覆盖目标</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Stuck-at</strong></td>
+            <td>信号固定为 0 或 1</td>
+            <td>连接开路/短路、栅氧化缺陷</td>
+          </tr>
+          <tr>
+            <td><strong>Transition</strong></td>
+            <td>信号无法在规定时间内翻转</td>
+            <td>延迟缺陷、电阻性缺陷</td>
+          </tr>
+          <tr>
+            <td><strong>Path Delay</strong></td>
+            <td>特定路径延迟超过规格</td>
+            <td>时序相关缺陷</td>
+          </tr>
+          <tr>
+            <td><strong>Bridging</strong></td>
+            <td>相邻信号线短路</td>
+            <td>金属桥接缺陷</td>
+          </tr>
+          <tr>
+            <td><strong>IDDQ</strong></td>
+            <td>静态电流异常</td>
+            <td>桥接、栅氧化缺陷</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box info" style="margin-top: 1.5rem;">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">故障覆盖率目标</div>
+          <p>工业界通常要求 Stuck-at 覆盖率 ≥98%，Transition 覆盖率 ≥90%。更高的覆盖率意味着更高的产品质量，但也需要更多的测试向量和测试时间。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> DFT 工具链</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Synopsys</h3>
+          <ul class="feature-list">
+            <li><strong>DFT Compiler：</strong>扫描链插入</li>
+            <li><strong>TetraMAX：</strong>ATPG 工具</li>
+            <li><strong>TestKompress：</strong>压缩测试向量</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Siemens/Mentor</h3>
+          <ul class="feature-list">
+            <li><strong>DFT Advisor：</strong>扫描链插入</li>
+            <li><strong>FastScan：</strong>ATPG 工具</li>
+            <li><strong>TestKompress：</strong>测试压缩</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• DFT 是确保芯片可测试、可量产的关键技术</li>
+            <li>• 扫描链是实现内部状态控制和观察的核心结构</li>
+            <li>• BIST 实现芯片自我测试，减少外部测试需求</li>
+            <li>• JTAG 提供标准化的测试访问接口</li>
+            <li>• ATPG 基于故障模型自动生成测试向量</li>
+            <li>• 高故障覆盖率是产品质量的重要保障</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="2-4-逻辑综合与形式验证.html">← 上一节</a>
+      <a href="2-6-物理设计（后端设计）.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

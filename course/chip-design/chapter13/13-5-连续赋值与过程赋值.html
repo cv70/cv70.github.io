@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.5 连续赋值与过程赋值 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>13.5 连续赋值与过程赋值</h1>
+      <p class="subtitle">Verilog HDL 基础</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解连续赋值与过程赋值的区别</li>
+        <li>掌握assign语句的使用方法</li>
+        <li>掌握always块与initial块的使用</li>
+        <li>理解阻塞赋值与非阻塞赋值的区别</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">赋值方式概述</h3>
+      <p class="card-text">Verilog中有两种主要的赋值方式：<strong>连续赋值（Continuous Assignment）</strong>用于组合逻辑建模，<strong>过程赋值（Procedural Assignment）</strong>用于时序逻辑和行为建模。理解两者的区别是编写正确Verilog代码的基础。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔗</span> 连续赋值（assign）</h2>
+      <div class="card">
+        <h3 class="card-title">基本语法</h3>
+        <pre><code>// 简单连续赋值
+assign y = a & b;
+
+// 条件赋值
+assign y = sel ? a : b;
+
+// 多条件赋值
+assign y = (state == IDLE)  ? 1'b0 :
+           (state == ACTIVE) ? 1'b1 :
+           1'bx;</code></pre>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">特点</h3>
+          <ul>
+            <li>目标必须是wire类型</li>
+            <li>持续监控右侧信号变化</li>
+            <li>任何输入变化立即更新输出</li>
+            <li>描述组合逻辑</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">综合结果</h3>
+          <p class="card-text">连续赋值语句综合生成<strong>组合逻辑电路</strong>，对应硬件中的逻辑门互连结构。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 过程赋值块</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">always块</h3>
+          <pre><code>// 时序逻辑：时钟边沿触发
+always @(posedge clk) begin
+    q &lt;= d;
+end
+
+// 组合逻辑：电平敏感
+always @(*) begin
+    y = a & b;
+end</code></pre>
+        </div>
+        <div class="card">
+          <h3 class="card-title">initial块</h3>
+          <pre><code>// 仅用于仿真，不可综合
+initial begin
+    clk = 0;
+    rst_n = 0;
+    #100 rst_n = 1;
+end</code></pre>
+        </div>
+      </div>
+
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">注意事项</div>
+          <p>• initial块只用于仿真初始化，不可综合
+          <br>• always块必须包含敏感列表或使用@(*)
+          <br>• 一个模块中可以有多个always块，它们并行执行</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 阻塞赋值 vs 非阻塞赋值</h2>
+      <table>
+        <thead>
+          <tr><th>特性</th><th>阻塞赋值 (=)</th><th>非阻塞赋值 (&lt;=)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>执行方式</td><td>顺序执行</td><td>并行执行</td></tr>
+          <tr><td>赋值时机</td><td>立即更新</td><td>时间步结束时更新</td></tr>
+          <tr><td>适用场景</td><td>组合逻辑</td><td>时序逻辑</td></tr>
+          <tr><td>综合结果</td><td>组合逻辑</td><td>触发器/锁存器</td></tr>
+        </tbody>
+      </table>
+
+      <div class="card">
+        <h3 class="card-title">示例对比</h3>
+        <pre><code>// 阻塞赋值示例（组合逻辑）
+always @(*) begin
+    a = b + c;    // 先执行
+    d = a + 1;    // 后执行，使用更新后的a
+end
+
+// 非阻塞赋值示例（时序逻辑）
+always @(posedge clk) begin
+    a &lt;= b + c;   // 并行调度
+    d &lt;= a + 1;   // 使用旧值a
+end</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">编码准则</div>
+        <p><strong>组合逻辑用阻塞赋值，时序逻辑用非阻塞赋值</strong>
+        <br>• 组合逻辑always块中：使用 = 赋值
+        <br>• 时序逻辑always块中：使用 &lt;= 赋值
+        <br>• 不要在同一个always块中混用两种赋值方式
+        <br>• 不要在不同always块中对同一变量赋值</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 连续赋值（assign）：用于组合逻辑，驱动wire</li>
+            <li>• 过程赋值：在always/initial块中使用</li>
+            <li>• 阻塞赋值（=）：用于组合逻辑</li>
+            <li>• 非阻塞赋值（&lt;=）：用于时序逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="13-4-运算符详解.html">← 上一节</a>
+      <a href="13-6-条件语句与循环语句.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>
