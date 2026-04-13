@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.7 时序签收标准 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.7 时序签收标准</h1>
+          <p class="subtitle">时序验证的通过标准</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解时序签收的概念和重要性</li>
+            <li>掌握时序签收的标准和指标</li>
+            <li>学会进行时序签收验证</li>
+            <li>了解签收报告的内容和格式</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">什么是时序签收</h3>
+          <p class="card-text">
+            <strong>时序签收（Timing Signoff）</strong>是指在芯片设计的最后阶段，
+            对设计进行全面的静态时序分析，确保所有时序要求都满足规范，
+            可以进入制造阶段的关键验证过程。时序签收是芯片流片前的必要条件。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✅</span> 时序签收标准</h2>
+
+          <h3>基本标准</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>标准</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Setup WNS</td>
+                <td>> 0</td>
+                <td>最差路径必须为正裕量</td>
+              </tr>
+              <tr>
+                <td>Setup TNS</td>
+                <td>= 0</td>
+                <td>总负Slack必须为零</td>
+              </tr>
+              <tr>
+                <td>Hold WNS</td>
+                <td>> 0</td>
+                <td>Hold路径必须有正裕量</td>
+              </tr>
+              <tr>
+                <td>Hold TNS</td>
+                <td>= 0</td>
+                <td>Hold总负Slack必须为零</td>
+              </tr>
+              <tr>
+                <td>Recovery/Removal</td>
+                <td>> 0</td>
+                <td>异步信号时序必须满足</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 签收检查清单</h2>
+
+          <h3>完整性检查</h3>
+          <ul class="feature-list">
+            <li>所有时钟都已正确定义和约束</li>
+            <li>所有IO端口都有适当的延迟约束</li>
+            <li>所有时序例外都已合理设置</li>
+            <li>没有未约束的时序路径</li>
+          </ul>
+
+          <h3>多角多模检查</h3>
+          <ul class="feature-list">
+            <li>所有工艺角（SS/TT/FF）都已分析</li>
+            <li>所有工作模式（功能/测试）都已验证</li>
+            <li>跨时钟域路径已正确处理</li>
+            <li>OCV分析已包含</li>
+          </ul>
+
+          <h3>时序违例检查</h3>
+          <ul class="feature-list">
+            <li>Setup违例：WNS > 0, TNS = 0</li>
+            <li>Hold违例：WNS > 0, TNS = 0</li>
+            <li>Transition违例：无违例</li>
+            <li>Capacitance违例：无违例</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 签收报告内容</h2>
+
+          <h3>必需的报告</h3>
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 时序签收报告生成
+# ============================================================================
+
+file mkdir signoff_reports
+
+# 1. Setup时序报告
+# ============================================
+report_timing -max_paths 100 -delay_type max \
+    -input_pins -nets -transition_time -capacitance \
+    > signoff_reports/setup_100paths.rpt
+
+report_timing -slack_lesser_than 0.1 -delay_type max \
+    > signoff_reports/setup_violations.rpt
+
+# 2. Hold时序报告
+# ============================================
+report_timing -max_paths 100 -delay_type min \
+    -input_pins -nets -transition_time -capacitance \
+    > signoff_reports/hold_100paths.rpt
+
+report_timing -slack_lesser_than 0.1 -delay_type min \
+    > signoff_reports/hold_violations.rpt
+
+# 3. 时序摘要
+# ============================================
+report_timing_summary > signoff_reports/timing_summary.rpt
+
+# 4. 时钟报告
+# ============================================
+report_clock -attributes > signoff_reports/clocks.rpt
+report_clock_interaction > signoff_reports/clock_interaction.rpt
+
+# 5. 约束报告
+# ============================================
+report_constraint -all_violators > signoff_reports/constraint_violations.rpt
+report_exceptions > signoff_reports/exceptions.rpt
+
+# 6. 设计规则报告
+# ============================================
+check_design > signoff_reports/design_check.rpt
+check_timing -verbose > signoff_reports/timing_check.rpt
+
+# 7. 单元使用报告
+# ============================================
+report_cell > signoff_reports/cell_usage.rpt
+report_reference > signoff_reports/reference.rpt
+
+# 8. OCV报告（如果适用）
+# ============================================
+report_timing_derate > signoff_reports/derating.rpt
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌡️</span> 多角签收</h2>
+
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 多角时序签收
+# ============================================================================
+
+# 定义需要分析的角
+set corners {ss tt ff}
+
+foreach corner $corners {
+    puts "=========================================="
+    puts "分析工艺角: $corner"
+    puts "=========================================="
+
+    # 设置当前角
+    set_analysis_view -setup $corner $corner
+    set_analysis_view -hold $corner $corner
+
+    # 更新时序
+    update_timing
+
+    # 生成签收报告
+    file mkdir signoff_reports/$corner
+
+    report_timing -max_paths 20 -delay_type max \
+        > signoff_reports/$corner/setup.rpt
+
+    report_timing -max_paths 20 -delay_type min \
+        > signoff_reports/$corner/hold.rpt
+
+    report_timing_summary > signoff_reports/$corner/summary.rpt
+}
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 签收常见问题</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>问题</th>
+                <th>原因</th>
+                <th>解决方法</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Setup负Slack</td>
+                <td>时序不满足</td>
+                <td>优化设计或调整约束</td>
+              </tr>
+              <tr>
+                <td>Hold负Slack</td>
+                <td>时钟偏斜过大</td>
+                <td>优化时钟树或插入延迟</td>
+              </tr>
+              <tr>
+                <td>未约束路径</td>
+                <td>约束不完整</td>
+                <td>补充缺失的约束</td>
+              </tr>
+              <tr>
+                <td>跨角违例</td>
+                <td>OCV考虑不足</td>
+                <td>增加OCV分析</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">签收注意事项</div>
+            <p>1）签收必须在网表级进行，不能只做RTL级验证；
+            2）必须包含所有工艺角和工作模式；3）OCV分析是签收的必需项；
+            4）签收报告需要详细存档；5）任何违例都必须在流片前解决。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 时序签收是流片前的关键步骤</li>
+                <li>• 所有时序指标必须满足标准</li>
+                <li>• 需要生成完整的签收报告</li>
+                <li>• 多角多模分析是必需的</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-6-片上变异（OCV）.html">← 上一节</a>
+          <a href="27-8-STA报告解读.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

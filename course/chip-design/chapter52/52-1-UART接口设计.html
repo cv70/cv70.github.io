@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.1 UART接口设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.1 UART接口设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握UART通信协议的基本原理</li>
+            <li>理解UART的数据帧格式</li>
+            <li>学会UART模块的硬件设计方法</li>
+            <li>了解UART的配置与调试技巧</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> UART概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>UART（Universal Asynchronous Receiver/Transmitter）</strong>通用异步收发传输器是一种串行通信接口，广泛用于微控制器与外设之间的通信。它采用异步传输方式，只需两根信号线（TX和RX）即可实现全双工通信。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">UART特点</div>
+              <p>• 异步通信：无需时钟信号同步<br>• 全双工：可同时收发数据<br>• 简单易用：只需TX、RX两根线<br>• 灵活配置：支持多种波特率和数据格式</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> UART信号接口</h2>
+          <table>
+            <thead><tr><th>信号</th><th>方向</th><th>描述</th><th>电平</th></tr></thead>
+            <tbody>
+              <tr><td>TX</td><td>输出</td><td>发送数据</td><td>3.3V/5V TTL</td></tr>
+              <tr><td>RX</td><td>输入</td><td>接收数据</td><td>3.3V/5V TTL</td></tr>
+              <tr><td>RTS</td><td>输出</td><td>请求发送（流控）</td><td>可选</td></tr>
+              <tr><td>CTS</td><td>输入</td><td>清除发送（流控）</td><td>可选</td></tr>
+              <tr><td>GND</td><td>-</td><td>信号地</td><td>0V</td></tr>
+            </tbody>
+          </table>
+          <div class="warning-box">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">电平转换注意</div>
+              <p>UART通常使用TTL电平（0-3.3V或0-5V），如需与RS-232设备通信，需要使用电平转换芯片（如MAX232）。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> UART数据帧格式</h2>
+          <div class="card">
+            <h3 class="card-title">标准UART数据帧</h3>
+            <p class="card-text">| 起始位 | 数据位 | 奇偶校验位 | 停止位 |</p>
+            <p class="card-text">| 1 bit | 5-9 bits | 0-1 bit | 1-2 bits |</p>
+          </div>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">起始位（Start Bit）</h3>
+              <p class="card-text">固定为0，表示数据帧开始，触发接收器同步。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">数据位（Data Bits）</h3>
+              <p class="card-text">通常为8位，可配置为5、6、7或9位，先传LSB。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">奇偶校验位（Parity Bit）</h3>
+              <p class="card-text">可选，用于错误检测。可配置为奇校验、偶校验或无校验。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">停止位（Stop Bits）</h3>
+              <p class="card-text">固定为1，可配置为1、1.5或2位，表示数据帧结束。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> UART模块硬件设计</h2>
+          <h3 class="card-title">UART发送模块（UART TX）</h3>
+          <pre class="code-block"><code>// UART发送模块结构
+module uart_tx #(
+    parameter CLK_FREQ = 50_000_000,  // 系统时钟频率
+    parameter BAUD_RATE = 115200      // 波特率
+) (
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       tx_start,       // 发送启动信号
+    input  wire [7:0] tx_data,        // 发送数据
+    output reg        tx,             // UART TX信号
+    output reg        tx_busy         // 发送忙标志
+);
+
+    // 波特率生成器
+    localparam BAUD_DIV = CLK_FREQ / BAUD_RATE;
+    reg [15:0] baud_counter;
+
+    // 发送状态机
+    localparam IDLE = 0, START = 1, DATA = 2, PARITY = 3, STOP = 4;
+    reg [2:0] state;
+    reg [3:0] bit_cnt;
+    reg [7:0] tx_shift;
+
+    // 状态机实现
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+            tx <= 1;
+            tx_busy <= 0;
+            bit_cnt <= 0;
+            baud_counter <= 0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    tx <= 1;
+                    tx_busy <= 0;
+                    if (tx_start) begin
+                        state <= START;
+                        tx_shift <= tx_data;
+                        tx_busy <= 1;
+                        baud_counter <= 0;
+                    end
+                end
+                START: begin
+                    tx <= 0;
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        state <= DATA;
+                        baud_counter <= 0;
+                        bit_cnt <= 0;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+                DATA: begin
+                    tx <= tx_shift[0];
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        tx_shift <= tx_shift >> 1;
+                        if (bit_cnt >= 7) begin
+                            state <= STOP;
+                        end else begin
+                            bit_cnt <= bit_cnt + 1;
+                        end
+                        baud_counter <= 0;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+                STOP: begin
+                    tx <= 1;
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        state <= IDLE;
+                        tx_busy <= 0;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+            endcase
+        end
+    end
+
+endmodule</code></pre>
+
+          <h3 class="card-title">UART接收模块（UART RX）</h3>
+          <pre class="code-block"><code>// UART接收模块结构
+module uart_rx #(
+    parameter CLK_FREQ = 50_000_000,
+    parameter BAUD_RATE = 115200
+) (
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       rx,             // UART RX信号
+    output reg [7:0]  rx_data,        // 接收数据
+    output reg        rx_valid,       // 数据有效标志
+    output reg        rx_error        // 帧错误标志
+);
+
+    localparam BAUD_DIV = CLK_FREQ / BAUD_RATE;
+    reg [15:0] baud_counter;
+    reg [3:0] bit_cnt;
+    reg [7:0] rx_shift;
+    reg rx_sync1, rx_sync2;  // 同步寄存器
+
+    // 边沿检测
+    wire rx_falling = rx_sync2 & ~rx_sync1;
+
+    // 状态机
+    localparam IDLE = 0, START = 1, DATA = 2, STOP = 3;
+    reg [1:0] state;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+            rx_valid <= 0;
+            rx_error <= 0;
+            rx_sync1 <= 1;
+            rx_sync2 <= 1;
+            baud_counter <= 0;
+        end else begin
+            // 同步异步输入
+            rx_sync1 <= rx;
+            rx_sync2 <= rx_sync1;
+
+            rx_valid <= 0;
+            rx_error <= 0;
+
+            case (state)
+                IDLE: begin
+                    if (rx_falling) begin
+                        state <= START;
+                        baud_counter <= BAUD_DIV/2;  // 中心采样
+                    end
+                end
+                START: begin
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        if (rx_sync2) begin
+                            rx_error <= 1;
+                            state <= IDLE;
+                        end else begin
+                            state <= DATA;
+                            bit_cnt <= 0;
+                        end
+                        baud_counter <= 0;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+                DATA: begin
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        rx_shift[bit_cnt] <= rx_sync2;
+                        if (bit_cnt >= 7) begin
+                            state <= STOP;
+                            rx_data <= rx_shift;
+                        end else begin
+                            bit_cnt <= bit_cnt + 1;
+                        end
+                        baud_counter <= 0;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+                STOP: begin
+                    if (baud_counter >= BAUD_DIV-1) begin
+                        if (!rx_sync2) begin
+                            rx_error <= 1;
+                        end else begin
+                            rx_valid <= 1;
+                        end
+                        state <= IDLE;
+                    end else begin
+                        baud_counter <= baud_counter + 1;
+                    end
+                end
+            endcase
+        end
+    end
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 常用波特率</h2>
+          <table>
+            <thead><tr><th>波特率</th><th>应用场景</th><th>典型用途</th></tr></thead>
+            <tbody>
+              <tr><td>9600</td><td>低速设备</td><td>传感器、旧式设备</td></tr>
+              <tr><td>19200</td><td>中低速</td><td>PLC、工业控制</td></tr>
+              <tr><td>38400</td><td>中速</td><td>GPS模块</td></tr>
+              <tr><td>57600</td><td>中高速</td><td>蓝牙模块</td></tr>
+              <tr><td>115200</td><td>高速（最常用）</td><td>调试输出、下载器</td></tr>
+              <tr><td>230400</td><td>超高速</td><td>高速数据传输</td></tr>
+              <tr><td>921600</td><td>极高速</td><td>高带宽数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> UART配置寄存器</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">控制寄存器（UART_CTRL）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [31:16] | BAUD_DIV | 波特率分频值 |</p>
+              <p class="card-text">| [3:2] | STOP_BITS | 停止位：00=1, 01=1.5, 10=2 |</p>
+              <p class="card-text">| [1:0] | PARITY | 奇偶校验：00=无, 01=奇, 10=偶 |</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">状态寄存器（UART_STATUS）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [7] | RX_OVF | 接收溢出 |</p>
+              <p class="card-text">| [6] | RX_ERR | 接收错误 |</p>
+              <p class="card-text">| [5] | TX_BUSY | 发送忙 |</p>
+              <p class="card-text">| [4] | RX_AVAIL | 接收数据可用 |</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 波特率不匹配</strong><br>症状：接收数据乱码<br>解决：检查波特率设置，确保收发一致</p>
+              <p><strong>2. 数据帧格式不一致</strong><br>症状：接收错误或丢包<br>解决：确认数据位、校验位、停止位配置相同</p>
+              <p><strong>3. 电平不兼容</strong><br>症状：无法通信<br>解决：添加电平转换电路</p>
+              <p><strong>4. 时钟漂移</strong><br>症状：长时间通信后出错<br>解决：使用高精度晶振，优化波特率分频</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• UART是异步串行通信接口，使用TX/RX两根线实现全双工通信</li>
+                <li>• UART数据帧由起始位、数据位、校验位、停止位组成</li>
+                <li>• UART模块包括波特率生成器、发送状态机、接收状态机</li>
+                <li>• 常用波特率从9600到921600，115200最常用</li>
+                <li>• 波特率匹配、帧格式一致、电平兼容是正常通信的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter51/51-8-IP生态.html">← 上一节</a>
+          <a href="52-2-SPI接口设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

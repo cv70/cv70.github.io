@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.7 总线仲裁 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.7 总线仲裁</h1>
+          <p class="subtitle">多主设备的协调机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解总线仲裁的基本概念和作用</li>
+            <li>掌握常见的仲裁算法及其特点</li>
+            <li>学习仲裁器的设计实现</li>
+            <li>了解QoS和优先级管理</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">总线仲裁概述</h3>
+          <p class="card-text"><strong>总线仲裁（Bus Arbitration）</strong>是解决多个主设备同时访问共享总线的竞争问题的机制。在SoC系统中，CPU、DMA、网络接口等模块都可能需要作为主设备访问总线，仲裁器负责决定在任意时刻哪个主设备可以使用总线。</p>
+          <p class="card-text">仲裁器的设计直接影响系统的<strong>性能、公平性和实时性</strong>。一个好的仲裁算法应该能够在保证系统性能的同时，避免某些主设备被"饿死"，同时满足实时性要求高的设备的访问需求。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 仲裁器基本组成</h2>
+          <p class="card-text">典型的仲裁器包含以下几个部分：</p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">请求输入</h3>
+              <ul class="feature-list">
+                <li>接收各主设备的请求</li>
+                <li>REQ信号输入</li>
+                <li>请求状态寄存</li>
+                <li>优先级编码</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">仲裁逻辑</h3>
+              <ul class="feature-list">
+                <li>实现仲裁算法</li>
+                <li>优先级比较</li>
+                <li>公平性保证</li>
+                <li>实时性满足</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">授权输出</h3>
+              <ul class="feature-list">
+                <li>输出授权信号</li>
+                <li>GRT信号输出</li>
+                <li>总线所有权转移</li>
+                <li>握手机制</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 常见仲裁算法</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>仲裁算法</th>
+                <th>原理</th>
+                <th>优点</th>
+                <th>缺点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>固定优先级</strong></td>
+                <td>预先分配固定优先级</td>
+                <td>实现简单，可预测</td>
+                <td>低优先级可能饿死</td>
+                <td>实时系统，优先级明确</td>
+              </tr>
+              <tr>
+                <td><strong>轮转（Round-Robin）</strong></td>
+                <td>循环分配总线使用权</td>
+                <td>公平，无饿死</td>
+                <td>无法保证实时性</td>
+                <td>公平性要求高的系统</td>
+              </tr>
+              <tr>
+                <td><strong>时间片</strong></td>
+                <td>每个主设备分配时间片</td>
+                <td>保证最小带宽</td>
+                <td>灵活性差</td>
+                <td>需要带宽保证的系统</td>
+              </tr>
+              <tr>
+                <td><strong>加权轮转</strong></td>
+                <td>按权重分配时间片</td>
+                <td>灵活的带宽分配</td>
+                <td>实现较复杂</td>
+                <td>不同带宽需求的系统</td>
+              </tr>
+              <tr>
+                <td><strong>Lottery</strong></td>
+                <td>随机选择请求者</td>
+                <td>简单，公平</td>
+                <td>无法预测延迟</td>
+                <td>简单系统，概率可接受</td>
+              </tr>
+              <tr>
+                <td><strong>老化（Aging）</strong></td>
+                <td>等待时间长的提升优先级</td>
+                <td>避免饿死</td>
+                <td>实现复杂</td>
+                <td>需要公平性的复杂系统</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 固定优先级仲裁</h2>
+          <p class="card-text">固定优先级仲裁是最简单的仲裁算法：</p>
+          <div class="tip-box success">
+            <span class="icon">📋</span>
+            <div class="content">
+              <div class="title">工作原理</div>
+              <p>每个主设备被分配一个固定的优先级，仲裁器始终选择当前请求中优先级最高的主设备。优先级可以基于设备的重要性、实时性要求等来分配。例如，CPU的优先级通常高于DMA。</p>
+            </div>
+          </div>
+
+          <div class="tip-box warning" style="margin-top: 1.5rem;">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">饿死问题</div>
+              <p>固定优先级仲裁的严重问题是低优先级主设备可能被饿死——当高优先级主设备持续请求时，低优先级主设备可能永远无法获得总线使用权。解决方法包括使用老化机制或切换到其他仲裁算法。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 轮转仲裁</h2>
+          <p class="card-text">轮转仲裁保证公平性：</p>
+          <ul class="feature-list">
+            <li><strong>基本思想：</strong>按照固定顺序循环遍历所有主设备</li>
+            <li><strong>工作机制：</strong>当前主设备释放总线后，授权给下一个有请求的主设备</li>
+            <li><strong>优势：</strong>每个主设备都能获得总线使用权，不会饿死</li>
+            <li><strong>劣势：</strong>无法保证实时性，高优先级设备可能需要等待</li>
+            <li><strong>改进：</strong>可以结合优先级，形成混合仲裁算法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> QoS（服务质量）管理</h2>
+          <p class="card-text">现代SoC系统需要更精细的QoS管理：</p>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">QoS参数</h3>
+              <ul class="feature-list">
+                <li><strong>最小带宽：</strong>保证最低数据传输率</li>
+                <li><strong>最大延迟：</strong>限制最大响应时间</li>
+                <li><strong>优先级：</strong>动态调整访问优先级</li>
+                <li><strong>公平性：</strong>确保所有设备有访问机会</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">QoS机制</h3>
+              <ul class="feature-list">
+                <li><strong>带宽分配：</strong>按需求分配带宽</li>
+                <li><strong>延迟保证：</strong>优先处理延迟敏感流量</li>
+                <li><strong>流量整形：</strong>控制突发流量</li>
+                <li><strong>动态调整：</strong>根据系统状态调整策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 仲裁器设计考虑</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">设计要点</div>
+              <ul style="list-style: none; padding: 0;">
+                <li><strong>1. 性能要求：</strong>仲裁延迟应该尽可能小，避免成为瓶颈</li>
+                <li><strong>2. 公平性：</strong>确保所有主设备都有合理的访问机会</li>
+                <li><strong>3. 实时性：</strong>满足实时设备的延迟要求</li>
+                <li><strong>4. 可配置性：</strong>支持运行时配置仲裁策略</li>
+                <li><strong>5. 可扩展性：</strong>支持动态添加/移除主设备</li>
+                <li><strong>6. 功耗优化：</strong>低功耗设计，支持时钟门控</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 分布式仲裁</h2>
+          <p class="card-text">对于大规模系统，可以采用分布式仲裁：</p>
+          <ul class="feature-list">
+            <li><strong>分层仲裁：</strong>将仲裁器分层，减少单个仲裁器的压力</li>
+            <li><strong>区域仲裁：</strong>不同区域使用不同的仲裁器</li>
+            <li><strong>交叉开关：</strong>使用交叉开关替代共享总线</li>
+            <li><strong>片上网络（NoC）：</strong>使用路由器进行分布式仲裁</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 仲裁器性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>仲裁延迟</strong></td>
+                <td>从请求到授权的时间</td>
+                <td>最小化（通常1-2个时钟周期）</td>
+              </tr>
+              <tr>
+                <td><strong>吞吐量</strong></td>
+                <td>单位时间完成的传输数</td>
+                <td>最大化</td>
+              </tr>
+              <tr>
+                <td><strong>公平性</strong></td>
+                <td>各主设备获得总线的机会</td>
+                <td>保证基本公平</td>
+              </tr>
+              <tr>
+                <td><strong>可预测性</strong></td>
+                <td>延迟的确定性</td>
+                <td>满足实时性要求</td>
+              </tr>
+              <tr>
+                <td><strong>功耗</strong></td>
+                <td>仲裁器运行的功耗</td>
+                <td>最小化</td>
+              </tr>
+              <tr>
+                <td><strong>面积</strong></td>
+                <td>仲裁器占用的芯片面积</td>
+                <td>最小化</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">仲裁设计常见问题</div>
+            <p>仲裁器设计常见问题包括：死锁（两个设备互相等待）、活锁（设备不断切换但无法完成）、饿死（低优先级设备无法获得总线）、优先级反转（高优先级被低优先级阻塞）。设计时需要仔细分析，避免这些问题。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 总线仲裁解决多主设备访问共享总线的竞争问题</li>
+                <li>• 常见仲裁算法包括固定优先级、轮转、时间片、加权轮转等</li>
+                <li>• 固定优先级简单但可能饿死低优先级设备</li>
+                <li>• 轮转仲裁保证公平性但无法保证实时性</li>
+                <li>• QoS管理提供精细的带宽和延迟控制</li>
+                <li>• 大规模系统可采用分层或分布式仲裁</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-6-Wishbone协议.html">← 上一节</a>
+          <a href="49-8-总线实例.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

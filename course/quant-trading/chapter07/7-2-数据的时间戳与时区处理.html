@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.2 数据的时间戳与时区处理 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>7.2 数据的时间戳与时区处理</h1>
+      <p class="subtitle">金融市场数据基础</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解金融数据时间戳的格式与标准</li>
+        <li>掌握时区转换与处理的关键方法</li>
+        <li>能够正确处理跨市场交易时区差异</li>
+        <li>避免时区错误导致的交易与回测偏差</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800" alt="时间与时区" class="card-image">
+      <h3 class="card-title">时间戳与时区处理</h3>
+      <p class="card-text"><strong>时间戳与时区处理</strong>是量化交易系统开发中的关键环节。
+    全球不同交易所使用不同的时区，错误的时间处理会导致策略失效和交易风险。
+    本节将详细介绍如何正确处理金融数据的时间戳与时区问题。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">⏰</span> 时间戳格式标准</h2>
+
+      <h3>Unix时间戳</h3>
+      <p>从1970年1月1日UTC时间00:00:00开始的秒数或毫秒数：</p>
+      <ul>
+        <li>秒级时间戳：1609459200（2021-01-01 00:00:00 UTC）</li>
+        <li>毫秒级时间戳：1609459200000（2021-01-01 00:00:00 UTC）</li>
+        <li>纳秒级时间戳：1609459200000000000（2021-01-01 00:00:00 UTC）</li>
+      </ul>
+
+      <h3>ISO 8601格式</h3>
+      <p>国际标准时间表示格式，人类可读性强：</p>
+      <ul>
+        <li>2021-01-01T00:00:00Z</li>
+        <li>2021-01-01T08:00:00+08:00</li>
+        <li>20210101T000000Z</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌍</span> 全球主要市场时区</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>市场</th>
+            <th>时区</th>
+            <th>UTC偏移</th>
+            <th>交易时段</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>中国A股</td>
+            <td>CST（北京）</td>
+            <td>UTC+8</td>
+            <td>09:30-11:30, 13:00-15:00</td>
+          </tr>
+          <tr>
+            <td>美股（NYSE）</td>
+            <td>EST/EDT</td>
+            <td>UTC-5/-4</td>
+            <td>09:30-16:00</td>
+          </tr>
+          <tr>
+            <td>伦敦（LSE）</td>
+            <td>GMT/BST</td>
+            <td>UTC+0/+1</td>
+            <td>08:00-16:30</td>
+          </tr>
+          <tr>
+            <td>东京（TSE）</td>
+            <td>JST</td>
+            <td>UTC+9</td>
+            <td>09:00-15:00</td>
+          </tr>
+          <tr>
+            <td>加密货币</td>
+            <td>全球7×24</td>
+            <td>UTC</td>
+            <td>无间断</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> Python时间处理</h2>
+      <h3>使用pytz处理时区</h3>
+      <pre><code>import pytz
+from datetime import datetime
+
+# 创建时区对象
+cst = pytz.timezone('Asia/Shanghai')
+est = pytz.timezone('US/Eastern')
+
+# 本地时间转为UTC
+local_time = cst.localize(datetime(2024, 1, 1, 9, 30))
+utc_time = local_time.astimezone(pytz.UTC)
+
+# 时区转换
+us_time = utc_time.astimezone(est)
+</code></pre>
+
+      <h3>使用pandas处理时间序列</h3>
+      <pre><code>import pandas as pd
+
+# 创建带时区的时间序列
+dates = pd.date_range('2024-01-01', periods=5, tz='Asia/Shanghai')
+
+# 时区转换
+dates_utc = dates.tz_convert('UTC')
+
+# 去除时区信息
+dates_naive = dates.tz_localize(None)
+</code></pre>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">常见陷阱</div>
+        <p>1. 混淆naive datetime（无时区）和aware datetime（有时区）<br>
+        2. 忽略夏令时调整<br>
+        3. 跨时区交易时段计算错误<br>
+        4. 回测数据与实盘数据时间对齐问题</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了Unix时间戳和ISO 8601格式标准</li>
+            <li>• 理解了全球主要市场的时区差异</li>
+            <li>• 学会了Python中时区转换的处理方法</li>
+            <li>• 了解了时间处理中的常见陷阱与解决方案</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="7-1-数据类型概述.html">← 上一节</a>
+      <a href="7-3-数据质量与异常检测.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

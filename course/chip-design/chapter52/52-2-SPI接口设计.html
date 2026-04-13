@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.2 SPI接口设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.2 SPI接口设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握SPI通信协议的基本原理</li>
+            <li>理解SPI的四种工作模式</li>
+            <li>学会SPI主从设备的硬件设计</li>
+            <li>了解SPI多设备通信方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> SPI概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>SPI（Serial Peripheral Interface）</strong>串行外设接口是一种高速同步串行通信总线，由Motorola公司开发。它采用主从架构，支持全双工通信，具有高速、简单、灵活的特点。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">SPI特点</div>
+              <p>• 同步通信：使用时钟信号同步<br>• 全双工：可同时收发数据<br>• 高速：支持MHz级数据速率<br>• 主从架构：一个主设备，多个从设备</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> SPI信号接口</h2>
+          <table>
+            <thead><tr><th>信号</th><th>方向</th><th>描述</th><th>主设备</th><th>从设备</th></tr></thead>
+            <tbody>
+              <tr><td>SCLK</td><td>输出→输入</td><td>串行时钟</td><td>输出</td><td>输入</td></tr>
+              <tr><td>MOSI</td><td>输出→输入</td><td>主出从入数据</td><td>输出</td><td>输入</td></tr>
+              <tr><td>MISO</td><td>输入←输出</td><td>主入从出数据</td><td>输入</td><td>输出</td></tr>
+              <tr><td>CS/SS</td><td>输出→输入</td><td>片选/从机选择</td><td>输出</td><td>输入</td></tr>
+            </tbody>
+          </table>
+          <div class="card">
+            <h3 class="card-title">信号说明</h3>
+            <p class="card-text"><strong>SCLK（Serial Clock）：</strong>由主设备输出的时钟信号，控制数据传输的时序。</p>
+            <p class="card-text"><strong>MOSI（Master Out Slave In）：</strong>主设备向从设备发送数据的信号线。</p>
+            <p class="card-text"><strong>MISO（Master In Slave Out）：</strong>从设备向主设备发送数据的信号线。</p>
+            <p class="card-text"><strong>CS/SS（Chip Select/Slave Select）：</strong>片选信号，低电平有效，用于选择要通信的从设备。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> SPI四种工作模式</h2>
+          <p class="card-text">SPI有四种工作模式，由时钟极性（CPOL）和时钟相位（CPHA）决定：</p>
+          <table>
+            <thead><tr><th>模式</th><th>CPOL</th><th>CPHA</th><th>时钟空闲状态</th><th>数据采样边沿</th><th>数据变化边沿</th></tr></thead>
+            <tbody>
+              <tr><td>Mode 0</td><td>0</td><td>0</td><td>低电平</td><td>上升沿</td><td>下降沿</td></tr>
+              <tr><td>Mode 1</td><td>0</td><td>1</td><td>低电平</td><td>下降沿</td><td>上升沿</td></tr>
+              <tr><td>Mode 2</td><td>1</td><td>0</td><td>高电平</td><td>下降沿</td><td>上升沿</td></tr>
+              <tr><td>Mode 3</td><td>1</td><td>1</td><td>高电平</td><td>上升沿</td><td>下降沿</td></tr>
+            </tbody>
+          </table>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">模式选择建议</div>
+              <p>• Mode 0最常用，大多数SPI设备都支持<br>• 不同模式的设备无法直接通信<br>• 设计时应支持所有四种模式以提高兼容性</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> SPI主机模块设计</h2>
+          <pre class="code-block"><code>// SPI主机模块
+module spi_master #(
+    parameter DATA_WIDTH = 8,
+    parameter CLK_DIV = 4  // 时钟分频系数
+) (
+    input  wire                  clk,
+    input  wire                  rst_n,
+    input  wire                  start,          // 启动传输
+    input  wire [2:0]            cpol_cpha,      // CPOL和CPHA
+    input  wire [DATA_WIDTH-1:0] tx_data,        // 发送数据
+    output wire [DATA_WIDTH-1:0] rx_data,        // 接收数据
+    output reg                   sclk,           // 串行时钟
+    output reg                   mosi,           // 主出从入
+    input  wire                  miso,           // 主入从出
+    output reg                   cs_n,           // 片选（低有效）
+    output reg                   busy            // 忙标志
+);
+
+    // 状态定义
+    localparam IDLE = 0, TRANSFER = 1, DONE = 2;
+    reg [1:0] state;
+
+    // 内部寄存器
+    reg [DATA_WIDTH-1:0] tx_shift;
+    reg [DATA_WIDTH-1:0] rx_shift;
+    reg [3:0] bit_cnt;
+    reg [CLK_DIV-1:0] clk_div;
+    wire sclk_edge = (clk_div == 0);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+            sclk <= cpol_cpha[2];
+            mosi <= 1;
+            cs_n <= 1;
+            busy <= 0;
+            bit_cnt <= 0;
+            clk_div <= 0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    cs_n <= 1;
+                    sclk <= cpol_cpha[2];
+                    busy <= 0;
+                    if (start) begin
+                        state <= TRANSFER;
+                        tx_shift <= tx_data;
+                        rx_shift <= 0;
+                        bit_cnt <= DATA_WIDTH - 1;
+                        cs_n <= 0;
+                        busy <= 1;
+                        clk_div <= 0;
+                    end
+                end
+
+                TRANSFER: begin
+                    if (sclk_edge) begin
+                        // 时钟翻转
+                        sclk <= ~sclk;
+
+                        // 根据CPHA决定采样和更新时机
+                        if (cpol_cpha[0] == 0) begin
+                            // CPHA=0: 第一个边沿采样
+                            if (sclk == cpol_cpha[2]) begin
+                                // 上升沿/下降沿采样
+                                rx_shift[bit_cnt] <= miso;
+                            end else begin
+                                // 更新MOSI
+                                mosi <= tx_shift[bit_cnt];
+                                if (bit_cnt == 0) begin
+                                    state <= DONE;
+                                end else begin
+                                    bit_cnt <= bit_cnt - 1;
+                                end
+                            end
+                        end else begin
+                            // CPHA=1: 第二个边沿采样
+                            if (sclk == cpol_cpha[2]) begin
+                                // 更新MOSI
+                                mosi <= tx_shift[bit_cnt];
+                                if (bit_cnt == 0) begin
+                                    state <= DONE;
+                                end else begin
+                                    bit_cnt <= bit_cnt - 1;
+                                end
+                            end else begin
+                                // 采样MISO
+                                rx_shift[bit_cnt] <= miso;
+                            end
+                        end
+                    end
+                    clk_div <= (clk_div >= CLK_DIV-1) ? 0 : clk_div + 1;
+                end
+
+                DONE: begin
+                    cs_n <= 1;
+                    busy <= 0;
+                    state <= IDLE;
+                end
+            endcase
+        end
+    end
+
+    // 输出接收数据
+    assign rx_data = rx_shift;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> SPI从机模块设计</h2>
+          <pre class="code-block"><code>// SPI从机模块
+module spi_slave #(
+    parameter DATA_WIDTH = 8
+) (
+    input  wire                  clk,
+    input  wire                  rst_n,
+    input  wire                  sclk,           // 串行时钟
+    input  wire                  mosi,           // 主出从入
+    output reg                   miso,           // 主入从出
+    input  wire                  cs_n,           // 片选（低有效）
+    input  wire [DATA_WIDTH-1:0] tx_data,        // 发送数据
+    output reg  [DATA_WIDTH-1:0] rx_data,        // 接收数据
+    output reg                   data_valid      // 数据有效
+);
+
+    // 边沿检测
+    reg sclk_prev;
+    wire sclk_rising = sclk & ~sclk_prev;
+    wire sclk_falling = ~sclk & sclk_prev;
+
+    // 同步CS信号
+    reg cs_prev;
+    wire cs_falling = cs_prev & ~cs_n;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            sclk_prev <= 0;
+            cs_prev <= 1;
+            miso <= 1;
+            data_valid <= 0;
+        end else begin
+            sclk_prev <= sclk;
+            cs_prev <= cs_n;
+            data_valid <= 0;
+        end
+    end
+
+    // 移位寄存器
+    reg [DATA_WIDTH-1:0] tx_shift;
+    reg [DATA_WIDTH-1:0] rx_shift;
+    reg [3:0] bit_cnt;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            tx_shift <= 0;
+            rx_shift <= 0;
+            bit_cnt <= 0;
+        end else begin
+            if (cs_falling) begin
+                // CS下降沿，初始化传输
+                tx_shift <= tx_data;
+                rx_shift <= 0;
+                bit_cnt <= DATA_WIDTH - 1;
+            end else if (cs_n == 0) begin
+                // CS有效，进行数据传输
+                if (sclk_rising) begin
+                    // 上升沿：采样MOSI
+                    rx_shift <= {rx_shift[DATA_WIDTH-2:0], mosi};
+                    bit_cnt <= bit_cnt - 1;
+                    if (bit_cnt == 0) begin
+                        rx_data <= {rx_shift[DATA_WIDTH-2:0], mosi};
+                        data_valid <= 1;
+                    end
+                end
+                if (sclk_falling) begin
+                    // 下降沿：更新MISO
+                    miso <= tx_shift[bit_cnt];
+                end
+            end
+        end
+    end
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 多从设备通信</h2>
+          <div class="card">
+            <h3 class="card-title">硬件连接方式</h3>
+            <p class="card-text">SPI支持一个主设备连接多个从设备，有两种连接方式：</p>
+            <p class="card-text"><strong>1. 独立片选线：</strong>每个从设备有独立的CS线，硬件简单，需要较多IO引脚。</p>
+            <p class="card-text"><strong>2. 级联方式：</strong>从设备串联，使用一条CS线，节省IO但通信延迟增加。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">多设备控制</div>
+              <p>• 独立CS方式可同时与多个设备通信<br>• CS信号应确保不通信时为高电平<br>• 通信时应先拉低CS，传输结束后拉高</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> SPI配置寄存器</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">控制寄存器（SPI_CTRL）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [31:16] | CLK_DIV | 时钟分频值 |</p>
+              <p class="card-text">| [3] | CPOL | 时钟极性 |</p>
+              <p class="card-text">| [2] | CPHA | 时钟相位 |</p>
+              <p class="card-text">| [1] | MSB_FIRST | 1=MSB先传, 0=LSB先传 |</p>
+              <p class="card-text">| [0] | ENABLE | SPI使能 |</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">状态寄存器（SPI_STATUS）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [3] | TX_EMPTY | 发送FIFO空 |</p>
+              <p class="card-text">| [2] | TX_FULL | 发送FIFO满 |</p>
+              <p class="card-text">| [1] | RX_AVAIL | 接收数据可用 |</p>
+              <p class="card-text">| [0] | BUSY | 传输忙 |</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 工作模式不匹配</strong><br>症状：数据错误或无法通信<br>解决：检查CPOL和CPHA设置，确保主从一致</p>
+              <p><strong>2. 时钟频率过高</strong><br>症状：数据不稳定或出错<br>解决：降低SCLK频率，增加建立保持时间</p>
+              <p><strong>3. CS时序错误</strong><br>症状：通信异常<br>解决：确保CS在SCLK变化前稳定，传输结束后释放</p>
+              <p><strong>4. 多设备冲突</strong><br>症状：多个设备同时响应<br>解决：确保同一时间只有一个CS有效</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• SPI是高速同步串行总线，采用主从架构</li>
+                <li>• SPI使用四根信号线：SCLK、MOSI、MISO、CS</li>
+                <li>• SPI有四种工作模式，由CPOL和CPHA决定</li>
+                <li>• 支持一个主设备连接多个从设备</li>
+                <li>• 工作模式匹配、时钟频率、CS时序是正常通信的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-1-UART接口设计.html">← 上一节</a>
+          <a href="52-3-I2C接口设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

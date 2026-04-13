@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>75.6 实盘部署规划 - 多因子选股策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>75.6 实盘部署规划</h1>
+      <p class="subtitle">项目一：多因子选股策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解实盘部署的前置条件</li>
+        <li>掌握实盘系统架构设计</li>
+        <li>学会部署流程与监控方案</li>
+        <li>制定完整的实施计划</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="实盘部署规划" class="card-image">
+      <h3 class="card-title">实盘部署规划</h3>
+      <p class="card-text"><strong>实盘部署</strong>是将策略从回测环境迁移到生产环境的关键环节。本节将规划完整的实盘部署方案。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 部署前置检查</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>检查项</th>
+            <th>标准</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>策略表现</td>
+            <td>年化超额收益>8%，夏普>1.5</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>样本外验证</td>
+            <td>6个月以上样本外测试</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>风险控制</td>
+            <td>止损机制完备，风险限额明确</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>系统稳定性</td>
+            <td>模拟盘运行稳定无重大故障</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>交易接口</td>
+            <td>券商接口测试通过</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>资金安排</td>
+            <td>资金规模>1000万，风险可控</td>
+            <td>⬜ 待检查</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 实盘系统架构</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">数据层</h3>
+          <ul class="feature-list">
+            <li>实时行情接入</li>
+            <li>因子数据计算</li>
+            <li>数据存储管理</li>
+            <li>数据质量监控</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">策略层</h3>
+          <ul class="feature-list">
+            <li>因子实时计算</li>
+            <li>信号生成模块</li>
+            <li>组合管理模块</li>
+            <li>再平衡调度</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">执行层</h3>
+          <ul class="feature-list">
+            <li>订单管理系统</li>
+            <li>交易接口适配</li>
+            <li>执行算法选择</li>
+            <li>成交确认反馈</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 系统部署架构</h2>
+      <div class="code-block">
+        <pre><code class="language-python"># 实盘系统主框架
+class ProductionSystem:
+    """
+    实盘交易系统
+    """
+
+    def __init__(self, config):
+        self.config = config
+
+        # 初始化各模块
+        self.data_manager = DataManager(config)
+        self.strategy_engine = StrategyEngine(config)
+        self.order_manager = OrderManager(config)
+        self.risk_manager = RiskManager(config)
+        self.monitor = SystemMonitor(config)
+
+    def start(self):
+        """启动系统"""
+        # 1. 初始化数据连接
+        self.data_manager.connect()
+
+        # 2. 初始化交易接口
+        self.order_manager.connect()
+
+        # 3. 加载策略模型
+        self.strategy_engine.load_model()
+
+        # 4. 启动监控
+        self.monitor.start()
+
+        # 5. 主循环
+        self._main_loop()
+
+    def _main_loop(self):
+        """主循环"""
+        while True:
+            try:
+                # 获取最新数据
+                market_data = self.data_manager.get_latest_data()
+
+                # 计算因子
+                factors = self.strategy_engine.calculate_factors(market_data)
+
+                # 生成信号
+                signals = self.strategy_engine.generate_signals(factors)
+
+                # 风险检查
+                signals = self.risk_manager.check_signals(signals)
+
+                # 执行交易
+                self.order_manager.execute_orders(signals)
+
+                # 更新监控
+                self.monitor.update_status()
+
+                # 等待下一个周期
+                time.sleep(self.config['cycle_time'])
+
+            except Exception as e:
+                self.monitor.alert(f"系统异常: {e}")
+                continue</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📅</span> 部署时间线</h2>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第1周：环境准备</h4>
+            <p>服务器配置、系统安装、网络配置</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第2周：接口测试</h4>
+            <p>交易接口测试、行情接口测试</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第3周：模拟运行</h4>
+            <p>模拟盘运行、系统调试</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第4周：小资金试运行</h4>
+            <p>10%资金试运行、监控优化</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第5周：正式上线</h4>
+            <p>全面上线、持续监控</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 风险控制方案</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">事前控制</h3>
+          <ul class="feature-list">
+            <li>单票仓位限制（<5%）</li>
+            <li>行业集中度限制（<30%）</li>
+            <li>总仓位控制（<90%）</li>
+            <li>单日交易量限制</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">事中控制</h3>
+          <ul class="feature-list">
+            <li>实时风险监控</li>
+            <li>异常交易预警</li>
+            <li>自动止损机制</li>
+            <li>熔断机制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 监控指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标类别</th>
+            <th>具体指标</th>
+            <th>阈值</th>
+            <th>报警级别</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>系统监控</td>
+            <td>CPU使用率、内存使用率、磁盘I/O</td>
+            <td>80%</td>
+            <td>警告</td>
+          </tr>
+          <tr>
+            <td>数据监控</td>
+            <td>数据延迟、数据完整性、数据更新频率</td>
+            <td>5分钟</td>
+            <td>严重</td>
+          </tr>
+          <tr>
+            <td>交易监控</td>
+            <td>订单成交率、订单延迟、撤单率</td>
+            <td>95%</td>
+            <td>警告</td>
+          </tr>
+          <tr>
+            <td>风险监控</td>
+            <td>实时VaR、实时回撤、敞口</td>
+            <td>风险限额</td>
+            <td>严重</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">部署风险提示</div>
+        <p>1）模拟盘与实盘存在差异；2）滑点可能高于预期；3）极端行情风险；4）系统故障风险；5）策略失效风险。务必做好风险预案。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了实盘部署的前置条件</li>
+            <li>• 设计了完整的实盘系统架构</li>
+            <li>• 规划了分阶段的部署时间线</li>
+            <li>• 制定了详细的风险控制方案</li>
+            <li>• 建立了全面的监控体系</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="75-5-结果分析与优化.html">← 上一节</a>
+      <a href="75-7-项目总结与反思.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

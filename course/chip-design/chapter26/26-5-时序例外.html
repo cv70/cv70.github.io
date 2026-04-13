@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.5 时序例外 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.5 时序例外</h1>
+          <p class="subtitle">高级时序例外约束技巧</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握路径延迟约束的方法</li>
+            <li>了解最大/最小延迟约束</li>
+            <li>学会处理复杂的时序关系</li>
+            <li>理解时序例外的组合使用</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 路径延迟约束</h2>
+
+          <h3>set_max_delay / set_min_delay</h3>
+          <div class="code-block">
+# 设置最大路径延迟
+set_max_delay 5.0 -from [get_ports data_in] \
+    -to [get_ports data_out]
+
+# 设置最小路径延迟
+set_min_delay 1.0 -from [get_ports data_in] \
+    -to [get_ports data_out]
+
+# 通过特定网络
+set_max_delay 3.0 -through [get_nets critical_path*]
+
+# 针对特定单元
+set_max_delay 2.5 -from [get_cells source_reg/Q] \
+    -to [get_cells dest_reg/D]
+          </div>
+
+          <h3>异步路径约束</h3>
+          <div class="code-block">
+# 异步复位路径
+set_max_delay 10.0 -from [get_ports async_rst] \
+    -to [get_cells reset_reg*/R]
+
+# 中断信号路径
+set_max_delay 5.0 -from [get_ports interrupt] \
+    -to [get_cells interrupt_handler/D]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 数据检查约束</h2>
+
+          <h3>set_data_check</h3>
+          <div class="code-block">
+# 数据到使能的检查
+set_data_check -from [get_pins data_reg/Q] \
+    -to [get_pins enable_reg/D] \
+    -setup 1.0 -hold 0.2
+
+# 地址到数据的检查
+set_data_check -from [get_pins addr_reg/Q] \
+    -to [get_pins data_in_reg/D] \
+    -setup 2.0
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 组合时序例外</h2>
+
+          <h3>路径组合</h3>
+          <div class="code-block">
+# From-To组合
+set_false_path \
+    -from [get_cells {reg1 reg2 reg3}] \
+    -to [get_cells {regA regB regC}]
+
+# Through组合
+set_multicycle_path -setup 2 \
+    -through [get_cells stage1 stage2 stage3]
+
+# 组合多种条件
+set_false_path \
+    -from [get_clocks CLK1] \
+    -to [get_clocks CLK2] \
+    -through [get_cells async_bridge*]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 复杂时序例外场景</h2>
+
+          <div class="code-block">
+# ============================================================================
+# 复杂时序例外示例
+# ============================================================================
+
+# ========== 跨时钟域处理 ==========
+# 快到慢时钟域（2个同步器）
+set_multicycle_path -setup 2 \
+    -from [get_clocks FAST_CLK] \
+    -to [get_clocks SLOW_CLK] \
+    -through [get_cells sync_stage2]
+
+# 慢到快时钟域
+set_false_path -from [get_clocks SLOW_CLK] \
+    -to [get_clocks FAST_CLK]
+
+# ========== 异步控制 ==========
+# 复位传播
+set_max_delay 8.0 -from [get_ports reset_n] \
+    -to [all_registers]
+
+# 时钟使能
+set_false_path -from [get_ports clock_en] \
+    -to [get_pins -filter "name =~ */E"]
+
+# ========== 特殊功能模块 ==========
+# 错误检测路径
+set_max_delay 15.0 -from [get_ports error_in] \
+    -to [get_cells error_handler*/D]
+
+# 看门狗定时器
+set_false_path -from [get_ports watchdog_feed] \
+    -to [get_cells watchdog_counter*/D]
+
+# 调试逻辑
+set_false_path -from [get_ports debug_mode] \
+    -through [get_cells debug_logic*]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 时序例外管理</h2>
+
+          <h3>查询时序例外</h3>
+          <div class="code-block">
+# 报告所有虚假路径
+report_exceptions -false_path
+
+# 报告所有多周期路径
+report_exceptions -multicycle
+
+# 报告特定路径的例外
+report_exceptions -from [get_cells reg1]
+          </div>
+
+          <h3>时序例外文档</h3>
+          <ul class="feature-list">
+            <li>为每个时序例外添加注释说明</li>
+            <li>在设计文档中记录例外原因</li>
+            <li>定期审查和更新时序例外</li>
+            <li>验证时序例外的正确性</li>
+          </ul>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">时序例外风险</div>
+            <p>不当使用时序例外可能导致：1）掩盖真实的时序问题；2）产生功能故障；
+            3）降低设计可靠性；4）增加调试难度。每个时序例外都需要充分的设计依据。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 路径延迟约束提供精确的时序控制</li>
+                <li>• 数据检查约束确保正确的时序关系</li>
+                <li>• 组合时序例外处理复杂场景</li>
+                <li>• 时序例外需要严格管理和审查</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-4-虚假路径与多周期路径.html">← 上一节</a>
+          <a href="26-6-面积约束.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

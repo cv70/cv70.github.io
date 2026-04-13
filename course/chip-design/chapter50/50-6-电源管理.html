@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.6 电源管理 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>50.6 电源管理</h1>
+      <p class="subtitle">SoC电源管理系统设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解SoC功耗的基本构成</li>
+        <li>掌握电源管理的基本技术</li>
+        <li>了解电源域划分方法</li>
+        <li>熟悉DVFS和低功耗状态管理</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> SoC功耗构成</h2>
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">功耗分类</div>
+          <p><strong>动态功耗（Dynamic Power）</strong>：由电路翻转产生的功耗，与频率和电容成正比。P_dynamic = α·C·V²·f</p>
+          <p><strong>静态功耗（Static Power）</strong>：由漏电流产生的功耗，与温度和电压有关。P_static = I_leak·V</p>
+          <p><strong>短路功耗（Short-circuit Power）</strong>：由PMOS和NMOS同时导通产生的功耗，通常较小。</p>
+        </div>
+      </div>
+
+      <h3>功耗占比分析</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>模块类型</th>
+            <th>动态功耗占比</th>
+            <th>静态功耗占比</th>
+            <th>特点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CPU/GPU</td>
+            <td>高（40-60%）</td>
+            <td>中（20-30%）</td>
+            <td>高频、高翻转</td>
+          </tr>
+          <tr>
+            <td>存储器</td>
+            <td>中（20-30%）</td>
+            <td>高（30-40%）</td>
+            <td>容量大、漏电流高</td>
+          </tr>
+          <tr>
+            <td>高速接口</td>
+            <td>中（10-20%）</td>
+            <td>低（5-10%）</td>
+            <td>高I/O活动</td>
+          </tr>
+          <tr>
+            <td>低速外设</td>
+            <td>低（5-10%）</td>
+            <td>低（5-10%）</td>
+            <td>低频、低活动</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 电源管理技术</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">时钟门控（Clock Gating）</h3>
+          <ul class="feature-list">
+            <li>关闭空闲模块的时钟</li>
+            <li>消除不必要的翻转</li>
+            <li>节省动态功耗</li>
+            <li>实现简单、效果显著</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：20-40%</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">电源门控（Power Gating）</h3>
+          <ul class="feature-list">
+            <li>关闭空闲模块的电源</li>
+            <li>消除漏电流</li>
+            <li>节省静态功耗</li>
+            <li>需要状态保存/恢复</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：50-90%（被关断区域）</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">动态电压频率调节（DVFS）</h3>
+          <ul class="feature-list">
+            <li>根据负载调整电压和频率</li>
+            <li>降低平均功耗</li>
+            <li>需要软件支持</li>
+            <li>调节过程平滑</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：30-60%</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多电压设计（Multi-Vdd）</h3>
+          <ul class="feature-list">
+            <li>不同模块使用不同电压</li>
+            <li>性能模块用高电压</li>
+            <li>非关键模块用低电压</li>
+            <li>需要电平转换器</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：20-40%</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">阈值电压调整（Vt Scaling）</h3>
+          <ul class="feature-list">
+            <li>使用多阈值晶体管</li>
+            <li>关键路径用低Vt</li>
+            <li>非关键路径用高Vt</li>
+            <li>降低漏电流</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：10-30%</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">自适应电压调节（AVS）</h3>
+          <ul class="feature-list">
+            <li>实时监测电路性能</li>
+            <li>动态调整工作电压</li>
+            <li>最大化功耗效率</li>
+            <li>需要传感器支持</li>
+          </ul>
+          <p class="card-text"><strong>功耗节省</strong>：10-20%</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗺️</span> 电源域划分</h2>
+      <p>电源域划分是电源管理的基础。根据功能、性能、使用频率等因素，将SoC划分为多个独立的电源域。</p>
+
+      <h3>典型电源域划分</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Always-On域（AON）</h3>
+          <ul class="feature-list">
+            <li>始终上电，永不关闭</li>
+            <li>包含RTC、PMU、唤醒逻辑</li>
+            <li>使用低漏电工艺</li>
+            <li>极低功耗设计</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">高性能域（HP）</h3>
+          <ul class="feature-list">
+            <li>CPU、GPU等核心处理单元</li>
+            <li>最高电压和频率</li>
+            <li>支持DVFS</li>
+            <li>可独立关断</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">外设域（PERI）</h3>
+          <ul class="feature-list">
+            <li>各种外设控制器</li>
+            <li>中等电压</li>
+            <li>支持时钟/电源门控</li>
+            <li>按需上电</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">存储器域（MEM）</h3>
+          <ul class="feature-list">
+            <li>SRAM、TCM等片上存储</li>
+            <li>低电压，深度睡眠</li>
+            <li>支持保留模式</li>
+            <li>数据保持能力</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>电源开关设计</h3>
+      <div class="code-block">
+<pre>
+// 电源开关单元（Power Switch Cell）
+module power_switch (
+    input  enable,      // 开关使能
+    input  vdd_in,      // 输入电源
+    output vdd_out      // 输出电源
+);
+
+// 头开关（Header Switch）
+// PMOS晶体管作为电源开关
+// 当enable=1时，vdd_out ≈ vdd_in
+// 当enable=0时，vdd_out ≈ 0V（实际为Vdd - Vth）
+
+// 实际实现使用综合库中的电源开关单元
+// 包含：
+// - 主开关晶体管
+// - 隔离单元（Isolation Cells）
+// - 保持寄存器（Retention Registers）
+// - 状态检测逻辑
+
+endmodule
+
+// 隔离单元示例
+module isolation_cell (
+    input  data_in,     // 来自关断域的信号
+    input  iso_enable,  // 隔离使能
+    output data_out     // 隔离后的信号
+);
+
+assign data_out = iso_enable ? ISO_VALUE : data_in;
+// ISO_VALUE通常是0或1，防止悬空信号
+
+endmodule</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> DVFS（动态电压频率调节）</h2>
+      <p>DVFS根据系统负载动态调整处理器的电压和频率，在性能和功耗之间取得平衡。</p>
+
+      <h3>DVFS操作点（OPP）</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>OPP等级</th>
+            <th>频率（MHz）</th>
+            <th>电压（V）</th>
+            <th>功耗（W）</th>
+            <th>应用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>OPP0</td>
+            <td>2400</td>
+            <td>1.05</td>
+            <td>5.2</td>
+            <td>高性能计算</td>
+          </tr>
+          <tr>
+            <td>OPP1</td>
+            <td>2000</td>
+            <td>0.95</td>
+            <td>3.4</td>
+            <td>游戏、视频</td>
+          </tr>
+          <tr>
+            <td>OPP2</td>
+            <td>1600</td>
+            <td>0.85</td>
+            <td>2.0</td>
+            <td>日常使用</td>
+          </tr>
+          <tr>
+            <td>OPP3</td>
+            <td>1200</td>
+            <td>0.75</td>
+            <td>1.1</td>
+            <td>后台任务</td>
+          </tr>
+          <tr>
+            <td>OPP4</td>
+            <td>800</td>
+            <td>0.65</td>
+            <td>0.5</td>
+            <td>待机</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>DVFS转换流程</h3>
+      <div class="flowchart">
+        <div class="flow-step">检测负载变化</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">决策新的OPP</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">降低频率</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">调节电压</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">提升频率到目标值</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">确认稳定</div>
+      </div>
+      <p class="tip-note">注意：升频时先升压后升频，降频时先降频后降压，避免时序违例。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">😴</span> 低功耗状态管理</h2>
+      <h3>典型低功耗状态</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">Active（活动态）</h3>
+          <ul class="feature-list">
+            <li>所有模块正常工作</li>
+            <li>最高性能</li>
+            <li>最大功耗</li>
+          </ul>
+          <p class="card-text"><strong>唤醒时间</strong>：0ms</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Idle（空闲态）</h3>
+          <ul class="feature-list">
+            <li>CPU停止执行</li>
+            <li>时钟门控生效</li>
+            <li>等待中断唤醒</li>
+          </ul>
+          <p class="card-text"><strong>唤醒时间</strong>：<10μs</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Standby（待机态）</h3>
+          <ul class="feature-list">
+            <li>部分电源域关断</li>
+            <li>关键状态保留</li>
+            <li>极少功耗</li>
+          </ul>
+          <p class="card-text"><strong>唤醒时间</strong>：<1ms</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Deep Sleep（深睡态）</h3>
+          <ul class="feature-list">
+            <li>大部分电路关断</li>
+            <li>仅AON域工作</li>
+            <li>超低功耗</li>
+          </ul>
+          <p class="card-text"><strong>唤醒时间</strong>：<10ms</p>
+        </div>
+      </div>
+
+      <h3>状态转换控制</h3>
+      <div class="code-block">
+<pre>
+// 低功耗状态机（简化）
+module power_state_machine (
+    input  clk,
+    input  rst_n,
+    input  [2:0] power_request,  // 0:Active, 1:Idle, 2:Standby, 3:DeepSleep
+    input  wake_up_event,
+    output reg [2:0] current_state,
+    output reg power_switch_hp,   // 高性能域电源开关
+    output reg power_switch_peri, // 外设域电源开关
+    output reg clock_gate_cpu     // CPU时钟门控
+);
+
+// 状态定义
+localparam ACTIVE     = 3'd0;
+localparam IDLE       = 3'd1;
+localparam STANDBY    = 3'd2;
+localparam DEEP_SLEEP = 3'd3;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        current_state     <= ACTIVE;
+        power_switch_hp   <= 1;
+        power_switch_peri <= 1;
+        clock_gate_cpu    <= 0;
+    end else begin
+        case (current_state)
+            ACTIVE:
+                if (power_request != ACTIVE)
+                    current_state <= power_request;
+
+            IDLE:
+                if (wake_up_event)
+                    current_state <= ACTIVE;
+                else if (power_request != IDLE)
+                    current_state <= power_request;
+
+            STANDBY:
+                if (wake_up_event)
+                    current_state <= ACTIVE;
+                else if (power_request != STANDBY)
+                    current_state <= power_request;
+
+            DEEP_SLEEP:
+                if (wake_up_event)
+                    current_state <= ACTIVE;
+
+            default:
+                current_state <= ACTIVE;
+        endcase
+    end
+end
+
+// 输出控制逻辑
+always @(*) begin
+    case (current_state)
+        ACTIVE: begin
+            power_switch_hp   = 1;
+            power_switch_peri = 1;
+            clock_gate_cpu    = 0;
+        end
+        IDLE: begin
+            power_switch_hp   = 1;
+            power_switch_peri = 1;
+            clock_gate_cpu    = 1;
+        end
+        STANDBY: begin
+            power_switch_hp   = 0;
+            power_switch_peri = 0;
+            clock_gate_cpu    = 1;
+        end
+        DEEP_SLEEP: begin
+            power_switch_hp   = 0;
+            power_switch_peri = 0;
+            clock_gate_cpu    = 1;
+        end
+    endcase
+end
+
+endmodule</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SoC功耗包括动态功耗和静态功耗两部分</li>
+            <li>• 电源管理技术包括时钟门控、电源门控、DVFS等</li>
+            <li>• 电源域划分是实现精细功耗管理的基础</li>
+            <li>• 低功耗状态管理需要在性能和功耗之间取得平衡</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-5-时钟管理.html">← 上一节</a>
+      <a href="50-7-SoC验证策略.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

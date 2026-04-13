@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.7 综合脚本编写 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.7 综合脚本编写</h1>
+          <p class="subtitle">编写可维护的综合脚本</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握综合脚本的组织结构</li>
+            <li>学会编写模块化的综合脚本</li>
+            <li>了解脚本的最佳实践</li>
+            <li>掌握脚本调试和错误处理</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📁</span> 脚本组织结构</h2>
+
+          <h3>推荐目录结构</h3>
+          <div class="code-block">
+project/
+├── rtl/                    # RTL源文件
+│   ├── top.v
+│   └── sub_modules/
+├── scripts/                # 综合脚本
+│   ├── setup.tcl          # 环境设置
+│   ├── constraints.tcl    # 约束文件
+│   ├── compile.tcl        # 综合脚本
+│   └── reports.tcl        # 报告生成
+├── lib/                    # 库文件
+├── reports/                # 输出报告
+├── outputs/                # 输出文件
+└── logs/                   # 日志文件
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📜</span> 主综合脚本</h2>
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 主综合脚本 - compile.tcl
+# ============================================================================
+
+# 捕获开始时间
+set start_time [clock seconds]
+
+# ============================================================================
+# 1. 环境设置
+# ============================================================================
+puts "=========================================="
+puts "Step 1: 环境设置"
+puts "=========================================="
+
+# 设置工作目录
+set script_dir [file dirname [info script]]
+set project_dir [file normalize "$script_dir/.."]
+
+# 定义路径变量
+set RTL_DIR "$project_dir/rtl"
+set LIB_DIR "$project_dir/lib"
+set SCRIPT_DIR "$project_dir/scripts"
+set REPORT_DIR "$project_dir/reports"
+set OUTPUT_DIR "$project_dir/outputs"
+set LOG_DIR "$project_dir/logs"
+
+# 创建输出目录
+file mkdir $REPORT_DIR
+file mkdir $OUTPUT_DIR
+file mkdir $LOG_DIR
+
+# 定义日志文件
+set LOG_FILE "$LOG_DIR/compile_[clock format [clock seconds] -format "%Y%m%d_%H%M%S"].log"
+
+# 重定向输出到日志
+sh date > $LOG_FILE
+redirect -append $LOG_FILE {
+    puts "开始综合流程..."
+}
+
+# ============================================================================
+# 2. 加载配置
+# ============================================================================
+puts "=========================================="
+puts "Step 2: 加载配置"
+puts "=========================================="
+
+# 加载环境设置
+source "$SCRIPT_DIR/setup.tcl"
+
+# 加载约束设置
+source "$SCRIPT_DIR/constraints.tcl"
+
+# ============================================================================
+# 3. 读入设计
+# ============================================================================
+puts "=========================================="
+puts "Step 3: 读入设计"
+puts "=========================================="
+
+redirect -append $LOG_FILE {
+    # 查找所有RTL文件
+    set rtl_files [glob -nocomplain "$RTL_DIR/*.v"]
+    set rtl_files [concat $rtl_files [glob -nocomplain "$RTL_DIR/sub_modules/*.v"]]
+
+    if {[llength $rtl_files] == 0} {
+        error "未找到RTL文件！"
+    }
+
+    puts "找到 [llength $rtl_files] 个RTL文件"
+
+    # 读入RTL文件
+    analyze -format verilog $rtl_files
+
+    # 精细化设计
+    elaborate top_design
+
+    # 设置当前设计
+    current_design top_design
+
+    # 链接设计
+    link
+
+    # 检查设计
+    if {[check_design]} {
+        puts "设计检查通过"
+    } else {
+        error "设计检查失败，请修复错误"
+    }
+}
+
+# ============================================================================
+# 4. 应用约束
+# ============================================================================
+puts "=========================================="
+puts "Step 4: 应用约束"
+puts "=========================================="
+
+redirect -append $LOG_FILE {
+    # 应用时钟约束
+    apply_clock_constraints
+
+    # 应用IO约束
+    apply_io_constraints
+
+    # 应用设计规则约束
+    apply_design_rule_constraints
+
+    # 报告约束
+    report_constraint -all_violators > "$REPORT_DIR/constraint_violations.rpt"
+}
+
+# ============================================================================
+# 5. 综合编译
+# ============================================================================
+puts "=========================================="
+puts "Step 5: 综合编译"
+puts "=========================================="
+
+redirect -append $LOG_FILE {
+    # 检查是否需要增量综合
+    if {[file exists "$OUTPUT_DIR/design_prev.ddc"]} {
+        puts "执行增量综合..."
+        read_ddc "$OUTPUT_DIR/design_prev.ddc"
+        compile_ultra -incremental
+    } else {
+        puts "执行全量综合..."
+        compile_ultra
+    }
+
+    # 检查综合结果
+    if {[check_timing -verbose]} {
+        puts "时序检查完成"
+    }
+}
+
+# ============================================================================
+# 6. 生成报告
+# ============================================================================
+puts "=========================================="
+puts "Step 6: 生成报告"
+puts "=========================================="
+
+source "$SCRIPT_DIR/reports.tcl"
+
+# ============================================================================
+# 7. 输出结果
+# ============================================================================
+puts "=========================================="
+puts "Step 7: 输出结果"
+puts "=========================================="
+
+redirect -append $LOG_FILE {
+    # 输出网表
+    write -format verilog -hierarchy -output "$OUTPUT_DIR/top_synth.v"
+
+    # 输出SDC约束
+    write_sdc -nosplit "$OUTPUT_DIR/top_synth.sdc"
+
+    # 输出SDF文件
+    write_sdf -version 2.1 -context verilog \
+        -load_delay cell "$OUTPUT_DIR/top_synth.sdf"
+
+    # 保存DDC文件用于增量综合
+    write -format ddc -hierarchy -output "$OUTPUT_DIR/design_prev.ddc"
+
+    # 输出综合报告
+    report_qor > "$OUTPUT_DIR/qor.rpt"
+}
+
+# ============================================================================
+# 8. 完成总结
+# ============================================================================
+puts "=========================================="
+puts "综合完成"
+puts "=========================================="
+
+# 计算耗时
+set end_time [clock seconds]
+set elapsed_time [expr {$end_time - $start_time}]
+puts "总耗时: [format "%.2f" [expr {$elapsed_time / 60.0}]] 分钟"
+
+# 输出关键指标
+redirect -append $LOG_FILE {
+    puts "\n========== 综合结果摘要 =========="
+    puts "设计名称: [current_design]"
+    puts "综合时间: $elapsed_time 秒"
+    puts "=================================="
+}
+
+# 保存会话
+save_session "$OUTPUT_DIR/session"
+
+puts "综合脚本执行完成！"
+puts "详细日志请查看: $LOG_FILE"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 配置脚本示例</h2>
+
+          <h3>setup.tcl - 环境设置</h3>
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 环境设置脚本
+# ============================================================================
+
+# 设置库名称和路径
+set TECH_NODE "saed90nm"
+set LIB_PATH "/foundry/libraries/${TECH_NODE}"
+
+# 设置目标库（根据工艺角选择）
+proc set_target_library_corner {corner} {
+    global target_library
+    set corner_lib "${LIB_PATH}/stdcell_rvt/db_${TECH_NODE}/saed90nm_${corner}.db"
+
+    if {[file exists $corner_lib]} {
+        set target_library [list $corner_lib]
+        puts "设置目标库: $corner_lib"
+    } else {
+        error "库文件不存在: $corner_lib"
+    }
+}
+
+# 默认使用TT角
+set_target_library_corner "typ"
+
+# 设置链接库
+set link_library "* $target_library"
+
+# 设置符号库
+set symbol_library "${LIB_PATH}/stdcell_rvt/db_${TECH_NODE}/saed90nm.sdb"
+
+# 设置搜索路径
+set search_path [list \
+    $RTL_DIR \
+    $LIB_DIR \
+    $SCRIPT_DIR \
+    ${LIB_PATH}/stdcell_rvt/db_${TECH_NODE} \
+]
+
+# 设置操作条件
+set_operating_conditions -min ss_0.9V_125C -max ff_1.1V_-40C
+
+# 设置线负载模型
+set_wire_load_model -name TSMC12_WLM
+set_wire_load_mode top
+
+# 设置综合选项
+set compile_preserve_subdesign_interfaces true
+set compile_seqmap_for_timing_only true
+set compile_no_new_cells_at_top_level false
+          </div>
+
+          <h3>constraints.tcl - 约束设置</h3>
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 约束设置脚本
+# ============================================================================
+
+# 定义时钟约束过程
+proc apply_clock_constraints {} {
+    # 主时钟
+    create_clock -name CLK -period 10.0 \
+        -waveform {0.0 5.0} [get_ports clk]
+
+    # 时钟不确定性
+    set_clock_uncertainty -setup 0.3 [get_clocks CLK]
+    set_clock_uncertainty -hold 0.1 [get_clocks CLK]
+
+    # 时钟转换时间
+    set_clock_transition -max 0.3 [get_clocks CLK]
+    set_clock_transition -min 0.1 [get_clocks CLK]
+
+    # 时钟延迟
+    set_clock_latency -max 1.5 [get_clocks CLK]
+    set_clock_latency -min 0.5 [get_clocks CLK]
+
+    puts "时钟约束应用完成"
+}
+
+# 定义IO约束过程
+proc apply_io_constraints {} {
+    # 输入延迟
+    set_input_delay -max 2.0 -clock CLK \
+        [remove_from_collection [all_inputs] [get_ports clk rst]]
+
+    set_input_delay -min 0.5 -clock CLK \
+        [remove_from_collection [all_inputs] [get_ports clk rst]]
+
+    # 输出延迟
+    set_output_delay -max 2.5 -clock CLK [all_outputs]
+    set_output_delay -min 0.5 -clock CLK [all_outputs]
+
+    # 驱动强度
+    set_driving_cell -lib_cell INVX1 [get_ports clk]
+
+    # 负载
+    set_load 0.1 [all_outputs]
+
+    puts "IO约束应用完成"
+}
+
+# 定义设计规则约束过程
+proc apply_design_rule_constraints {} {
+    # 最大扇出
+    set_max_fanout 16 [current_design]
+
+    # 最大转换时间
+    set_max_transition 0.5 [current_design]
+
+    # 最大电容
+    set_max_capacitance 0.5 [current_design]
+
+    # 面积约束
+    set_max_area 0
+
+    puts "设计规则约束应用完成"
+}
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">脚本编写最佳实践</div>
+            <p>1）使用函数和过程封装重复代码；2）添加详细的注释说明；
+            3）使用变量而非硬编码路径；4）实现错误处理和日志记录；
+            5）支持参数化配置。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 良好的脚本结构是可维护性的基础</li>
+                <li>• 模块化设计提高脚本复用性</li>
+                <li>• 完整的日志和错误处理很重要</li>
+                <li>• 参数化配置增强脚本灵活性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-6-综合优化策略.html">← 上一节</a>
+          <a href="25-8-多模式多角分析.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

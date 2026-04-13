@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.4 回测验证 - 期货CTA策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>76.4 回测验证</h1>
+      <p class="subtitle">项目二：期货CTA策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握期货回测的特殊性</li>
+        <li>学会合约切换处理</li>
+        <li>理解回测偏差修正</li>
+        <li>能够进行策略稳健性检验</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="回测验证" class="card-image">
+      <h3 class="card-title">期货策略回测验证</h3>
+      <p class="card-text"><strong>回测验证</strong>是确认策略有效性的关键环节。本节将介绍期货回测的特殊要求和方法。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 合约切换处理</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def continuous_contract(contracts_data, method='volume'):
+    """
+    生成连续合约
+    """
+    if method == 'volume':
+        # 成交量加权切换
+        roll_dates = find_roll_dates_by_volume(contracts_data)
+    elif method == 'open_interest':
+        # 持仓量加权切换
+        roll_dates = find_roll_dates_by_oi(contracts_data)
+    else:
+        # 固定日期切换
+        roll_dates = find_roll_dates_fixed(contracts_data)
+
+    # 拼接合约
+    continuous = pd.DataFrame()
+    for i, (start, end) in enumerate(zip(roll_dates, roll_dates[1:])):
+        contract_data = contracts_data[i].loc[start:end]
+        continuous = pd.concat([continuous, contract_data])
+
+    # 调整价格（消除跳空）
+    continuous = adjust_price(continuous, roll_dates)
+
+    return continuous
+
+def find_roll_dates_by_volume(contracts_data):
+    """
+    根据成交量切换合约
+    """
+    roll_dates = []
+    for i in range(len(contracts_data) - 1):
+        # 主力合约切换点：次月合约成交量超过主力
+        current_vol = contracts_data[i]['volume']
+        next_vol = contracts_data[i+1]['volume']
+        crossover = (next_vol > current_vol).idxmax()
+        roll_dates.append(crossover)
+    return roll_dates</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 回测性能指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>计算方法</th>
+            <th>目标值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>年化收益率</td>
+            <td>(终值/初值)^(252/天数) - 1</td>
+            <td>> 15%</td>
+          </tr>
+          <tr>
+            <td>夏普比率</td>
+            <td>年化收益/年化波动</td>
+            <td>> 1.2</td>
+          </tr>
+          <tr>
+            <td>最大回撤</td>
+            <td>最大下跌幅度</td>
+            <td>< 20%</td>
+          </tr>
+          <tr>
+            <td>盈亏比</td>
+            <td>平均盈利/平均亏损</td>
+            <td>> 1.5</td>
+          </tr>
+          <tr>
+            <td>胜率</td>
+            <td>盈利交易占比</td>
+            <td>> 40%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 稳健性检验</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">样本外测试</h3>
+          <ul class="feature-list">
+            <li>滚动窗口测试</li>
+            <li>样本外表现评估</li>
+            <li>参数稳定性验证</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">敏感性分析</h3>
+          <ul class="feature-list">
+            <li>参数扰动测试</li>
+            <li>不同市场环境测试</li>
+            <li>极端情况压力测试</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">回测偏差提示</div>
+        <p>期货回测常见偏差：1）合约切换价格跳空；2）滑点低估；3）成交限制忽略；4）保证金变化忽略。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了期货回测的特殊要求</li>
+            <li>• 学会了合约切换处理方法</li>
+            <li>• 理解了回测偏差的修正</li>
+            <li>• 能够进行稳健性检验</li>
+            <li>• 掌握了期货绩效评估方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-3-风险管理设计.html">← 上一节</a>
+      <a href="76-5-参数优化.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

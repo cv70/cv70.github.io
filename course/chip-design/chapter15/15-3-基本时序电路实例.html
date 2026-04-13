@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.3 基本时序电路实例 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.3 基本时序电路实例</h1>
+          <p class="subtitle">Verilog设计实例</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握D触发器的设计</li>
+            <li>理解JK和T触发器</li>
+            <li>学会寄存器的实现</li>
+            <li>能够设计移位寄存器</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> D触发器</h2>
+          <div class="code-block">
+<pre><code>// 基本D触发器
+module dff(
+    input  clk,
+    input  d,
+    output reg q
+);
+    always @(posedge clk) begin
+        q <= d;
+    end
+endmodule
+
+// 带异步复位的D触发器
+module dff_async_rst(
+    input  clk,
+    input  rst_n,
+    input  d,
+    output reg q
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            q <= 1'b0;
+        else
+            q <= d;
+    end
+endmodule
+
+// 带同步复位的D触发器
+module dff_sync_rst(
+    input  clk,
+    input  rst_n,
+    input  d,
+    output reg q
+);
+    always @(posedge clk) begin
+        if (!rst_n)
+            q <= 1'b0;
+        else
+            q <= d;
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> JK触发器</h2>
+          <div class="code-block">
+<pre><code>// JK触发器
+module jk_ff(
+    input  clk,
+    input  rst_n,
+    input  j,
+    input  k,
+    output reg q,
+    output reg q_n
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            q <= 1'b0;
+            q_n <= 1'b1;
+        end
+        else begin
+            case ({j, k})
+                2'b00: q <= q;          // 保持
+                2'b01: q <= 1'b0;        // 复位
+                2'b10: q <= 1'b1;        // 置位
+                2'b11: q <= ~q;         // 翻转
+            endcase
+            q_n <= ~q;
+        end
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏯️</span> T触发器</h2>
+          <div class="code-block">
+<pre><code>// T触发器
+module t_ff(
+    input  clk,
+    input  rst_n,
+    input  t,
+    output reg q
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            q <= 1'b0;
+        else if (t)
+            q <= ~q;
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 寄存器</h2>
+          <div class="code-block">
+<pre><code>// 8位寄存器
+module register_8bit(
+    input  clk,
+    input  rst_n,
+    input  load,
+    input  [7:0] d,
+    output reg [7:0] q
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            q <= 8'b0000_0000;
+        else if (load)
+            q <= d;
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 移位寄存器</h2>
+          <div class="code-block">
+<pre><code>// 8位移位寄存器（左移）
+module shift_register_left(
+    input  clk,
+    input  rst_n,
+    input  shift_en,
+    input  serial_in,
+    output [7:0] parallel_out
+);
+    reg [7:0] shift_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            shift_reg <= 8'b0000_0000;
+        else if (shift_en)
+            shift_reg <= {shift_reg[6:0], serial_in};
+    end
+
+    assign parallel_out = shift_reg;
+endmodule
+
+// 双向移位寄存器
+module bidirectional_shift(
+    input  clk,
+    input  rst_n,
+    input  shift_en,
+    input  dir,        // 0:右移, 1:左移
+    input  serial_in,
+    output [7:0] parallel_out
+);
+    reg [7:0] shift_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            shift_reg <= 8'b0000_0000;
+        else if (shift_en) begin
+            if (dir)
+                shift_reg <= {shift_reg[6:0], serial_in};  // 左移
+            else
+                shift_reg <= {serial_in, shift_reg[7:1]};  // 右移
+        end
+    end
+
+    assign parallel_out = shift_reg;
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• D触发器是最基本的存储单元</li>
+                <li>• JK触发器功能最全面</li>
+                <li>• T触发器适用于计数器</li>
+                <li>• 移位寄存器用于数据移位</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="15-2-算术运算单元设计.html">← 上一节</a>
+          <a href="15-4-计数器与分频器设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

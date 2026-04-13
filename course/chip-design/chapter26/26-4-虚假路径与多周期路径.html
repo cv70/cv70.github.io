@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.4 虚假路径与多周期路径 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.4 虚假路径与多周期路径</h1>
+          <p class="subtitle">时序例外的约束方法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解虚假路径的概念和应用场景</li>
+            <li>掌握多周期路径的约束方法</li>
+            <li>学会正确使用时序例外约束</li>
+            <li>了解时序例外的风险和注意事项</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚫</span> 虚假路径（False Path）</h2>
+
+          <h3>什么是虚假路径</h3>
+          <p><strong>虚假路径</strong>是指逻辑上不存在、不会被激活的时序路径。
+            这些路径不需要满足时序约束，应该被标记为虚假路径以避免工具误报违例。</p>
+
+          <h3>虚假路径的常见场景</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">复位路径</h3>
+              <p class="card-text">异步复位信号与时钟域无关</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">测试模式</h3>
+              <p class="card-text">测试扫描链与功能模式互斥</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">配置路径</h3>
+              <p class="card-text">一次性配置信号不参与时序</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">互斥逻辑</h3>
+              <p class="card-text"> mutually exclusive控制逻辑</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 虚假路径约束</h2>
+
+          <h3>set_false_path命令</h3>
+          <div class="code-block">
+# 基本虚假路径
+set_false_path -from [get_ports reset_n]
+
+# 从特定单元到端口
+set_false_path -from [get_cells async_reg*/Q] \
+    -to [get_ports config_out]
+
+# 跨时钟域路径（已同步）
+set_false_path -from [get_clocks CLK_A] \
+    -to [get_clocks CLK_B]
+
+# 测试模式路径
+set_false_path -from [get_ports scan_enable] \
+    -to [get_cells func_logic*]
+
+# 配置寄存器路径
+set_false_path -through [get_cells config_reg*] \
+    -to [get_ports data_out]
+          </div>
+
+          <h3>复杂虚假路径</h3>
+          <div class="code-block">
+# 多个虚假路径
+set_false_path -from [get_cells {reg1 reg2 reg3}]
+set_false_path -to [get_ports {out1 out2 out3}]
+
+# 通过特定网络
+set_false_path -through [get_nets clock_gate*]
+
+# 组合条件
+set_false_path \
+    -from [get_cells -hierarchical "*rst_sync*"] \
+    -to [get_cells -hierarchical "*data_path*"]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 多周期路径（Multi-cycle Path）</h2>
+
+          <h3>什么是多周期路径</h3>
+          <p><strong>多周期路径</strong>是指需要多个时钟周期才能完成数据传输的路径。
+            这种路径不需要在单周期内满足时序，可以放宽约束。</p>
+
+          <h3>多周期路径的常见场景</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">慢速控制路径</h3>
+              <p class="card-text">状态机等不需要高速的控制逻辑</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">长组合链</h3>
+              <p class="card-text">复杂的计算逻辑需要多个周期</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">跨时钟域</h3>
+              <p class="card-text">同步器路径</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">低速接口</h3>
+              <p class="card-text">UART、SPI等低速通信</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 多周期路径约束</h2>
+
+          <h3>set_multicycle_path命令</h3>
+          <div class="code-block">
+# Setup多周期（2个周期）
+set_multicycle_path -setup 2 \
+    -from [get_cells slow_reg*] \
+    -to [get_cells dest_reg*]
+
+# Hold多周期（通常比setup少1）
+set_multicycle_path -hold 1 \
+    -from [get_cells slow_reg*] \
+    -to [get_cells dest_reg*]
+
+# 针对整个时钟域
+set_multicycle_path -setup 2 \
+    -from [get_clocks SLOW_CLK] \
+    -to [get_clocks FAST_CLK]
+
+# 针对特定路径
+set_multicycle_path -setup 3 \
+    -through [get_cells complex_logic*]
+          </div>
+
+          <h3>不同类型的多周期约束</h3>
+          <div class="code-block">
+# 状态机路径（2周期）
+set_multicycle_path -setup 2 \
+    -from [get_cells state_reg*] \
+    -to [get_cells next_state_reg*]
+set_multicycle_path -hold 1 \
+    -from [get_cells state_reg*] \
+    -to [get_cells next_state_reg*]
+
+# 计算单元路径（4周期）
+set_multicycle_path -setup 4 \
+    -from [get_cells multiplier/Q] \
+    -to [get_cells accumulator/D]
+set_multicycle_path -hold 3 \
+    -from [get_cells multiplier/Q] \
+    -to [get_cells accumulator/D]
+
+# 跨时钟域同步器（2周期）
+set_multicycle_path -setup 2 \
+    -from [get_clocks CLK_A] \
+    -through [get_cells sync_stage1] \
+    -to [get_clocks CLK_B]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 时序例外实例</h2>
+
+          <div class="code-block">
+# ============================================================================
+# 综合时序例外约束示例
+# ============================================================================
+
+# ========== 虚假路径 ==========
+# 复位路径
+set_false_path -from [get_ports {rst_n async_rst}]
+
+# 测试模式
+set_false_path -from [get_ports scan_enable]
+set_false_path -from [get_ports scan_in]
+set_false_path -to [get_ports scan_out]
+
+# 配置路径
+set_false_path -through [get_cells config_reg*]
+
+# JTAG路径
+set_false_path -from [get_ports tck]
+set_false_path -from [get_ports tdi]
+set_false_path -to [get_ports tdo]
+
+# ========== 多周期路径 ==========
+# 状态机（2周期）
+set_multicycle_path -setup 2 \
+    -from [get_cells state_reg/Q] \
+    -to [get_cells next_state_reg/D]
+set_multicycle_path -hold 1 \
+    -from [get_cells state_reg/Q] \
+    -to [get_cells next_state_reg/D]
+
+# 乘法器（4周期）
+set_multicycle_path -setup 4 \
+    -from [get_cells multiplier/Q] \
+    -to [get_cells product_reg/D]
+set_multicycle_path -hold 3 \
+    -from [get_cells multiplier/Q] \
+    -to [get_cells product_reg/D]
+
+# 慢速控制逻辑（3周期）
+set_multicycle_path -setup 3 \
+    -from [get_cells ctrl_reg/Q] \
+    -to [get_cells ctrl_logic*/D]
+set_multicycle_path -hold 2 \
+    -from [get_cells ctrl_reg/Q] \
+    -to [get_cells ctrl_logic*/D]
+
+# ========== 时钟路径例外 ==========
+# 跨时钟域（已同步）
+set_false_path -from [get_clocks CLK_A] \
+    -to [get_clocks CLK_B] \
+    -through [get_cells sync_stage2]
+
+# 时钟门控使能
+set_false_path -from [get_ports clock_en] \
+    -to [get_pins clock_gate*/E]
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">时序例外注意事项</div>
+            <p>1）过度使用时序例外会掩盖真实的设计问题；2）虚假路径必须是逻辑上真正不存在的路径；
+            3）多周期路径必须有充分的设计依据；4）定期审查时序例外的合理性；
+            5）在文档中记录每个时序例外的原因。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 虚假路径不需要满足时序约束</li>
+                <li>• 多周期路径放宽时序要求</li>
+                <li>• 时序例外必须基于真实设计需求</li>
+                <li>• 过度使用时序例外会带来风险</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-3-输入输出延时约束.html">← 上一节</a>
+          <a href="26-5-时序例外.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

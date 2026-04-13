@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.2 时钟域处理技巧 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header"><h1>18.2 时钟域处理技巧</h1><p class="subtitle">HDL 编码最佳实践</p></header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list"><li>理解跨时钟域的问题</li><li>掌握单bit信号同步</li><li>学会多bit信号同步</li><li>能够处理异步时钟域</li></ul>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 双触发器同步</h2>
+          <div class="code-block">
+<pre><code>// 双触发器同步器（单bit信号）
+module sync_2ff(
+    input  clk_dst,    // 目标时钟
+    input  rst_n,
+    input  async_in,   // 异步输入
+    output sync_out    // 同步输出
+);
+    reg meta, sync;
+
+    always @(posedge clk_dst or negedge rst_n) begin
+        if (!rst_n) begin
+            meta <= 1'b0;
+            sync <= 1'b0;
+        end
+        else begin
+            meta <= async_in;
+            sync <= meta;
+        end
+    end
+
+    assign sync_out = sync;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 握手协议</h2>
+          <div class="code-block">
+<pre><code>// 握手同步（多bit信号）
+module handshake_sync(
+    input  clk_src,
+    input  clk_dst,
+    input  rst_n,
+    input  [7:0] data_in,
+    input        req_in,
+    output       ack_out,
+    output [7:0] data_out
+);
+    // 源时钟域
+    reg [7:0] data_reg;
+    reg req_reg;
+    
+    always @(posedge clk_src or negedge rst_n) begin
+        if (!rst_n) begin
+            data_reg <= 0;
+            req_reg <= 0;
+        end
+        else if (req_in && !req_reg) begin
+            data_reg <= data_in;
+            req_reg <= 1;
+        end
+        else if (ack_out)
+            req_reg <= 0;
+    end
+    
+    // 目标时钟域（同步req信号）
+    reg req_meta, req_sync;
+    always @(posedge clk_dst or negedge rst_n) begin
+        if (!rst_n) begin
+            req_meta <= 0;
+            req_sync <= 0;
+        end
+        else begin
+            req_meta <= req_reg;
+            req_sync <= req_meta;
+        end
+    end
+    
+    // 数据捕获
+    always @(posedge clk_dst or negedge rst_n) begin
+        if (!rst_n)
+            data_out <= 0;
+        else if (req_sync && !ack_out)
+            data_out <= data_reg;
+    end
+    
+    // ACK生成
+    reg ack_reg;
+    always @(posedge clk_dst or negedge rst_n) begin
+        if (!rst_n)
+            ack_reg <= 0;
+        else
+            ack_reg <= req_sync;
+    end
+    
+    assign ack_out = ack_reg;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block"><h2><span class="icon">📝</span> 本节小结</h2><div class="tip-box success"><span class="icon">✅</span><div class="content"><ul style="list-style: none; padding: 0;"><li>• 跨时钟域需要同步</li><li>• 单bit用双触发器</li><li>• 多bit用握手或FIFO</li><li>• 避免亚稳态传播</li></ul></div></div></div>
+        <div class="chapter-nav"><a href="18-1-可综合编码规范.html">← 上一节</a><a href="18-3-复位策略.html">下一节 →</a></div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

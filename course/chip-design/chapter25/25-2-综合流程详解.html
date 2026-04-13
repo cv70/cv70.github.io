@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.2 综合流程详解 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.2 综合流程详解</h1>
+          <p class="subtitle">从设计输入到网表生成的完整过程</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握逻辑综合的完整流程步骤</li>
+            <li>理解每个步骤的作用和注意事项</li>
+            <li>了解综合过程中的中间产物</li>
+            <li>学会识别和解决综合过程中的问题</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 综合流程概览</h2>
+          <div class="code-block">
+1. 环境设置 → 2. 设计读入 → 3. 约束设定 → 4. 编译
+→ 5. 优化 → 6. 映射 → 7. 报告分析 → 8. 网表输出
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 步骤详解</h2>
+
+          <h3>步骤1：环境设置</h3>
+          <p>设置综合工具所需的各种参数和库文件：</p>
+          <div class="code-block">
+# 设置目标库
+set target_library [list saed90nm_typ.db]
+
+# 设置链接库
+set link_library "* $target_library"
+
+# 设置符号库
+set symbol_library saed90nm.sdb
+
+# 设置搜索路径
+set search_path [list ./rtl ./lib ./scripts]
+          </div>
+
+          <h3>步骤2：设计读入</h3>
+          <p>读取RTL设计文件并进行预处理：</p>
+          <div class="code-block">
+# 读入RTL文件
+read_verilog {top_module.v sub_module1.v sub_module2.v}
+
+# 分析设计层次
+current_design top_module
+
+# 链接设计
+link
+          </div>
+
+          <h3>步骤3：约束设定</h3>
+          <p>设定时序、面积等设计约束：</p>
+          <div class="code-block">
+# 时钟约束
+create_clock -name CLK -period 10 [get_ports clk]
+
+# 输入延迟
+set_input_delay 2 -clock CLK [all_inputs]
+
+# 输出延迟
+set_output_delay 2 -clock CLK [all_outputs]
+
+# 面积约束
+set_max_area 0
+          </div>
+
+          <h3>步骤4：编译</h3>
+          <p>对设计进行初步编译和转换：</p>
+          <div class="code-block">
+# 编译设计
+compile
+
+# 或使用超编译（更激进优化）
+compile_ultra
+          </div>
+
+          <h3>步骤5：优化</h3>
+          <p>根据约束进行多层次优化：</p>
+          <ul class="feature-list">
+            <li><strong>架构级优化</strong>：选择最优的实现架构</li>
+            <li><strong>逻辑级优化</strong>：简化布尔表达式</li>
+            <li><strong>门级优化</strong>：选择最佳单元组合</li>
+          </ul>
+
+          <h3>步骤6：映射</h3>
+          <p>将逻辑映射到工艺库的标准单元：</p>
+          <div class="code-block">
+# 映射到目标库
+map_effort high
+
+# 使用指定阈值电压
+set_attribute -type boolean auto_ungroup none true
+          </div>
+
+          <h3>步骤7：报告分析</h3>
+          <p>生成并分析综合报告：</p>
+          <div class="code-block">
+# 时序报告
+report_timing -max_paths 10 > timing.rpt
+
+# 面积报告
+report_area > area.rpt
+
+# 功耗报告
+report_power > power.rpt
+
+# 单元报告
+report_cell > cell.rpt
+          </div>
+
+          <h3>步骤8：网表输出</h3>
+          <p>输出综合后的网表和约束文件：</p>
+          <div class="code-block">
+# 输出网表
+write -format verilog -hierarchy -output top_synth.v
+
+# 输出约束文件
+write_sdc -nosplit top_synth.sdc
+
+# 输出SDF文件
+write_sdf -version 2.1 top_synth.sdf
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <p>在综合过程中，建议使用<strong>增量综合</strong>策略。
+            对大型设计，可以先综合子模块，再综合顶层，这样可以减少综合时间并更容易定位问题。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 常见问题处理</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>问题</th>
+                <th>可能原因</th>
+                <th>解决方法</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>链接失败</td>
+                <td>缺少库文件或路径错误</td>
+                <td>检查search_path和library设置</td>
+              </tr>
+              <tr>
+                <td>时序违例</td>
+                <td>约束过紧或逻辑复杂</td>
+                <td>调整约束或优化设计架构</td>
+              </tr>
+              <tr>
+                <td>面积超标</td>
+                <td>未设置面积约束</td>
+                <td>添加set_max_area约束</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 综合流程包含8个主要步骤</li>
+                <li>• 每个步骤都有特定的目的和操作</li>
+                <li>• 约束设定是综合成功的关键</li>
+                <li>• 报告分析用于验证综合结果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-1-逻辑综合概述.html">← 上一节</a>
+          <a href="25-3-工艺库与目标库.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

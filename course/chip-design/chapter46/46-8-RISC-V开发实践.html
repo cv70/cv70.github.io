@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.8 RISC-V开发实践 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>46.8 RISC-V开发实践</h1>
+          <p class="subtitle">RISC-V 架构精讲</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握RISC-V汇编编程基础</li>
+            <li>理解RISC-V函数调用约定</li>
+            <li>学会使用调试工具</li>
+            <li>了解性能优化技巧</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">开发实践概述</h3>
+          <p class="card-text">
+            本节将通过实际案例介绍RISC-V开发中的关键技术和最佳实践，包括汇编编程、
+            函数调用、调试和性能优化。掌握这些技能将帮助你更高效地进行RISC-V开发。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 汇编编程实例</h2>
+          <div class="card">
+            <h3 class="card-title">示例：字符串复制</h3>
+            <div class="code-block">
+# char *strcpy(char *dest, const char *src)
+# a0: dest, a1: src
+# 返回: a0 (dest)
+
+strcpy:
+  mv t0, a0          # 保存dest指针
+
+loop:
+  lbu t1, 0(a1)      # 加载src字符（无符号）
+  sb t1, 0(a0)       # 存储到dest
+  addi a0, a0, 1     # dest++
+  addi a1, a1, 1     # src++
+  bnez t1, loop      # 如果不是'\0'则继续
+
+  mv a0, t0          # 返回原始dest指针
+  ret
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 函数调用约定</h2>
+          <div class="card">
+            <h3 class="card-title">RISC-V ABI调用规范</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>寄存器</th>
+                  <th>用途</th>
+                  <th>保存者</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ra (x1)</td>
+                  <td>返回地址</td>
+                  <td>调用者保存</td>
+                </tr>
+                <tr>
+                  <td>sp (x2)</td>
+                  <td>栈指针</td>
+                  <td>被调用者保存</td>
+                </tr>
+                <tr>
+                  <td>a0-a7</td>
+                  <td>参数/返回值</td>
+                  <td>调用者保存</td>
+                </tr>
+                <tr>
+                  <td>t0-t6</td>
+                  <td>临时寄存器</td>
+                  <td>调用者保存</td>
+                </tr>
+                <tr>
+                  <td>s0-s11</td>
+                  <td>保存寄存器</td>
+                  <td>被调用者保存</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 函数调用示例</h2>
+          <div class="card">
+            <h3 class="card-title">递归函数：斐波那契数列</h3>
+            <div class="code-block">
+# int fib(int n)
+# a0: n
+# 返回: a0 (fib(n))
+
+fib:
+  addi sp, sp, -16   # 分配栈空间
+  sw ra, 0(sp)       # 保存返回地址
+  sw s0, 4(sp)       # 保存s0
+
+  mv s0, a0          # s0 = n
+
+  li t0, 1
+  ble s0, t0, base_case  # if (n <= 1) return n
+
+  # fib(n-1)
+  addi a0, s0, -1    # a0 = n-1
+  call fib
+  mv s1, a0          # s1 = fib(n-1)
+
+  # fib(n-2)
+  addi a0, s0, -2    # a0 = n-2
+  call fib
+
+  add a0, a0, s1     # a0 = fib(n-1) + fib(n-2)
+  j epilogue
+
+base_case:
+  mv a0, s0          # return n
+
+epilogue:
+  lw ra, 0(sp)       # 恢复返回地址
+  lw s0, 4(sp)       # 恢复s0
+  addi sp, sp, 16    # 释放栈空间
+  ret
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 调试技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">GDB调试</h3>
+              <div class="code-block">
+# 启动GDB
+riscv64-unknown-elf-gdb program
+
+# 常用命令
+break main          # 设置断点
+run                 # 运行程序
+step                # 单步执行
+next                # 单步执行（跳过函数）
+print $x10          # 打印寄存器
+info registers      # 显示所有寄存器
+bt                  # 显示调用栈
+continue            # 继续执行
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">打印调试</h3>
+              <div class="code-block">
+# 使用ecall实现打印
+# 需要操作系统支持
+
+# 打印整数
+li a7, 1            # SYS_write
+mv a0, s0           # 文件描述符
+la a1, message      # 缓冲区
+li a2, len          # 长度
+ecall
+
+# 退出程序
+li a7, 93           # SYS_exit
+li a0, 0            # 退出码
+ecall
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">性能分析工具</div>
+            <p><strong>perf</strong> - Linux性能分析工具<br>
+            <strong>spike --log-commits</strong> - 记录指令执行<br>
+            <strong>riscv-objdump -d</strong> - 反汇编查看代码<br>
+            <strong>riscv-objdump -S</strong> - 混合源代码和汇编</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 性能优化技巧</h2>
+          <div class="card">
+            <h3 class="card-title">优化策略</h3>
+            <ul class="feature-list">
+              <li><strong>减少分支</strong> - 使用条件移动代替条件分支</li>
+              <li><strong>指令调度</strong> - 重排指令减少数据依赖</li>
+              <li><strong>循环展开</strong> - 减少循环开销</li>
+              <li><strong>内存访问优化</strong> - 利用Cache局部性</li>
+              <li><strong>使用压缩指令</strong> - 减少代码大小</li>
+              <li><strong>利用SIMD</strong> - 使用向量扩展加速</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 实战项目：数组求和优化</h2>
+          <div class="card">
+            <h3 class="card-title">基本实现 vs 优化实现</h3>
+            <div class="code-block">
+# 基本实现
+sum_basic:
+  mv t0, a0          # 数组指针
+  li t1, 0           # 和 = 0
+  mv t2, a1          # 计数器
+
+loop_basic:
+  beqz t2, end_basic
+  lw t3, 0(t0)
+  add t1, t1, t3
+  addi t0, t0, 4
+  addi t2, t2, -1
+  j loop_basic
+
+end_basic:
+  mv a0, t1
+  ret
+
+# 优化实现（循环展开4x）
+sum_optimized:
+  mv t0, a0          # 数组指针
+  li t1, 0           # 和 = 0
+  mv t2, a1          # 计数器
+
+  # 处理不能被4整除的部分
+  andi t3, t2, 3
+  beqz t3, loop_opt
+remainder_loop:
+  beqz t3, loop_opt
+  lw t4, 0(t0)
+  add t1, t1, t4
+  addi t0, t0, 4
+  addi t3, t3, -1
+  j remainder_loop
+
+loop_opt:
+  blt t2, 4, end_opt
+  lw t4, 0(t0)       # 展开4次
+  lw t5, 4(t0)
+  lw t6, 8(t0)
+  lw t7, 12(t0)
+  add t1, t1, t4
+  add t1, t1, t5
+  add t1, t1, t6
+  add t1, t1, t7
+  addi t0, t0, 16
+  addi t2, t2, -4
+  j loop_opt
+
+end_opt:
+  mv a0, t1
+  ret
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 常见错误与调试</h2>
+          <div class="card">
+            <h3 class="card-title">典型问题</h3>
+            <ul class="feature-list">
+              <li><strong>栈不平衡</strong> - 忘记恢复栈指针</li>
+              <li><strong>寄存器覆盖</strong> - 未正确保存/恢复寄存器</li>
+              <li><strong>对齐错误</strong> - 访问未对齐的内存</li>
+              <li><strong>延迟槽误解</strong> - RISC-V没有延迟槽</li>
+              <li><strong>立即数范围</strong> - 立即数超出12位范围</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">开发最佳实践</div>
+            <p>• 使用注释说明代码意图<br>
+            • 遵循调用约定规范<br>
+            • 编写测试用例验证正确性<br>
+            • 使用版本控制管理代码<br>
+            • 关注性能与可读性的平衡</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 掌握RISC-V汇编编程基础</li>
+                <li>• 理解函数调用约定和栈帧管理</li>
+                <li>• 学会使用GDB等调试工具</li>
+                <li>• 了解性能优化技巧和最佳实践</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="46-7-RISC-V生态系统.html">← 上一节</a>
+          <a href="../chapter47/47-1-处理器设计流程.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

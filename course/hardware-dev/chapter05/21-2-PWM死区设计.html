@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21.2 PWM死区设计 - 嵌入式硬件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>21.2 PWM死区设计</h1>
+      <p class="subtitle">互补输出与保护</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解PWM死区的概念与作用</li>
+        <li>掌握死区时间的计算方法</li>
+        <li>能够设计安全的互补PWM输出</li>
+        <li>了解死区对系统性能的影响</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=800" alt="PWM死区设计" class="card-image">
+      <h3 class="card-title">PWM死区设计</h3>
+      <p class="card-text"><strong>PWM死区（Dead Time）</strong>是互补PWM输出中防止桥臂直通的重要保护机制。
+    在H桥、半桥驱动电路中，死区设计直接影响系统的安全性和性能。本节将深入讲解PWM死区的设计要点。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 死区设计全景解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 为什么需要</h3>
+          <p class="card-text">理解死区防止直通的作用</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心内容</h3>
+          <p class="card-text">掌握死区时间的计算与设置</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何实现</h3>
+          <p class="card-text">学会设计安全有效的死区</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 死区的作用原理</h2>
+      <div class="card">
+        <h3 class="card-title">为什么需要死区</h3>
+        <div class="grid grid-2" style="margin-top: 1rem;">
+          <div>
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">直通风险</h4>
+            <ul style="font-size: 0.9rem; line-height: 1.6;">
+              <li>互补输出切换时存在过渡时间</li>
+              <li>关断延迟 + 导通延迟可能同时导通</li>
+              <li>直通导致电源短路、器件损坏</li>
+              <li>死区是防止直通的必要措施</li>
+            </ul>
+          </div>
+          <div>
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">死区机制</h4>
+            <ul style="font-size: 0.9rem; line-height: 1.6;">
+              <li>上管关断后延迟一段时间再开下管</li>
+              <li>下管关断后延迟一段时间再开上管</li>
+              <li>确保开关管完全关断后再开启</li>
+              <li>延迟时间即为死区时间</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 死区时间计算</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>影响因素</th>
+            <th>说明</th>
+            <th>典型值</th>
+            <th>计算方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>开关管关断时间（Toff）</td>
+            <td>开关管从导通到关断的时间</td>
+            <td>100-500ns</td>
+            <td>参考器件数据手册</td>
+          </tr>
+          <tr>
+            <td>驱动电路延迟（Td）</td>
+            <td>驱动电路的传输延迟</td>
+            <td>50-200ns</td>
+            <td>参考驱动芯片规格</td>
+          </tr>
+          <tr>
+            <td>安全裕量（Margin）</td>
+            <td>考虑温漂、参数离散</td>
+            <td>20-50ns</td>
+            <td>经验值</td>
+          </tr>
+          <tr>
+            <td>最小死区时间</td>
+            <td>理论最小死区</td>
+            <td>200-1000ns</td>
+            <td>Deadtime = Toff + Td + Margin</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 死区配置方法</h2>
+      <div class="card">
+        <h3 class="card-title">硬件死区 vs 软件死区</h3>
+        <div class="grid grid-2" style="margin-top: 1rem;">
+          <div>
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">硬件死区</h4>
+            <ul style="font-size: 0.9rem; line-height: 1.6;">
+              <li>使用MCU内置的硬件死区功能</li>
+              <li>精度高、不受中断影响</li>
+              <li>配置简单、可靠性高</li>
+              <li>推荐使用硬件实现</li>
+            </ul>
+          </div>
+          <div>
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">软件死区</h4>
+            <ul style="font-size: 0.9rem; line-height: 1.6;">
+              <li>通过软件延时实现死区</li>
+              <li>灵活性高、但精度差</li>
+              <li>受中断、调度影响</li>
+              <li>仅用于低速、精度要求低场合</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> 死区的影响</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">电压失真</h3>
+          <p class="card-text">死区会导致实际输出电压与理想PWM电压有偏差，特别是在低占空比和高占空比时失真更明显，影响控制精度。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">谐波增加</h3>
+          <p class="card-text">死区会在输出中引入额外的谐波分量，增加EMI，需要通过滤波器或软件补偿来改善。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">死区补偿</h3>
+          <p class="card-text">可通过软件算法补偿死区影响，如根据电流方向调整占空比，或使用前馈补偿技术。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">优化策略</h3>
+          <p class="card-text">在保证安全的前提下，死区时间应尽可能小，以减少死区对性能的影响。需要权衡安全性与性能。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>死区设计建议：1）仔细查阅开关管和驱动芯片的数据手册；2）实际测试验证死区设置是否足够；3）考虑最坏情况下的温度和参数变化；4）使用硬件死区功能优先于软件实现；5）对死区效应进行补偿，提高控制精度；6）通过示波器观察互补输出波形，确认无直通风险。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了PWM死区的作用与重要性</li>
+            <li>• 掌握了死区时间的计算方法</li>
+            <li>• 能够设计安全的互补PWM输出</li>
+            <li>• 了解了死区对系统性能的影响与补偿</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="21-1-PWM原理与参数.html">← 上一节</a>
+      <a href="21-3-H桥驱动电路.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

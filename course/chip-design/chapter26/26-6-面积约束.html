@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.6 面积约束 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.6 面积约束</h1>
+          <p class="subtitle">设计面积优化与约束方法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解面积约束的重要性</li>
+            <li>掌握面积约束的设置方法</li>
+            <li>学会面积优化技巧</li>
+            <li>了解面积与时序的权衡关系</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">什么是面积约束</h3>
+          <p class="card-text">
+            <strong>面积约束</strong>是指对设计所占用的芯片面积进行限制和优化的约束条件。
+            通过设置面积约束，可以指导综合工具在满足时序要求的前提下，
+            选择面积更小的实现方案，从而降低芯片成本。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 基本面积约束</h2>
+
+          <h3>set_max_area命令</h3>
+          <div class="code-block">
+# 设置最大面积（0表示尽可能小）
+set_max_area 0
+
+# 设置具体的面积上限
+set_max_area 100000
+
+# 针对特定模块
+set_max_area 5000 [get_cells sub_module]
+
+# 层次化面积约束
+set_max_area 20000 [get_cells cpu_core]
+set_max_area 10000 [get_cells memory_ctrl]
+          </div>
+
+          <h3>面积单位</h3>
+          <p>面积单位通常是平方微米（μm²）或工艺库定义的单位。
+            具体单位取决于工艺库的定义。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 面积报告分析</h2>
+
+          <h3>面积报告内容</h3>
+          <div class="code-block">
+# 生成面积报告
+report_area -hierarchy
+
+# 详细面积报告
+report_area -hierarchy -nosplit
+
+# 按单元类型统计
+report_cell
+
+# 设计层次面积
+report_design
+          </div>
+
+          <h3>面积报告解读</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>含义</th>
+                <th>优化建议</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Combinational area</td>
+                <td>组合逻辑面积</td>
+                <td>资源共享、逻辑简化</td>
+              </tr>
+              <tr>
+                <td>Noncombinational area</td>
+                <td>时序单元面积</td>
+                <td>优化寄存器使用</td>
+              </tr>
+              <tr>
+                <td>Net Interconnect area</td>
+                <td>连线面积</td>
+                <td>布局优化</td>
+              </tr>
+              <tr>
+                <td>Total area</td>
+                <td>总面积</td>
+                <td>综合优化策略</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 面积优化策略</h2>
+
+          <h3>1. 资源共享</h3>
+          <div class="code-block">
+# 启用资源共享
+set_resource_sharing true
+
+# 设置共享级别
+set_sharing_resource_effort high
+
+# 保留层次结构进行共享
+set_compile_sequential_area_recovery true
+          </div>
+
+          <h3>2. 逻辑简化</h3>
+          <div class="code-block">
+# 启用常量传播
+remove_constant_ports
+
+# 移除未使用的逻辑
+remove_unconnected_ports -blast_buses
+
+# 逻辑优化
+optimize_design -area
+
+# 展平层次结构
+ungroup -all -flatten
+          </div>
+
+          <h3>3. 单元选择</h3>
+          <div class="code-block">
+# 面积优先的综合
+compile -map_effort high -area_effort high
+
+# 使用最小单元库
+set_min_library saed90nm_min.db
+
+# 限制单元尺寸
+set_size_only [get_cells -filter "is_hierarchical == false"]
+          </div>
+
+          <h3>4. 编码优化</h3>
+          <p>在RTL设计阶段采用面积友好的编码风格：</p>
+          <ul class="feature-list">
+            <li>使用case语句而非if-else链</li>
+            <li>避免不必要的锁存器</li>
+            <li>合理使用状态机编码</li>
+            <li>复用相同的计算逻辑</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 面积与时序权衡</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">面积优先</h3>
+              <ul class="feature-list">
+                <li>使用小尺寸单元</li>
+                <li>资源共享最大化</li>
+                <li>逻辑深度增加</li>
+                <li>可能影响时序</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">时序优先</h3>
+              <ul class="feature-list">
+                <li>使用大驱动单元</li>
+                <li>逻辑展开</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>权衡策略</h3>
+          <div class="code-block">
+# 分阶段优化
+# 第一阶段：时序优先
+compile -map_effort high
+
+# 第二阶段：面积优化
+compile -inc -area_effort high
+
+# 或使用ultra模式
+compile_ultra -area_high_effort_script
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 面积约束实例</h2>
+
+          <div class="code-block">
+# ============================================================================
+# 面积约束与优化示例
+# ============================================================================
+
+# ========== 全局面积约束 ==========
+set_max_area 0
+
+# ========== 模块级面积约束 ==========
+set_max_area 15000 [get_cells cpu_core]
+set_max_area 8000 [get_cells dma_ctrl]
+set_max_area 5000 [get_cells uart]
+set_max_area 3000 [get_cells gpio]
+
+# ========== 面积优化设置 ==========
+# 资源共享
+set_resource_sharing true
+set_sharing_resource_effort high
+
+# 逻辑优化
+set_optimize_effort high
+set_area_high_effort true
+
+# 单元选择
+set_auto_wire_load_selection true
+set_size_only true
+
+# ========== 编译策略 ==========
+# 第一阶段：满足时序
+compile_ultra -timing_high_effort_script
+
+# 第二阶段：优化面积
+compile_ultra -area_high_effort_script
+
+# ========== 面积报告 ==========
+report_area -hierarchy > reports/area_hier.rpt
+report_cell > reports/cell_usage.rpt
+report_resources > reports/resources.rpt
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">面积优化建议</div>
+            <p>1）在设计早期就考虑面积约束；2）使用适当的编码风格；
+            3）避免过度的时序约束导致面积浪费；4）定期分析面积报告；
+            5）平衡面积、时序和功耗的需求。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 面积约束指导工具优化芯片面积</li>
+                <li>• 资源共享和逻辑简化是主要优化手段</li>
+                <li>• 面积与时序需要权衡</li>
+                <li>• 良好的RTL编码有助于面积优化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-5-时序例外.html">← 上一节</a>
+          <a href="26-7-功耗约束.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

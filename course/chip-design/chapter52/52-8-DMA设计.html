@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.8 DMA设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.8 DMA设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握DMA的基本原理与优势</li>
+            <li>理解DMA的传输模式与配置</li>
+            <li>学会DMA控制器的硬件设计</li>
+            <li>了解DMA与外设的协同工作</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> DMA概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>DMA（Direct Memory Access）</strong>直接内存访问是一种无需CPU干预的数据传输机制。DMA控制器可以在外设和内存之间、或内存和内存之间直接传输数据，大幅减轻CPU负担，提高系统效率。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">DMA优势</div>
+              <p>• 减轻CPU负担：CPU可执行其他任务<br>• 提高传输效率：高速数据传输<br>• 降低功耗：减少CPU唤醒次数<br>• 实时性好：满足实时数据传输需求</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DMA工作原理</h2>
+          <div class="card">
+            <h3 class="card-title">DMA传输流程</h3>
+            <p class="card-text">1. <strong>请求：</strong>外设向DMA控制器发起传输请求</p>
+            <p class="card-text">2. <strong>仲裁：</strong>DMA控制器仲裁多个请求，选择优先级最高的</p>
+            <p class="card-text">3. <strong>响应：</strong>DMA控制器响应请求，获得总线控制权</p>
+            <p class="card-text">4. <strong>传输：</strong>DMA控制器执行数据传输</p>
+            <p class="card-text">5. <strong>完成：</strong>传输完成，触发中断通知CPU</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> DMA传输类型</h2>
+          <table>
+            <thead><tr><th>类型</th><th>源地址</th><th>目的地址</th><th>应用场景</th></tr></thead>
+            <tbody>
+              <tr><td>内存到内存</td><td>内存</td><td>内存</td><td>内存复制、数据搬移</td></tr>
+              <tr><td>外设到内存</td><td>外设</td><td>内存</td><td>ADC数据采集、UART接收</td></tr>
+              <tr><td>内存到外设</td><td>内存</td><td>外设</td><td>DAC输出、UART发送</td></tr>
+              <tr><td>外设到外设</td><td>外设</td><td>外设</td><td>外设间数据转发</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> DMA控制器设计</h2>
+          <pre class="code-block"><code>// DMA控制器模块
+module dma_controller #(
+    parameter CHANNEL_NUM = 8,        // DMA通道数
+    parameter ADDR_WIDTH = 32,        // 地址宽度
+    parameter DATA_WIDTH = 32,        // 数据宽度
+    parameter BURST_MAX = 16          // 最大突发传输长度
+) (
+    // 系统接口
+    input  wire                          clk,
+    input  wire                          rst_n,
+
+    // 寄存器接口
+    input  wire                          reg_wr,
+    input  wire                          reg_rd,
+    input  wire [4:0]                    reg_addr,
+    input  wire [31:0]                   reg_wdata,
+    output wire [31:0]                   reg_rdata,
+
+    // DMA请求（来自外设）
+    input  wire [CHANNEL_NUM-1:0]        dma_req,       // DMA请求
+    output wire [CHANNEL_NUM-1:0]        dma_ack,       // DMA应答
+
+    // 总线接口（主端口）
+    output wire                          m_cmd_valid,
+    input  wire                          m_cmd_ready,
+    output wire [ADDR_WIDTH-1:0]         m_addr,
+    output wire                          m_cmd_write,
+    output wire [DATA_WIDTH/8-1:0]       m_cmd_strb,
+    output wire [DATA_WIDTH-1:0]         m_cmd_data,
+    output wire [7:0]                    m_cmd_len,     // 突发长度
+
+    input  wire                          m_rsp_valid,
+    output wire                          m_rsp_ready,
+    input  wire [DATA_WIDTH-1:0]         m_rsp_data,
+    input  wire                          m_rsp_last,
+
+    // 中断输出
+    output wire [CHANNEL_NUM-1:0]        transfer_done,  // 传输完成中断
+    output wire [CHANNEL_NUM-1:0]        transfer_error   // 传输错误中断
+);
+
+    // 通道寄存器
+    reg [ADDR_WIDTH-1:0] src_addr [CHANNEL_NUM-1:0];    // 源地址
+    reg [ADDR_WIDTH-1:0] dst_addr [CHANNEL_NUM-1:0];    // 目的地址
+    reg [15:0]           transfer_cnt [CHANNEL_NUM-1:0]; // 传输计数
+    reg [7:0]            burst_size [CHANNEL_NUM-1:0];   // 突发大小
+    reg [CHANNEL_NUM-1:0] channel_enable;               // 通道使能
+    reg [CHANNEL_NUM-1:0] channel_priority;             // 通道优先级
+    reg [2:0]            data_size [CHANNEL_NUM-1:0];   // 数据大小
+    reg [1:0]            addr_mode [CHANNEL_NUM-1:0];   // 地址模式
+
+    // 通道状态
+    reg [CHANNEL_NUM-1:0] channel_active;
+    reg [CHANNEL_NUM-1:0] channel_done;
+    reg [CHANNEL_NUM-1:0] channel_error;
+
+    // 仲裁器
+    reg [3:0] arbiter_ptr;
+    wire [CHANNEL_NUM-1:0] arbiter_grant;
+    reg [3:0] current_channel;
+
+    // 当前通道控制信号
+    reg [ADDR_WIDTH-1:0] curr_src_addr;
+    reg [ADDR_WIDTH-1:0] curr_dst_addr;
+    reg [15:0]           curr_transfer_cnt;
+    reg [7:0]            curr_burst_cnt;
+    reg                  curr_dir;  // 0=读(源->目的), 1=写
+    reg                  curr_active;
+
+    // 通道优先级编码器
+    integer k;
+    always @(*) begin
+        arbiter_grant = {CHANNEL_NUM{1'b0}};
+        for (k = 0; k < CHANNEL_NUM; k = k + 1) begin
+            if (dma_req[k] && channel_enable[k] && !channel_active[k]) begin
+                arbiter_grant[k] = 1;
+            end
+        end
+    end
+
+    // 优先级仲裁器
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            arbiter_ptr <= 0;
+            current_channel <= 0;
+            curr_active <= 0;
+        end else begin
+            if (curr_active && (curr_burst_cnt == 0 || curr_transfer_cnt == 0)) begin
+                // 当前通道传输完成
+                curr_active <= 0;
+                channel_active[current_channel] <= 0;
+            end else if (!curr_active && |arbiter_grant) begin
+                // 选择新通道
+                // 简单轮询仲裁
+                for (k = 0; k < CHANNEL_NUM; k = k + 1) begin
+                    if (arbiter_grant[(arbiter_ptr + k) % CHANNEL_NUM]) begin
+                        current_channel <= (arbiter_ptr + k) % CHANNEL_NUM;
+                        curr_src_addr <= src_addr[(arbiter_ptr + k) % CHANNEL_NUM];
+                        curr_dst_addr <= dst_addr[(arbiter_ptr + k) % CHANNEL_NUM];
+                        curr_transfer_cnt <= transfer_cnt[(arbiter_ptr + k) % CHANNEL_NUM];
+                        curr_burst_cnt <= burst_size[(arbiter_ptr + k) % CHANNEL_NUM];
+                        curr_active <= 1;
+                        channel_active[(arbiter_ptr + k) % CHANNEL_NUM] <= 1;
+                        arbiter_ptr <= (arbiter_ptr + k + 1) % CHANNEL_NUM;
+                    end
+                end
+            end
+        end
+    end
+
+    // DMA应答
+    assign dma_ack = channel_active;
+
+    // 总线主端口控制
+    assign m_cmd_valid = curr_active && (curr_burst_cnt > 0);
+    assign m_addr = curr_dir ? curr_dst_addr : curr_src_addr;
+    assign m_cmd_write = curr_dir;  // 1=写, 0=读
+    assign m_cmd_strb = {DATA_WIDTH/8{1'b1}};
+    assign m_cmd_len = curr_burst_cnt - 1;
+
+    // 总线响应处理
+    assign m_rsp_ready = 1;
+
+    // 传输状态更新
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            channel_done <= 0;
+            channel_error <= 0;
+        end else begin
+            channel_done <= 0;
+            channel_error <= 0;
+
+            if (curr_active && m_cmd_valid && m_cmd_ready) begin
+                // 命令已发送
+                if (!curr_dir) begin
+                    // 读操作，等待响应
+                    if (m_rsp_valid) begin
+                        // 数据读取完成，写入目的地址
+                        // （此处简化处理，实际需要写入FIFO或缓存）
+                        curr_src_addr <= curr_src_addr + (DATA_WIDTH/8);
+                        curr_dst_addr <= curr_dst_addr + (DATA_WIDTH/8);
+                        curr_transfer_cnt <= curr_transfer_cnt - 1;
+                        curr_burst_cnt <= curr_burst_cnt - 1;
+
+                        if (m_rsp_last || curr_transfer_cnt == 1) begin
+                            channel_done[current_channel] <= 1;
+                        end
+                    end
+                end else begin
+                    // 写操作
+                    curr_src_addr <= curr_src_addr + (DATA_WIDTH/8);
+                    curr_dst_addr <= curr_dst_addr + (DATA_WIDTH/8);
+                    curr_transfer_cnt <= curr_transfer_cnt - 1;
+                    curr_burst_cnt <= curr_burst_cnt - 1;
+
+                    if (curr_transfer_cnt == 1) begin
+                        channel_done[current_channel] <= 1;
+                    end
+                end
+            end
+        end
+    end
+
+    // 中断输出
+    assign transfer_done = channel_done;
+    assign transfer_error = channel_error;
+
+    // 寄存器读写（简化）
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        // 寄存器读逻辑
+    end
+
+    assign reg_rdata = rdata;
+
+    // 寄存器写（简化）
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            channel_enable <= 0;
+            channel_priority <= 0;
+        end else if (reg_wr) begin
+            // 寄存器写逻辑
+        end
+    end
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📐</span> DMA地址模式</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">固定地址</h3>
+              <p class="card-text">传输过程中地址保持不变：</p>
+              <p class="card-text">• 适用于外设寄存器访问<br>• 如UART数据寄存器<br>• 每次传输到相同地址</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">递增地址</h3>
+              <p class="card-text">传输后地址自动递增：</p>
+              <p class="card-text">• 适用于内存块传输<br>• 连续的数据缓冲区<br>• 每次传输地址+数据宽度</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">递减地址</h3>
+              <p class="card-text">传输后地址自动递减：</p>
+              <p class="card-text">• 特殊场景使用<br>• 堆栈操作<br>• 每次传输地址-数据宽度</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">重装载地址</h3>
+              <p class="card-text">传输完成后地址重置：</p>
+              <p class="card-text">• 循环缓冲区<br>• 音频/视频数据流<br>• 循环传输模式</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌊</span> DMA数据流</h2>
+          <div class="card">
+            <h3 class="card-title">DMA数据流架构</h3>
+            <p class="card-text">DMA控制器通常包含多个数据流（Stream），每个数据流包含：</p>
+            <p class="card-text">1. <strong>源通道：</strong>配置源地址、源数据宽度</p>
+            <p class="card-text">2. <strong>目的通道：</strong>配置目的地址、目的数据宽度</p>
+            <p class="card-text">3. <strong>传输计数器：</strong>记录剩余传输量</p>
+            <p class="card-text">4. <strong>FIFO：</strong>缓冲数据，处理宽度转换</p>
+            <p class="card-text">5. <strong>控制器：</strong>管理传输流程和状态</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> DMA与外设协同</h2>
+          <div class="card">
+            <h3 class="card-title">外设DMA请求</h3>
+            <p class="card-text">外设通过DMA请求信号与DMA控制器协同：</p>
+            <p class="card-text">• <strong>UART：</strong>接收数据就绪或发送缓冲区空</p>
+            <p class="card-text">• <strong>ADC：</strong>转换完成</p>
+            <p class="card-text">• <strong>SPI/I2C：</strong>数据接收/发送就绪</p>
+            <p class="card-text">• <strong>定时器：</strong>比较匹配/捕获事件</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">DMA请求映射</div>
+              <p>• 每个DMA通道可映射到多个外设请求<br>• 通过多路选择器选择请求源<br>• 支持多路复用和优先级配置</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DMA配置寄存器</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">通道配置寄存器（DMA_CCR）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [14] | MEM2MEM | 内存到内存模式 |</p>
+              <p class="card-text">| [13:12] | PL | 优先级 |</p>
+              <p class="card-text">| [11:10] | MSIZE | 内存数据宽度 |</p>
+              <p class="card-text">| [9:8] | PSIZE | 外设数据宽度 |</p>
+              <p class="card-text">| [7:6] | MINC | 内存地址递增 |</p>
+              <p class="card-text">| [5:4] | PINC | 外设地址递增 |</p>
+              <p class="card-text">| [3:2] | CIRC | 循环模式 |</p>
+              <p class="card-text">| [1:0] | DIR | 传输方向 |</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">通道配置寄存器（DMA_CCR）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [0] | EN | 通道使能 |</p>
+              <p class="card-text">| [1] | TCIE | 传输完成中断使能 |</p>
+              <p class="card-text">| [2] | HTIE | 半传输中断使能 |</p>
+              <p class="card-text">| [3] | TEIE | 传输错误中断使能 |</p>
+              <p class="card-text">| [4] | DIR | 传输方向 |</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> DMA性能优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">突发传输</h3>
+              <p class="card-text">一次传输多个数据：</p>
+              <p class="card-text">• 减少总线开销<br>• 提高传输效率<br>• 支持可配置突发长度</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">双缓冲</h3>
+              <p class="card-text">两个缓冲区交替使用：</p>
+              <p class="card-text">• 实现无间断数据流<br>• 防止数据丢失<br>• 适用于实时数据采集</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">链式传输</h3>
+              <p class="card-text">自动启动下一个传输：</p>
+              <p class="card-text">• 减少CPU干预<br>• 复杂的数据搬移<br>• 提高自动化程度</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">FIFO优化</h3>
+              <p class="card-text">使用FIFO缓冲数据：</p>
+              <p class="card-text">• 处理数据宽度转换<br>• 平衡传输速率<br>• 减少总线等待</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 数据丢失</strong><br>症状：传输数据不完整<br>解决：增加FIFO深度，优化缓冲区管理</p>
+              <p><strong>2. 总线冲突</strong><br>症状：DMA传输效率低<br>解决：优化优先级，使用多通道并行</p>
+              <p><strong>3. 地址越界</strong><br>症状：访问错误地址<br>解决：检查地址配置，添加边界检查</p>
+              <p><strong>4. 中断丢失</strong><br>症状：无法收到完成中断<br>解决：检查中断使能，确保中断服务及时</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• DMA是直接内存访问机制，无需CPU干预即可传输数据</li>
+                <li>• DMA支持内存到内存、外设到内存等多种传输类型</li>
+                <li>• DMA控制器包含通道管理、仲裁器、总线接口等模块</li>
+                <li>• 支持固定、递增、递减、重装载等多种地址模式</li>
+                <li>• 突发传输、双缓冲、链式传输可优化DMA性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-7-看门狗设计.html">← 上一节</a>
+          <a href="../chapter53/53-1.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

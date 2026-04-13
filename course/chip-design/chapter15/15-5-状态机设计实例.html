@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.5 状态机设计实例 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.5 状态机设计实例</h1>
+          <p class="subtitle">Verilog设计实例</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握状态机的三段式写法</li>
+            <li>理解Moore和Mealy状态机</li>
+            <li>学会设计序列检测器</li>
+            <li>能够实现交通灯控制等应用</li>
+          </ul>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 三段式状态机模板</h2>
+          <div class="code-block">
+<pre><code>// 三段式状态机模板
+module fsm_template(
+    input  clk,
+    input  rst_n,
+    input  in,
+    output out
+);
+    // 状态定义
+    localparam S0 = 2'b00;
+    localparam S1 = 2'b01;
+    localparam S2 = 2'b10;
+    localparam S3 = 2'b11;
+
+    reg [1:0] state, next_state;
+
+    // 第一段：状态寄存器
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            state <= S0;
+        else
+            state <= next_state;
+    end
+
+    // 第二段：次态逻辑
+    always @(*) begin
+        case (state)
+            S0: next_state = in ? S1 : S0;
+            S1: next_state = in ? S2 : S0;
+            S2: next_state = in ? S3 : S0;
+            S3: next_state = in ? S3 : S0;
+            default: next_state = S0;
+        endcase
+    end
+
+    // 第三段：输出逻辑
+    always @(*) begin
+        case (state)
+            S0: out = 1'b0;
+            S1: out = 1'b0;
+            S2: out = 1'b0;
+            S3: out = 1'b1;
+            default: out = 1'b0;
+        endcase
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 序列检测器</h2>
+          <div class="code-block">
+<pre><code>// "1011"序列检测器（Mealy型）
+module sequence_detector_1011(
+    input  clk,
+    input  rst_n,
+    input  data_in,
+    output detected
+);
+    localparam IDLE = 3'b000;
+    localparam S1   = 3'b001;
+    localparam S10  = 3'b010;
+    localparam S101 = 3'b011;
+    localparam S1011= 3'b100;
+
+    reg [2:0] state, next_state;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            state <= IDLE;
+        else
+            state <= next_state;
+    end
+
+    always @(*) begin
+        next_state = IDLE;
+        case (state)
+            IDLE: next_state = data_in ? S1 : IDLE;
+            S1:   next_state = data_in ? S1 : S10;
+            S10:  next_state = data_in ? S101 : IDLE;
+            S101: next_state = data_in ? S1011 : S10;
+            S1011:next_state = data_in ? S1 : S10;
+            default: next_state = IDLE;
+        endcase
+    end
+
+    assign detected = (state == S101) && data_in;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 三段式状态机结构清晰</li>
+                <li>• Moore状态机输出只取决于状态</li>
+                <li>• Mealy状态机输出取决于状态和输入</li>
+                <li>• 序列检测器是经典应用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="15-4-计数器与分频器设计.html">← 上一节</a>
+          <a href="15-6-存储器接口设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

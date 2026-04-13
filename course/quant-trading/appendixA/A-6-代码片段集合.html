@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A-6 代码片段集合 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>A-6 代码片段集合</h1>
+      <p class="subtitle">Python量化编程速查</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">📊</span> 数据获取</h2>
+      <div class="code-block">
+        <pre><code># Tushare数据获取
+import tushare as ts
+
+# 设置token
+ts.set_token('your_token')
+pro = ts.pro_api()
+
+# 获取股票日线数据
+df = pro.daily(ts_code='000001.SZ', start_date='20240101', end_date='20241231')
+
+# 获取股票列表
+stock_list = pro.stock_basic(exchange='', list_status='L')</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 技术指标计算</h2>
+      <div class="code-block">
+        <pre><code># 常用技术指标计算
+import pandas as pd
+import numpy as np
+
+# 移动平均线
+def SMA(data, period=20):
+    return data.rolling(window=period).mean()
+
+# 指数移动平均线
+def EMA(data, period=20):
+    return data.ewm(span=period, adjust=False).mean()
+
+# RSI指标
+def RSI(data, period=14):
+    delta = data.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+# 布林带
+def BollingerBands(data, period=20, std_dev=2):
+    sma = SMA(data, period)
+    std = data.rolling(window=period).std()
+    upper_band = sma + (std * std_dev)
+    lower_band = sma - (std * std_dev)
+    return upper_band, sma, lower_band
+
+# MACD指标
+def MACD(data, fast=12, slow=26, signal=9):
+    ema_fast = EMA(data, fast)
+    ema_slow = EMA(data, slow)
+    macd = ema_fast - ema_slow
+    signal_line = EMA(macd, signal)
+    histogram = macd - signal_line
+    return macd, signal_line, histogram</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💰</span> 收益率计算</h2>
+      <div class="code-block">
+        <pre><code># 收益率计算
+import pandas as pd
+
+# 简单收益率
+def simple_return(prices):
+    return prices.pct_change()
+
+# 对数收益率
+def log_return(prices):
+    return np.log(prices / prices.shift(1))
+
+# 累积收益率
+def cumulative_return(returns):
+    return (1 + returns).cumprod()
+
+# 年化收益率
+def annualized_return(returns, periods_per_year=252):
+    cumulative = cumulative_return(returns).iloc[-1]
+    years = len(returns) / periods_per_year
+    return cumulative ** (1/years) - 1</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📉</span> 风险指标计算</h2>
+      <div class="code-block">
+        <pre><code># 风险指标计算
+import numpy as np
+
+# 夏普比率
+def sharpe_ratio(returns, risk_free_rate=0.02):
+    excess_returns = returns - risk_free_rate/252
+    return excess_returns.mean() / excess_returns.std() * np.sqrt(252)
+
+# 最大回撤
+def max_drawdown(cumulative_returns):
+    cumulative = cumulative_returns.fillna(1)
+    rolling_max = cumulative.expanding().max()
+    drawdown = (cumulative - rolling_max) / rolling_max
+    return drawdown.min()
+
+# 波动率
+def volatility(returns, annualize=True):
+    vol = returns.std()
+    return vol * np.sqrt(252) if annualize else vol
+
+# VaR (在险价值)
+def var(returns, confidence=0.95):
+    return np.percentile(returns, 100 * (1 - confidence))</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 数据处理</h2>
+      <div class="code-block">
+        <pre><code># 数据处理实用函数
+import pandas as pd
+
+# 重采样
+def resample_data(data, freq='D'):
+    return data.resample(freq).mean()
+
+# 缺失值填充
+def fill_missing(data, method='ffill'):
+    return data.fillna(method=method)
+
+# 数据对齐
+def align_data(df1, df2):
+    return df1.align(df2, join='inner', axis=0)
+
+# 异常值检测
+def detect_outliers(data, std=3):
+    mean = data.mean()
+    std_dev = data.std()
+    return (data < mean - std * std_dev) | (data > mean + std * std_dev)</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💾</span> 数据库操作</h2>
+      <div class="code-block">
+        <pre><code># 数据库操作示例
+import pandas as pd
+from sqlalchemy import create_engine
+
+# 创建数据库连接
+engine = create_engine('mysql+pymysql://user:password@host/database')
+
+# 保存数据到数据库
+df.to_sql('stock_data', engine, if_exists='replace', index=False)
+
+# 从数据库读取数据
+df = pd.read_sql('SELECT * FROM stock_data', engine)
+
+# 时序数据库连接 (InfluxDB)
+from influxdb import InfluxDBClient
+client = InfluxDBClient(host='localhost', port=8086, database='quant')</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 性能优化</h2>
+      <div class="code-block">
+        <pre><code># 性能优化技巧
+import numpy as np
+
+# 向量化操作代替循环
+# 慢
+result = []
+for i in range(len(data)):
+    result.append(data[i] * 2)
+
+# 快
+result = data * 2
+
+# 使用numba加速
+from numba import jit
+
+@jit(nopython=True)
+def fast_calculations(data):
+    return np.sum(data * 2)
+
+# 并行处理
+from joblib import Parallel, delayed
+
+def parallel_apply(func, data, n_jobs=-1):
+    return Parallel(n_jobs=n_jobs)(delayed(func)(x) for x in data)</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">使用建议</div>
+        <p>这些代码片段可以直接复制使用。建议根据实际需求调整参数，
+        并在实盘使用前进行充分测试。注意异常处理和数据验证。</p>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="A-5-常用第三方库.html">← 上一节</a>
+      <a href="A-7-性能优化技巧.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

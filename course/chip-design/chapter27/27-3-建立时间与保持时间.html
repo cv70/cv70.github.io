@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.3 建立时间与保持时间 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.3 建立时间与保持时间</h1>
+          <p class="subtitle">时序检查的核心概念</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>深入理解建立时间和保持时间的概念</li>
+            <li>掌握Setup和Hold的检查方法</li>
+            <li>理解Setup和Hold违例的原因</li>
+            <li>学会分析和修复Setup/Hold问题</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 建立时间（Setup Time）</h2>
+
+          <h3>定义</h3>
+          <p><strong>建立时间（T_setup）</strong>是指在时钟沿到达之前，数据必须保持稳定的最短时间。</p>
+
+          <h3>Setup检查公式</h3>
+          <div class="code-block">
+T_data_arrival + T_setup <= T_clock_arrival + T_period
+
+其中：
+- T_data_arrival: 数据到达时间
+- T_setup: 寄存器建立时间
+- T_clock_arrival: 时钟到达时间
+- T_period: 时钟周期
+
+Slack = (T_clock_arrival + T_period) - (T_data_arrival + T_setup)
+          </div>
+
+          <h3>Setup违例</h3>
+          <p>当Slack < 0时，发生Setup违例。这意味着数据到达太晚，无法在时钟沿前稳定。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 保持时间（Hold Time）</h2>
+
+          <h3>定义</h3>
+          <p><strong>保持时间（T_hold）</strong>是指在时钟沿到达之后，数据必须保持稳定的最短时间。</p>
+
+          <h3>Hold检查公式</h3>
+          <div class="code-block">
+T_data_arrival >= T_clock_arrival + T_hold
+
+其中：
+- T_data_arrival: 数据到达时间
+- T_clock_arrival: 时钟到达时间
+- T_hold: 寄存器保持时间
+
+Slack = T_data_arrival - (T_clock_arrival + T_hold)
+          </div>
+
+          <h3>Hold违例</h3>
+          <p>当Slack < 0时，发生Hold违例。这意味着数据到达太早，在时钟沿后无法保持足够长时间。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Setup vs Hold</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>Setup Time</th>
+                <th>Hold Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>时间参考</td>
+                <td>时钟沿之前</td>
+                <td>时钟沿之后</td>
+              </tr>
+              <tr>
+                <td>主要因素</td>
+                <td>数据路径延迟</td>
+                <td>时钟偏斜</td>
+              </tr>
+              <tr>
+                <td>与频率关系</td>
+                <td>高频时更困难</td>
+                <td>与频率无关</td>
+              </tr>
+              <tr>
+                <td>修复方法</td>
+                <td>减少延迟、流水线</td>
+                <td>增加延迟、缓冲</td>
+              </tr>
+              <tr>
+                <td>违例后果</td>
+                <td>功能错误</td>
+                <td>亚稳态</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Setup违例修复</h2>
+
+          <h3>常见原因</h3>
+          <ul class="feature-list">
+            <li>组合逻辑延迟过大</li>
+            <li>时钟频率过高</li>
+            <li>输入延迟设置不合理</li>
+            <li>单元驱动能力不足</li>
+          </ul>
+
+          <h3>修复方法</h3>
+          <div class="code-block">
+# 1. 使用更大驱动能力的单元
+size_cell [get_cells small_driver*] BUFX4
+
+# 2. 减少逻辑层级
+# 修改RTL，减少组合逻辑深度
+
+# 3. 流水线化
+# 插入寄存器，分割长组合路径
+
+# 4. 设置多周期路径
+set_multicycle_path -setup 2 \
+    -from [get_cells source_reg] \
+    -to [get_cells dest_reg]
+
+# 5. 优化约束
+# 重新评估并放宽约束
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Hold违例修复</h2>
+
+          <h3>常见原因</h3>
+          <ul class="feature-list">
+            <li>时钟偏斜过大</li>
+            <li>数据路径延迟过小</li>
+            <li>时钟门控导致的时钟延迟差异</li>
+            <li>多时钟域交叉</li>
+          </ul>
+
+          <h3>修复方法</h3>
+          <div class="code-block">
+# 1. 插入延迟单元
+insert_buffer [get_pins fast_path*/A] BUFH1
+
+# 2. 调整单元尺寸（减小驱动）
+size_cell [get_cells fast_driver*] BUFX1
+
+# 3. 增加负载
+set_load 0.2 [get_pins data_in]
+
+# 4. 调整时钟树
+# 让时钟工具平衡时钟延迟
+
+# 5. 设置虚假路径（如果适用）
+set_false_path -hold -from [get_cells source_reg] \
+    -to [get_cells dest_reg]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 时序检查实例</h2>
+
+          <div class="code-block">
+# ============================================================================
+# Setup和Hold检查示例
+# ============================================================================
+
+# Setup检查
+report_timing -max_paths 20 -delay_type max \
+    > reports/setup_violations.rpt
+
+# Hold检查
+report_timing -max_paths 20 -delay_type min \
+    > reports/hold_violations.rpt
+
+# 检查特定路径的Setup和Hold
+report_timing -from [get_cells reg1/Q] \
+    -to [get_cells reg2/D] \
+    -max_paths 1 -delay_type max
+
+report_timing -from [get_cells reg1/Q] \
+    -to [get_cells reg2/D] \
+    -max_paths 1 -delay_type min
+
+# 检查所有寄存器的Setup和Hold
+check_timing -verbose > reports/check_timing.rpt
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">Setup/Hold权衡</div>
+            <p>修复Setup问题通常会增加延迟，可能导致Hold问题；
+            修复Hold问题会增加延迟，可能影响Setup。需要平衡两者，
+            通常先解决Setup问题，再修复Hold问题。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Setup和Hold是时序检查的基础</li>
+                <li>• Setup关注数据在时钟沿前稳定</li>
+                <li>• Hold关注数据在时钟沿后保持</li>
+                <li>• 修复需要理解违例的根本原因</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-2-时序路径分析.html">← 上一节</a>
+          <a href="27-4-PrimeTime使用.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

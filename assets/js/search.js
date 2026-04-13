@@ -39,6 +39,12 @@ const SearchEngine = {
         { title: 'JSON 代码生成', url: '/tool/json-to-code/', category: '工具', desc: 'JSON 转代码工具' },
         { title: 'AI应用开发修炼手册', url: '/course/ai-app-dev/', category: '课程', desc: '从零到实战的AI开发课程' },
         { title: 'AI产品经理修炼手册', url: '/course/ai-pm/', category: '课程', desc: '从产品思维到AI落地的全能型AI产品经理课程' },
+        { title: '投资人修炼手册', url: '/course/investor-manual/', category: '课程', desc: '从投资基础到实战专家的完整学习路径' },
+        { title: '创业者修炼手册', url: '/course/startup-manual/', category: '课程', desc: '从创业思维到融资退出的创业全流程指南' },
+        { title: '芯片设计修炼手册', url: '/course/chip-design/', category: '课程', desc: '数字芯片设计从入门到精通' },
+        { title: '嵌入式硬件开发修炼手册', url: '/course/hardware-dev/', category: '课程', desc: '嵌入式硬件开发完整课程体系' },
+        { title: '嵌入式软件开发修炼手册', url: '/course/embedded-dev/', category: '课程', desc: '嵌入式C语言与驱动开发实战' },
+        { title: '量化交易开发修炼手册', url: '/course/quant-trading/', category: '课程', desc: '量化交易策略与系统开发' },
         { title: '全栈应用开发修炼手册', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
     ],
 

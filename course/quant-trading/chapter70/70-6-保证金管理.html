@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>70.6 保证金管理 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>70.6 保证金管理</h1>
+      <p class="subtitle">商品期货量化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解期货保证金的基本概念</li>
+        <li>掌握保证金的计算方法</li>
+        <li>能够有效管理保证金风险</li>
+        <li>了解追保和强平的机制</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800" alt="保证金管理" class="card-image">
+      <h3 class="card-title">保证金管理</h3>
+      <p class="card-text"><strong>保证金管理</strong>是期货交易风险控制的核心。合理的保证金管理可以确保在极端行情下不被强制平仓，同时充分利用资金效率。本节将介绍保证金机制、计算方法和管理策略。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💰</span> 保证金类型</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">初始保证金</h3>
+          <ul class="feature-list">
+            <li>开仓时需要的资金</li>
+            <li>通常为合约价值的5-15%</li>
+            <li>交易所设定最低标准</li>
+            <li>期货公司可能提高要求</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">维持保证金</h3>
+          <ul class="feature-list">
+            <li>维持持仓所需的最低资金</li>
+            <li>通常为初始保证金的75%</li>
+            <li>低于此水平需追加保证金</li>
+            <li>用于风险监控</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">追加保证金</h3>
+          <ul class="feature-list">
+            <li>账户权益低于维持保证金</li>
+            <li>需在规定时间内补充资金</li>
+            <li>否则可能被强制平仓</li>
+            <li>通常T+1日中午前完成</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">强平保证金</h3>
+          <ul class="feature-list">
+            <li>触发强平的保证金水平</li>
+            <li>通常为初始保证金的50%</li>
+            <li>达到此水平自动平仓</li>
+            <li>保护交易所和期货公司风险</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 保证金计算</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>计算公式</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>合约价值</td>
+            <td>价格 × 合约单位 × 手数</td>
+            <td>一手期货合约的名义价值</td>
+          </tr>
+          <tr>
+            <td>初始保证金</td>
+            <td>合约价值 × 保证金率</td>
+            <td>开仓所需资金</td>
+          </tr>
+          <tr>
+            <td>维持保证金</td>
+            <td>初始保证金 × 维持比例</td>
+            <td>维持持仓最低资金</td>
+          </tr>
+          <tr>
+            <td>账户权益</td>
+            <td>可用资金 + 浮动盈亏</td>
+            <td>账户实际净值</td>
+          </tr>
+          <tr>
+            <td>可用资金</td>
+            <td>账户权益 - 占用保证金</td>
+            <td>可用于开仓的资金</td>
+          </tr>
+          <tr>
+            <td>保证金占用率</td>
+            <td>占用保证金 / 账户权益</td>
+            <td>资金使用效率指标</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Python实现示例</h2>
+      <pre><code class="language-python"># 保证金管理系统
+import pandas as pd
+import numpy as np
+
+class MarginManager:
+    """保证金管理器"""
+
+    def __init__(self, initial_capital):
+        self.initial_capital = initial_capital
+        self.available_capital = initial_capital
+        self.positions = {}
+        self.margin_rates = {}
+
+    def set_margin_rate(self, symbol, initial_rate, maintenance_rate=0.75):
+        """设置保证金率"""
+        self.margin_rates[symbol] = {
+            'initial': initial_rate,
+            'maintenance': initial_rate * maintenance_rate
+        }
+
+    def calculate_position_margin(self, symbol, price, quantity, contract_size):
+        """计算持仓保证金"""
+        if symbol not in self.margin_rates:
+            raise ValueError(f"Margin rate not set for {symbol}")
+
+        contract_value = price * quantity * contract_size
+        initial_margin = contract_value * self.margin_rates[symbol]['initial']
+        maintenance_margin = contract_value * self.margin_rates[symbol]['maintenance']
+
+        return {
+            'contract_value': contract_value,
+            'initial_margin': initial_margin,
+            'maintenance_margin': maintenance_margin
+        }
+
+    def open_position(self, symbol, side, price, quantity, contract_size):
+        """开仓"""
+        margin_info = self.calculate_position_margin(symbol, price, quantity, contract_size)
+
+        if margin_info['initial_margin'] > self.available_capital:
+            raise ValueError("Insufficient capital")
+
+        self.available_capital -= margin_info['initial_margin']
+        self.positions[symbol] = {
+            'side': side,
+            'price': price,
+            'quantity': quantity,
+            'contract_size': contract_size,
+            'initial_margin': margin_info['initial_margin'],
+            'maintenance_margin': margin_info['maintenance_margin']
+        }
+
+        return {
+            'status': 'success',
+            'margin_used': margin_info['initial_margin'],
+            'available_capital': self.available_capital
+        }
+
+    def update_pnl(self, symbol, current_price):
+        """更新盈亏"""
+        if symbol not in self.positions:
+            return 0
+
+        pos = self.positions[symbol]
+        if pos['side'] == 'long':
+            pnl = (current_price - pos['price']) * pos['quantity'] * pos['contract_size']
+        else:
+            pnl = (pos['price'] - current_price) * pos['quantity'] * pos['contract_size']
+
+        pos['pnl'] = pnl
+        return pnl
+
+    def check_margin_call(self, symbol, current_price):
+        """检查是否需要追加保证金"""
+        if symbol not in self.positions:
+            return {'margin_call': False}
+
+        self.update_pnl(symbol, current_price)
+        pos = self.positions[symbol]
+
+        account_equity = self.available_capital + pos['pnl']
+        total_margin = sum(p['initial_margin'] for p in self.positions.values())
+
+        margin_ratio = total_margin / account_equity
+
+        if margin_ratio > 1.0:
+            return {
+                'margin_call': True,
+                'type': 'force_close',
+                'action': '立即强平',
+                'equity': account_equity,
+                'required': total_margin
+            }
+        elif margin_ratio > 0.8:
+            return {
+                'margin_call': True,
+                'type': 'margin_call',
+                'action': '需要追加保证金',
+                'equity': account_equity,
+                'required': total_margin,
+                'shortfall': total_margin - account_equity
+            }
+        else:
+            return {
+                'margin_call': False,
+                'margin_ratio': margin_ratio
+            }
+
+    def calculate_position_size(self, symbol, price, risk_per_trade, stop_loss_distance, contract_size):
+        """根据风险计算仓位大小"""
+        if symbol not in self.margin_rates:
+            return 0
+
+        # 单笔风险金额
+        risk_amount = self.available_capital * risk_per_trade
+
+        # 根据止损距离计算合约数量
+        contracts_by_risk = int(risk_amount / (stop_loss_distance * contract_size))
+
+        # 根据保证金限制计算合约数量
+        margin_per_contract = price * contract_size * self.margin_rates[symbol]['initial']
+        contracts_by_margin = int(self.available_capital / margin_per_contract)
+
+        # 取两者较小值
+        contracts = min(contracts_by_risk, contracts_by_margin)
+
+        return {
+            'contracts': contracts,
+            'risk_amount': risk_amount,
+            'margin_required': contracts * margin_per_contract
+        }
+
+# 使用示例
+if __name__ == '__main__':
+    manager = MarginManager(initial_capital=1000000)
+
+    # 设置保证金率
+    manager.set_margin_rate('RB', 0.10)  # 螺纹钢10%保证金
+    manager.set_margin_rate('CU', 0.08)  # 铜8%保证金
+
+    # 开仓
+    result = manager.open_position(
+        symbol='RB',
+        side='long',
+        price=3800,
+        quantity=10,
+        contract_size=10
+    )
+    print("Open Position:", result)
+
+    # 检查保证金状态
+    margin_status = manager.check_margin_call('RB', 3850)
+    print("Margin Status:", margin_status)
+
+    # 计算仓位大小
+    position_size = manager.calculate_position_size(
+        symbol='RB',
+        price=3800,
+        risk_per_trade=0.02,
+        stop_loss_distance=100,
+        contract_size=10
+    )
+    print("Position Size:", position_size)
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 保证金管理策略</h2>
+      <div class="tip-box info">
+        <span class="icon">📋</span>
+        <div class="content">
+          <div class="title">保证金管理原则</div>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li><strong>保证金占用率</strong>: 控制在50-70%之间，保留应急资金</li>
+            <li><strong>单品种集中度</strong>: 单品种保证金不超过账户总资金的20%</li>
+            <li><strong>杠杆控制</strong>: 根据市场波动调整杠杆，波动大时降低杠杆</li>
+            <li><strong>动态调整</strong>: 根据盈亏动态调整仓位和保证金使用</li>
+            <li><strong>紧急预案</strong>: 预留10-20%资金应对极端行情</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">风险提示</div>
+        <p>保证金管理风险：1）高杠杆交易，小幅波动即可触发强平；2）市场跳空可能直接跳过止损；3）多品种相关性高时风险放大；4）极端行情下流动性不足，无法及时平仓；5）追加保证金不及时导致强平损失。建议严格控制杠杆，设置止损，监控保证金占用率。</p>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>保证金管理成功的关键：1）建立实时保证金监控系统；2）设置保证金占用率预警；3）根据市场波动调整仓位；4）分散投资降低集中度风险；5）预留充足应急资金；6）理解交易所保证金调整规则；7）制定强平应对预案。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了期货保证金的基本概念</li>
+            <li>• 掌握了保证金的计算方法</li>
+            <li>• 能够有效管理保证金风险</li>
+            <li>• 了解了追保和强平的机制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="70-5-交割机制.html">← 上一节</a>
+      <a href="70-7-商品CTA策略.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

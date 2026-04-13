@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.1 交叉编译工具链 - 嵌入式软件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>16.1 交叉编译工具链</h1>
+      <p class="subtitle">构建系统与工具链</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解交叉编译的概念与必要性</li>
+        <li>掌握交叉编译工具链的组成结构</li>
+        <li>学会获取和配置交叉编译工具链</li>
+        <li>能够搭建完整的交叉编译环境</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="交叉编译工具链" class="card-image">
+      <h3 class="card-title">交叉编译工具链</h3>
+      <p class="card-text"><strong>交叉编译工具链</strong>是"构建系统与工具链"这一章中的第1节内容。
+    嵌入式开发中，代码在主机上编译，但在目标设备上运行。本节将系统介绍交叉编译工具链的原理、
+    组成和使用方法，帮助你建立高效的开发环境。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 交叉编译全景解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 为什么需要</h3>
+          <p class="card-text">嵌入式设备资源有限，无法运行大型编译器</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心概念</h3>
+          <p class="card-text">主机与目标架构不同的编译环境</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何搭建</h3>
+          <p class="card-text">获取工具链、配置环境变量、验证编译</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 交叉编译基础概念</h2>
+      <h3>主机与目标机</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>主机(Host)</td>
+            <td>运行编译工具的计算机</td>
+            <td>x86_64 Linux、macOS</td>
+          </tr>
+          <tr>
+            <td>目标机(Target)</td>
+            <td>运行程序的嵌入式设备</td>
+            <td>ARM Cortex-M、RISC-V</td>
+          </tr>
+          <tr>
+            <td>本机编译</td>
+            <td>主机=目标机</td>
+            <td>PC上编译PC程序</td>
+          </tr>
+          <tr>
+            <td>交叉编译</td>
+            <td>主机≠目标机</td>
+            <td>PC上编译ARM程序</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>三元组命名规范</h3>
+      <div class="tip-box info">
+        <span class="icon">ℹ️</span>
+        <div class="content">
+          <div class="title">命名格式</div>
+          <p><strong>&lt;arch&gt;-&lt;vendor&gt;-&lt;os&gt;-&lt;libc&gt;</strong></p>
+          <p>常见示例：</p>
+          <ul>
+            <li>arm-none-eabi：ARM架构，无厂商，裸机环境，newlib</li>
+            <li>arm-linux-gnueabihf：ARM架构，无厂商，Linux系统，glibc硬浮点</li>
+            <li>aarch64-linux-gnu：ARM64架构，无厂商，Linux系统，glibc</li>
+            <li>riscv32-unknown-elf：RISC-V 32位架构，裸机环境</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛠️</span> 工具链组成</h2>
+      <h3>核心工具</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>工具</th>
+            <th>全称</th>
+            <th>功能</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>gcc</td>
+            <td>GNU Compiler Collection</td>
+            <td>C/C++编译器</td>
+          </tr>
+          <tr>
+            <td>g++</td>
+            <td>GNU C++ Compiler</td>
+            <td>C++编译器</td>
+          </tr>
+          <tr>
+            <td>ld</td>
+            <td>GNU Linker</td>
+            <td>链接器</td>
+          </tr>
+          <tr>
+            <td>as</td>
+            <td>GNU Assembler</td>
+            <td>汇编器</td>
+          </tr>
+          <tr>
+            <td>ar</td>
+            <td>Archiver</td>
+            <td>静态库打包工具</td>
+          </tr>
+          <tr>
+            <td>ranlib</td>
+            <td>Archive Index Generator</td>
+            <td>生成库索引</td>
+          </tr>
+          <tr>
+            <td>objdump</td>
+            <td>Object Dump</td>
+            <td>反汇编工具</td>
+          </tr>
+          <tr>
+            <td>objcopy</td>
+            <td>Object Copy</td>
+            <td>目标文件转换</td>
+          </tr>
+          <tr>
+            <td>size</td>
+            <td>Size Utility</td>
+            <td>显示段大小</td>
+          </tr>
+          <tr>
+            <td>readelf</td>
+            <td>Read ELF</td>
+            <td>ELF文件信息查看</td>
+          </tr>
+          <tr>
+            <td>strip</td>
+            <td>Strip Symbols</td>
+            <td>去除符号信息</td>
+          </tr>
+          <tr>
+            <td>nm</td>
+            <td>Name List</td>
+            <td>列出符号表</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 获取工具链</h2>
+      <h3>官方工具链</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>厂商</th>
+            <th>下载地址</th>
+            <th>支持架构</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ARM</td>
+            <td>developer.arm.com</td>
+            <td>ARM Cortex-M/A</td>
+          </tr>
+          <tr>
+            <td>GNU</td>
+            <td>ftp.gnu.org/gnu/gcc</td>
+            <td>多种架构</td>
+          </tr>
+          <tr>
+            <td>MCU Eclipse</td>
+            <td>github.com/gnu-mcu-eclipse</td>
+            <td>ARM/RISC-V等</td>
+          </tr>
+          <tr>
+            <td>SiFive</td>
+            <td>github.com/sifive/freedom-tools</td>
+            <td>RISC-V</td>
+          </tr>
+          <tr>
+            <td>Microchip</td>
+            <td>microchip.com</td>
+            <td>PIC/AVR</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Linux安装</h3>
+      <pre><code class="language-bash"># Ubuntu/Debian
+sudo apt-get install gcc-arm-none-eabi
+sudo apt-get install gcc-arm-linux-gnueabihf
+sudo apt-get install gcc-riscv32-unknown-elf
+
+# Fedora/RHEL
+sudo dnf install arm-none-eabi-gcc-cs
+sudo dnf install arm-linux-gnueabihf-gcc
+
+# macOS (通过Homebrew)
+brew install arm-none-eabi-gcc
+brew install riscv32-unknown-elf-gcc</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 配置环境</h2>
+      <h3>设置PATH</h3>
+      <pre><code class="language-bash"># 临时设置
+export PATH=/opt/gcc-arm-none-eabi/bin:$PATH
+
+# 永久设置(~/.bashrc或~/.zshrc)
+echo 'export PATH=/opt/gcc-arm-none-eabi/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc</code></pre>
+
+      <h3>验证安装</h3>
+      <pre><code class="language-bash"># 检查编译器版本
+arm-none-eabi-gcc --version
+arm-linux-gnueabihf-gcc --version
+
+# 查看支持的目标架构
+arm-none-eabi-gcc -print-multi-lib
+
+# 测试编译
+echo 'int main(){return 0;}' | arm-none-eabi-gcc -x c - -o test.elf
+
+# 查看生成的文件信息
+file test.elf
+readelf -h test.elf</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🌍</span> 常见架构工具链</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>架构</th>
+            <th>工具链前缀</th>
+            <th>典型应用</th>
+            <th>库类型</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ARM Cortex-M</td>
+            <td>arm-none-eabi-</td>
+            <td>STM32、NXP、TI</td>
+            <td>newlib、newlib-nano</td>
+          </tr>
+          <tr>
+            <td>ARM Cortex-A</td>
+            <td>arm-linux-gnueabihf-</td>
+            <td>树莓派、BeagleBone</td>
+            <td>glibc</td>
+          </tr>
+          <tr>
+            <td>ARM64</td>
+            <td>aarch64-linux-gnu-</td>
+            <td>Raspberry Pi 4/5</td>
+            <td>glibc</td>
+          </tr>
+          <tr>
+            <td>RISC-V 32位</td>
+            <td>riscv32-unknown-elf-</td>
+            <td>ES32、CH32</td>
+            <td>newlib</td>
+          </tr>
+          <tr>
+            <td>RISC-V 64位</td>
+            <td>riscv64-unknown-linux-gnu-</td>
+            <td>Linux RISC-V</td>
+            <td>glibc</td>
+          </tr>
+          <tr>
+            <td>MIPS</td>
+            <td>mips-linux-gnu-</td>
+            <td>路由器、IoT</td>
+            <td>uclibc、glibc</td>
+          </tr>
+          <tr>
+            <td>MSP430</td>
+            <td>msp430-elf-</td>
+            <td>TI MSP430</td>
+            <td>newlib</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">工具链选择建议</div>
+        <p>1）优先使用芯片厂商提供的工具链；
+        2）裸机开发选择带eabi的工具链；
+        3）Linux开发选择带linux-gnu的工具链；
+        4）注意工具链版本与芯片的兼容性；
+        5）定期更新工具链以获得性能改进和bug修复。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了交叉编译的基本概念</li>
+            <li>• 掌握了工具链的组成结构</li>
+            <li>• 学会了获取和配置工具链</li>
+            <li>• 能够搭建完整的交叉编译环境</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="#">← 上一节</a>
+      <a href="16-2-GCC编译选项详解.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

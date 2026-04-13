@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>19.4 总线接口设计 - 芯片设计开发手册</title>
+  <title>19.4 总线接口设计 - 芯片设计开发</title>
   <link rel="shortcut icon" href="/assets/img/favicon.ico">
   <link rel="stylesheet" href="../styles.css">
 </head>
@@ -12,136 +12,190 @@
 
   <div class="course-layout">
     <div id="sidebar-container"></div>
-
     <main class="course-main">
-  <div class="container" style="padding: 0;">
-    <header class="page-header">
-      <h1>19.4 总线接口设计</h1>
-      <p class="subtitle">RTL 设计方法论</p>
-    </header>
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>19.4 总线接口设计</h1>
+          <p class="subtitle">芯片间通信的桥梁</p>
+        </header>
 
-    <div class="content-block animate-fade-in-up">
-      <h2><span class="icon">🎯</span> 学习目标</h2>
-      <ul class="feature-list">
-        <li>理解片上总线的基本概念</li>
-        <li>掌握常用总线协议的RTL实现</li>
-        <li>了解AMBA总线协议族</li>
-        <li>能够设计简单的总线接口模块</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <h3 class="card-title">片上总线概述</h3>
-      <p class="card-text"><strong>片上总线</strong>是连接芯片内部各模块的通信通道，定义了数据传输的协议和接口标准。标准化的总线协议使得不同模块可以方便地集成，是SoC设计的基础。</p>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">📊</span> AMBA总线协议族</h2>
-      <table>
-        <thead>
-          <tr><th>协议</th><th>特点</th><th>应用场景</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>APB</td><td>简单、低功耗、无流水</td><td>外设访问、低速设备</td></tr>
-          <tr><td>AHB</td><td>高性能、流水线、突发传输</td><td>高速总线、存储器接口</td></tr>
-          <tr><td>AXI</td><td>高带宽、分离通道、乱序</td><td>高性能系统、多核处理器</td></tr>
-          <tr><td>ACE</td><td>缓存一致性扩展</td><td>多核缓存一致性</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">💡</span> AXI协议核心信号</h2>
-      <div class="grid grid-2">
-        <div class="card">
-          <h3 class="card-title">写通道</h3>
-          <ul>
-            <li><strong>AW（Write Address）</strong>：写地址通道</li>
-            <li><strong>W（Write Data）</strong>：写数据通道</li>
-            <li><strong>B（Write Response）</strong>：写响应通道</li>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解总线接口的基本概念</li>
+            <li>掌握常用总线协议</li>
+            <li>学会设计AXI接口</li>
+            <li>了解总线接口的时序约束</li>
           </ul>
         </div>
-        <div class="card">
-          <h3 class="card-title">读通道</h3>
-          <ul>
-            <li><strong>AR（Read Address）</strong>：读地址通道</li>
-            <li><strong>R（Read Data）</strong>：读数据通道</li>
-          </ul>
-        </div>
-      </div>
-    </div>
 
-    <div class="content-block">
-      <h2><span class="icon">🔧</span> 简单APB接口示例</h2>
-      <div class="code-block">
-        <pre><code>// 简单APB从接口
+        <div class="card">
+          <h3 class="card-title">总线接口概述</h3>
+          <p class="card-text">
+            <strong>总线接口</strong>是芯片与外部设备或其他芯片进行数据通信的通道。良好的总线接口设计需要考虑协议兼容性、时序匹配、带宽需求等多个方面。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 常用总线协议对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>总线类型</th>
+                <th>特点</th>
+                <th>应用场景</th>
+                <th>带宽</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>APB</td>
+                <td>简单、低功耗</td>
+                <td>低速外设配置</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>AHB</td>
+                <td>流水线、高带宽</td>
+                <td>高性能系统</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>AXI</td>
+                <td>多通道、突发传输</td>
+                <td>SoC内部互联</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>PCIe</td>
+                <td>串行、高速</td>
+                <td>扩展卡、高速IO</td>
+                <td>极高</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> AXI总线特点</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">通道结构</h3>
+              <ul class="feature-list">
+                <li>读地址通道</li>
+                <li>读数据通道</li>
+                <li>写地址通道</li>
+                <li>写数据通道</li>
+                <li>写响应通道</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">核心特性</h3>
+              <ul class="feature-list">
+                <li>分离的地址/数据通道</li>
+                <li>支持未对齐传输</li>
+                <li>突发传输支持</li>
+                <li>乱序完成支持</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 简单APB从机接口代码</h2>
+          <div class="code-block">
+<pre>// APB Slave接口
 module apb_slave (
+    // APB信号
     input  wire        pclk,
     input  wire        presetn,
-    input  wire [31:0] paddr,
     input  wire        psel,
     input  wire        penable,
     input  wire        pwrite,
+    input  wire [31:0] paddr,
     input  wire [31:0] pwdata,
     output reg  [31:0] prdata,
-    output reg         pready
-);
-    reg [31:0] mem [0:255];
+    output reg         pready,
 
-    always @(posedge pclk or negedge presetn) begin
-        if (!presetn) begin
-            pready <= 1'b0;
-        end else if (psel && penable) begin
-            if (pwrite)
-                mem[paddr[9:2]] <= pwdata;
-            else
-                prdata <= mem[paddr[9:2]];
-            pready <= 1'b1;
-        end else begin
-            pready <= 1'b0;
+    // 内部寄存器接口
+    output reg  [31:0] reg0,
+    output reg  [31:0] reg1
+);
+
+always @(posedge pclk or negedge presetn) begin
+    if (!presetn) begin
+        reg0   <= 32'h0;
+        reg1   <= 32'h0;
+        prdata <= 32'h0;
+        pready <= 1'b0;
+    end else begin
+        pready <= 1'b1;
+
+        if (psel && penable) begin
+            if (pwrite) begin
+                case (paddr[7:0])
+                    8'h00: reg0 <= pwdata;
+                    8'h04: reg1 <= pwdata;
+                endcase
+            end else begin
+                case (paddr[7:0])
+                    8'h00: prdata <= reg0;
+                    8'h04: prdata <= reg1;
+                    default: prdata <= 32'h0;
+                endcase
+            end
         end
     end
-endmodule</code></pre>
-      </div>
-    </div>
+end
 
-    <div class="tip-box info">
-      <span class="icon">💡</span>
-      <div class="content">
-        <div class="title">总线设计要点</div>
-        <p>1. 严格遵循时序要求，保证setup/hold时间<br>
-        2. 合理使用流水线提高吞吐率<br>
-        3. 考虑总线仲裁和优先级<br>
-        4. 支持错误处理和恢复机制</p>
-      </div>
-    </div>
+endmodule</pre>
+          </div>
+        </div>
 
-    <div class="content-block">
-      <h2><span class="icon">📝</span> 本节小结</h2>
-      <div class="tip-box success">
-        <span class="icon">✅</span>
-        <div class="content">
-          <ul style="list-style: none; padding: 0;">
-            <li>• 片上总线是SoC模块通信的基础</li>
-            <li>• AMBA是最广泛使用的总线标准</li>
-            <li>• AXI采用分离通道设计，性能最高</li>
-            <li>• 总线接口需要严格遵循协议规范</li>
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 接口时序设计要点</h2>
+          <ul class="feature-list">
+            <li>建立时间和保持时间满足要求</li>
+            <li>时钟偏移（skew）控制在范围内</li>
+            <li>输出延迟符合接口规范</li>
+            <li>输入采样窗口充足</li>
+            <li>考虑PCB走线延迟</li>
           </ul>
         </div>
-      </div>
-    </div>
 
-    <div class="chapter-nav">
-      <a href="19-3-异步FIFO设计.html">← 上一节</a>
-      <a href="19-5-低功耗设计技术.html">下一节 →</a>
-    </div>
-  </div>
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">设计注意事项</div>
+            <p>总线接口设计时必须严格遵循协议规范，在仿真中验证所有时序参数，并在实际硬件上进行充分的时序分析。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 总线接口是芯片通信的重要通道</li>
+                <li>• 不同总线协议适用于不同场景</li>
+                <li>• AXI是现代SoC的主流总线</li>
+                <li>• 接口设计需严格遵守时序规范</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="19-3-异步FIFO设计.html">← 上一节</a>
+          <a href="19-5-低功耗设计技术.html">下一节 →</a>
+        </div>
+      </div>
     </main>
   </div>
 
   <script src="/assets/js/dark-mode.js"></script>
   <script src="../load-sidebar.js"></script>
-
     <div id="footer-container"></div>
     <script src="/assets/js/load-components.js"></script>
 </body>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.8 多模式多角分析 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.8 多模式多角分析</h1>
+          <p class="subtitle">MCMM综合方法与实践</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解多模式多角（MCMM）的概念</li>
+            <li>掌握MCMM综合的配置方法</li>
+            <li>学会分析多角下的时序结果</li>
+            <li>了解MCMM在先进工艺中的重要性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">什么是MCMM</h3>
+          <p class="card-text">
+            <strong>多模式多角（Multi-Corner Multi-Mode，MCMM）</strong>是指在综合时同时考虑
+            多种工作模式和多个工艺角的设计方法。随着工艺节点的推进，工艺变异和操作条件的
+            影响越来越大，MCMM成为确保设计可靠性的必要手段。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌡️</span> 工艺角（Corner）</h2>
+
+          <h3>典型工艺角定义</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>工艺角</th>
+                <th>工艺</th>
+                <th>电压</th>
+                <th>温度</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SS</td>
+                <td>Slow</td>
+                <td>0.9V</td>
+                <td>125°C</td>
+                <td>最差时序（setup）</td>
+              </tr>
+              <tr>
+                <td>TT</td>
+                <td>Typical</td>
+                <td>1.0V</td>
+                <td>25°C</td>
+                <td>典型条件</td>
+              </tr>
+              <tr>
+                <td>FF</td>
+                <td>Fast</td>
+                <td>1.1V</td>
+                <td>-40°C</td>
+                <td>最佳时序（hold）</td>
+              </tr>
+              <tr>
+                <td>SF</td>
+                <td>Slow/Fast</td>
+                <td>-</td>
+                <td>-</td>
+                <td>跨角分析</td>
+              </tr>
+              <tr>
+                <td>FS</td>
+                <td>Fast/Slow</td>
+                <td>-</td>
+                <td>-</td>
+                <td>跨角分析</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 工作模式（Mode）</h2>
+
+          <h3>常见设计模式</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">功能模式</h3>
+              <p class="card-text">正常工作模式，主要功能执行</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">测试模式</h3>
+              <p class="card-text">DFT测试模式，扫描链使能</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">低功耗模式</h3>
+              <p class="card-text">省电模式，部分模块关断</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调试模式</h3>
+              <p class="card-text">调试访问模式，JTAG使能</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> MCMM配置</h2>
+
+          <h3>定义工艺角</h3>
+          <div class="code-block">
+# 定义慢角
+create_corner ss_corner
+read_lib -corner ss_corner \
+    /foundry/libraries/saed90nm/ss.db
+
+# 定义快角
+create_corner ff_corner
+read_lib -corner ff_corner \
+    /foundry/libraries/saed90nm/ff.db
+
+# 定义典型角
+create_corner tt_corner
+read_lib -corner tt_corner \
+    /foundry/libraries/saed90nm/tt.db
+
+# 设置操作条件
+set_operating_conditions -corner ss_corner ss_0.9V_125C
+set_operating_conditions -corner ff_corner ff_1.1V_-40C
+set_operating_conditions -corner tt_corner tt_1.0V_25C
+          </div>
+
+          <h3>定义工作模式</h3>
+          <div class="code-block">
+# 创建功能模式
+create_mode func_mode
+
+# 创建测试模式
+create_mode test_mode
+
+# 设置活动模式
+current_mode func_mode
+          </div>
+
+          <h3>为不同模式设置约束</h3>
+          <div class="code-block">
+# 功能模式约束
+current_mode func_mode
+create_clock -name CLK -period 10.0 [get_ports clk]
+set_clock_uncertainty -setup 0.3 [get_clocks CLK]
+
+# 测试模式约束（时钟较慢）
+current_mode test_mode
+create_clock -name CLK -period 15.0 [get_ports clk]
+set_clock_uncertainty -setup 0.5 [get_clocks CLK]
+
+# 设置测试模式特定约束
+set_disable_timing [get_cells scan_enable*]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> MCMM综合流程</h2>
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# MCMM综合脚本
+# ============================================================================
+
+# 1. 定义所有工艺角
+# ============================================
+puts "定义工艺角..."
+
+# SS角
+create_corner ss_corner
+read_lib -corner ss_corner lib/saed90nm_ss.db
+set_operating_conditions -corner ss_corner WCCOM
+
+# FF角
+create_corner ff_corner
+read_lib -corner ff_corner lib/saed90nm_ff.db
+set_operating_conditions -corner ff_corner BCCOM
+
+# TT角
+create_corner tt_corner
+read_lib -corner tt_corner lib/saed90nm_tt.db
+set_operating_conditions -corner tt_corner NOM
+
+# 2. 定义工作模式
+# ============================================
+puts "定义工作模式..."
+
+# 功能模式
+create_mode func_mode
+current_mode func_mode
+
+# 测试模式
+create_mode test_mode
+
+# 3. 为每个模式设置约束
+# ============================================
+puts "设置模式约束..."
+
+# 功能模式约束
+current_mode func_mode
+create_clock -name CLK -period 10.0 [get_ports clk]
+set_clock_uncertainty -setup 0.3 [get_clocks CLK]
+set_clock_uncertainty -hold 0.1 [get_clocks CLK]
+
+set_input_delay -max 2.0 -clock CLK [all_inputs]
+set_output_delay -max 2.0 -clock CLK [all_outputs]
+
+# 测试模式约束
+current_mode test_mode
+create_clock -name CLK -period 15.0 [get_ports clk]
+set_clock_uncertainty -setup 0.5 [get_clocks CLK]
+set_clock_uncertainty -hold 0.2 [get_clocks CLK]
+
+# 禁用测试模式下的某些路径
+set_false_path -from [get_ports scan_enable*]
+
+# 4. 读入设计
+# ============================================
+puts "读入设计..."
+read_verilog {top.v sub1.v sub2.v}
+current_design top
+link
+
+# 5. MCMM综合
+# ============================================
+puts "执行MCMM综合..."
+
+# 设置综合考虑所有角落
+set_timing_derate -cell_delay -early 1.1 -corner ff_corner
+set_timing_derate -cell_delay -late 1.15 -corner ss_corner
+
+# 执行综合
+compile_ultra -retime
+
+# 6. 分析所有角的结果
+# ============================================
+puts "生成多角报告..."
+
+# 为每个角生成时序报告
+foreach corner [list ss_corner ff_corner tt_corner] {
+    puts "分析工艺角: $corner"
+    report_timing -corner $corner -max_paths 10 \
+        > "reports/timing_${corner}.rpt"
+}
+
+# 为每个模式生成报告
+foreach mode [list func_mode test_mode] {
+    puts "分析模式: $mode"
+    report_timing -mode $mode -max_paths 10 \
+        > "reports/timing_${mode}.rpt"
+}
+
+# 7. 输出结果
+# ============================================
+puts "输出结果..."
+write -format verilog -hierarchy -output outputs/top_mcmm.v
+write_sdc -nosplit outputs/top_mcmm.sdc
+
+puts "MCMM综合完成！"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> MCMM报告分析</h2>
+
+          <h3>多角时序对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>工艺角/模式</th>
+                <th>WNS (ns)</th>
+                <th>TNS (ns)</th>
+                <th>关键路径</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SS / Func</td>
+                <td>-0.25</td>
+                <td>-1.50</td>
+                <td>data_path</td>
+              </tr>
+              <tr>
+                <td>FF / Func</td>
+                <td>2.10</td>
+                <td>15.30</td>
+                <td>clock_path</td>
+              </tr>
+              <tr>
+                <td>TT / Func</td>
+                <td>0.80</td>
+                <td>5.20</td>
+                <td>data_path</td>
+              </tr>
+              <tr>
+                <td>SS / Test</td>
+                <td>0.35</td>
+                <td>2.10</td>
+                <td>scan_path</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">MCMM注意事项</div>
+            <p>MCMM综合会显著增加运行时间和内存使用。
+            对于大型设计，建议先在典型条件下进行初始综合，然后在MCMM环境下进行优化。
+            同时，要合理选择需要分析的角落和模式，避免过度配置。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• MCMM考虑多种工作模式和工艺角</li>
+                <li>• 工艺角包括SS、FF、TT等组合</li>
+                <li>• 工作模式包括功能、测试、低功耗等</li>
+                <li>• MCMM确保设计在各种条件下都能可靠工作</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-7-综合脚本编写.html">← 上一节</a>
+          <a href="../chapter26/26-1-SDC约束语言.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

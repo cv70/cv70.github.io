@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.3 译码单元设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.3 译码单元设计</h1>
+          <p class="subtitle">RISC-V 处理器设计实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解译码单元的功能和设计要点</li>
+            <li>掌握指令译码的逻辑实现</li>
+            <li>了解控制信号的生成方法</li>
+            <li>熟悉立即数生成和扩展</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">译码单元概述</h3>
+          <p class="card-text">
+            <strong>译码单元（Instruction Decode Unit, IDU）</strong>负责解析指令的各个字段，
+            生成控制信号用于指导后续流水线阶段的操作。IDU需要识别指令类型、提取操作数、
+            生成立即数，并产生相应的控制信号。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧩</span> 指令字段解析</h2>
+          <div class="card">
+            <h3 class="card-title">RISC-V指令格式</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>格式</th>
+                  <th>字段</th>
+                  <th>描述</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>R型</td>
+                  <td>func7, rs2, rs1, funct3, rd, opcode</td>
+                  <td>寄存器-寄存器操作</td>
+                </tr>
+                <tr>
+                  <td>I型</td>
+                  <td>imm[11:0], rs1, funct3, rd, opcode</td>
+                  <td>立即数操作/加载</td>
+                </tr>
+                <tr>
+                  <td>S型</td>
+                  <td>imm[11:5], rs2, rs1, funct3, imm[4:0], opcode</td>
+                  <td>存储操作</td>
+                </tr>
+                <tr>
+                  <td>B型</td>
+                  <td>imm[12|10:5], rs2, rs1, funct3, imm[4:1|11], opcode</td>
+                  <td>条件分支</td>
+                </tr>
+                <tr>
+                  <td>U型</td>
+                  <td>imm[31:12], rd, opcode</td>
+                  <td>上位立即数</td>
+                </tr>
+                <tr>
+                  <td>J型</td>
+                  <td>imm[20|10:1|11|19:12], rd, opcode</td>
+                  <td>无条件跳转</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 译码逻辑</h2>
+          <div class="card">
+            <h3 class="card-title">指令类型识别</h3>
+            <div class="code-block">
+// 指令类型识别
+wire [6:0] opcode = instr[6:0];
+
+// R型指令
+wire is_r_type = (opcode == 7'b0110011);
+
+// I型指令
+wire is_i_type = (opcode == 7'b0010011) ||  // 立即数运算
+                 (opcode == 7'b0000011) ||  // 加载
+                 (opcode == 7'b1100111);    // JALR
+
+// S型指令
+wire is_s_type = (opcode == 7'b0100011);
+
+// B型指令
+wire is_b_type = (opcode == 7'b1100011);
+
+// U型指令
+wire is_u_type = (opcode == 7'b0110111) ||  // LUI
+                 (opcode == 7'b0010111);    // AUIPC
+
+// J型指令
+wire is_j_type = (opcode == 7'b1101111);
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 寄存器字段提取</h2>
+          <div class="card">
+            <h3 class="card-title">寄存器编号</h3>
+            <div class="code-block">
+// 提取寄存器字段
+wire [4:0] rs1 = instr[19:15];
+wire [4:0] rs2 = instr[24:20];
+wire [4:0] rd  = instr[11:7];
+
+// funct字段
+wire [2:0] funct3 = instr[14:12];
+wire [6:0] funct7 = instr[31:25];
+
+// 检测x0寄存器
+wire rs1_is_zero = (rs1 == 5'b0);
+wire rs2_is_zero = (rs2 == 5'b0);
+wire rd_is_zero  = (rd  == 5'b0);
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 立即数生成与扩展</h2>
+          <div class="card">
+            <h3 class="card-title">立即数符号扩展</h3>
+            <div class="code-block">
+// I型立即数
+wire [31:0] imm_i = {{20{instr[31]}}, instr[31:20]};
+
+// S型立即数
+wire [31:0] imm_s = {{20{instr[31]}}, instr[31:25], instr[11:7]};
+
+// B型立即数
+wire [31:0] imm_b = {{20{instr[31]}},
+                     instr[31],
+                     instr[7],
+                     instr[30:25],
+                     instr[11:8],
+                     1'b0};
+
+// U型立即数
+wire [31:0] imm_u = {instr[31:12], 12'b0};
+
+// J型立即数
+wire [31:0] imm_j = {{12{instr[31]}},
+                     instr[31],
+                     instr[19:12],
+                     instr[20],
+                     instr[30:21],
+                     1'b0};
+
+// 选择立即数
+wire [31:0] imm;
+assign imm = (is_i_type) ? imm_i :
+             (is_s_type) ? imm_s :
+             (is_b_type) ? imm_b :
+             (is_u_type) ? imm_u :
+             (is_j_type) ? imm_j : 32'b0;
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">B型和J型立即数重组</div>
+            <p>B型和J型立即数的字段在指令中是不连续的，需要重新组合：
+            <br>• B型：imm[12|10:5] + rs2 + rs1 + funct3 + imm[4:1|11]<br>
+            • J型：imm[20] + imm[10:1] + imm[11] + imm[19:12] + rd + opcode</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 控制信号生成</h2>
+          <div class="card">
+            <h3 class="card-title">主要控制信号</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>信号</th>
+                  <th>描述</th>
+                  <th>值</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>alu_op</td>
+                  <td>ALU操作码</td>
+                  <td>ADD/SUB/AND/OR/XOR等</td>
+                </tr>
+                <tr>
+                  <td>alu_src</td>
+                  <td>ALU源选择</td>
+                  <td>0=rs2, 1=imm</td>
+                </tr>
+                <tr>
+                  <td>mem_read</td>
+                  <td>内存读使能</td>
+                  <td>0/1</td>
+                </tr>
+                <tr>
+                  <td>mem_write</td>
+                  <td>内存写使能</td>
+                  <td>0/1</td>
+                </tr>
+                <tr>
+                  <td>mem_to_reg</td>
+                  <td>写回源选择</td>
+                  <td>0=ALU结果, 1=内存数据</td>
+                </tr>
+                <tr>
+                  <td>reg_write</td>
+                  <td>寄存器写使能</td>
+                  <td>0/1</td>
+                </tr>
+                <tr>
+                  <td>branch</td>
+                  <td>分支指令</td>
+                  <td>0/1</td>
+                </tr>
+                <tr>
+                  <td>jump</td>
+                  <td>跳转指令</td>
+                  <td>0/1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 译码器实现</h2>
+          <div class="card">
+            <h3 class="card-title">控制信号生成示例</h3>
+            <div class="code-block">
+// ALU操作码
+wire [3:0] alu_op;
+always @(*) begin
+  case (opcode)
+    7'b0110011: begin  // R型
+      case (funct3)
+        3'b000: alu_op = funct7[5] ? `ALU_SUB : `ALU_ADD;
+        3'b111: alu_op = `ALU_AND;
+        3'b110: alu_op = `ALU_OR;
+        3'b100: alu_op = `ALU_XOR;
+        3'b001: alu_op = `ALU_SLL;
+        3'b101: alu_op = funct7[5] ? `ALU_SRA : `ALU_SRL;
+        default: alu_op = `ALU_ADD;
+      endcase
+    end
+    7'b0010011: begin  // I型
+      case (funct3)
+        3'b000: alu_op = `ALU_ADD;
+        3'b111: alu_op = `ALU_AND;
+        3'b110: alu_op = `ALU_OR;
+        3'b100: alu_op = `ALU_XOR;
+        3'b001: alu_op = `ALU_SLL;
+        3'b101: alu_op = funct7[5] ? `ALU_SRA : `ALU_SRL;
+        default: alu_op = `ALU_ADD;
+      endcase
+    end
+    default: alu_op = `ALU_ADD;
+  endcase
+end
+
+// 控制信号
+assign reg_write  = is_r_type | is_i_type | is_j_type | is_u_type;
+assign mem_read   = (opcode == 7'b0000011);
+assign mem_write  = (opcode == 7'b0100011);
+assign branch     = (opcode == 7'b1100011);
+assign jump       = (opcode == 7'b1101111) | (opcode == 7'b1100111);
+assign alu_src    = is_i_type | is_s_type | is_b_type | is_u_type;
+assign mem_to_reg = mem_read;
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 译码单元解析指令字段并生成控制信号</li>
+                <li>• 需要处理6种不同的指令格式</li>
+                <li>• 立即数需要正确的符号扩展</li>
+                <li>• 控制信号指导后续流水线阶段</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-2-取指单元设计.html">← 上一节</a>
+          <a href="47-4-执行单元设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.6 写回单元设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.6 写回单元设计</h1>
+          <p class="subtitle">RISC-V 处理器设计实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解写回单元的功能和设计要点</li>
+            <li>掌握寄存器堆的写回机制</li>
+            <li>了解写回数据的选择逻辑</li>
+            <li>熟悉异常时的写回处理</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">写回单元概述</h3>
+          <p class="card-text">
+            <strong>写回单元（Write Back Unit, WBU）</strong>是流水线的最后一级，负责将指令执行
+            结果写回寄存器堆。WBU需要从多个数据源中选择正确的写回数据，并处理异常情况下的写回取消。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧩</span> WBU基本架构</h2>
+          <div class="card">
+            <h3 class="card-title">主要组件</h3>
+            <div class="grid grid-2">
+              <div>
+                <h4>数据选择</h4>
+                <ul class="feature-list">
+                  <li><strong>多路选择器</strong> - 选择写回数据</li>
+                  <li><strong>数据源</strong> - ALU结果/内存数据/PC+4</li>
+                </ul>
+              </div>
+              <div>
+                <h4>控制逻辑</h4>
+                <ul class="feature-list">
+                  <li><strong>写使能</strong> - 控制寄存器写</li>
+                  <li><strong>异常处理</strong> - 取消写回</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 写回数据源</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>数据源</th>
+                <th>描述</th>
+                <th>控制信号</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ALU结果</td>
+                <td>算术逻辑运算结果</td>
+                <td>mem_to_reg=0</td>
+              </tr>
+              <tr>
+                <td>内存数据</td>
+                <td>Load指令从内存读取的数据</td>
+                <td>mem_to_reg=1</td>
+              </tr>
+              <tr>
+                <td>PC+4</td>
+                <td>跳转/链接指令的返回地址</td>
+                <td>jump=1</td>
+              </tr>
+              <tr>
+                <td>立即数</td>
+                <td>LUI/AUIPC的结果</td>
+                <td>特殊处理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> WBU实现</h2>
+          <div class="card">
+            <h3 class="card-title">写回逻辑</h3>
+            <div class="code-block">
+// 写回数据选择
+wire [31:0] wb_data;
+assign wb_data = (mem_to_reg) ? mem_read_data :
+                 (jump) ? pc_plus_4 :
+                 alu_result;
+
+// 寄存器写使能
+wire reg_write_en = reg_write && !exception && !flush;
+
+// 写回目的寄存器
+wire [4:0] rd_wb = (reg_write_en) ? rd : 5'b0;
+
+// 写入寄存器堆
+register_file reg_file (
+  .clk        (clk),
+  .rd_a1      (rs1),
+  .rd_a2      (rs2),
+  .rd_d1      (reg_data1),
+  .rd_d2      (reg_data2),
+  .wr_en      (reg_write_en),
+  .wr_addr    (rd_wb),
+  .wr_data    (wb_data)
+);
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 异常处理</h2>
+          <div class="card">
+            <h3 class="card-title">异常时的写回控制</h3>
+            <ul class="feature-list">
+              <li><strong>异常检测</strong> - 在WB阶段检测异常</li>
+              <li><strong>写回取消</strong> - 异常时禁止写回</li>
+              <li><strong>流水线刷新</strong> - 清除后续指令</li>
+              <li><strong>PC保存</strong> - 保存异常返回地址</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">精确异常</div>
+            <p>处理器需要支持精确异常，即异常发生时，所有在异常指令之前的指令都已完成，
+            所有在异常指令之后的指令都未修改架构状态。这需要在流水线中正确处理异常和写回。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 前递支持</h2>
+          <div class="card">
+            <h3 class="card-title">WBU前递数据</h3>
+            <p class="card-text">WBU阶段的写回数据需要前递到ID/EX阶段，用于解决数据冒险。</p>
+            <div class="code-block">
+// 前递信号
+wire [4:0] wb_rd = rd_wb;
+wire [31:0] wb_data_out = wb_data;
+wire wb_reg_write = reg_write_en;
+
+// 这些信号连接到前递单元
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• WBU负责将结果写回寄存器堆</li>
+                <li>• 需要从多个数据源选择写回数据</li>
+                <li>• 异常时需要取消写回</li>
+                <li>• WBU数据需要前递到早期阶段</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-5-访存单元设计.html">← 上一节</a>
+          <a href="47-7-流水线冒险处理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

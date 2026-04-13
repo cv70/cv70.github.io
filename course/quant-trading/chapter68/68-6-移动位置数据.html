@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>68.6 移动位置数据 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>68.6 移动位置数据</h1>
+      <p class="subtitle">另类数据应用</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解移动位置数据的特征与价值</li>
+        <li>掌握位置数据分析的核心技术</li>
+        <li>能够构建客流与商业活跃度指标</li>
+        <li>了解位置数据在零售与地产中的应用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1576153192396-180ecef2a715?w=800" alt="移动位置数据" class="card-image">
+      <h3 class="card-title">移动位置数据</h3>
+      <p class="card-text"><strong>移动位置数据</strong>通过智能手机GPS、Wi-Fi、基站定位等技术收集用户移动轨迹，能够反映人群流动、商业活跃度、区域经济活力等信息。在零售、地产、旅游等行业的量化分析中具有广泛应用价值。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 数据来源与类型</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">GPS数据</h3>
+          <ul class="feature-list">
+            <li>高精度定位</li>
+            <li>地图APP、导航应用</li>
+            <li>隐私要求高，需匿名化</li>
+            <li>应用: 精确客流分析</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Wi-Fi数据</h3>
+          <ul class="feature-list">
+            <li>室内定位优势</li>
+            <li>商场、机场、酒店</li>
+            <li>可分析店内行为</li>
+            <li>应用: 购物中心分析</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">基站数据</h3>
+          <ul class="feature-list">
+            <li>覆盖范围广</li>
+            <li>电信运营商数据</li>
+            <li>精度较低但样本大</li>
+            <li>应用: 区域经济分析</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">签到数据</h3>
+          <ul class="feature-list">
+            <li>用户主动签到</li>
+            <li>社交媒体平台</li>
+            <li>反映兴趣与偏好</li>
+            <li>应用: 品牌热度分析</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏪</span> 主要应用场景</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>应用领域</th>
+            <th>具体案例</th>
+            <th>分析指标</th>
+            <th>交易机会</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>零售股分析</td>
+            <td>门店客流统计</td>
+            <td>客流量、停留时间、复购率</td>
+            <td>零售股业绩预测</td>
+          </tr>
+          <tr>
+            <td>购物中心</td>
+            <td>商场活跃度评估</td>
+            <td>日均客流、周末占比</td>
+            <td>地产REITs交易</td>
+          </tr>
+          <tr>
+            <td>餐饮连锁</td>
+            <td>餐厅排队时长</td>
+            <td>高峰时段、翻台率</td>
+            <td>餐饮股业绩预测</td>
+          </tr>
+          <tr>
+            <td>旅游景区</td>
+            <td>游客数量监测</td>
+            <td>入园人数、停留时长</td>
+            <td>旅游股季节性交易</td>
+          </tr>
+          <tr>
+            <td>区域经济</td>
+            <td>经济活力评估</td>
+            <td>人口流动、商业活动</td>
+            <td>区域地产、银行股</td>
+          </tr>
+          <tr>
+            <td>品牌竞争</td>
+            <td>门店竞争力分析</td>
+            <td>客流对比、转化率</td>
+            <td>行业龙头投资</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Python实现示例</h2>
+      <pre><code class="language-python"># 移动位置数据分析示例
+import pandas as pd
+import numpy as np
+from sklearn.cluster import DBSCAN
+from geopy.distance import geodesic
+
+# 客流分析
+def analyze_store_footfall(location_data, store_locations):
+    """分析门店客流"""
+    df = pd.DataFrame(location_data)
+
+    # 为每个用户匹配最近的门店
+    def find_nearest_store(lat, lon):
+        distances = []
+        for store in store_locations:
+            distance = geodesic((lat, lon), (store['lat'], store['lon'])).meters
+            distances.append({
+                'store_id': store['id'],
+                'distance': distance
+            })
+        nearest = min(distances, key=lambda x: x['distance'])
+        return nearest['store_id'] if nearest['distance'] < 100 else None
+
+    df['store_id'] = df.apply(
+        lambda row: find_nearest_store(row['lat'], row['lon']),
+        axis=1
+    )
+
+    # 过滤有效门店访问
+    valid_visits = df[df['store_id'].notna()]
+
+    # 按门店和时间聚合
+    store_footfall = valid_visits.groupby(['store_id', 'date']).agg({
+        'user_id': 'nunique',  # 唯一访客数
+        'timestamp': ['min', 'max'],  # 营业时间
+        'duration': 'mean'  # 平均停留时间
+    }).reset_index()
+
+    store_footfall.columns = ['store_id', 'date', 'unique_visitors',
+                              'first_visit', 'last_visit', 'avg_duration']
+
+    # 计算客流增长率
+    store_footfall['yoy_growth'] = store_footfall.groupby('store_id')['unique_visitors'].transform(
+        lambda x: x.pct_change(365)
+    )
+
+    return store_footfall
+
+# 客群分析
+def analyze_customer_segments(location_data, store_id):
+    """分析门店客群特征"""
+    df = pd.DataFrame(location_data)
+    store_df = df[df['store_id'] == store_id]
+
+    # 计算每个客户的访问特征
+    customer_stats = store_df.groupby('user_id').agg({
+        'date': ['count', 'nunique'],  # 访问次数、天数
+        'duration': ['mean', 'sum'],   # 平均/总停留时间
+        'hour': lambda x: x.mode()[0] if not x.empty else 12  # 偏好时段
+    }).reset_index()
+
+    customer_stats.columns = ['user_id', 'visit_count', 'visit_days',
+                              'avg_duration', 'total_duration', 'preferred_hour']
+
+    # 计算复购率
+    customer_stats['is_repeat'] = customer_stats['visit_days'] > 1
+    repeat_rate = customer_stats['is_repeat'].mean()
+
+    # 客户分类
+    def classify_customer(row):
+        if row['visit_days'] >= 10 and row['avg_duration'] > 30:
+            return '忠诚客户'
+        elif row['visit_days'] >= 3:
+            return '回头客户'
+        else:
+            return '新客户'
+
+    customer_stats['customer_type'] = customer_stats.apply(classify_customer, axis=1)
+
+    return customer_stats, repeat_rate
+
+# 热力图生成
+def generate_heatmap_data(location_data, grid_size=0.01):
+    """生成热力图数据"""
+    df = pd.DataFrame(location_data)
+
+    # 创建网格
+    lat_min, lat_max = df['lat'].min(), df['lat'].max()
+    lon_min, lon_max = df['lon'].min(), df['lon'].max()
+
+    lat_bins = np.arange(lat_min, lat_max, grid_size)
+    lon_bins = np.arange(lon_min, lon_max, grid_size)
+
+    # 计算每个网格的密度
+    df['lat_bin'] = pd.cut(df['lat'], lat_bins, include_lowest=True)
+    df['lon_bin'] = pd.cut(df['lon'], lon_bins, include_lowest=True)
+
+    heatmap = df.groupby(['lat_bin', 'lon_bin']).size().reset_index(name='count')
+
+    # 转换为坐标格式
+    heatmap['lat_center'] = heatmap['lat_bin'].apply(lambda x: x.mid)
+    heatmap['lon_center'] = heatmap['lon_bin'].apply(lambda x: x.mid)
+
+    return heatmap[['lat_center', 'lon_center', 'count']]
+
+# 区域经济活力分析
+def analyze_regional_economic_activity(location_data, poi_data):
+    """分析区域经济活力"""
+    df = pd.DataFrame(location_data)
+
+    # 按区域划分（如行政区）
+    df['region'] = df.apply(
+        lambda row: find_region(row['lat'], row['lon']),
+        axis=1
+    )
+
+    # 计算区域活跃度指标
+    regional_stats = df.groupby('region').agg({
+        'user_id': 'nunique',  # 活跃用户数
+        'timestamp': 'nunique',  # 活跃天数
+        'poi_type': lambda x: x.nunique()  # 访问的POI类型多样性
+    }).reset_index()
+
+    regional_stats.columns = ['region', 'active_users',
+                              'active_days', 'poi_diversity']
+
+    # 计算经济活力得分
+    scaler = StandardScaler()
+    features = ['active_users', 'active_days', 'poi_diversity']
+    regional_stats[features] = scaler.fit_transform(regional_stats[features])
+
+    regional_stats['vitality_score'] = regional_stats[features].mean(axis=1)
+
+    return regional_stats.sort_values('vitality_score', ascending=False)
+
+# 竞品分析
+def analyze_competition(location_data, store_ids):
+    """分析竞品门店表现"""
+    df = pd.DataFrame(location_data)
+    df = df[df['store_id'].isin(store_ids)]
+
+    # 各门店客流对比
+    comparison = df.groupby('store_id').agg({
+        'user_id': 'nunique',  # 客流量
+        'duration': 'mean',    # 平均停留时间
+        'date': 'nunique'      # 活跃天数
+    }).reset_index()
+
+    comparison.columns = ['store_id', 'visitor_count',
+                          'avg_duration', 'active_days']
+
+    # 计算市场份额
+    total_visitors = comparison['visitor_count'].sum()
+    comparison['market_share'] = comparison['visitor_count'] / total_visitors
+
+    return comparison.sort_values('visitor_count', ascending=False)
+
+# 趋势分析
+def analyze_footfall_trends(footfall_data):
+    """分析客流趋势"""
+    df = footfall_data.copy()
+
+    # 计算移动平均
+    df['ma7'] = df.groupby('store_id')['unique_visitors'].transform(
+        lambda x: x.rolling(7).mean()
+    )
+    df['ma30'] = df.groupby('store_id')['unique_visitors'].transform(
+        lambda x: x.rolling(30).mean()
+    )
+
+    # 计算增长率
+    df['wow_growth'] = df.groupby('store_id')['unique_visitors'].transform(
+        lambda x: x.pct_change(7)
+    )
+    df['mom_growth'] = df.groupby('store_id')['unique_visitors'].transform(
+        lambda x: x.pct_change(30)
+    )
+
+    # 识别异常
+    df['is_anomaly'] = df['wow_growth'].abs() > 0.3  # 增长率超过30%
+
+    return df
+
+# 顾客来源分析
+def analyze_customer_origins(location_data, store_id, radius=5000):
+    """分析顾客来源地"""
+    df = pd.DataFrame(location_data)
+    store_df = df[df['store_id'] == store_id]
+
+    if store_df.empty:
+        return None
+
+    # 获取门店位置
+    store_location = store_df[['store_lat', 'store_lon']].iloc[0]
+
+    # 计算每个顾客到门店的距离
+    store_df['distance'] = store_df.apply(
+        lambda row: geodesic(
+            (row['home_lat'], row['home_lon']),
+            (store_location['store_lat'], store_location['store_lon'])
+        ).meters,
+        axis=1
+    )
+
+    # 按距离分段
+    distance_bins = [0, 1000, 3000, 5000, 10000, float('inf')]
+    distance_labels = ['1km以内', '1-3km', '3-5km', '5-10km', '10km以上']
+    store_df['distance_group'] = pd.cut(
+        store_df['distance'],
+        bins=distance_bins,
+        labels=distance_labels
+    )
+
+    # 统计各距离段的顾客数
+    origin_stats = store_df.groupby('distance_group').agg({
+        'user_id': 'nunique',
+        'spending': 'sum'
+    }).reset_index()
+
+    origin_stats['customer_ratio'] = (
+        origin_stats['user_id'] / origin_stats['user_id'].sum()
+    )
+
+    return origin_stats
+</code></pre>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>位置数据应用需注意：1）隐私保护是首要考量，数据必须匿名化；2）样本代表性问题，不同APP的用户群体不同；3）定位精度和数据质量差异大；4）需要处理数据偏差和噪音；5）季节性和节假日因素影响大。建议严格遵守数据隐私法规，确保数据使用的合法性。</p>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>位置数据成功应用的关键：1）选择与目标业务匹配的数据源；2）建立精确的POI映射关系；3）关注长期趋势而非短期波动；4）结合其他数据源交叉验证；5）注意季节性和节假日调整。建议从单一应用场景开始，如单品牌门店分析，逐步扩展到多品牌、多区域的综合分析。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了移动位置数据的特征与价值</li>
+            <li>• 掌握了位置数据分析的核心技术</li>
+            <li>• 能够构建客流与商业活跃度指标</li>
+            <li>• 了解了位置数据在零售与地产中的应用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="68-5-供应链数据.html">← 上一节</a>
+      <a href="68-7-另类数据处理挑战.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

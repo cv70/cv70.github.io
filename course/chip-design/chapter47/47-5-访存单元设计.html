@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.5 访存单元设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.5 访存单元设计</h1>
+          <p class="subtitle">RISC-V 处理器设计实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解访存单元的功能和设计要点</li>
+            <li>掌握数据Cache的设计</li>
+            <li>了解内存访问的地址对齐</li>
+            <li>熟悉Load/Store指令的实现</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">访存单元概述</h3>
+          <p class="card-text">
+            <strong>访存单元（Load Store Unit, LSU）</strong>负责处理所有内存访问指令，
+            包括加载（Load）和存储（Store）操作。LSU需要处理数据Cache、地址对齐、
+            内存屏障等复杂情况，是处理器与内存系统交互的关键接口。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧩</span> LSU基本架构</h2>
+          <div class="card">
+            <h3 class="card-title">主要组件</h3>
+            <div class="grid grid-2">
+              <div>
+                <h4>Cache相关</h4>
+                <ul class="feature-list">
+                  <li><strong>DCache</strong> - 数据缓存</li>
+                  <li><strong>TLB</strong> - 数据TLB</li>
+                  <li><strong>写缓冲</strong> - Store缓冲</li>
+                </ul>
+              </div>
+              <div>
+                <h4>访问控制</h4>
+                <ul class="feature-list">
+                  <li><strong>地址对齐检查</strong></li>
+                  <li><strong>权限检查</strong></li>
+                  <li><strong>原子操作支持</strong></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Load/Store指令</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指令</th>
+                <th>操作</th>
+                <th>数据宽度</th>
+                <th>对齐要求</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>LB/LH/LW</td>
+                <td>加载（有符号）</td>
+                <td>8/16/32位</td>
+                <td>字节/半字/字对齐</td>
+              </tr>
+              <tr>
+                <td>LBU/LHU</td>
+                <td>加载（无符号）</td>
+                <td>8/16位</td>
+                <td>字节/半字对齐</td>
+              </tr>
+              <tr>
+                <td>SB/SH/SW</td>
+                <td>存储</td>
+                <td>8/16/32位</td>
+                <td>字节/半字/字对齐</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 数据Cache设计</h2>
+          <div class="card">
+            <h3 class="card-title">Cache参数配置</h3>
+            <ul class="feature-list">
+              <li><strong>容量</strong> - 32KB/64KB/128KB</li>
+              <li><strong>块大小</strong> - 64B/128B</li>
+              <li><strong>关联度</strong> - 4路/8路组相联</li>
+              <li><strong>写策略</strong> - 写通/写回</li>
+              <li><strong>分配策略</strong> - 读分配/写分配</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 地址对齐处理</h2>
+          <div class="card">
+            <h3 class="card-title">对齐检查与处理</h3>
+            <div class="code-block">
+// 对齐检查
+wire load_misaligned = (funct3 == 3'b000 && addr[0]) ||  // LB
+                       (funct3 == 3'b001 && addr[0]) ||  // LH
+                       (funct3 == 3'b010 && addr[1:0]);   // LW
+
+wire store_misaligned = (funct3 == 3'b000 && addr[0]) || // SB
+                        (funct3 == 3'b001 && addr[0]) || // SH
+                        (funct3 == 3'b010 && addr[1:0]);  // SW
+
+// 对齐异常
+wire misaligned_exception = (mem_read && load_misaligned) ||
+                            (mem_write && store_misaligned);
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">数据字节选择</div>
+            <p>对于未对齐访问或小宽度访问，需要从Cache行中选择正确的字节：
+            <br>• 字节访问：根据addr[1:0]选择字节<br>
+            • 半字访问：根据addr[1]选择半字<br>
+            • 符号扩展：有符号加载需要符号扩展</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> Load-Store队列</h2>
+          <div class="card">
+            <h3 class="card-title">LSQ功能</h3>
+            <ul class="feature-list">
+              <li><strong>Load队列</strong> - 缓存待执行的Load操作</li>
+              <li><strong>Store队列</strong> - 缓存待执行的Store操作</li>
+              <li><strong>内存一致性</strong> - 维护内存访问顺序</li>
+              <li><strong>Load-Store冲突检测</strong> - 检测RAW/WAR/WAW冒险</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 访问权限检查</h2>
+          <div class="card">
+            <h3 class="card-title">权限验证</h3>
+            <ul class="feature-list">
+              <li><strong>读权限</strong> - PTE.R=1</li>
+              <li><strong>写权限</strong> - PTE.W=1</li>
+              <li><strong>用户态访问</strong> - PTE.U=1</li>
+              <li><strong>异常处理</strong> - 访问违规触发异常</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• LSU处理所有内存访问指令</li>
+                <li>• 数据Cache提高访存效率</li>
+                <li>• 需要检查地址对齐和访问权限</li>
+                <li>• Load-Store队列维护内存一致性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-4-执行单元设计.html">← 上一节</a>
+          <a href="47-6-写回单元设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

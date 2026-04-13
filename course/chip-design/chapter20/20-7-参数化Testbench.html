@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.7 参数化Testbench - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.7 参数化Testbench</h1>
+          <p class="subtitle">灵活可配置的验证平台</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解参数化设计的好处</li>
+            <li>掌握参数定义和使用</li>
+            <li>学会条件编译技术</li>
+            <li>了解配置文件管理</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">参数化设计概述</h3>
+          <p class="card-text">
+            <strong>参数化Testbench</strong>通过使用参数和宏定义，使测试平台能够适应不同的测试需求，提高代码的灵活性和复用性。
+          </p>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 参数定义与使用</h2>
+          <div class="code-block">
+<pre// Testbench参数化
+module tb_dut #(
+    parameter DATA_WIDTH = 8,
+    parameter ADDR_WIDTH = 16,
+    parameter CLK_PERIOD = 10,
+    parameter TEST_CASES = 1000
+)();
+
+// 根据参数定义信号
+reg  [DATA_WIDTH-1:0]  data_in;
+wire [DATA_WIDTH-1:0]  data_out;
+reg  [ADDR_WIDTH-1:0]  addr_in;
+reg                    clk;
+
+// 时钟生成使用参数
+initial begin
+    clk = 0;
+    forever #(CLK_PERIOD/2) clk = ~clk;
+end
+
+// 测试循环使用参数
+initial begin
+    integer i;
+    for (i = 0; i < TEST_CASES; i = i + 1) begin
+        data_in = $urandom;
+        addr_in = $urandom_range(0, (1<<ADDR_WIDTH)-1);
+        @(posedge clk);
+    end
+end
+
+// 实例化DUT
+dut #(
+    .DATA_WIDTH(DATA_WIDTH),
+    .ADDR_WIDTH(ADDR_WIDTH)
+) u_dut (
+    .clk(clk),
+    .data_in(data_in),
+    .data_out(data_out),
+    .addr_in(addr_in)
+);
+
+endmodule</pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 宏定义与条件编译</h2>
+          <div class="code-block">
+<pre// 宏定义
+`define DEBUG_MODE 1
+`define VERBOSE 1
+`define SIM_TIME 1000000
+
+// 条件编译
+`ifdef DEBUG_MODE
+    initial $display("Debug mode enabled");
+`endif
+
+// 条件执行
+always @(posedge clk) begin
+    `ifdef VERBOSE
+        $display("[%0t] Data: %h", $time, data);
+    `endif
+end
+
+// 宏函数
+`define MAX(a,b) ((a) > (b) ? (a) : (b))
+`define ABS(x)   ((x) < 0 ? -(x) : (x))
+
+// 使用宏
+always @(posedge clk) begin
+    if (data > `MAX(THRESHOLD, LIMIT)) begin
+        flag <= 1;
+    end
+end
+
+// 仿真时间限制
+initial begin
+    #`SIM_TIME;
+    $display("Simulation timeout at %0t", $time);
+    $finish;
+end</pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 参数化设计优势</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>优势</th>
+                <th>说明</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>灵活性</td>
+                <td>适应不同配置</td>
+                <td>多规格DUT测试</td>
+              </tr>
+              <tr>
+                <td>复用性</td>
+                <td>一次编写多次使用</td>
+                <td>相似项目复用</td>
+              </tr>
+              <tr>
+                <td>可维护性</td>
+                <td>集中管理配置</td>
+                <td>统一修改参数</td>
+              </tr>
+              <tr>
+                <td>可扩展性</td>
+                <td>易于添加新功能</td>
+                <td>功能增强</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">设计建议</div>
+            <p>将所有可配置参数集中定义在Testbench头部，并添加注释说明。使用有意义的参数名称，提高代码可读性。</p>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 参数化提高Testbench灵活性</li>
+                <li>• 参数可以传递给DUT</li>
+                <li>• 宏定义支持条件编译</li>
+                <li>• 集中管理配置参数</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="20-6-任务与函数封装.html">← 上一节</a>
+          <a href="20-8-Testbench实例.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

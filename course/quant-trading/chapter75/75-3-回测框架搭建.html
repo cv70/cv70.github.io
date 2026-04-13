@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>75.3 回测框架搭建 - 多因子选股策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>75.3 回测框架搭建</h1>
+      <p class="subtitle">项目一：多因子选股策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解回测框架的核心组件</li>
+        <li>掌握Backtrader框架的使用方法</li>
+        <li>学会自定义策略和指标</li>
+        <li>能够构建完整的回测系统</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="回测框架搭建" class="card-image">
+      <h3 class="card-title">回测框架搭建</h3>
+      <p class="card-text"><strong>回测框架</strong>是量化策略验证的核心工具。本节将基于Backtrader构建一个专业的回测系统。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 回测框架架构</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">数据层</h3>
+          <ul class="feature-list">
+            <li>数据加载</li>
+            <li>数据清洗</li>
+            <li>数据对齐</li>
+            <li>数据存储</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">策略层</h3>
+          <ul class="feature-list">
+            <li>信号生成</li>
+            <li>订单管理</li>
+            <li>仓位控制</li>
+            <li>风控逻辑</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">分析层</h3>
+          <ul class="feature-list">
+            <li>绩效计算</li>
+            <li>风险分析</li>
+            <li>归因分析</li>
+            <li>报告生成</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 核心代码实现</h2>
+      <div class="code-block">
+        <pre><code class="language-python">import backtrader as bt
+import pandas as pd
+from datetime import datetime
+
+# 数据加载类
+class MultiFactorData(bt.feeds.PandasData):
+    params = (
+        ('datetime', None),
+        ('factor', 6),
+        ('returns', 7),
+    )
+
+# 多因子策略类
+class MultiFactorStrategy(bt.Strategy):
+    params = (
+        ('lookback', 20),
+        ('top_n', 50),
+        ('rebalance_freq', 20),
+    )
+
+    def __init__(self):
+        self.factor_data = self.datas[0].factor
+        self.returns = self.datas[0].returns
+        self.rebalance_counter = 0
+
+    def next(self):
+        # 按频率调仓
+        self.rebalance_counter += 1
+        if self.rebalance_counter % self.params.rebalance_freq != 0:
+            return
+
+        # 获取因子值
+        current_factor = self.factor_data[0]
+
+        # 计算因子排名
+        factor_ranks = {}
+        for i, data in enumerate(self.datas):
+            factor_ranks[i] = data.factor[0]
+
+        # 选择因子值最高的股票
+        sorted_stocks = sorted(factor_ranks.items(),
+                              key=lambda x: x[1],
+                              reverse=True)
+        top_stocks = [i for i, _ in sorted_stocks[:self.params.top_n]]
+
+        # 调仓逻辑
+        for i, data in enumerate(self.datas):
+            current_position = self.getposition(data).size
+
+            if i in top_stocks and current_position == 0:
+                # 买入
+                target_value = self.broker.getvalue() / self.params.top_n
+                price = data.close[0]
+                size = target_value / price
+                self.buy(data=data, size=size)
+
+            elif i not in top_stocks and current_position > 0:
+                # 卖出
+                self.sell(data=data, size=current_position)
+
+# 回测引擎
+def run_backtest(factor_data, returns, start_date, end_date):
+    """
+    运行回测
+    """
+    cerebro = bt.Cerebro()
+
+    # 添加策略
+    cerebro.addstrategy(MultiFactorStrategy,
+                       lookback=20,
+                       top_n=50,
+                       rebalance_freq=20)
+
+    # 加载数据
+    for ticker in factor_data.columns:
+        data = pd.DataFrame({
+            'datetime': factor_data.index,
+            'close': 1.0,  # 基准价格
+            'factor': factor_data[ticker],
+            'returns': returns[ticker]
+        })
+        data_feed = MultiFactorData(dataname=data)
+        cerebro.adddata(data_feed)
+
+    # 设置初始资金
+    cerebro.broker.setcash(10000000)
+
+    # 设置手续费
+    cerebro.broker.setcommission(commission=0.001)
+
+    # 添加分析器
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+    cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
+
+    # 运行回测
+    results = cerebro.run()
+    strat = results[0]
+
+    # 获取分析结果
+    sharpe = strat.analyzers.sharpe.get_analysis()
+    drawdown = strat.analyzers.drawdown.get_analysis()
+    returns = strat.analyzers.returns.get_analysis()
+
+    return {
+        'final_value': cerebro.broker.getvalue(),
+        'sharpe_ratio': sharpe.get('sharperatio'),
+        'max_drawdown': drawdown.get('max', {}).get('drawdown'),
+        'total_return': returns.get('rtot')
+    }</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 绩效分析模块</h2>
+      <div class="code-block">
+        <pre><code class="language-python">import numpy as np
+
+class PerformanceAnalyzer:
+    """
+    绩效分析器
+    """
+
+    def __init__(self, portfolio_returns, benchmark_returns):
+        self.portfolio_returns = portfolio_returns
+        self.benchmark_returns = benchmark_returns
+
+    def calculate_metrics(self):
+        """计算绩效指标"""
+        metrics = {}
+
+        # 年化收益率
+        metrics['annual_return'] = self._calculate_annual_return()
+
+        # 夏普比率
+        metrics['sharpe_ratio'] = self._calculate_sharpe_ratio()
+
+        # 最大回撤
+        metrics['max_drawdown'] = self._calculate_max_drawdown()
+
+        # 胜率
+        metrics['win_rate'] = self._calculate_win_rate()
+
+        # 盈亏比
+        metrics['win_loss_ratio'] = self._calculate_win_loss_ratio()
+
+        # 信息比率
+        metrics['information_ratio'] = self._calculate_information_ratio()
+
+        # Alpha与Beta
+        alpha, beta = self._calculate_alpha_beta()
+        metrics['alpha'] = alpha
+        metrics['beta'] = beta
+
+        return metrics
+
+    def _calculate_annual_return(self):
+        """计算年化收益率"""
+        total_return = (1 + self.portfolio_returns).prod() - 1
+        years = len(self.portfolio_returns) / 252
+        annual_return = (1 + total_return) ** (1/years) - 1
+        return annual_return
+
+    def _calculate_sharpe_ratio(self, risk_free_rate=0.03):
+        """计算夏普比率"""
+        excess_returns = self.portfolio_returns - risk_free_rate/252
+        return np.sqrt(252) * excess_returns.mean() / excess_returns.std()
+
+    def _calculate_max_drawdown(self):
+        """计算最大回撤"""
+        cum_returns = (1 + self.portfolio_returns).cumprod()
+        rolling_max = cum_returns.expanding().max()
+        drawdown = (cum_returns - rolling_max) / rolling_max
+        return drawdown.min()
+
+    def _calculate_win_rate(self):
+        """计算胜率"""
+        winning_days = (self.portfolio_returns > 0).sum()
+        total_days = len(self.portfolio_returns)
+        return winning_days / total_days
+
+    def _calculate_win_loss_ratio(self):
+        """计算盈亏比"""
+        winning_returns = self.portfolio_returns[self.portfolio_returns > 0]
+        losing_returns = self.portfolio_returns[self.portfolio_returns < 0]
+        return abs(winning_returns.mean() / losing_returns.mean())
+
+    def _calculate_information_ratio(self):
+        """计算信息比率"""
+        active_returns = self.portfolio_returns - self.benchmark_returns
+        return np.sqrt(252) * active_returns.mean() / active_returns.std()
+
+    def _calculate_alpha_beta(self):
+        """计算Alpha与Beta"""
+        covariance = np.cov(self.portfolio_returns, self.benchmark_returns)[0,1]
+        benchmark_variance = self.benchmark_returns.var()
+        beta = covariance / benchmark_variance
+
+        alpha = (self.portfolio_returns.mean() -
+                self.benchmark_returns.mean() * beta) * 252
+
+        return alpha, beta</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 可视化模块</h2>
+      <div class="code-block">
+        <pre><code class="language-python">import matplotlib.pyplot as plt
+import seaborn as sns
+
+class BacktestVisualizer:
+    """
+    回测可视化
+    """
+
+    @staticmethod
+    def plot_equity_curve(portfolio_returns, benchmark_returns):
+        """绘制净值曲线"""
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        portfolio_cum = (1 + portfolio_returns).cumprod()
+        benchmark_cum = (1 + benchmark_returns).cumprod()
+
+        ax.plot(portfolio_cum.index, portfolio_cum, label='策略净值', linewidth=2)
+        ax.plot(benchmark_cum.index, benchmark_cum, label='基准净值', linewidth=2, alpha=0.7)
+
+        ax.set_xlabel('日期')
+        ax.set_ylabel('净值')
+        ax.set_title('策略净值曲线')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        return fig
+
+    @staticmethod
+    def plot_drawdown(portfolio_returns):
+        """绘制回撤图"""
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        cum_returns = (1 + portfolio_returns).cumprod()
+        rolling_max = cum_returns.expanding().max()
+        drawdown = (cum_returns - rolling_max) / rolling_max
+
+        ax.fill_between(drawdown.index, drawdown, 0, alpha=0.3, color='red')
+        ax.plot(drawdown.index, drawdown, color='red', linewidth=2)
+
+        ax.set_xlabel('日期')
+        ax.set_ylabel('回撤')
+        ax.set_title('策略回撤曲线')
+        ax.grid(True, alpha=0.3)
+
+        return fig
+
+    @staticmethod
+    def plot_monthly_returns(portfolio_returns):
+        """绘制月度收益热图"""
+        monthly_returns = portfolio_returns.resample('M').apply(
+            lambda x: (1 + x).prod() - 1
+        )
+
+        monthly_returns_df = pd.DataFrame({
+            'year': monthly_returns.index.year,
+            'month': monthly_returns.index.month,
+            'return': monthly_returns.values
+        }).pivot('year', 'month', 'return')
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+        sns.heatmap(monthly_returns_df, cmap='RdYlGn', center=0,
+                   fmt='.2%', annot=True, ax=ax)
+
+        ax.set_title('月度收益热图')
+        ax.set_xlabel('月份')
+        ax.set_ylabel('年份')
+
+        return fig</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">回测框架最佳实践</div>
+        <p>1) 使用事件驱动而非向量化；2) 真实模拟交易成本；3) 避免前视偏差；4) 进行样本外测试；5) 多次验证结果稳健性。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了回测框架的三层架构</li>
+            <li>• 掌握了Backtrader框架的核心用法</li>
+            <li>• 实现了多因子选股策略的回测逻辑</li>
+            <li>• 构建了完整的绩效分析模块</li>
+            <li>• 学会了回测结果的可视化方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="75-2-因子选择与构造.html">← 上一节</a>
+      <a href="75-4-策略回测.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

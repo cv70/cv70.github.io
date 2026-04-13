@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.3 输入输出延时约束 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.3 输入输出延时约束</h1>
+          <p class="subtitle">IO接口时序约束方法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握输入延迟约束的设置方法</li>
+            <li>理解输出延迟约束的含义</li>
+            <li>学会处理不同的IO时序模型</li>
+            <li>了解驱动和负载约束</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📥</span> 输入延迟约束</h2>
+
+          <h3>基本输入延迟</h3>
+          <div class="code-block">
+# 设置最大输入延迟
+set_input_delay -max 2.0 -clock CLK [get_ports data_in]
+
+# 设置最小输入延迟
+set_input_delay -min 0.5 -clock CLK [get_ports data_in]
+
+# 同时设置max和min
+set_input_delay -clock CLK [get_ports data_in] \
+    -max 2.0 -min 0.5
+
+# 针对所有输入端口
+set_input_delay -max 2.5 -clock CLK [all_inputs]
+          </div>
+
+          <h3>时钟端口排除</h3>
+          <div class="code-block">
+# 排除时钟和复位端口
+set_input_delay -max 2.0 -clock CLK \
+    [remove_from_collection [all_inputs] \
+        [get_ports {clk rst_n scan_enable}]]
+
+# 分别约束不同信号组
+set_input_delay -max 1.5 -clock CLK [get_ports data_a*]
+set_input_delay -max 3.0 -clock CLK [get_ports control*]
+          </div>
+
+          <h3>不同时钟的输入延迟</h3>
+          <div class="code-block">
+# 异步输入
+set_input_delay -max 5.0 -clock [get_clocks ASYNC_CLK] \
+    [get_ports async_data]
+
+# 同步输入
+set_input_delay -max 2.0 -clock [get_clocks SYS_CLK] \
+    [get_ports sync_data]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📤</span> 输出延迟约束</h2>
+
+          <h3>基本输出延迟</h3>
+          <div class="code-block">
+# 设置最大输出延迟
+set_output_delay -max 2.0 -clock CLK [get_ports data_out]
+
+# 设置最小输出延迟
+set_output_delay -min 0.5 -clock CLK [get_ports data_out]
+
+# 同时设置
+set_output_delay -clock CLK [get_ports data_out] \
+    -max 2.0 -min 0.5
+
+# 所有输出端口
+set_output_delay -max 2.5 -clock CLK [all_outputs]
+          </div>
+
+          <h3>参考上升/下降沿</h3>
+          <div class="code-block">
+# 上升沿参考
+set_output_delay -clock CLK -max 2.0 \
+    -clock_fall [get_ports data_out]
+
+# 下降沿参考
+set_output_delay -clock CLK -max 2.5 \
+    -clock_rise [get_ports data_out]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 驱动和负载约束</h2>
+
+          <h3>驱动单元约束</h3>
+          <div class="code-block">
+# 设置驱动单元
+set_driving_cell -lib_cell INVX1 [get_ports clk]
+set_driving_cell -lib_cell BUFX2 [get_ports data_in]
+
+# 设置驱动强度
+set_driving_cell -lib_cell DFFX1 -pin Q \
+    [get_ports data_in]
+
+# 设置驱动电阻
+set_drive 0.1 [get_ports output_enable]
+          </div>
+
+          <h3>负载约束</h3>
+          <div class="code-block">
+# 设置负载电容
+set_load 0.1 [all_outputs]
+
+# 不同输出不同负载
+set_load 0.05 [get_ports data_out*]
+set_load 0.2 [get_ports address_out*]
+
+# 设置扇出
+set_fanout_load 0.05 [all_outputs]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> IO时序模型</h2>
+
+          <h3>源同步接口模型</h3>
+          <div class="code-block">
+# DDR输入（数据与时钟同步）
+create_clock -name DDR_CLK -period 2.5 \
+    [get_ports ddr_clk]
+
+set_input_delay -clock DDR_CLK -max 0.5 \
+    [get_ports ddr_dq]
+set_input_delay -clock DDR_CLK -min -0.3 \
+    [get_ports ddr_dq]
+          </div>
+
+          <h3>系统级时序模型</h3>
+          <div class="code-block">
+# 外部寄存器模型
+create_clock -name EXT_CLK -period 10.0
+
+# 输入：考虑外部寄存器的Tco和PCB延迟
+set_input_delay -max 2.0 -clock EXT_CLK \
+    [get_ports sys_data_in]
+set_input_delay -min 0.5 -clock EXT_CLK \
+    [get_ports sys_data_in]
+
+# 输出：考虑外部建立时间和PCB延迟
+set_output_delay -max 2.0 -clock EXT_CLK \
+    [get_ports sys_data_out]
+set_output_delay -min 0.5 -clock EXT_CLK \
+    [get_ports sys_data_out]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> IO约束实例</h2>
+
+          <div class="code-block">
+# ============================================================================
+# SoC IO约束示例
+# ============================================================================
+
+# 系统时钟
+create_clock -name SYS_CLK -period 5.0 [get_ports sys_clk]
+
+# ========== 输入约束 ==========
+# 同步输入
+set_input_delay -clock SYS_CLK -max 1.5 -min 0.5 \
+    [get_ports {data_in[0:15] ctrl_in[0:3]}]
+
+# 异步输入
+set_input_delay -clock SYS_CLK -max 5.0 -min 2.0 \
+    [get_ports {async_rst async_int}]
+
+# 扫描输入
+set_input_delay -clock SYS_CLK -max 3.0 -min 1.0 \
+    [get_ports {scan_in scan_enable}]
+
+# ========== 输出约束 ==========
+# 同步输出
+set_output_delay -clock SYS_CLK -max 1.5 -min 0.5 \
+    [get_ports {data_out[0:15] ctrl_out[0:3]}]
+
+# 扫描输出
+set_output_delay -clock SYS_CLK -max 2.0 -min 0.5 \
+    [get_ports scan_out]
+
+# ========== 驱动约束 ==========
+set_driving_cell -lib_cell INVX1 [get_ports sys_clk]
+set_driving_cell -lib_cell BUFX4 [get_ports {data_in[0:15]}]
+set_driving_cell -lib_cell INVX2 [get_ports {ctrl_in[0:3]}]
+
+# ========== 负载约束 ==========
+set_load 0.05 [get_ports {data_out[0:15]}]
+set_load 0.1 [get_ports {ctrl_out[0:3]}]
+set_load 0.02 [get_ports scan_out]
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">IO约束建议</div>
+            <p>1）基于实际的接口时序规范设置IO约束；2）考虑PCB布线延迟；
+            3）为不同速度的接口设置不同的约束；4）定期验证IO约束的合理性；
+            5）使用接口时序模型简化复杂接口的约束。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 输入延迟描述外部数据到达时间</li>
+                <li>• 输出延迟描述外部建立时间要求</li>
+                <li>• 驱动和负载约束模拟实际电路环境</li>
+                <li>• IO约束应基于真实的接口规范</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-2-时钟约束.html">← 上一节</a>
+          <a href="26-4-虚假路径与多周期路径.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

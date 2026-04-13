@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>69.2 主要交易所接口 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>69.2 主要交易所接口</h1>
+      <p class="subtitle">加密货币量化交易</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>了解主流加密货币交易所的API接口</li>
+        <li>掌握交易所API的调用方法</li>
+        <li>能够实现数据获取和交易执行功能</li>
+        <li>了解API使用中的常见问题与解决方案</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1642104704074-907c0698cbd9?w=800" alt="交易所接口" class="card-image">
+      <h3 class="card-title">主要交易所接口</h3>
+      <p class="card-text"><strong>交易所API</strong>是连接量化策略与加密货币市场的桥梁。了解主流交易所的API特点、限制和最佳实践，对于构建稳定可靠的交易系统至关重要。本节将介绍主要交易所的API接口及其使用方法。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏢</span> 主流交易所API对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>交易所</th>
+            <th>API类型</th>
+            <th>数据延迟</th>
+            <th>请求限制</th>
+            <th>特色功能</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Binance</td>
+            <td>REST/WebSocket</td>
+            <td><100ms</td>
+            <td>1200/min</td>
+            <td>品种全，流动性好</td>
+          </tr>
+          <tr>
+            <td>OKX</td>
+            <td>REST/WebSocket</td>
+            <td><100ms</td>
+            <td>600/min</td>
+            <td>衍生品丰富</td>
+          </tr>
+          <tr>
+            <td>Bybit</td>
+            <td>REST/WebSocket</td>
+            <td><100ms</td>
+            <td>1200/min</td>
+            <td>合约做市商友好</td>
+          </tr>
+          <tr>
+            <td>Coinbase</td>
+            <td>REST/WebSocket</td>
+            <td><1000ms</td>
+            <td>10000/min</td>
+            <td>合规性好</td>
+          </tr>
+          <tr>
+            <td>Gate.io</td>
+            <td>REST/WebSocket</td>
+            <td><500ms</td>
+            <td>400/min</td>
+            <td>山寨币丰富</td>
+          </tr>
+          <tr>
+            <td>Kraken</td>
+            <td>REST/WebSocket</td>
+            <td><500ms</td>
+            <td>600/min</td>
+            <td>欧洲市场主流</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📡</span> API类型与功能</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">公共API</h3>
+          <ul class="feature-list">
+            <li>获取市场数据</li>
+            <li>查询订单簿</li>
+            <li>获取历史K线</li>
+            <li>查看交易历史</li>
+            <li>无需认证</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">私有API</h3>
+          <ul class="feature-list">
+            <li>账户信息查询</li>
+            <li>下单与撤单</li>
+            <li>仓位管理</li>
+            <li>资金划转</li>
+            <li>需要API Key认证</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">WebSocket</h3>
+          <ul class="feature-list">
+            <li>实时行情推送</li>
+            <li>订单簿深度推送</li>
+            <li>交易记录推送</li>
+            <li>账户资产推送</li>
+            <li>低延迟实时数据</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">FIX API</h3>
+          <ul class="feature-list">
+            <li>机构级接口</li>
+            <li>标准化协议</li>
+            <li>高性能执行</li>
+            <li>需要特殊申请</li>
+            <li>高频交易适用</td>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Python实现示例</h2>
+      <pre><code class="language-python"># 加密货币交易所API使用示例
+import requests
+import hmac
+import hashlib
+import json
+import websocket
+import threading
+import time
+from datetime import datetime
+
+class BinanceAPI:
+    """币安API封装"""
+
+    def __init__(self, api_key=None, secret_key=None):
+        self.base_url = "https://api.binance.com"
+        self.api_key = api_key
+        self.secret_key = secret_key
+
+    def _sign(self, params):
+        """生成签名"""
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        signature = hmac.new(
+            self.secret_key.encode(),
+            query_string.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        return signature
+
+    def _request(self, endpoint, method='GET', params=None, signed=False):
+        """发送请求"""
+        url = f"{self.base_url}{endpoint}"
+
+        headers = {'X-MBX-APIKEY': self.api_key} if self.api_key else {}
+
+        if signed and self.secret_key:
+            params['timestamp'] = int(time.time() * 1000)
+            params['signature'] = self._sign(params)
+
+        if method == 'GET':
+            response = requests.get(url, params=params, headers=headers)
+        else:
+            response = requests.post(url, json=params, headers=headers)
+
+        return response.json()
+
+    def get_ticker_price(self, symbol='BTCUSDT'):
+        """获取最新价格"""
+        endpoint = "/api/v3/ticker/price"
+        params = {'symbol': symbol}
+        return self._request(endpoint, 'GET', params)
+
+    def get_order_book(self, symbol='BTCUSDT', limit=100):
+        """获取订单簿"""
+        endpoint = "/api/v3/depth"
+        params = {'symbol': symbol, 'limit': limit}
+        return self._request(endpoint, 'GET', params)
+
+    def get_klines(self, symbol='BTCUSDT', interval='1h', limit=100):
+        """获取K线数据"""
+        endpoint = "/api/v3/klines"
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'limit': limit
+        }
+        return self._request(endpoint, 'GET', params)
+
+    def place_order(self, symbol, side, order_type, quantity=None, price=None):
+        """下单"""
+        endpoint = "/api/v3/order"
+        params = {
+            'symbol': symbol,
+            'side': side,  # 'BUY' or 'SELL'
+            'type': order_type  # 'LIMIT', 'MARKET', etc.
+        }
+
+        if quantity:
+            params['quantity'] = quantity
+        if price and order_type == 'LIMIT':
+            params['price'] = price
+
+        return self._request(endpoint, 'POST', params, signed=True)
+
+    def get_account(self):
+        """获取账户信息"""
+        endpoint = "/api/v3/account"
+        return self._request(endpoint, 'GET', {}, signed=True)
+
+class BinanceWebSocket:
+    """币安WebSocket客户端"""
+
+    def __init__(self):
+        self.ws = None
+        self.callbacks = {}
+
+    def on_message(self, ws, message):
+        """消息处理"""
+        data = json.loads(message)
+
+        if 'e' in data:
+            event_type = data['e']
+            if event_type in self.callbacks:
+                self.callbacks[event_type](data)
+
+    def on_error(self, ws, error):
+        """错误处理"""
+        print(f"WebSocket Error: {error}")
+
+    def on_close(self, ws, close_status_code, close_msg):
+        """连接关闭"""
+        print("WebSocket Connection Closed")
+
+    def on_open(self, ws):
+        """连接建立"""
+        print("WebSocket Connection Opened")
+
+    def subscribe_ticker(self, symbol='btcusdt', callback=None):
+        """订阅价格推送"""
+        self.callbacks['24hrTicker'] = callback or self.default_ticker_callback
+
+        if not self.ws:
+            self.ws = websocket.WebSocketApp(
+                f"wss://stream.binance.com:9443/ws/{symbol}@ticker",
+                on_message=self.on_message,
+                on_error=self.on_error,
+                on_close=self.on_close,
+                on_open=self.on_open
+            )
+
+        self.ws.run_forever()
+
+    def subscribe_depth(self, symbol='btcusdt', callback=None):
+        """订阅深度推送"""
+        self.callbacks['depthUpdate'] = callback or self.default_depth_callback
+
+        if not self.ws:
+            self.ws = websocket.WebSocketApp(
+                f"wss://stream.binance.com:9443/ws/{symbol}@depth",
+                on_message=self.on_message,
+                on_error=self.on_error,
+                on_close=self.on_close,
+                on_open=self.on_open
+            )
+
+        self.ws.run_forever()
+
+    def default_ticker_callback(self, data):
+        """默认价格回调"""
+        print(f"Price: {data['c']} Volume: {data['v']}")
+
+    def default_depth_callback(self, data):
+        """默认深度回调"""
+        print(f"Bids: {data['b'][:3]} Asks: {data['a'][:3]}")
+
+# 使用示例
+if __name__ == '__main__':
+    # REST API示例
+    api = BinanceAPI()
+
+    # 获取价格
+    ticker = api.get_ticker_price('BTCUSDT')
+    print(f"BTC Price: {ticker['price']}")
+
+    # 获取K线
+    klines = api.get_klines('BTCUSDT', '1h', 10)
+    df = pd.DataFrame(klines, columns=[
+        'open_time', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+        'taker_buy_quote', 'ignore'
+    ])
+    print(df[['open_time', 'close', 'volume']])
+
+    # WebSocket示例
+    ws_client = BinanceWebSocket()
+    # ws_client.subscribe_ticker('btcusdt')
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔐</span> API安全与认证</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">API安全最佳实践</div>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li><strong>API Key管理</strong>: 不要在代码中硬编码API Key，使用环境变量或配置文件</li>
+            <li><strong>权限设置</strong>: 只授予必要的权限，读/写权限分开</li>
+            <li><strong>IP白名单</strong>: 设置IP白名单限制API访问</li>
+            <li><strong>签名验证</strong>: 使用HMAC签名确保请求完整性</li>
+            <li><strong>请求限流</strong>: 遵守交易所的请求频率限制</li>
+            <li><strong>异常处理</strong>: 妥善处理网络错误和API错误</li>
+            <li><strong>日志记录</strong>: 记录API调用日志，便于问题排查</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题与解决方案</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>问题</th>
+            <th>原因</th>
+            <th>解决方案</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>请求限流</td>
+            <td>超过API调用频率限制</td>
+            <td>实现请求队列，增加延迟，合并请求</td>
+          </tr>
+          <tr>
+            <td>签名错误</td>
+            <td>时间戳偏差或签名算法错误</td>
+            <td>同步系统时间，检查签名实现</td>
+          </tr>
+          <tr>
+            <td>连接断开</td>
+            <td>网络问题或服务器端断开</td>
+            <td>实现自动重连机制，指数退避</td>
+          </tr>
+          <tr>
+            <td>数据延迟</td>
+            <td>网络延迟或服务器负载高</td>
+            <td>使用WebSocket替代REST，选择最近服务器</td>
+          </tr>
+          <tr>
+            <td>订单失败</td>
+            <td>余额不足、价格变化、市场暂停</td>
+            <td>检查余额，更新价格，添加重试逻辑</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>交易所API使用建议：1）使用成熟的第三方库如ccxt；2）实现完善的错误处理和重试机制；3）WebSocket用于实时数据，REST用于交易操作；4）监控API调用频率，避免限流；5）做好API Key的安全管理；6）多交易所多接口备份，降低单点故障风险；7）充分测试后再接入实盘。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 了解了主流加密货币交易所的API接口</li>
+            <li>• 掌握了交易所API的调用方法</li>
+            <li>• 能够实现数据获取和交易执行功能</li>
+            <li>• 了解了API使用中的常见问题与解决方案</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="69-1-加密货币市场特点.html">← 上一节</a>
+      <a href="69-3-币圈特有策略.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

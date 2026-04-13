@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11.6 IO保护电路 - 嵌入式硬件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>11.6 IO保护电路</h1>
+      <p class="subtitle">GPIO与数字IO</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解GPIO需要保护的场景</li>
+        <li>掌握过压、过流、ESD保护电路设计</li>
+        <li>了解不同保护器件的特性</li>
+        <li>能够设计完善的GPIO保护电路</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800" alt="IO保护电路" class="card-image">
+      <h3 class="card-title">IO保护电路</h3>
+      <p class="card-text"><strong>IO保护电路</strong>是"GPIO与数字IO"这一章中的第6节内容。
+    GPIO接口直接连接外部设备，容易受到各种电气威胁。设计完善的保护电路是确保系统可靠运行的关键。
+    本节将详细介绍GPIO的各种保护电路设计方法。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> IO保护电路全景解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 为什么重要</h3>
+          <p class="card-text">保护电路防止GPIO受到电气威胁损坏</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心内容</h3>
+          <p class="card-text">掌握ESD、过压、过流等保护电路设计</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何落地</h3>
+          <p class="card-text">根据应用场景设计合适的保护电路</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> GPIO面临的电气威胁</h2>
+
+      <h3>威胁类型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>威胁类型</th>
+            <th>典型值</th>
+            <th>危害</th>
+            <th>常见场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ESD静电放电</td>
+            <td>±8kV-±15kV</td>
+            <td>瞬间击穿损坏</td>
+            <td>人体触摸、设备插拔</td>
+          </tr>
+          <tr>
+            <td>过压</td>
+            <td>超过VDD</td>
+            <td>击穿、漏电</td>
+            <td>5V设备误接、电源波动</td>
+          </tr>
+          <tr>
+            <td>过流</td>
+            <td>超过驱动能力</td>
+            <td>过热损坏</td>
+            <td>短路、负载过重</td>
+          </tr>
+          <tr>
+            <td>负压</td>
+            <td>低于GND</td>
+            <td>闩锁、损坏</td>
+            <td>信号反接、感应负压</td>
+          </tr>
+          <tr>
+            <td>浪涌</td>
+            <td>高压脉冲</td>
+            <td>击穿、干扰</td>
+            <td>雷电、电机启停</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> ESD保护电路</h2>
+
+      <h3>ESD保护原理</h3>
+      <p>ESD保护通过快速泄放静电能量保护IO：</p>
+      <ul class="feature-list">
+        <li><strong>击穿电压</strong>：正常工作时不动作</li>
+        <li><strong>快速响应</strong>：纳秒级响应速度</li>
+        <li><strong>大电流</strong>：承受大电流泄放</li>
+        <li><strong>恢复时间</strong>：ESD后快速恢复</li>
+      </ul>
+
+      <h3>ESD保护器件</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>器件类型</th>
+            <th>典型值</th>
+            <th>特点</th>
+            <th>应用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>TVS二极管</td>
+            <td>±15kV</td>
+            <td>响应快、体积小</td>
+            <td>通用接口</td>
+          </tr>
+          <tr>
+            <td>ESD二极管阵列</td>
+            <td>±8kV</td>
+            <td>多通道、集成</td>
+            <td>多IO保护</td>
+          </tr>
+          <tr>
+            <td>压敏电阻</td>
+            <td>大能量</td>
+            <td>能量吸收大</td>
+            <td>电源线路</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>TVS二极管选型</h3>
+      <ul class="feature-list">
+        <li><strong>击穿电压</strong>：略高于正常工作电压</li>
+        <li><strong>钳位电压</strong>：保护时不高于IO绝对最大值</li>
+        <li><strong>寄生电容</strong>：高速信号选低电容型号</li>
+        <li><strong>封装</th>：考虑PCB空间和散热</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 过压保护电路</h2>
+
+      <h3>稳压管保护</h3>
+      <p>使用稳压管钳位过压：</p>
+      <ul class="feature-list">
+        <li><strong>工作原理</strong>：电压超过击穿电压时导通</li>
+        <li><strong>稳压值</strong>：选择略低于IO最大电压</li>
+        <li><strong>限流电阻</strong>：限制稳压管电流</li>
+        <li><strong>应用</strong>：3.3V接口接5V信号时保护</li>
+      </ul>
+
+      <h3>电压钳位电路</h3>
+      <div class="tip-box info">
+        <span class="icon">ℹ️</span>
+        <div class="content">
+          <div class="title">电压钳位设计</div>
+          <p><strong>上钳位</strong>：使用稳压管钳位到VDD+0.3V</p>
+          <p><strong>下钳位</strong>：使用稳压管钳位到GND-0.3V</p>
+          <p><strong>二极管钳位</strong>：使用二极管钳位到电源轨</p>
+          <p><strong>注意</strong>：确保钳位电压在IO安全范围内</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 过流保护电路</h2>
+
+      <h3>限流电阻</h3>
+      <p>串联电阻限制输出电流：</p>
+      <ul class="feature-list">
+        <li><strong>限流值</strong>：R = (Vmax - Vload) / Imax</li>
+        <li><strong>典型值</strong>：33Ω-100Ω</li>
+        <li><strong>作用</strong>：限制短路电流</li>
+        <li><strong>影响</strong>：增加输出阻抗</li>
+      </ul>
+
+      <h3>保险丝保护</h3>
+      <p>使用保险丝防止过流损坏：</p>
+      <ul class="feature-list">
+        <li><strong>快熔保险丝</strong>：快速响应过流</li>
+        <li><strong>保险丝值</strong>：略高于正常工作电流</li>
+        <li><strong>自恢复保险丝</strong>：过流后可恢复</li>
+        <li><strong>应用</strong>：电源输出保护</li>
+      </ul>
+
+      <h3>PTC自恢复保险丝</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>动作电流</td>
+            <td>超过动作电流时发热增加</td>
+          </tr>
+          <tr>
+            <td>高阻状态</td>
+            <td>温度升高后进入高阻</td>
+          </tr>
+          <tr>
+            <td>自恢复</td>
+            <td>冷却后自动恢复低阻</td>
+          </tr>
+          <tr>
+            <td>响应时间</td>
+            <td>秒级到毫秒级</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 电感负载保护</h2>
+
+      <h3>继电器驱动保护</h3>
+      <p>电感负载必须加续流二极管：</p>
+      <ul class="feature-list">
+        <li><strong>续流二极管</strong>：并联在继电器线圈两端</li>
+        <li><strong>方向</strong>：负极接VDD，正极接驱动管集电极</li>
+        <li><strong>作用</strong>：为电感能量提供泄放回路</li>
+        <li><strong>保护</strong>：防止反向电动势损坏驱动管</li>
+      </ul>
+
+      <h3>电机驱动保护</h3>
+      <ul class="feature-list">
+        <li><strong>H桥驱动</strong>：需要完整的保护电路</li>
+        <li><strong>二极管网络</strong>：每个开关并联二极管</li>
+        <li><strong>吸收电路</strong>：RC或RCD吸收电路</li>
+        <li><strong>限流保护</strong>：过流保护电路</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 保护电路注意事项</h2>
+      <ul class="feature-list">
+        <li><strong>响应速度</strong>：ESD保护要求纳秒级响应</li>
+        <li><strong>寄生参数</strong>：保护器件的寄生电容影响高速信号</li>
+        <li><strong>钳位电压</strong>：确保钳位电压在IO安全范围内</li>
+        <li><strong>布局</strong>：保护器件尽可能靠近IO引脚</li>
+        <li><strong>接地</strong>：保护器件良好接地</li>
+      </ul>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>IO保护建议：1）外部接口加TVS二极管ESD保护；2）电感负载必须加续流二极管；
+        3）输出加限流电阻限制短路电流；4）不同电压域间加电平转换和保护；
+        5）长距离传输加保护电路；6）工业环境增强保护等级。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了GPIO需要保护的场景</li>
+            <li>• 掌握了过压、过流、ESD保护电路设计</li>
+            <li>• 了解了不同保护器件的特性</li>
+            <li>• 能够设计完善的GPIO保护电路</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="11-5-GPIO驱动能力设计.html">← 上一节</a>
+      <a href="12-1-内部时钟与外部时钟.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

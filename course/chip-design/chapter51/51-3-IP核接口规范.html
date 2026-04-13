@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>51.3 IP核接口规范 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>51.3 IP核接口规范</h1>
+          <p class="subtitle">IP核设计与复用</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握IP接口设计原则</li>
+            <li>理解常用总线协议（AXI、APB、AHB）</li>
+            <li>掌握时钟与复位设计规范</li>
+            <li>了解中断与DMA接口设计</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📐</span> 接口设计原则</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">标准化原则</h3>
+              <ul class="feature-list">
+                <li>采用行业标准接口协议</li>
+                <li>遵循ARM AMBA等总线规范</li>
+                <li>使用通用控制信号命名</li>
+                <li>保持接口一致性</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">可配置原则</h3>
+              <ul class="feature-list">
+                <li>参数化数据位宽</li>
+                <li>可配置的功能特性</li>
+                <li>可选的接口通道</li>
+                <li>灵活的中断数量</li>
+              </ul>
+            </div>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">接口规范的重要性</div>
+              <p>标准化的接口是IP可复用的基础，良好的接口设计可以大幅降低集成难度，提高互操作性。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚌</span> AMBA总线协议</h2>
+          <div class="card">
+            <p class="card-text"><strong>AMBA（Advanced Microcontroller Bus Architecture）</strong>是ARM提出的片上总线标准，包含多种协议，适用于不同应用场景。</p>
+          </div>
+          <table>
+            <thead><tr><th>协议</th><th>全称</th><th>特点</th><th>应用场景</th></tr></thead>
+            <tbody>
+              <tr><td>AXI</td><td>Advanced eXtensible Interface</td><td>高性能、乱序执行、多通道</td><td>高性能SoC、存储控制器</td></tr>
+              <tr><td>AHB</td><td>Advanced High-performance Bus</td><td>高性能、单周期传输</td><td>传统SoC、外设连接</td></tr>
+              <tr><td>APB</td><td>Advanced Peripheral Bus</td><td>低功耗、低复杂度</td><td>低速外设、寄存器访问</td></tr>
+              <tr><td>ACE</td><td>AXI Coherency Extensions</td><td>缓存一致性支持</td><td>多核SoC</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> AXI接口详解</h2>
+          <div class="card">
+            <h3 class="card-title">AXI特点</h3>
+            <ul class="feature-list">
+              <li><strong>分离通道：</strong>读/写地址通道、读/写数据通道、写响应通道独立</li>
+              <li><strong>乱序传输：</strong>支持乱序完成，提高带宽利用率</li>
+              <li><strong>突发传输：</strong>支持突发模式，提高传输效率</li>
+              <li><strong>多主多从：</strong>支持多个主设备和从设备</li>
+              <li><strong>QoS支持：</strong>支持服务质量控制</li>
+            </ul>
+          </div>
+          <div class="code-block">AXI5主要信号（主设备侧）：
+// 全局信号
+ACLK        // 时钟
+ARESETn     // 复位（低有效）
+
+// 写地址通道
+AWID[3:0]   // 写事务ID
+AWADDR[31:0] // 写地址
+AWLEN[7:0]  // 突发长度
+AWSIZE[2:0] // 突发大小
+AWBURST[1:0] // 突发类型
+AWVALID     // 写地址有效
+AWREADY     // 写地址就绪
+
+// 写数据通道
+WDATA[63:0] // 写数据
+WSTRB[7:0]  // 写数据字节使能
+WLAST       // 最后一个数据
+WVALID      // 写数据有效
+WREADY      // 写数据就绪
+
+// 写响应通道
+BID[3:0]    // 写响应ID
+BRESP[1:0]  // 写响应
+BVALID      // 写响应有效
+BREADY      // 写响应就绪
+
+// 读地址通道
+ARID[3:0]   // 读事务ID
+ARADDR[31:0] // 读地址
+ARLEN[7:0]  // 突发长度
+ARSIZE[2:0] // 突发大小
+ARBURST[1:0] // 突发类型
+ARVALID     // 读地址有效
+ARREADY     // 读地址就绪
+
+// 读数据通道
+RID[3:0]    // 读事务ID
+RDATA[63:0] // 读数据
+RRESP[1:0]  // 读响应
+RLAST       // 最后一个数据
+RVALID      // 读数据有效
+RREADY      // 读数据就绪</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐢</span> APB接口详解</h2>
+          <div class="card">
+            <h3 class="card-title">APB特点</h3>
+            <ul class="feature-list">
+              <li><strong>简单高效：</strong>协议简单，易于实现</li>
+              <li><strong>低功耗：</strong>无时钟门控时自动进入低功耗</li>
+              <li><strong>单周期：</strong>每个传输需要2个时钟周期</li>
+              <li><strong>适合低速：</strong>适用于低速外设控制</li>
+            </ul>
+          </div>
+          <div class="code-block">APB4主要信号：
+PCLK        // 时钟
+PRESETn     // 复位（低有效）
+
+PADDR[31:0] // 地址
+PSEL        // 从设备选择
+PENABLE     // 使能信号
+PWRITE      // 写使能（1=写，0=读）
+PWDATA[31:0] // 写数据
+PRDATA[31:0] // 读数据
+PREADY      // 从设备就绪
+PSLVERR     // 从设备错误
+
+// 保护信号（APB4）
+PPROT[2:0]  // 保护类型</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🕐</span> 时钟与复位设计</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">时钟设计规范</h3>
+              <ul class="feature-list">
+                <li>提供独立的时钟输入</li>
+                <li>支持clock gating</li>
+                <li>明确时钟域边界</li>
+                <li>提供时钟使能信号</li>
+                <li>支持多时钟域（如需要）</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">复位设计规范</h3>
+              <ul class="feature-list">
+                <li>提供异步复位、同步释放</li>
+                <li>明确复位极性（通常低有效）</li>
+                <li>支持软复位（寄存器控制）</li>
+                <li>独立的复位输入</li>
+                <li>复位域与时钟域对应</li>
+              </ul>
+            </div>
+          </div>
+          <div class="code-block">推荐的时钟复位信号命名：
+clk         // 主时钟
+clk_en      // 时钟使能
+rst_n       // 复位（低有效）
+soft_rst_n  // 软复位（低有效）
+sys_clk     // 系统时钟
+bus_clk     // 总线时钟</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔔</span> 中断接口设计</h2>
+          <div class="card">
+            <h3 class="card-title">中断信号类型</h3>
+            <ul class="feature-list">
+              <li><strong>电平中断：</strong>高/低电平有效，适用于持续事件</li>
+              <li><strong>边沿中断：</strong>上升/下降沿有效，适用于瞬时事件</li>
+              <li><strong>多中断源：</strong>支持多个独立中断源</li>
+              <li><strong>中断向量：</strong>提供中断号/向量地址</li>
+            </ul>
+          </div>
+          <div class="code-block">中断接口示例：
+// 单中断
+intr_req    // 中断请求（高有效）
+intr_ack    // 中断应答
+
+// 多中断
+intr[7:0]   // 8个中断源
+intr_vld    // 中断有效
+intr_id[2:0] // 中断ID</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📤</span> DMA接口设计</h2>
+          <div class="card">
+            <p class="card-text"><strong>DMA（Direct Memory Access）</strong>接口允许IP直接访问存储器，无需CPU参与，提高数据传输效率。</p>
+          </div>
+          <ul class="feature-list">
+            <li><strong>DMA请求：</strong>dma_req，表示需要DMA传输</li>
+            <li><strong>DMA应答：</strong>dma_ack，表示DMA控制器响应</li>
+            <li><strong>传输参数：</strong>源地址、目标地址、传输长度</li>
+            <li><strong>传输完成：</strong>dma_done，表示传输完成</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 自定义接口设计</h2>
+          <div class="card">
+            <h3 class="card-title">自定义接口原则</h3>
+            <ul class="feature-list">
+              <li>采用握手机制（valid/ready）</li>
+              <li>明确信号方向（input/output）</li>
+              <li>清晰的信号命名</li>
+              <li>提供时序图说明</li>
+              <li>兼容标准协议风格</li>
+            </ul>
+          </div>
+          <div class="code-block">握手机制示例：
+// 发送方
+s_data      // 数据
+s_valid     // 数据有效
+s_ready     // 接收方就绪
+
+// 接收方
+m_data      // 数据
+m_valid     // 数据有效
+m_ready     // 接收方就绪</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• IP接口应采用标准协议，提高互操作性</li>
+                <li>• AXI适用于高性能场景，APB适用于低速外设</li>
+                <li>• 时钟复位设计需遵循规范，支持低功耗</li>
+                <li>• 自定义接口应采用握手机制，保持一致性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="51-2-IP核开发流程.html">← 上一节</a>
+          <a href="51-4-IP核验证.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

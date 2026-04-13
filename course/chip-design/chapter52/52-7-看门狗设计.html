@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.7 看门狗设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.7 看门狗设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握看门狗的基本原理与作用</li>
+            <li>理解独立看门狗和窗口看门狗的区别</li>
+            <li>学会看门狗模块的硬件设计</li>
+            <li>了解看门狗的应用场景与配置</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> 看门狗概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>看门狗（Watchdog Timer, WDT）</strong>是一种用于监控系统运行状态的定时器。当系统正常运行时，软件会定期"喂狗"（重置看门狗）；如果系统出现故障（如死锁、程序跑飞），软件无法及时喂狗，看门狗将超时并触发系统复位，从而恢复系统正常运行。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">看门狗特点</div>
+              <p>• 独立运行：通常使用独立时钟源<br>• 可配置超时时间：适应不同应用需求<br>• 多种触发方式：复位、中断、NMI等<br>• 安全可靠：提高系统鲁棒性</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 看门狗分类</h2>
+          <table>
+            <thead><tr><th>类型</th><th>特点</th><th>时钟源</th><th>应用场景</th></tr></thead>
+            <tbody>
+              <tr><td>独立看门狗（IWDG）</td><td>独立于主时钟，可配置超时时间</td><td>内部低速RC振荡器</td><td>防止主程序死锁</td></tr>
+              <tr><td>窗口看门狗（WWDG）</td><td>必须在窗口期内喂狗</td><td>APB总线时钟</td><td>检测程序执行速度异常</td></tr>
+              <tr><td>外部看门狗</td><td>独立芯片，硬件级别监控</td><td>外部晶振</td><td>高可靠性系统</td></tr>
+              <tr><td>软件看门狗</td><td>纯软件实现</td><td>系统时钟</td><td>辅助监控</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 看门狗工作原理</h2>
+          <div class="card">
+            <h3 class="card-title">基本工作流程</h3>
+            <p class="card-text">1. <strong>初始化：</strong>配置看门狗超时时间、使能看门狗</p>
+            <p class="card-text">2. <strong>倒计时：</strong>看门狗开始递减计数</p>
+            <p class="card-text">3. <strong>喂狗：</strong>软件在超时前重置计数器</p>
+            <p class="card-text">4. <strong>正常情况：</strong>定期喂狗，系统正常运行</p>
+            <p class="card-text">5. <strong>异常情况：</strong>未能及时喂狗，触发复位</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 独立看门狗模块设计</h2>
+          <pre class="code-block"><code>// 独立看门狗模块
+module iwdg #(
+    parameter COUNTER_WIDTH = 12,    // 计数器位宽
+    parameter PRESCALER_WIDTH = 3,   // 预分频位宽
+    parameter LSI_FREQ = 32000       // LSI时钟频率(Hz)
+) (
+    input  wire                          clk,
+    input  wire                          rst_n,
+
+    // 控制接口
+    input  wire                          write_enable,   // 写使能
+    input  wire [4:0]                    reg_addr,       // 寄存器地址
+    input  wire [31:0]                   reg_wdata,      // 写数据
+    output wire [31:0]                   reg_rdata,      // 读数据
+
+    // 信号输出
+    output wire                          reset_out,      // 复位输出
+    output wire                          interrupt_out,  // 中断输出
+    output wire                          counter_value   // 计数器值（用于调试）
+);
+
+    // 寄存器定义
+    reg [PRESCALER_WIDTH-1:0] prescaler;   // 预分频器
+    reg [COUNTER_WIDTH-1:0] reload_reg;    // 重装载值
+    reg [COUNTER_WIDTH-1:0] counter;       // 计数器
+    reg iwdg_enable;          // 看门狗使能
+    reg reset_enable;         // 复位使能
+    reg interrupt_enable;     // 中断使能
+    reg [1:0] window_config;  // 窗口配置
+
+    // 状态标志
+    reg timeout_flag;         // 超时标志
+    reg prescaler_update;     // 预分频更新标志
+    reg reload_update;        // 重装载更新标志
+
+    // 预分频计数器
+    reg [15:0] prescaler_cnt;
+    localparam PRESCALER_DIV = 1 << prescaler;
+    wire prescaler_tick = (prescaler_cnt == 0);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prescaler_cnt <= 0;
+            prescaler <= 0;
+            reload_reg <= 12'hFFF;
+            counter <= 0;
+            iwdg_enable <= 0;
+            reset_enable <= 1;
+            interrupt_enable <= 0;
+            timeout_flag <= 0;
+            prescaler_update <= 0;
+            reload_update <= 0;
+        end else begin
+            prescaler_update <= 0;
+            reload_update <= 0;
+
+            // 寄存器写操作
+            if (write_enable) begin
+                case (reg_addr)
+                    5'h0: begin  // 控制寄存器
+                        if (reg_wdata[0] && !iwdg_enable) begin
+                            iwdg_enable <= 1;
+                            counter <= reload_reg;
+                        end
+                        if (reg_wdata[1]) reset_enable <= reg_wdata[1];
+                        if (reg_wdata[2]) interrupt_enable <= reg_wdata[2];
+                    end
+                    5'h1: begin  // 预分频寄存器
+                        if (!iwdg_enable) begin
+                            prescaler <= reg_wdata[PRESCALER_WIDTH-1:0];
+                            prescaler_update <= 1;
+                        end
+                    end
+                    5'h2: begin  // 重装载寄存器
+                        if (!iwdg_enable) begin
+                            reload_reg <= reg_wdata[COUNTER_WIDTH-1:0];
+                            reload_update <= 1;
+                        end
+                    end
+                    5'h3: begin  // 喂狗寄存器（键值）
+                        if (reg_wdata == 32'hAAAA && iwdg_enable) begin
+                            counter <= reload_reg;  // 喂狗
+                            timeout_flag <= 0;
+                        end
+                    end
+                endcase
+            end
+
+            // 预分频器
+            if (prescaler_tick) begin
+                prescaler_cnt <= PRESCALER_DIV - 1;
+            end else begin
+                prescaler_cnt <= prescaler_cnt - 1;
+            end
+
+            // 计数器
+            if (iwdg_enable && prescaler_tick) begin
+                if (counter > 0) begin
+                    counter <= counter - 1;
+                end else begin
+                    counter <= reload_reg;
+                    timeout_flag <= 1;  // 超时
+                end
+            end
+        end
+    end
+
+    // 输出
+    assign reset_out = reset_enable && timeout_flag;
+    assign interrupt_out = interrupt_enable && timeout_flag;
+    assign counter_value = counter;
+
+    // 寄存器读操作
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        case (reg_addr)
+            5'h0: rdata = {28'h0, interrupt_enable, reset_enable, iwdg_enable};
+            5'h1: rdata = {{32-PRESCALER_WIDTH{1'b0}}, prescaler};
+            5'h2: rdata = {{32-COUNTER_WIDTH{1'b0}}, reload_reg};
+            5'h3: rdata = 32'h0;  // 喂狗寄存器写保护
+            5'h4: rdata = {{32-COUNTER_WIDTH{1'b0}}, counter};
+            5'h5: rdata = {31'h0, timeout_flag};
+            5'h6: rdata = {31'h0, prescaler_update};
+            5'h7: rdata = {31'h0, reload_update};
+            default: rdata = 32'h0;
+        endcase
+    end
+
+    assign reg_rdata = rdata;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🪟</span> 窗口看门狗设计</h2>
+          <div class="card">
+            <h3 class="card-title">窗口看门狗原理</h3>
+            <p class="card-text">窗口看门狗要求喂狗操作必须在指定的时间窗口内进行：</p>
+            <p class="card-text">• <strong>下窗口：</strong>计数器值必须大于下窗口值才能喂狗</p>
+            <p class="card-text">• <strong>上窗口：</strong>计数器值必须小于上窗口值才能喂狗</p>
+            <p class="card-text">• <strong>作用：</strong>防止程序运行过快或过慢，检测程序执行异常</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 窗口看门狗模块设计</h2>
+          <pre class="code-block"><code>// 窗口看门狗模块
+module wwdg #(
+    parameter COUNTER_WIDTH = 7,     // 计数器位宽
+    parameter WINDOW_WIDTH = 7,      // 窗口值位宽
+    parameter PCLK_FREQ = 50_000_000 // APB时钟频率
+) (
+    input  wire                          clk,
+    input  wire                          rst_n,
+
+    // 控制接口
+    input  wire                          write_enable,   // 写使能
+    input  wire [4:0]                    reg_addr,       // 寄存器地址
+    input  wire [31:0]                   reg_wdata,      // 写数据
+    output wire [31:0]                   reg_rdata,      // 读数据
+
+    // 信号输出
+    output wire                          reset_out,      // 复位输出
+    output wire                          early_wakeup    // 早期唤醒中断
+);
+
+    // 寄存器定义
+    reg [COUNTER_WIDTH-1:0] counter;       // 计数器
+    reg [WINDOW_WIDTH-1:0] window_reg;     // 窗口值
+    reg wwdg_enable;          // 看门狗使能
+    reg [3:0] prescaler;       // 预分频器
+
+    // 状态标志
+    reg timeout_flag;
+    reg window_violation;
+
+    // 预分频器
+    reg [15:0] prescaler_cnt;
+    localparam PRESCALER_DIV = 1 << prescaler;
+    wire prescaler_tick = (prescaler_cnt == 0);
+
+    // 计数器递减
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            counter <= 0;
+            window_reg <= 7'h7F;
+            wwdg_enable <= 0;
+            prescaler <= 0;
+            timeout_flag <= 0;
+            window_violation <= 0;
+            prescaler_cnt <= 0;
+        end else begin
+            // 寄存器写操作
+            if (write_enable) begin
+                case (reg_addr)
+                    5'h0: begin  // 控制寄存器
+                        wwdg_enable <= reg_wdata[7];
+                        prescaler <= reg_wdata[3:0];
+                    end
+                    5'h1: begin  // 配置寄存器
+                        window_reg <= reg_wdata[WINDOW_WIDTH-1:0];
+                    end
+                    5'h2: begin  // 喂狗寄存器
+                        if (reg_wdata == 32'h55) begin  // 解锁
+                            // 允许配置
+                        end
+                    end
+                    5'h3: begin  // 刷新寄存器（喂狗）
+                        if (reg_wdata == 32'hAA && wwdg_enable) begin
+                            // 检查窗口
+                            if (counter >= window_reg && counter < {1'b1, {COUNTER_WIDTH-1{1'b1}}}) begin
+                                // 在窗口内，喂狗成功
+                                counter <= {1'b1, {COUNTER_WIDTH-1{1'b1}}};
+                                timeout_flag <= 0;
+                                window_violation <= 0;
+                            end else begin
+                                // 窗口违规
+                                window_violation <= 1;
+                            end
+                        end
+                    end
+                endcase
+            end
+
+            // 预分频器
+            if (prescaler_tick) begin
+                prescaler_cnt <= PRESCALER_DIV - 1;
+            end else begin
+                prescaler_cnt <= prescaler_cnt - 1;
+            end
+
+            // 计数器
+            if (wwdg_enable && prescaler_tick) begin
+                if (counter > 0) begin
+                    counter <= counter - 1;
+                end else begin
+                    counter <= {1'b1, {COUNTER_WIDTH-1{1'b1}}};
+                    timeout_flag <= 1;  // 超时
+                end
+            end
+        end
+    end
+
+    // 输出
+    assign reset_out = wwdg_enable && (timeout_flag || window_violation);
+    assign early_wakeup = wwdg_enable && (counter == window_reg);
+
+    // 寄存器读操作
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        case (reg_addr)
+            5'h0: rdata = {24'h0, prescaler, 3'h0, wwdg_enable};
+            5'h1: rdata = {{32-WINDOW_WIDTH{1'b0}}, window_reg};
+            5'h2: rdata = 32'h0;
+            5'h3: rdata = 32'h0;
+            5'h4: rdata = {{32-COUNTER_WIDTH{1'b0}}, counter};
+            5'h5: rdata = {30'h0, window_violation, timeout_flag};
+            default: rdata = 32'h0;
+        endcase
+    end
+
+    assign reg_rdata = rdata;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 看门狗安全特性</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">写保护</h3>
+              <p class="card-text">防止意外关闭或修改看门狗：</p>
+              <p class="card-text">• 需要特定序列解锁才能写寄存器<br>• 防止程序错误导致看门狗失效<br>• 提高系统安全性</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">独立时钟</h3>
+              <p class="card-text">使用独立时钟源提高可靠性：</p>
+              <p class="card-text">• 不受主时钟故障影响<br>• 即使主时钟停止仍能工作<br>• LSI振荡器通常为32kHz</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">硬件复位</h3>
+              <p class="card-text">超时后触发硬件复位：</p>
+              <p class="card-text">• 直接复位CPU和外设<br>• 不依赖软件响应<br>• 确保系统能够恢复</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调试保护</h3>
+              <p class="card-text">调试模式下仍能工作：</p>
+              <p class="card-text">• 可配置调试时是否暂停<br>• 确保调试时系统安全<br>• 防止调试掩盖问题</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 超时时间计算</h2>
+          <div class="card">
+            <h3 class="card-title">独立看门狗超时时间</h3>
+            <p class="card-text">Timeout = (Reload + 1) × Prescaler × (1 / LSI_FREQ)</p>
+            <p class="card-text">例如：LSI=32kHz, Prescaler=256, Reload=4095</p>
+            <p class="card-text">Timeout = (4095+1) × 256 × (1/32000) = 32.768秒</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">窗口看门狗超时时间</h3>
+            <p class="card-text">Timeout = (2^COUNTER_WIDTH) × Prescaler × (1 / PCLK_FREQ)</p>
+            <p class="card-text">例如：PCLK=50MHz, Prescaler=8, COUNTER_WIDTH=7</p>
+            <p class="card-text">Timeout = 128 × 8 × (1/50000000) = 20.48μs</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 频繁复位</strong><br>症状：系统不断复位<br>解决：增加超时时间，优化喂狗策略</p>
+              <p><strong>2. 无法喂狗</strong><br>症状：喂狗操作无效<br>解决：检查解锁序列，确认寄存器写入正确</p>
+              <p><strong>3. 窗口违规</strong><br>症状：窗口看门狗误触发<br>解决：调整窗口值，优化喂狗时机</p>
+              <p><strong>4. 调试时复位</strong><br>症状：断点调试时系统复位<br>解决：配置调试模式下暂停看门狗</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 看门狗是监控系统运行状态的重要安全机制</li>
+                <li>• 分为独立看门狗和窗口看门狗，各有特点</li>
+                <li>• 独立看门狗使用独立时钟，窗口看门狗要求窗口内喂狗</li>
+                <li>• 具有写保护、独立时钟、硬件复位等安全特性</li>
+                <li>• 正确配置超时时间和喂狗策略是关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-6-定时器设计.html">← 上一节</a>
+          <a href="52-8-DMA设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

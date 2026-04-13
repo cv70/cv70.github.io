@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.6 实盘部署 - 期货CTA策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>76.6 实盘部署</h1>
+      <p class="subtitle">项目二：期货CTA策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解实盘部署的前置条件</li>
+        <li>掌握期货交易接口使用</li>
+        <li>学会实时监控系统构建</li>
+        <li>能够完成策略实盘上线</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="实盘部署" class="card-image">
+      <h3 class="card-title">期货策略实盘部署</h3>
+      <p class="card-text"><strong>实盘部署</strong>是策略从测试到生产的关键环节。本节介绍期货策略的实盘部署方案。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">✅</span> 部署前检查</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>检查项</th>
+            <th>标准</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>策略表现</td>
+            <td>夏普>1.2，回撤<20%</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>模拟盘测试</td>
+            <td>模拟盘运行3个月稳定</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>风控系统</td>
+            <td>止损、限额完备</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>交易接口</td>
+            <td>接口测试通过</td>
+            <td>⬜ 待检查</td>
+          </tr>
+          <tr>
+            <td>资金安排</td>
+            <td>资金充足，风险可控</td>
+            <td>⬜ 待检查</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔌</span> 交易接口集成</h2>
+      <div class="code-block">
+        <pre><code class="language-python">class FuturesTradingAPI:
+    """
+    期货交易API封装
+    """
+
+    def __init__(self, config):
+        self.api = init_ctp_gateway(config)
+        self.connected = False
+
+    def connect(self):
+        """连接交易服务器"""
+        self.api.connect()
+        self.connected = True
+
+    def place_order(self, symbol, direction, volume, price=None):
+        """
+        下单
+        """
+        order = {
+            'symbol': symbol,
+            'direction': direction,
+            'volume': volume,
+            'price_type': 'MARKET' if price is None else 'LIMIT',
+            'price': price
+        }
+
+        order_id = self.api.send_order(order)
+        return order_id
+
+    def cancel_order(self, order_id):
+        """撤单"""
+        return self.api.cancel_order(order_id)
+
+    def get_position(self, symbol):
+        """查询持仓"""
+        return self.api.query_position(symbol)
+
+    def get_account(self):
+        """查询账户"""
+        return self.api.query_account()</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 实时监控</h2>
+      <div class="code-block">
+        <pre><code class="language-python">class RealTimeMonitor:
+    """
+    实时监控系统
+    """
+
+    def __init__(self, config):
+        self.alerts = []
+        self.alert_rules = config['alert_rules']
+
+    def check_position_risk(self, positions):
+        """检查持仓风险"""
+        for symbol, position in positions.items():
+            # 检查止损
+            if position['pnl'] < position['stop_loss']:
+                self.alert(f"{symbol} 触发止损: {position['pnl']}")
+
+            # 检查仓位限制
+            if position['size'] > self.alert_rules['max_position']:
+                self.alert(f"{symbol} 仓位超限: {position['size']}")
+
+    def check_account_risk(self, account):
+        """检查账户风险"""
+        # 检查保证金占用
+        margin_ratio = account['used_margin'] / account['total_asset']
+        if margin_ratio > self.alert_rules['max_margin_ratio']:
+            self.alert(f"保证金占用过高: {margin_ratio:.2%}")
+
+        # 检查当日盈亏
+        if account['daily_pnl'] < self.alert_rules['max_daily_loss']:
+            self.alert(f"当日亏损超限: {account['daily_pnl']}")
+            self.emergency_stop()
+
+    def alert(self, message):
+        """发送警报"""
+        self.alerts.append({
+            'time': datetime.now(),
+            'message': message,
+            'level': 'WARNING'
+        })
+        send_notification(message)
+
+    def emergency_stop(self):
+        """紧急停止"""
+        # 平掉所有持仓
+        self.close_all_positions()
+        # 停止策略
+        self.stop_strategy()</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📅</span> 部署流程</h2>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第1-3天：模拟测试</h4>
+            <p>模拟盘运行，验证系统稳定性</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第4-7天：小资金试运行</h4>
+            <p>10%资金试运行，密切监控</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第8-14天：逐步加仓</h4>
+            <p>表现稳定后逐步增加仓位</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>第15天后：正式运行</h4>
+            <p>全仓位运行，持续监控优化</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">实盘风险提示</div>
+        <p>1）模拟盘与实盘存在差异；2）极端行情风险；3）系统故障风险；4）强平风险；5）保证金风险。务必做好风险预案。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了实盘部署的前置条件</li>
+            <li>• 掌握了期货交易接口使用</li>
+            <li>• 学会了实时监控系统构建</li>
+            <li>• 制定了分阶段部署流程</li>
+            <li>• 建立了完善的风险应对机制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-5-参数优化.html">← 上一节</a>
+      <a href="76-7-项目总结.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.4 计数器与分频器设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.4 计数器与分频器设计</h1>
+          <p class="subtitle">Verilog设计实例</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握二进制计数器的设计</li>
+            <li>理解BCD计数器的实现</li>
+            <li>学会分频器的设计方法</li>
+            <li>能够设计可配置计数器</li>
+          </ul>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 二进制计数器</h2>
+          <div class="code-block">
+<pre><code>// 8位二进制计数器
+module counter_8bit(
+    input  clk,
+    input  rst_n,
+    input  enable,
+    output [7:0] count,
+    output       overflow
+);
+    reg [7:0] count_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            count_reg <= 8'b0000_0000;
+        else if (enable)
+            count_reg <= count_reg + 1;
+    end
+
+    assign count = count_reg;
+    assign overflow = (count_reg == 8'b1111_1111) && enable;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔟</span> BCD计数器</h2>
+          <div class="code-block">
+<pre><code>// 2位BCD计数器（0-99）
+module bcd_counter_2digit(
+    input  clk,
+    input  rst_n,
+    input  enable,
+    output [7:0] bcd,      // [7:4]十位, [3:0]个位
+    output       carry
+);
+    reg [3:0] ones, tens;
+    wire ones_carry = (ones == 4'd9) && enable;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ones <= 4'd0;
+            tens <= 4'd0;
+        end
+        else if (enable) begin
+            if (ones < 4'd9)
+                ones <= ones + 1;
+            else begin
+                ones <= 4'd0;
+                if (tens < 4'd9)
+                    tens <= tens + 1;
+                else
+                    tens <= 4'd0;
+            end
+        end
+    end
+
+    assign bcd = {tens, ones};
+    assign carry = (tens == 4'd9) && (ones == 4'd9) && enable;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 分频器</h2>
+          <div class="code-block">
+<pre><code>// 偶数分频器
+module clock_divider_even #(parameter DIV = 10)(
+    input  clk,
+    input  rst_n,
+    output clk_div
+);
+    reg [$clog2(DIV/2)-1:0] count;
+    reg clk_div_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            count <= 0;
+            clk_div_reg <= 0;
+        end
+        else begin
+            if (count == DIV/2 - 1) begin
+                count <= 0;
+                clk_div_reg <= ~clk_div_reg;
+            end
+            else
+                count <= count + 1;
+        end
+    end
+
+    assign clk_div = clk_div_reg;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 二进制计数器简单高效</li>
+                <li>• BCD计数器用于数字显示</li>
+                <li>• 分频器用于时钟管理</li>
+                <li>• 参数化设计提高复用性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="15-3-基本时序电路实例.html">← 上一节</a>
+          <a href="15-5-状态机设计实例.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>77.4 回测系统 - 期权波动率交易</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>77.4 回测系统</h1>
+      <p class="subtitle">项目三：期权波动率交易</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握期权回测特殊性</li>
+        <li>学会处理期权到期</li>
+        <li>理解波动率曲面构建</li>
+        <li>能够进行期权策略回测</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="回测系统" class="card-image">
+      <h3 class="card-title">期权策略回测系统</h3>
+      <p class="card-text">期权回测需要处理非线性收益、时间衰减等特殊问题。本节介绍期权回测系统的构建。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 回测核心功能</h2>
+      <div class="code-block">
+        <pre><code class="language-python">class OptionBacktester:
+    """
+    期权回测器
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.positions = []
+
+    def evaluate_option(self, option, spot, time_to_expiry):
+        """
+        评估期权价值
+        """
+        # 检查是否到期
+        if time_to_expiry <= 0:
+            return self.calculate_payoff(option, spot)
+
+        # 计算理论价值
+        return black_scholes(
+            S=spot,
+            K=option['strike'],
+            T=time_to_expiry,
+            r=self.config['risk_free_rate'],
+            sigma=option['volatility'],
+            option_type=option['type']
+        )
+
+    def calculate_payoff(self, option, spot):
+        """
+        计算到期收益
+        """
+        if option['type'] == 'call':
+            return max(spot - option['strike'], 0)
+        else:
+            return max(option['strike'] - spot, 0)
+
+    def backtest_strategy(self, strategy_data):
+        """
+        策略回测
+        """
+        results = []
+
+        for date in strategy_data['dates']:
+            # 更新期权价值
+            self.update_positions(date)
+
+            # 检查到期行权
+            self.handle_expiration(date)
+
+            # 执行策略信号
+            signals = self.generate_signals(date)
+            self.execute_signals(signals, date)
+
+            # 记录组合价值
+            portfolio_value = self.calculate_portfolio_value(date)
+            results.append({'date': date, 'value': portfolio_value})
+
+        return pd.DataFrame(results)</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 波动率曲面</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def build_volatility_surface(option_data):
+    """
+    构建波动率曲面
+    """
+    # 按到期日和行权价分组
+    surface = pd.DataFrame(index=option_data['expiry'],
+                         columns=option_data['strike'])
+
+    for expiry in surface.index:
+        for strike in surface.columns:
+            # 获取对应期权
+            options = option_data[
+                (option_data['expiry'] == expiry) &
+                (option_data['strike'] == strike)
+            ]
+
+            # 提取隐含波动率
+            if len(options) > 0:
+                surface.loc[expiry, strike] = options['iv'].mean()
+
+    # 插值填充缺失值
+    surface = surface.interpolate(method='linear', axis=0)
+
+    return surface</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">回测风险提示</div>
+        <p>1）期权流动性差；2）买卖价差大；3）执行困难；4）对冲成本高；5）到期处理复杂。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了期权回测的特殊性</li>
+            <li>• 掌握了期权价值评估方法</li>
+            <li>• 学会了波动率曲面构建</li>
+            <li>• 能够进行期权策略回测</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="77-3-Delta对冲框架.html">← 上一节</a>
+      <a href="77-5-风险分析.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

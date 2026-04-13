@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.8 Testbench实例 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.8 Testbench实例</h1>
+          <p class="subtitle">完整的Testbench设计示例</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>综合运用前面学到的知识</li>
+            <li>设计完整的Testbench</li>
+            <li>理解验证策略</li>
+            <li>学会组织测试代码</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">实例概述</h3>
+          <p class="card-text">
+            本节通过一个完整的FIFO Testbench实例，演示如何综合运用激励生成、响应检查、文件IO、任务封装等技术，构建一个完整的验证平台。
+          </p>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 完整Testbench示例</h2>
+          <div class="code-block">
+<pre// FIFO Testbench
+module tb_fifo #(
+    parameter DATA_WIDTH = 8,
+    parameter DEPTH      = 16,
+    parameter CLK_PERIOD = 10
+)();
+
+// 时钟和复位
+reg clk;
+reg rst_n;
+
+// 接口信号
+reg                     wr_en;
+reg  [DATA_WIDTH-1:0]   wr_data;
+wire                    full;
+reg                     rd_en;
+wire [DATA_WIDTH-1:0]   rd_data;
+wire                    empty;
+
+// 统计信号
+integer wr_count;
+integer rd_count;
+integer error_count;
+
+// 时钟生成
+initial begin
+    clk = 0;
+    forever #(CLK_PERIOD/2) clk = ~clk;
+end
+
+// 复位序列
+initial begin
+    rst_n = 0;
+    repeat(5) @(posedge clk);
+    rst_n = 1;
+end
+
+// 写数据任务
+task write_data;
+    input [DATA_WIDTH-1:0] data;
+    begin
+        @(posedge clk);
+        while (full) @(posedge clk);
+        wr_en   <= 1'b1;
+        wr_data <= data;
+        @(posedge clk);
+        wr_en <= 1'b0;
+        wr_count = wr_count + 1;
+    end
+endtask
+
+// 读数据任务
+task read_data;
+    output [DATA_WIDTH-1:0] data;
+    begin
+        @(posedge clk);
+        while (empty) @(posedge clk);
+        rd_en <= 1'b1;
+        @(posedge clk);
+        rd_en <= 1'b0;
+        data = rd_data;
+        rd_count = rd_count + 1;
+    end
+endtask
+
+// 主测试流程
+initial begin
+    reg [DATA_WIDTH-1:0] wr_pattern;
+    reg [DATA_WIDTH-1:0] rd_pattern;
+    integer i;
+
+    // 初始化
+    wr_en = 0;
+    rd_en = 0;
+    wr_data = 0;
+    wr_count = 0;
+    rd_count = 0;
+    error_count = 0;
+
+    // 等待复位释放
+    wait(rst_n);
+    repeat(2) @(posedge clk);
+
+    $display("========== Test Started ==========");
+
+    // 测试1: 写满FIFO
+    $display("Test 1: Fill FIFO");
+    for (i = 0; i < DEPTH; i = i + 1) begin
+        write_data(i);
+    end
+
+    // 测试2: 读空FIFO
+    $display("Test 2: Empty FIFO");
+    for (i = 0; i < DEPTH; i = i + 1) begin
+        read_data(rd_pattern);
+        if (rd_pattern !== i) begin
+            $display("Error: Expected %h, Got %h", i, rd_pattern);
+            error_count = error_count + 1;
+        end
+    end
+
+    // 测试3: 随机读写
+    $display("Test 3: Random read/write");
+    repeat(1000) begin
+        if ($urandom_range(0, 1) && !full) begin
+            write_data($urandom);
+        end else if (!empty) begin
+            read_data(rd_pattern);
+        end
+    end
+
+    // 测试4: 同时读写
+    $display("Test 4: Simultaneous read/write");
+    fork
+        begin
+            repeat(50) write_data($urandom);
+        end
+        begin
+            repeat(50) read_data(rd_pattern);
+        end
+    join
+
+    // 报告结果
+    $display("========== Test Summary ==========");
+    $display("Write operations: %0d", wr_count);
+    $display("Read operations:  %0d", rd_count);
+    $display("Errors:          %0d", error_count);
+
+    if (error_count == 0) begin
+        $display("TEST PASSED!");
+    end else begin
+        $display("TEST FAILED!");
+    end
+
+    $finish;
+end
+
+// 实例化DUT
+fifo #(
+    .DATA_WIDTH(DATA_WIDTH),
+    .DEPTH(DEPTH)
+) u_fifo (
+    .clk(clk),
+    .rst_n(rst_n),
+    .wr_en(wr_en),
+    .wr_data(wr_data),
+    .full(full),
+    .rd_en(rd_en),
+    .rd_data(rd_data),
+    .empty(empty)
+);
+
+endmodule</pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 测试策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">功能测试</h3>
+              <ul class="feature-list">
+                <li>基本读写功能</li>
+                <li>满空状态检查</li>
+                <li>数据完整性验证</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">边界测试</h3>
+              <ul class="feature-list">
+                <li>FIFO写满/读空</li>
+                <li>同时读写</li>
+                <li>随机压力测试</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">验证完成</div>
+            <p>通过这个实例，我们学习了如何构建一个完整的Testbench，包括时钟复位、任务封装、测试流程、结果检查等各个方面。</p>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 完整Testbench包含多个测试场景</li>
+                <li>• 任务封装提高代码可读性</li>
+                <li>• 自动检查确保验证质量</li>
+                <li>• 测试报告总结验证结果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="20-7-参数化Testbench.html">← 上一节</a>
+          <a href="../chapter21/21-1-主流仿真工具介绍.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

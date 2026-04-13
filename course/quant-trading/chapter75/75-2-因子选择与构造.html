@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>75.2 因子选择与构造 - 多因子选股策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>75.2 因子选择与构造</h1>
+      <p class="subtitle">项目一：多因子选股策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握因子分类体系与选择原则</li>
+        <li>学会常用因子的构造方法</li>
+        <li>理解因子有效性检验方法</li>
+        <li>能够独立进行因子挖掘与筛选</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="因子选择与构造" class="card-image">
+      <h3 class="card-title">因子选择与构造</h3>
+      <p class="card-text"><strong>因子</strong>是股票收益的驱动因素。选择有效的因子是构建多因子模型的核心。本节将介绍因子分类、构造方法和有效性检验。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 因子分类体系</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">风格因子</h3>
+          <ul class="feature-list">
+            <li>价值因子：市盈率、市净率等</li>
+            <li>成长因子：营收增长率、利润增长率</li>
+            <li>质量因子：ROE、ROA、财务质量</li>
+            <li>动量因子：价格动量、盈利动量</li>
+            <li>波动率因子：历史波动、特质波动</li>
+            <li>流动性因子：换手率、成交额</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">行业因子</h3>
+          <ul class="feature-list">
+            <li>中信行业分类</li>
+            <li>申万行业分类</li>
+            <li>行业中性化</li>
+            <li>行业轮动</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔬</span> 因子构造实例</h2>
+      <div class="code-block">
+        <pre><code class="language-python">import pandas as pd
+import numpy as np
+
+# 价值因子构造示例
+def calculate_value_factor(df):
+    """
+    计算价值因子
+    市盈率倒数 + 市净率倒数 + 市销率倒数
+    """
+    # 市盈率倒数
+    pe_inv = 1 / df['pe_ratio']
+    # 市净率倒数
+    pb_inv = 1 / df['pb_ratio']
+    # 市销率倒数
+    ps_inv = 1 / df['ps_ratio']
+
+    # 标准化
+    pe_norm = (pe_inv - pe_inv.mean()) / pe_inv.std()
+    pb_norm = (pb_inv - pb_inv.mean()) / pb_inv.std()
+    ps_norm = (ps_inv - ps_inv.mean()) / ps_inv.std()
+
+    # 综合价值因子
+    value_factor = (pe_norm + pb_norm + ps_norm) / 3
+
+    return value_factor
+
+# 动量因子构造示例
+def calculate_momentum_factor(df, periods=[20, 60, 120]):
+    """
+    计算动量因子
+    多周期动量的加权平均
+    """
+    close = df['close']
+
+    momentum_signals = []
+    weights = []
+
+    for period in periods:
+        momentum = close.pct_change(period)
+        momentum_signals.append(momentum)
+        weights.append(1 / period)
+
+    # 加权平均
+    weights = np.array(weights) / sum(weights)
+    momentum_factor = sum(m * w for m, w in zip(momentum_signals, weights))
+
+    return momentum_factor
+
+# 质量因子构造示例
+def calculate_quality_factor(df):
+    """
+    计算质量因子
+    ROE + ROA + 利润率稳定性
+    """
+    roe = df['roe']
+    roa = df['roa']
+    # 利润率（营业收入/净利润）
+    profit_margin = df['net_profit'] / df['revenue']
+
+    # 标准化
+    roe_norm = (roe - roe.mean()) / roe.std()
+    roa_norm = (roa - roa.mean()) / roa.std()
+    profit_margin_norm = (profit_margin - profit_margin.mean()) / profit_margin.std()
+
+    # 综合质量因子
+    quality_factor = (roe_norm + roa_norm + profit_margin_norm) / 3
+
+    return quality_factor</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 因子有效性检验</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">IC分析</h3>
+          <p class="card-text"><strong>IC（Information Coefficient）</strong>衡量因子值与下期收益率的相关系数</p>
+          <div class="code-block">
+            <pre><code class="language-python">def calculate_ic(factor, returns):
+    """
+    计算因子的IC值
+    """
+    # 按日期分组计算
+    ic_values = []
+    for date in factor.index.get_level_values('date').unique():
+        factor_slice = factor.loc[date]
+        return_slice = returns.loc[date]
+        ic = factor_slice.corr(return_slice, method='spearman')
+        ic_values.append(ic)
+
+    return pd.Series(ic_values)
+
+# IC均值与IR
+ic_mean = ic.mean()
+ic_std = ic.std()
+ir = ic_mean / ic_std</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">分层回测</h3>
+          <p class="card-text">将股票按因子值分成若干组，比较各组收益率差异</p>
+          <div class="code-block">
+            <pre><code class="language-python">def group_backtest(factor, returns, n_groups=5):
+    """
+    分层回测
+    """
+    # 按因子值分组
+    groups = pd.qcut(factor, n_groups, labels=False)
+
+    # 计算各组收益率
+    group_returns = []
+    for i in range(n_groups):
+        mask = groups == i
+        group_ret = returns[mask].mean()
+        group_returns.append(group_ret)
+
+    return pd.Series(group_returns)</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">单调性检验</h3>
+          <p class="card-text">检验因子值与收益是否呈单调关系</p>
+          <div class="code-block">
+            <pre><code class="language-python">from scipy.stats import spearmanr
+
+def monotonicity_test(group_returns):
+    """
+    单调性检验
+    """
+    group_idx = range(len(group_returns))
+    correlation, p_value = spearmanr(group_idx, group_returns)
+
+    return correlation, p_value</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚖️</span> 因子筛选标准</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>标准</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IC均值</td>
+            <td>> 3%</td>
+            <td>因子预测能力</td>
+          </tr>
+          <tr>
+            <td>IR（信息比率）</td>
+            <td>> 0.5</td>
+            <td>因子稳定性</td>
+          </tr>
+          <tr>
+            <td>多空收益</td>
+            <td>> 5%</td>
+            <td>分层回测表现</td>
+          </tr>
+          <tr>
+            <td>单调性</td>
+            <td>> 0.3</td>
+            <td>因子排序一致性</td>
+          </tr>
+          <tr>
+            <td>换手率</td>
+            <td>< 80%</td>
+            <td>交易成本考量</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 因子正交化</h2>
+      <p class="card-text">去除因子之间的相关性，使因子相互独立</p>
+      <div class="code-block">
+        <pre><code class="language-python">from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+
+def orthogonalize_factors(factors_df):
+    """
+    因子正交化
+    """
+    # 标准化
+    scaler = StandardScaler()
+    factors_scaled = scaler.fit_transform(factors_df)
+
+    # PCA正交化
+    pca = PCA()
+    factors_orth = pca.fit_transform(factors_scaled)
+
+    return pd.DataFrame(factors_orth, index=factors_df.index)
+
+# 正交化前相关性
+corr_before = factors_df.corr()
+
+# 正交化后相关性
+factors_orth = orthogonalize_factors(factors_df)
+corr_after = factors_orth.corr()</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">因子过拟合风险</div>
+        <p>因子构造和筛选过程中，容易出现过拟合问题。建议：1）使用样本外验证；2）控制因子复杂度；3）避免过度数据挖掘；4）进行稳健性检验。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了因子的分类体系与选择原则</li>
+            <li>• 学会了价值、动量、质量等常用因子的构造方法</li>
+            <li>• 理解了IC分析、分层回测等有效性检验方法</li>
+            <li>• 掌握了因子筛选的标准和流程</li>
+            <li>• 学会了因子正交化技术</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="75-1-项目背景与目标.html">← 上一节</a>
+      <a href="75-3-回测框架搭建.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.5 参数优化 - 期货CTA策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>76.5 参数优化</h1>
+      <p class="subtitle">项目二：期货CTA策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解参数优化的原理</li>
+        <li>掌握常用优化方法</li>
+        <li>避免过拟合陷阱</li>
+        <li>能够选择稳健参数</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="参数优化" class="card-image">
+      <h3 class="card-title">策略参数优化</h3>
+      <p class="card-text"><strong>参数优化</strong>是提升策略表现的重要手段，但需避免过拟合。本节介绍科学的参数优化方法。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 优化方法</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">网格搜索</h3>
+          <div class="code-block">
+            <pre><code class="language-python">def grid_search(param_grid):
+    """
+    网格搜索
+    """
+    results = []
+    # 遍历所有参数组合
+    for params in ParameterGrid(param_grid):
+        result = backtest(params)
+        results.append({'params': params, 'score': result['sharpe']})
+
+    # 找到最优参数
+    best = max(results, key=lambda x: x['score'])
+    return best['params'], results</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">随机搜索</h3>
+          <div class="code-block">
+            <pre><code class="language-python">def random_search(param_dist, n_iter=100):
+    """
+    随机搜索
+    """
+    results = []
+    for _ in range(n_iter):
+        params = {k: random.choice(v) for k, v in param_dist.items()}
+        result = backtest(params)
+        results.append({'params': params, 'score': result['sharpe']})
+
+    best = max(results, key=lambda x: x['score'])
+    return best['params'], results</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">贝叶斯优化</h3>
+          <div class="code-block">
+            <pre><code class="language-python">from hyperopt import fmin, tpe, hp
+
+def bayesian_optimization(param_space, max_evals=100):
+    """
+    贝叶斯优化
+    """
+    def objective(params):
+        result = backtest(params)
+        return -result['sharpe']
+
+    best = fmin(objective, param_space,
+                algo=tpe.suggest, max_evals=max_evals)
+    return best</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 过拟合检测</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>检测方法</th>
+            <th>指标</th>
+            <th>判断标准</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>样本外衰减</td>
+            <td>样本外夏普/样本内夏普</td>
+            <td>< 0.5</td>
+          </tr>
+          <tr>
+            <td>参数敏感性</td>
+            <td>参数变化对绩效的影响</td>
+            <td>过于敏感</td>
+          </tr>
+          <tr>
+            <td>交易次数</td>
+            <td>年均交易次数</td>
+            <td>> 1000次/年</td>
+          </tr>
+          <tr>
+            <td>拟合优度</td>
+            <td>R方</td>
+            <td>> 0.9</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 参数稳定性测试</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def parameter_stability_test(params, train_period, test_period, n_tests=10):
+    """
+    参数稳定性测试
+    """
+    results = []
+    for i in range(n_tests):
+        train_start = train_period[0] + i * timedelta(days=30)
+        train_end = train_period[1] + i * timedelta(days=30)
+        test_start = test_period[0] + i * timedelta(days=30)
+        test_end = test_period[1] + i * timedelta(days=30)
+
+        # 样本内优化
+        train_result = backtest(params, train_start, train_end)
+
+        # 样本外测试
+        test_result = backtest(params, test_start, test_end)
+
+        results.append({
+            'train_sharpe': train_result['sharpe'],
+            'test_sharpe': test_result['sharpe'],
+            'decay': test_result['sharpe'] / train_result['sharpe']
+        })
+
+    return pd.DataFrame(results)</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">优化风险提示</div>
+        <p>1）避免过度优化；2）保持参数简单；3）关注样本外表现；4）定期更新参数；5）避免数据挖掘偏差。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了参数优化的原理</li>
+            <li>• 掌握了多种优化方法</li>
+            <li>• 学会了过拟合检测</li>
+            <li>• 能够进行参数稳定性测试</li>
+            <li>• 掌握了稳健参数选择方法</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-4-回测验证.html">← 上一节</a>
+      <a href="76-6-实盘部署.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

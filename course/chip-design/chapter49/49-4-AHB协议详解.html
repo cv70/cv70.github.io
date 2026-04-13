@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.4 AHB协议详解 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.4 AHB协议详解</h1>
+          <p class="subtitle">高性能系统总线协议</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握AHB协议的核心特性和架构</li>
+            <li>理解AHB的信号定义和传输协议</li>
+            <li>学习AHB的传输类型和时序</li>
+            <li>了解AHB-Lite和AHB5新特性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">AHB协议简介</h3>
+          <p class="card-text"><strong>AHB（Advanced High-performance Bus）</strong>是AMBA 2.0引入的高性能系统总线协议，在AXI出现之前是AMBA家族中的高性能总线代表。AHB设计简洁、易于实现，在中等性能要求的SoC设计中仍然有广泛应用。</p>
+          <p class="card-text">AHB采用<strong>单一地址/数据总线</strong>架构，支持<strong>流水线操作</strong>和<strong>突发传输</strong>。虽然性能不如AXI，但AHB的设计复杂度更低，功耗和面积也更小，非常适合作为系统层的互联总线。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> AHB核心特性</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">高性能特性</h3>
+              <ul class="feature-list">
+                <li>支持流水线操作，地址和数据可并行传输</li>
+                <li>支持突发传输，提高数据吞吐量</li>
+                <li>支持多个主设备，通过仲裁器共享总线</li>
+                <li>支持分裂传输（Split Transaction）</li>
+                <li>支持字节、半字、字传输</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">设计优势</h3>
+              <ul class="feature-list">
+                <li>单一总线架构，设计简单</li>
+                <li>信号数量少，易于实现</li>
+                <li>功耗低，面积小</li>
+                <li>时序收敛容易</li>
+                <li>工具支持成熟</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AHB信号定义</h2>
+          <p class="card-text">AHB总线信号分为几类：系统信号、地址和控制信号、数据信号、响应信号：</p>
+          <table>
+            <thead>
+              <tr>
+                <th>信号类别</th>
+                <th>信号名称</th>
+                <th>方向</th>
+                <th>描述</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td rowspan="2"><strong>系统信号</strong></td>
+                <td>HCLK</td>
+                <td>输入</td>
+                <td>总线时钟</td>
+              </tr>
+              <tr>
+                <td>HRESETn</td>
+                <td>输入</td>
+                <td>总线复位（低电平有效）</td>
+              </tr>
+              <tr>
+                <td rowspan="7"><strong>地址和控制</strong></td>
+                <td>HADDR[31:0]</td>
+                <td>输出</td>
+                <td>32位地址总线</td>
+              </tr>
+              <tr>
+                <td>HTRANS[1:0]</td>
+                <td>输出</td>
+                <td>传输类型（IDLE、BUSY、NSEQ、SEQ）</td>
+              </tr>
+              <tr>
+                <td>HSIZE[2:0]</td>
+                <td>输出</td>
+                <td>传输大小（字节、半字、字等）</td>
+              </tr>
+              <tr>
+                <td>HBURST[2:0]</td>
+                <td>输出</td>
+                <td>突发类型（SINGLE、INCR、WRAP等）</td>
+              </tr>
+              <tr>
+                <td>HPROT[3:0]</td>
+                <td>输出</td>
+                <td>保护控制信号</td>
+              </tr>
+              <tr>
+                <td>HWRITE</td>
+                <td>输出</td>
+                <td>传输方向（1=写，0=读）</td>
+              </tr>
+              <tr>
+                <td>HMASTLOCK</td>
+                <td>输出</td>
+                <td>锁定传输信号</td>
+              </tr>
+              <tr>
+                <td rowspan="3"><strong>数据信号</strong></td>
+                <td>HWDATA[31:0]</td>
+                <td>输出</td>
+                <td>写数据总线</td>
+              </tr>
+              <tr>
+                <td>HRDATA[31:0]</td>
+                <td>输入</td>
+                <td>读数据总线</td>
+              </tr>
+              <tr>
+                <td>HREADY</td>
+                <td>输入</td>
+                <td>传输完成信号</td>
+              </tr>
+              <tr>
+                <td rowspan="2"><strong>响应信号</strong></td>
+                <td>HRESP[1:0]</td>
+                <td>输入</td>
+                <td>传输响应（OKAY、ERROR、RETRY、SPLIT）</td>
+              </tr>
+              <tr>
+                <td>HREADYOUT</td>
+                <td>输出</td>
+                <td>从设备产生的HREADY信号</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📏</span> AHB传输类型</h2>
+          <p class="card-text">AHB定义了四种传输类型，通过HTRANS[1:0]信号指定：</p>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">IDLE（00）</h3>
+              <ul class="feature-list">
+                <li>无数据传输</li>
+                <li>主设备不占用总线</li>
+                <li>用于总线空闲状态</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">BUSY（01）</h3>
+              <ul class="feature-list">
+                <li>主设备保持总线控制权</li>
+                <li>但不进行数据传输</li>
+                <li>用于插入等待周期</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">NSEQ（10）</h3>
+              <ul class="feature-list">
+                <li>非顺序传输</li>
+                <li>单次传输或突发首拍</li>
+                <li>地址不连续</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">SEQ（11）</h3>
+              <ul class="feature-list">
+                <li>顺序传输</li>
+                <li>突发传输的后续拍</li>
+                <li>地址自动递增</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> AHB流水线操作</h2>
+          <p class="card-text">AHB支持<strong>地址和数据流水线</strong>操作，这是其高性能的关键：</p>
+          <div class="tip-box success">
+            <span class="icon">🔄</span>
+            <div class="content">
+              <div class="title">流水线机制</div>
+              <p>AHB允许主设备在当前传输完成之前发送下一个传输的地址。这样，地址传输和数据传输可以重叠进行，大大提高了总线利用率。流水线深度可以根据设计需求调整，通常为2-4级。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> AHB突发传输</h2>
+          <p class="card-text">AHB支持多种突发传输类型：</p>
+          <table>
+            <thead>
+              <tr>
+                <th>HBURST编码</th>
+                <th>突发类型</th>
+                <th>描述</th>
+                <th>最大长度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>000</td>
+                <td>SINGLE</td>
+                <td>单次传输</td>
+                <td>1</td>
+              </tr>
+              <tr>
+                <td>001</td>
+                <td>INCR</td>
+                <td>未指定长度的递增突发</td>
+                <td>不确定</td>
+              </tr>
+              <tr>
+                <td>010</td>
+                <td>WRAP4</td>
+                <td>4拍回绕突发</td>
+                <td>4</td>
+              </tr>
+              <tr>
+                <td>011</td>
+                <td>INCR4</td>
+                <td>4拍递增突发</td>
+                <td>4</td>
+              </tr>
+              <tr>
+                <td>100</td>
+                <td>WRAP8</td>
+                <td>8拍回绕突发</td>
+                <td>8</td>
+              </tr>
+              <tr>
+                <td>101</td>
+                <td>INCR8</td>
+                <td>8拍递增突发</td>
+                <td>8</td>
+              </tr>
+              <tr>
+                <td>110</td>
+                <td>WRAP16</td>
+                <td>16拍回绕突发</td>
+                <td>16</td>
+              </tr>
+              <tr>
+                <td>111</td>
+                <td>INCR16</td>
+                <td>16拍递增突发</td>
+                <td>16</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> AHB响应类型</h2>
+          <p class="card-text">AHB从设备通过HRESP[1:0]信号返回响应：</p>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">OKAY（00）</h3>
+              <ul class="feature-list">
+                <li>传输成功完成</li>
+                <li>正常响应</li>
+                <li>最常见的响应类型</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">ERROR（01）</h3>
+              <ul class="feature-list">
+                <li>传输错误</li>
+                <li>访问失败或异常</li>
+                <li>主设备需要处理错误</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">RETRY（10）</h3>
+              <ul class="feature-list">
+                <li>传输未完成</li>
+                <li>主设备需要重试</li>
+                <li>用于从设备忙的情况</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">SPLIT（11）</h3>
+              <ul class="feature-list">
+                <li>分裂传输</li>
+                <li>从设备释放总线</li>
+                <li>完成后再通知主设备</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📐</span> AHB-Lite</h2>
+          <p class="card-text"><strong>AHB-Lite</strong>是AHB的简化版本，支持单主设备：</p>
+          <ul class="feature-list">
+            <li><strong>单主设备：</strong>只支持一个主设备，无需仲裁器</li>
+            <li><strong>简化设计：</strong>移除了分裂传输和重试机制</li>
+            <li><strong>小面积：</strong>逻辑简单，面积小</li>
+            <li><strong>应用场景：</strong>简单的嵌入式系统、FPGA设计</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🆕</span> AHB5新特性</h2>
+          <p class="card-text">AHB5是AMBA 5的一部分，引入了新特性：</p>
+          <ul class="feature-list">
+            <li><strong>扩展地址宽度：</strong>支持64位地址</li>
+            <li><strong>安全扩展：</strong>支持TrustZone安全扩展</li>
+            <li><strong>原子操作：</strong>支持原子加载/存储</li>
+            <li><strong>用户扩展：</strong>支持用户自定义信号</li>
+          </ul>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">AHB vs AXI选择</div>
+            <p>AHB和AXI各有优势：AHB设计简单，适合中等性能应用；AXI性能更高，适合高性能系统。在实际设计中，常常采用混合架构：高性能模块使用AXI，系统总线使用AHB，外设总线使用APB。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• AHB是高性能系统总线，设计简洁易于实现</li>
+                <li>• 支持流水线操作和突发传输，提高总线利用率</li>
+                <li>• 四种传输类型（IDLE/BUSY/NSEQ/SEQ）提供灵活控制</li>
+                <li>• 支持多种突发类型，包括递增和回绕</li>
+                <li>• AHB-Lite是简化版本，适合单主设备系统</li>
+                <li>• AHB5引入了64位地址和安全扩展等新特性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-3-AXI协议详解.html">← 上一节</a>
+          <a href="49-5-APB协议详解.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

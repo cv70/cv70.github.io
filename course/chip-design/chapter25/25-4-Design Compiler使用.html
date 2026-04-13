@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.4 Design Compiler使用 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.4 Design Compiler使用</h1>
+          <p class="subtitle">Synopsys DC工具的操作指南</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握Design Compiler的基本使用方法</li>
+            <li>学会编写DC综合脚本</li>
+            <li>了解DC的图形界面和命令行模式</li>
+            <li>掌握DC的常用命令和选项</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Design Compiler简介</h3>
+          <p class="card-text">
+            <strong>Design Compiler（DC）</strong>是Synopsys公司开发的业界标准逻辑综合工具。
+            它提供了强大的综合优化能力，支持从RTL到门级网表的完整转换流程，
+            是数字芯片设计流程中最常用的综合工具之一。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> DC启动方式</h2>
+
+          <h3>命令行模式（dc_shell）</h3>
+          <div class="code-block">
+# 启动DC Shell
+dc_shell -topographical_mode
+
+# 或使用图形界面
+dc_shell -gui
+
+# 执行脚本文件
+dc_shell -f compile.tcl
+          </div>
+
+          <h3>图形界面模式（Design Vision）</h3>
+          <div class="code-block">
+# 启动Design Vision
+design_vision
+
+# 加载脚本
+design_vision -f compile.tcl
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📜</span> 完整综合脚本示例</h2>
+          <div class="code-block">
+#!/bin/tcl
+# ===========================================
+# Design Compiler 综合脚本
+# ===========================================
+
+# 1. 环境设置
+# ===========================================
+# 设置库名称
+set LIB_NAME "saed90nm"
+
+# 设置库路径
+set LIB_PATH "/foundry/libraries/${LIB_NAME}"
+
+# 设置目标库
+set target_library [list ${LIB_PATH}/stdcell_rvt/db_${LIB_NAME}/saed90nm_typ.db]
+
+# 设置链接库
+set link_library "* $target_library"
+
+# 设置符号库
+set symbol_library ${LIB_PATH}/stdcell_rvt/db_${LIB_NAME}/saed90nm.sdb
+
+# 设置搜索路径
+set search_path [list \
+    ./rtl \
+    ./scripts \
+    ./netlist \
+    ${LIB_PATH}/stdcell_rvt/db_${LIB_NAME} \
+]
+
+# 2. 读入设计
+# ===========================================
+# 读入RTL文件
+read_verilog { \
+    rtl/top.v \
+    rtl/sub_module1.v \
+    rtl/sub_module2.v \
+}
+
+# 设置当前设计
+current_design top_module
+
+# 链接设计
+link
+
+# 检查设计
+check_design > reports/check_design.rpt
+
+# 3. 设置约束
+# ===========================================
+# 创建时钟
+create_clock -name CLK -period 10 [get_ports clk]
+
+# 设置时钟不确定性
+set_clock_uncertainty 0.5 [get_clocks CLK]
+
+# 设置时钟转换时间
+set_clock_transition 0.2 [get_clocks CLK]
+
+# 设置输入延迟
+set_input_delay 2.0 -clock CLK [remove_from_collection [all_inputs] [get_ports clk]]
+
+# 设置输出延迟
+set_output_delay 2.0 -clock CLK [all_outputs]
+
+# 设置驱动强度
+set_driving_cell -lib_cell INVX1 [get_ports clk]
+
+# 设置负载
+set_load 0.1 [all_outputs]
+
+# 设置面积约束
+set_max_area 0
+
+# 4. 编译优化
+# ===========================================
+# 设置编译策略
+set_compile_ultra_ungroup [get_designs *]
+
+# 执行编译
+compile_ultra
+
+# 或使用常规编译
+# compile
+
+# 5. 报告生成
+# ===========================================
+# 创建报告目录
+file mkdir reports
+
+# 生成时序报告
+report_timing -max_paths 20 -delay_type max \
+    > reports/timing_setup.rpt
+
+report_timing -max_paths 20 -delay_type min \
+    > reports/timing_hold.rpt
+
+# 生成面积报告
+report_area -hierarchy > reports/area.rpt
+
+# 生成功耗报告
+report_power -hierarchy > reports/power.rpt
+
+# 生成单元报告
+report_cell > reports/cell.rpt
+
+# 生成约束报告
+report_constraint -all_violators > reports/violations.rpt
+
+# 6. 输出结果
+# ===========================================
+# 创建输出目录
+file mkdir outputs
+
+# 输出网表
+write -format verilog -hierarchy \
+    -outputs outputs/top_synth.v
+
+# 输出SDC约束
+write_sdc -nosplit outputs/top_synth.sdc
+
+# 输出SDF文件
+write_sdf -version 2.1 outputs/top_synth.sdf
+
+# 输出DDC文件（DC内部格式）
+write -format ddc -hierarchy \
+    -output outputs/top_synth.ddc
+
+# 7. 清理退出
+# ===========================================
+# 保存会话
+save_session output/session
+
+# 退出DC
+exit
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> DC常用命令</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>命令类别</th>
+                <th>常用命令</th>
+                <th>功能说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>设计管理</td>
+                <td>read_verilog, read_vhdl</td>
+                <td>读入RTL文件</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>current_design</td>
+                <td>设置当前设计</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>link</td>
+                <td>链接设计</td>
+              </tr>
+              <tr>
+                <td>约束设置</td>
+                <td>create_clock</td>
+                <td>创建时钟</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>set_input_delay</td>
+                <td>设置输入延迟</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>set_output_delay</td>
+                <td>设置输出延迟</td>
+              </tr>
+              <tr>
+                <td>综合编译</td>
+                <td>compile</td>
+                <td>常规编译</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>compile_ultra</td>
+                <td>高级编译</td>
+              </tr>
+              <tr>
+                <td>报告生成</td>
+                <td>report_timing</td>
+                <td>时序报告</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>report_area</td>
+                <td>面积报告</td>
+              </tr>
+              <tr>
+                <td>文件输出</td>
+                <td>write</td>
+                <td>输出网表</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>write_sdc</td>
+                <td>输出约束</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">使用技巧</div>
+            <p>建议使用<strong>脚本化</strong>的方式进行综合，而不是在GUI中手动操作。
+            脚本可以重复执行、版本控制，并且更容易进行回归测试和流程自动化。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• DC是业界标准的综合工具</li>
+                <li>• 支持命令行和图形界面两种模式</li>
+                <li>• 脚本化是推荐的使用方式</li>
+                <li>• 掌握常用命令是高效使用DC的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-3-工艺库与目标库.html">← 上一节</a>
+          <a href="25-5-综合报告分析.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

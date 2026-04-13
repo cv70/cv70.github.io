@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.4 GPIO设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.4 GPIO设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握GPIO的基本功能与特性</li>
+            <li>理解GPIO的输入输出控制机制</li>
+            <li>学会GPIO的硬件设计方法</li>
+            <li>了解GPIO的中断与复用功能</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> GPIO概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>GPIO（General Purpose Input/Output）</strong>通用输入输出端口是最基础、最常用的外设接口。它提供可编程的数字IO引脚，支持输入、输出、中断等多种功能，是芯片与外部世界交互的桥梁。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">GPIO特点</div>
+              <p>• 灵活配置：可配置为输入或输出<br>• 多功能复用：支持多种外设功能<br>• 中断支持：边沿和电平触发中断<br>• 可编程驱动：可配置输出驱动强度</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> GPIO基本结构</h2>
+          <div class="card">
+            <h3 class="card-title">GPIO引脚结构</h3>
+            <p class="card-text">每个GPIO引脚包含以下模块：</p>
+            <p class="card-text">1. <strong>输入缓冲器：</strong>将外部信号同步到芯片内部时钟域</p>
+            <p class="card-text">2. <strong>输出驱动器：</strong>驱动外部负载，支持多种驱动模式</p>
+            <p class="card-text">3. <strong>上拉/下拉电阻：</strong>提供默认电平</p>
+            <p class="card-text">4. <strong>多路选择器：</strong>支持外设功能复用</p>
+            <p class="card-text">5. <strong>中断检测电路：</strong>检测边沿或电平变化</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPIO工作模式</h2>
+          <table>
+            <thead><tr><th>模式</th><th>方向</th><th>描述</th><th>应用场景</th></tr></thead>
+            <tbody>
+              <tr><td>输入浮空</td><td>输入</td><td>无上拉下拉，高阻态</td><td>外部驱动信号</td></tr>
+              <tr><td>输入上拉</td><td>输入</td><td>内部上拉电阻</td><td>按键检测（低电平有效）</td></tr>
+              <tr><td>输入下拉</td><td>输入</td><td>内部下拉电阻</td><td>按键检测（高电平有效）</td></tr>
+              <tr><td>模拟输入</td><td>输入</td><td>连接到ADC</td><td>模拟信号采集</td></tr>
+              <tr><td>推挽输出</td><td>输出</td><td>PMOS+NMOS，强驱动</td><td>LED驱动、逻辑输出</td></tr>
+              <tr><td>开漏输出</td><td>输出</td><td>仅NMOS，需外接上拉</td><td>I2C总线、电平转换</td></tr>
+              <tr><td>复用推挽</td><td>输出</td><td>外设功能，推挽驱动</td><td>UART TX、SPI MOSI</td></tr>
+              <tr><td>复用开漏</td><td>输出</td><td>外设功能，开漏输出</td><td>I2C SDA/SCL</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> GPIO模块设计</h2>
+          <pre class="code-block"><code>// GPIO模块设计
+module gpio #(
+    parameter DATA_WIDTH = 32,     // GPIO位宽
+    parameter DEBOUNCE_EN = 1,     // 使能去抖动
+    parameter DEBOUNCE_CNT = 1000  // 去抖动计数值
+) (
+    input  wire                  clk,
+    input  wire                  rst_n,
+    input  wire [DATA_WIDTH-1:0] data_in,    // 外部输入
+    output wire [DATA_WIDTH-1:0] data_out,   // 外部输出
+    output wire [DATA_WIDTH-1:0] data_oe,    // 输出使能
+    output wire [DATA_WIDTH-1:0] data_pu,    // 上拉使能
+    output wire [DATA_WIDTH-1:0] data_pd,    // 下拉使能
+
+    // 寄存器接口
+    input  wire                  reg_wr,
+    input  wire                  reg_rd,
+    input  wire [4:0]            reg_addr,
+    input  wire [31:0]           reg_wdata,
+    output wire [31:0]           reg_rdata,
+
+    // 中断输出
+    output wire [DATA_WIDTH-1:0] irq         // 中断请求
+);
+
+    // 寄存器定义
+    reg [DATA_WIDTH-1:0] dir_reg;      // 方向寄存器（0=输入, 1=输出）
+    reg [DATA_WIDTH-1:0] out_reg;      // 输出数据寄存器
+    reg [DATA_WIDTH-1:0] in_reg;       // 输入数据寄存器（只读）
+    reg [DATA_WIDTH-1:0] set_reg;      // 置位寄存器（写1置位）
+    reg [DATA_WIDTH-1:0] clr_reg;      // 清零寄存器（写1清零）
+    reg [DATA_WIDTH-1:0] tog_reg;      // 翻转寄存器（写1翻转）
+
+    // 中断相关寄存器
+    reg [DATA_WIDTH-1:0] irq_type;     // 中断类型（0=电平, 1=边沿）
+    reg [DATA_WIDTH-1:0] irq_pol;      // 中断极性（0=低/下降沿, 1=高/上升沿）
+    reg [DATA_WIDTH-1:0] irq_en;       // 中断使能
+    reg [DATA_WIDTH-1:0] irq_status;   // 中断状态
+
+    // 同步外部输入
+    reg [DATA_WIDTH-1:0] in_sync1, in_sync2;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            in_sync1 <= 0;
+            in_sync2 <= 0;
+        end else begin
+            in_sync1 <= data_in;
+            in_sync2 <= in_sync1;
+        end
+    end
+
+    // 输入去抖动
+    reg [DATA_WIDTH-1:0] in_deb;
+    reg [15:0] debounce_cnt [DATA_WIDTH-1:0];
+    reg [DATA_WIDTH-1:0] in_stable;
+
+    genvar i;
+    generate
+        if (DEBOUNCE_EN) begin
+            for (i = 0; i < DATA_WIDTH; i = i + 1) begin : debounce
+                always @(posedge clk or negedge rst_n) begin
+                    if (!rst_n) begin
+                        debounce_cnt[i] <= 0;
+                        in_stable[i] <= 0;
+                    end else begin
+                        if (in_sync2[i] != in_stable[i]) begin
+                            if (debounce_cnt[i] >= DEBOUNCE_CNT-1) begin
+                                in_stable[i] <= in_sync2[i];
+                                debounce_cnt[i] <= 0;
+                            end else begin
+                                debounce_cnt[i] <= debounce_cnt[i] + 1;
+                            end
+                        end else begin
+                            debounce_cnt[i] <= 0;
+                        end
+                    end
+                end
+            end
+            assign in_deb = in_stable;
+        end else begin
+            assign in_deb = in_sync2;
+        end
+    endgenerate
+
+    // 输入数据寄存器
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            in_reg <= 0;
+        end else begin
+            in_reg <= in_deb;
+        end
+    end
+
+    // 中断检测
+    reg [DATA_WIDTH-1:0] in_prev;
+    wire [DATA_WIDTH-1:0] edge_rise = in_deb & ~in_prev;
+    wire [DATA_WIDTH-1:0] edge_fall = ~in_deb & in_prev;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            in_prev <= 0;
+            irq_status <= 0;
+        end else begin
+            in_prev <= in_deb;
+
+            // 检测中断条件
+            for (integer j = 0; j < DATA_WIDTH; j = j + 1) begin
+                if (irq_type[j]) begin
+                    // 边沿触发
+                    if (irq_pol[j] && edge_rise[j]) irq_status[j] <= 1;
+                    if (!irq_pol[j] && edge_fall[j]) irq_status[j] <= 1;
+                end else begin
+                    // 电平触发
+                    if (irq_pol[j] && in_deb[j]) irq_status[j] <= 1;
+                    if (!irq_pol[j] && !in_deb[j]) irq_status[j] <= 1;
+                end
+            end
+        end
+    end
+
+    // 中断输出
+    assign irq = irq_status & irq_en;
+
+    // 寄存器读写
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        case (reg_addr)
+            5'h0: rdata = {{32-DATA_WIDTH{1'b0}}, dir_reg};
+            5'h1: rdata = {{32-DATA_WIDTH{1'b0}}, out_reg};
+            5'h2: rdata = {{32-DATA_WIDTH{1'b0}}, in_reg};
+            5'h3: rdata = {{32-DATA_WIDTH{1'b0}}, set_reg};
+            5'h4: rdata = {{32-DATA_WIDTH{1'b0}}, clr_reg};
+            5'h5: rdata = {{32-DATA_WIDTH{1'b0}}, tog_reg};
+            5'h8: rdata = {{32-DATA_WIDTH{1'b0}}, irq_type};
+            5'h9: rdata = {{32-DATA_WIDTH{1'b0}}, irq_pol};
+            5'hA: rdata = {{32-DATA_WIDTH{1'b0}}, irq_en};
+            5'hB: rdata = {{32-DATA_WIDTH{1'b0}}, irq_status};
+            default: rdata = 32'h0;
+        endcase
+    end
+
+    assign reg_rdata = rdata;
+
+    // 寄存器写操作
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dir_reg <= 0;
+            out_reg <= 0;
+            set_reg <= 0;
+            clr_reg <= 0;
+            tog_reg <= 0;
+            irq_type <= 0;
+            irq_pol <= 0;
+            irq_en <= 0;
+        end else if (reg_wr) begin
+            case (reg_addr)
+                5'h0: dir_reg <= reg_wdata[DATA_WIDTH-1:0];
+                5'h1: out_reg <= reg_wdata[DATA_WIDTH-1:0];
+                5'h3: set_reg <= reg_wdata[DATA_WIDTH-1:0];
+                5'h4: clr_reg <= reg_wdata[DATA_WIDTH-1:0];
+                5'h5: tog_reg <= reg_wdata[DATA_WIDTH-1:0];
+                5'h8: irq_type <= reg_wdata[DATA_WIDTH-1:0];
+                5'h9: irq_pol <= reg_wdata[DATA_WIDTH-1:0];
+                5'hA: irq_en <= reg_wdata[DATA_WIDTH-1:0];
+                5'hB: irq_status <= irq_status & ~reg_wdata[DATA_WIDTH-1:0];  // 写1清零
+            endcase
+        end
+    end
+
+    // 输出逻辑
+    wire [DATA_WIDTH-1:0] out_data = out_reg | set_reg;
+    wire [DATA_WIDTH-1:0] out_final = (out_reg & ~clr_reg) | (set_reg & ~clr_reg);
+    wire [DATA_WIDTH-1:0] out_toggle = out_final ^ tog_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            out_reg <= 0;
+            tog_reg <= 0;
+        end else if (reg_wr) begin
+            if (reg_addr == 5'h5) tog_reg <= tog_reg | reg_wdata[DATA_WIDTH-1:0];
+            if (reg_addr == 5'h1) out_reg <= reg_wdata[DATA_WIDTH-1:0];
+        end else begin
+            tog_reg <= 0;
+        end
+    end
+
+    // 输出控制
+    assign data_out = (out_final ^ tog_reg) & dir_reg;
+    assign data_oe = dir_reg;
+    assign data_pu = ~dir_reg;  // 输入模式下使能上拉
+    assign data_pd = 0;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> GPIO复用功能</h2>
+          <div class="card">
+            <h3 class="card-title">功能复用原理</h3>
+            <p class="card-text">GPIO引脚通常支持多种外设功能，通过多路选择器（MUX）进行切换：</p>
+            <p class="card-text">1. <strong>GPIO模式：</strong>通用输入输出功能</p>
+            <p class="card-text">2. <strong>外设功能1：</strong>如UART_TX、SPI_SCK等</p>
+            <p class="card-text">3. <strong>外设功能2：</strong>如I2C_SDA、PWM输出等</p>
+            <p class="card-text">4. <strong>外设功能N：</strong>根据芯片设计确定</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">复用控制</div>
+              <p>• 通过寄存器配置选择功能模式<br>• 每个引脚可能支持2-8种复用功能<br>• 不同引脚可能支持相同的外设功能</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> GPIO电气特性</h2>
+          <table>
+            <thead><tr><th>特性</th><th>参数</th><th>典型值</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>输出高电平</td><td>VOH</td><td>VDD-0.1V</td><td>输出逻辑1时电压</td></tr>
+              <tr><td>输出低电平</td><td>VOL</td><td>0.1V</td><td>输出逻辑0时电压</td></tr>
+              <tr><td>输入高电平</td><td>VIH</td><td>0.7×VDD</td><td>识别为逻辑1的最低电压</td></tr>
+              <tr><td>输入低电平</td><td>VIL</td><td>0.3×VDD</td><td>识别为逻辑0的最高电压</td></tr>
+              <tr><td>输出驱动电流</td><td>IOH/IOL</td><td>±8mA/±20mA</td><td>输出电流能力</td></tr>
+              <tr><td>输入漏电流</td><td>II</td><td>±1μA</td><td>输入端漏电流</td></tr>
+              <tr><td>上拉电阻</td><td>RPU</td><td>30k-100kΩ</td><td>内部上拉电阻值</td></tr>
+              <tr><td>下拉电阻</td><td>RPD</td><td>30k-100kΩ</td><td>内部下拉电阻值</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> GPIO保护电路</h2>
+          <div class="card">
+            <h3 class="card-title">ESD保护</h3>
+            <p class="card-text">GPIO引脚需要ESD（静电放电）保护：</p>
+            <p class="card-text">1. <strong>TVS二极管：</strong>快速响应的瞬态电压抑制器</p>
+            <p class="card-text">2. <strong>钳位二极管：</strong>将电压限制在安全范围内</p>
+            <p class="card-text">3. <strong>限流电阻：</strong>限制ESD电流</p>
+            <p class="card-text">4. <strong>电源轨钳位：</strong>连接到VDD和VSS的二极管</p>
+          </div>
+          <div class="warning-box">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">设计注意事项</div>
+              <p>• 确保ESD保护不影响正常信号<br>• 保护电路的寄生电容要小<br>• 需要通过HBM和CDM ESD测试</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 输入抖动</strong><br>症状：输入信号不稳定<br>解决：使能去抖动功能，增加滤波电容</p>
+              <p><strong>2. 输出驱动不足</strong><br>症状：无法驱动负载<br>解决：使用推挽输出，增加外部驱动电路</p>
+              <p><strong>3. 中断误触发</strong><br>症状：中断频繁触发<br>解决：使用边沿触发而非电平触发，增加消抖</p>
+              <p><strong>4. 功能复用冲突</strong><br>症状：外设无法工作<br>解决：检查引脚复用配置，确保正确选择</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• GPIO是通用输入输出接口，是最基础的外设</li>
+                <li>• GPIO支持多种工作模式，包括输入、输出、复用等</li>
+                <li>• GPIO模块包含方向控制、数据寄存器、中断检测等功能</li>
+                <li>• GPIO引脚支持功能复用，可配置为不同外设功能</li>
+                <li>• 需要ESD保护电路和适当的电气特性设计</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-3-I2C接口设计.html">← 上一节</a>
+          <a href="52-5-PWM设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

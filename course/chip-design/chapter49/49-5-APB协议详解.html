@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.5 APB协议详解 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.5 APB协议详解</h1>
+          <p class="subtitle">低功耗外设总线协议</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握APB协议的核心特性和设计思想</li>
+            <li>理解APB的信号定义和传输协议</li>
+            <li>学习APB的时序和工作模式</li>
+            <li>了解APB4的新特性和应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">APB协议简介</h3>
+          <p class="card-text"><strong>APB（Advanced Peripheral Bus）</strong>是AMBA家族中的低速外设总线协议，专门为连接低速外设而设计。APB的设计理念是<strong>极简、低功耗、小面积</strong>，非常适合连接UART、GPIO、定时器、I2C、SPI等低速外设。</p>
+          <p class="card-text">APB采用<strong>单主多从</strong>架构，通常通过AHB-to-APB桥接器连接到系统总线。APB不支持突发传输，每次传输都是单次操作，这对于低速外设来说已经足够，同时大大简化了设计。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> APB核心特性</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">设计特点</h3>
+              <ul class="feature-list">
+                <li>极简的信号定义</li>
+                <li>单次传输，无突发</li>
+                <li>低功耗设计</li>
+                <li>小面积占用</li>
+                <li>易于实现和验证</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">适用场景</h3>
+              <ul class="feature-list">
+                <li>低速外设连接</li>
+                <li>寄存器配置</li>
+                <li>状态读取</li>
+                <li>控制信号传输</li>
+                <li>低功耗应用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> APB信号定义</h2>
+          <p class="card-text">APB协议的信号数量非常少，设计简洁：</p>
+          <table>
+            <thead>
+              <tr>
+                <th>信号名称</th>
+                <th>方向</th>
+                <th>描述</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>PCLK</strong></td>
+                <td>输入</td>
+                <td>APB总线时钟</td>
+              </tr>
+              <tr>
+                <td><strong>PRESETn</strong></td>
+                <td>输入</td>
+                <td>APB总线复位（低电平有效）</td>
+              </tr>
+              <tr>
+                <td><strong>PADDR[31:0]</strong></td>
+                <td>输出</td>
+                <td>32位地址总线</td>
+              </tr>
+              <tr>
+                <td><strong>PSELx</strong></td>
+                <td>输出</td>
+                <td>从设备选择信号（每个从设备一个）</td>
+              </tr>
+              <tr>
+                <td><strong>PENABLE</strong></td>
+                <td>输出</td>
+                <td>传输使能信号</td>
+              </tr>
+              <tr>
+                <td><strong>PWRITE</strong></td>
+                <td>输出</td>
+                <td>传输方向（1=写，0=读）</td>
+              </tr>
+              <tr>
+                <td><strong>PWDATA[31:0]</strong></td>
+                <td>输出</td>
+                <td>写数据总线</td>
+              </tr>
+              <tr>
+                <td><strong>PRDATA[31:0]</strong></td>
+                <td>输入</td>
+                <td>读数据总线</td>
+              </tr>
+              <tr>
+                <td><strong>PREADY</strong></td>
+                <td>输入</td>
+                <td>从设备就绪信号（可选）</td>
+              </tr>
+              <tr>
+                <td><strong>PSLVERR</strong></td>
+                <td>输入</td>
+                <td>从设备错误信号（可选）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> APB传输时序</h2>
+          <p class="card-text">APB传输分为两个阶段：**Setup阶段**和**Enable阶段**：</p>
+
+          <div class="tip-box success">
+            <span class="icon">📋</span>
+            <div class="content">
+              <div class="title">传输流程</div>
+              <ol style="padding-left: 20px;">
+                <li><strong>Setup阶段（PCLK上升沿1）：</strong>
+                  <ul style="list-style-type: circle;">
+                    <li>主设备驱动PADDR、PWRITE、PWDATA等信号</li>
+                    <li>拉高目标从设备的PSELx信号</li>
+                    <li>PENABLE保持低电平</li>
+                  </ul>
+                </li>
+                <li><strong>Enable阶段（PCLK上升沿2）：</strong>
+                  <ul style="list-style-type: circle;">
+                    <li>主设备拉高PENABLE信号</li>
+                    <li>从设备在PENABLE为高期间完成操作</li>
+                    <li>如果是读操作，从设备驱动PRDATA</li>
+                  </ul>
+                </li>
+                <li><strong>传输完成：</strong>
+                  <ul style="list-style-type: circle;">
+                    <li>主设备拉低PENABLE和PSELx</li>
+                    <li>传输结束，可以开始下一次传输</li>
+                  </ul>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> APB读写操作</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">APB写操作</h3>
+              <ul class="feature-list">
+                <li><strong>Setup周期：</strong>主设备放置地址和写数据</li>
+                <li><strong>Enable周期：</strong>PENABLE变高，从设备捕获数据</li>
+                <li><strong>完成：</strong>从设备在PENABLE为高期间完成写操作</li>
+                <li><strong>时序：</strong>最少2个时钟周期</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">APB读操作</h3>
+              <ul class="feature-list">
+                <li><strong>Setup周期：</strong>主设备放置读地址</li>
+                <li><strong>Enable周期：</strong>PENABLE变高，从设备提供数据</li>
+                <li><strong>完成：</strong>主设备在PENABLE为高期间捕获数据</li>
+                <li><strong>时序：</strong>最少2个时钟周期</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 等待状态支持</h2>
+          <p class="card-text">APB3及以后版本支持等待状态：</p>
+          <ul class="feature-list">
+            <li><strong>PREADY信号：</strong>从设备可以拉低PREADY来插入等待周期</li>
+            <li><strong>时序扩展：</strong>传输可以延长到多个时钟周期</li>
+            <li><strong>应用场景：</strong>需要较长响应时间的外设（如EEPROM）</li>
+            <li><strong>向后兼容：</strong>不支持PREADY的从设备可以忽略该信号</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">❌</span> 错误处理</h2>
+          <p class="card-text">APB3及以后版本支持错误报告：</p>
+          <ul class="feature-list">
+            <li><strong>PSLVERR信号：</strong>从设备可以拉高PSLVERR报告错误</li>
+            <li><strong>错误类型：</strong>地址错误、访问错误、保护错误等</li>
+            <li><strong>主设备响应：</strong>主设备需要检查PSLVERR并处理错误</li>
+            <li><strong>可选信号：</strong>不需要错误处理的系统可以不实现该信号</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🆕</span> APB4新特性</h2>
+          <p class="card-text">APB4是AMBA 4引入的升级版本，增加了新特性：</p>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">安全扩展</h3>
+              <ul class="feature-list">
+                <li><strong>PPROT[2:0]：</strong>保护信号</li>
+                <li>指示事务的特权级别</li>
+                <li>支持安全/非安全访问</li>
+                <li>支持数据/指令访问</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">用户扩展</h3>
+              <ul class="feature-list">
+                <li><strong>PUSER：</strong>用户定义信号</li>
+                <li>传输附加信息</li>
+                <li>提高灵活性</li>
+                <li>不影响基本功能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> APB桥接器</h2>
+          <p class="card-text">APB通常通过桥接器连接到系统总线：</p>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">桥接器功能</div>
+              <p>AHB-to-APB桥接器负责：协议转换（从AHB到APB）、时钟域转换（如果需要）、地址译码、从设备选择。桥接器通常还包含一个降频器，因为APB时钟通常低于AHB时钟，以降低功耗。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">APB设计注意事项</div>
+            <p>APB虽然简单，但设计时仍需注意：地址对齐要求（通常32位对齐）、时钟频率选择（根据外设需求）、复位策略、功耗管理（时钟门控）等。对于需要错误处理的外设，务必实现PSLVERR信号。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• APB是专为低速外设设计的极简总线协议</li>
+                <li>• 信号数量少，设计简单，功耗低，面积小</li>
+                <li>• 传输分为Setup和Enable两个阶段，最少2个时钟周期</li>
+                <li>• APB3支持等待状态和错误处理</li>
+                <li>• APB4增加了安全扩展和用户扩展</li>
+                <li>• 通常通过桥接器连接到系统总线</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-4-AHB协议详解.html">← 上一节</a>
+          <a href="49-6-Wishbone协议.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

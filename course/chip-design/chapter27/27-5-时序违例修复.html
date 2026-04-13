@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.5 时序违例修复 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.5 时序违例修复</h1>
+          <p class="subtitle">时序问题的诊断与解决方法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握时序违例的诊断方法</li>
+            <li>学会分析违例的根本原因</li>
+            <li>了解常见的修复策略</li>
+            <li>掌握RTL和网表层面的修复方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 时序违例诊断</h2>
+
+          <h3>诊断流程</h3>
+          <ol class="feature-list">
+            <li>识别违例路径</li>
+            <li>分析路径组成</li>
+            <li>定位关键单元</li>
+            <li>确定违例原因</li>
+            <li>选择修复方案</li>
+            <li>验证修复效果</li>
+          </ol>
+
+          <h3>诊断命令</h3>
+          <div class="code-block">
+# 查看所有违例
+report_constraint -all_violators
+
+# 查看最严重的违例
+report_timing -max_paths 10 -slack_lesser_than 0
+
+# 按路径组查看违例
+foreach pg [all_path_groups] {
+    report_timing -path_group $pg -max_paths 5
+}
+
+# 查看特定单元的延迟
+report_cell -delay [get_cells critical_cell*]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Setup违例修复</h2>
+
+          <h3>RTL层面修复</h3>
+          <ul class="feature-list">
+            <li><strong>流水线化</strong>：插入寄存器分割长组合路径</li>
+            <li><strong>并行化</strong>：将串行逻辑改为并行执行</li>
+            <li><strong>逻辑简化</strong>：优化算法减少计算复杂度</li>
+            <li><strong>编码优化</strong>：使用更高效的编码风格</li>
+          </ul>
+
+          <h3>网表层面修复</h3>
+          <div class="code-block">
+# 1. 增加驱动强度
+size_cell [get_cells weak_driver*] BUFX8
+
+# 2. 替换为更快的单元
+swap_cell [get_cells slow_gate*] NAND2X1
+
+# 3. 减少扇出
+set_max_fanout 10 [current_design]
+compile -inc
+
+# 4. 调整约束
+set_multicycle_path -setup 2 \
+    -from [get_cells slow_reg] \
+    -to [get_cells dest_reg]
+
+# 5. 重新综合
+# 移除路径上的单元并重新综合
+remove_cell [get_cells sub_optimal*]
+compile -inc
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Hold违例修复</h2>
+
+          <h3>常见原因分析</h3>
+          <ul class="feature-list">
+            <li>时钟偏斜过大</li>
+            <li>数据路径延迟过小</li>
+            <li>时钟门控延迟不均</li>
+            <li>单元驱动能力过强</li>
+          </ul>
+
+          <h3>修复方法</h3>
+          <div class="code-block">
+# 1. 插入延迟单元
+insert_buffer [get_pins fast_path/A] BUFH1
+
+# 2. 减小驱动强度
+size_cell [get_cells strong_driver*] BUFX1
+
+# 3. 增加负载
+set_load 0.2 [get_pins data_in]
+
+# 4. 调整单元类型
+swap_cell [get_cells fast_gate*] NAND2XL
+
+# 5. 设置虚假路径（谨慎使用）
+set_false_path -hold \
+    -from [get_cells source_reg] \
+    -to [get_cells dest_reg]
+
+# 6. 调整时钟树
+# 让时钟工具重新平衡时钟
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 违例修复实例</h2>
+
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# 时序违例修复脚本
+# ============================================================================
+
+# 1. 分析违例
+# ============================================
+puts "分析Setup违例..."
+report_timing -max_paths 10 -delay_type max \
+    > reports/setup_before.rpt
+
+puts "分析Hold违例..."
+report_timing -max_paths 10 -delay_type min \
+    > reports/hold_before.rpt
+
+# 2. 修复Setup违例
+# ============================================
+# 找到Setup违例路径
+set setup_violators [get_timing_paths -max_paths 5 \
+    -slack_lesser_than 0 -delay_type max]
+
+foreach path $setup_violators {
+    set startpoint [get_attribute $path startpoint]
+    set endpoint [get_attribute $path endpoint]
+
+    # 尝试增加驱动
+    set cells [get_cells -of_objects $path]
+    foreach cell $cells {
+        set ref [get_attribute $cell ref_name]
+        # 替换为更大驱动的单元
+        if {[regexp {X1$} $ref]} {
+            size_cell $cell [string replace $ref end end X2]
+        }
+    }
+}
+
+# 3. 修复Hold违例
+# ============================================
+# 找到Hold违例路径
+set hold_violators [get_timing_paths -max_paths 5 \
+    -slack_lesser_than 0 -delay_type min]
+
+foreach path $hold_violators {
+    # 在数据路径插入缓冲
+    set net [get_attribute $path startpoint_pin]
+    if {[get_attribute $net is_wire]} {
+        insert_buffer [get_attribute $net driver_pin] BUFH1
+    }
+}
+
+# 4. 更新时序并验证
+# ============================================
+update_timing
+
+puts "验证修复效果..."
+report_timing -max_paths 10 -delay_type max \
+    > reports/setup_after.rpt
+
+report_timing -max_paths 10 -delay_type min \
+    > reports/hold_after.rpt
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 修复策略选择</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>违例类型</th>
+                <th>严重程度</th>
+                <th>推荐策略</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Setup < -1ns</td>
+                <td>严重</td>
+                <td>RTL修改 + 重新综合</td>
+              </tr>
+              <tr>
+                <td>Setup -1ns ~ 0</td>
+                <td>中等</td>
+                <td>网表优化 + 约束调整</td>
+              </tr>
+              <tr>
+                <td>Hold < -0.5ns</td>
+                <td>严重</td>
+                <td>插入缓冲 + 时钟树优化</td>
+              </tr>
+              <tr>
+                <td>Hold -0.5ns ~ 0</td>
+                <td>中等</td>
+                <td>单元调整 + 负载增加</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">修复注意事项</div>
+            <p>1）修复一个违例可能导致新的违例；2）优先修复Setup违例；
+            3）谨慎使用时序例外约束；4）修复后必须重新验证所有路径；
+            5）记录每次修复的原因和效果。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 时序违例修复需要系统化的诊断流程</li>
+                <li>• Setup和Hold违例有不同的修复方法</li>
+                <li>• RTL层面修复通常比网表层面更有效</li>
+                <li>• 修复后必须全面验证时序</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-4-PrimeTime使用.html">← 上一节</a>
+          <a href="27-6-片上变异（OCV）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

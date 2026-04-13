@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.6 定时器设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.6 定时器设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握定时器的基本功能与分类</li>
+            <li>理解定时器的工作原理</li>
+            <li>学会定时器模块的硬件设计</li>
+            <li>了解定时器的高级应用</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> 定时器概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>定时器（Timer）</strong>是嵌入式系统中最重要的外设之一，用于产生精确的时间延迟、测量时间间隔、生成周期性中断、事件计数等。定时器是实时操作系统（RTOS）任务调度、PWM生成、看门狗等功能的基础。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">定时器特点</div>
+              <p>• 精确计时：基于系统时钟，精度高<br>• 灵活配置：支持多种工作模式<br>• 多功能：可做定时、计数、PWM等<br>• 中断支持：可触发中断或DMA</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 定时器分类</h2>
+          <table>
+            <thead><tr><th>类型</th><th>特点</th><th>应用场景</th></tr></thead>
+            <tbody>
+              <tr><td>基本定时器</td><td>简单的向上计数器</td><td>系统时基、延时</td></tr>
+              <tr><td>通用定时器</td><td>支持多种计数模式、输入捕获、输出比较</td><td>PWM、测量、编码器</td></tr>
+              <tr><td>高级定时器</td><td>支持死区、互补输出、刹车功能</td><td>电机控制</td></tr>
+              <tr><td>看门狗定时器</td><td>独立运行，用于系统监控</td><td>系统可靠性</td></tr>
+              <tr><td>实时定时器（RTC）</td><td>低功耗，支持日历功能</td><td>时钟、闹钟</td></tr>
+              <tr><td>系统滴答定时器（SysTick）</td><td>标准ARM核外设</td><td>RTOS时基</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 定时器工作模式</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">向上计数模式</h3>
+              <p class="card-text">计数器从0计数到自动重装载值（ARR），然后重新从0开始：</p>
+              <p class="card-text">0 → 1 → 2 → ... → ARR → 0 → ...</p>
+              <p class="card-text">最常用的模式，适用于大多数定时场景。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">向下计数模式</h3>
+              <p class="card-text">计数器从自动重装载值（ARR）向下计数到0，然后重新从ARR开始：</p>
+              <p class="card-text">ARR → ARR-1 → ... → 1 → 0 → ARR → ...</p>
+              <p class="card-text">适用于需要倒计时的应用。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">中心对齐模式</h3>
+              <p class="card-text">计数器从0向上计数到ARR，然后向下计数到0：</p>
+              <p class="card-text">0 → 1 → ... → ARR → ARR-1 → ... → 0 → ...</p>
+              <p class="card-text">产生对称的PWM波形，减少谐波。</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title>外部时钟模式</h3>
+              <p class="card-text">计数器由外部时钟源驱动：</p>
+              <p class="card-text">• 用于测量外部信号频率<br>• 用于编码器接口<br>• 用于外部事件计数</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 通用定时器模块设计</h2>
+          <pre class="code-block"><code>// 通用定时器模块
+module timer #(
+    parameter COUNTER_WIDTH = 32,    // 计数器位宽
+    parameter CHANNEL_NUM = 4,       // 比较通道数
+    parameter CLK_FREQ = 50_000_000  // 系统时钟频率
+) (
+    input  wire                          clk,
+    input  wire                          rst_n,
+
+    // 控制信号
+    input  wire                          enable,         // 定时器使能
+    input  wire                          start,          // 启动
+    input  wire                          stop,           // 停止
+    input  wire                          reload,         // 重装载
+
+    // 外部输入
+    input  wire                          ext_clk,        // 外部时钟
+    input  wire                          ext_trig,       // 外部触发
+
+    // 寄存器接口
+    input  wire                          reg_wr,
+    input  wire                          reg_rd,
+    input  wire [4:0]                    reg_addr,
+    input  wire [31:0]                   reg_wdata,
+    output wire [31:0]                   reg_rdata,
+
+    // 输出
+    output wire [COUNTER_WIDTH-1:0]      counter,        // 计数器值
+    output wire                          update_irq,     // 更新中断
+    output wire [CHANNEL_NUM-1:0]        compare_irq,    // 比较中断
+    output wire [CHANNEL_NUM-1:0]        compare_out     // 比较输出
+);
+
+    // 寄存器定义
+    reg [1:0] count_mode;        // 计数模式：00=向上, 01=向下, 10=中心对齐
+    reg [COUNTER_WIDTH-1:0] arr_reg;        // 自动重装载寄存器
+    reg [COUNTER_WIDTH-1:0] psc_reg;        // 预分频寄存器
+    reg [COUNTER_WIDTH-1:0] ccr_reg [CHANNEL_NUM-1:0];  // 捕获/比较寄存器
+    reg [CHANNEL_NUM-1:0] cc_enable;       // 通道使能
+    reg [CHANNEL_NUM-1:0] cc_mode;         // 通道模式：0=输出, 1=输入
+    reg irq_enable;            // 中断使能
+    reg one_pulse;             // 单脉冲模式
+
+    // 内部信号
+    reg [COUNTER_WIDTH-1:0] counter_reg;
+    reg [COUNTER_WIDTH-1:0] psc_counter;
+    reg [15:0] psc_div;
+    wire psc_tick = (psc_counter == 0);
+    reg update_flag;
+    reg [CHANNEL_NUM-1:0] compare_match;
+
+    // 预分频器
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            psc_counter <= 0;
+        end else if (enable) begin
+            if (psc_tick) begin
+                psc_counter <= psc_reg;
+            end else begin
+                psc_counter <= psc_counter - 1;
+            end
+        end
+    end
+
+    // 计数器
+    reg counting_up;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            counter_reg <= 0;
+            counting_up <= 1;
+            update_flag <= 0;
+            count_mode <= 2'b00;
+            arr_reg <= 0;
+            psc_reg <= 0;
+            cc_enable <= {CHANNEL_NUM{1'b0}};
+            cc_mode <= {CHANNEL_NUM{1'b0}};
+            irq_enable <= 0;
+            one_pulse <= 0;
+        end else if (enable) begin
+            update_flag <= 0;
+
+            // 寄存器写操作
+            if (reg_wr) begin
+                case (reg_addr)
+                    5'h0: count_mode <= reg_wdata[1:0];
+                    5'h1: arr_reg <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h2: psc_reg <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h4: ccr_reg[0] <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h5: ccr_reg[1] <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h6: ccr_reg[2] <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h7: ccr_reg[3] <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h8: cc_enable <= reg_wdata[CHANNEL_NUM-1:0];
+                    5'h9: cc_mode <= reg_wdata[CHANNEL_NUM-1:0];
+                    5'hA: irq_enable <= reg_wdata[0];
+                    5'hB: one_pulse <= reg_wdata[0];
+                endcase
+            end
+
+            // 计数器控制
+            if (start) begin
+                counter_reg <= 0;
+                counting_up <= 1;
+            end else if (stop) begin
+                // 停止计数
+            end else if (reload) begin
+                counter_reg <= arr_reg;
+            end else if (psc_tick) begin
+                case (count_mode)
+                    2'b00: begin  // 向上计数
+                        if (counter_reg >= arr_reg) begin
+                            counter_reg <= 0;
+                            update_flag <= 1;
+                            if (one_pulse) enable <= 0;
+                        end else begin
+                            counter_reg <= counter_reg + 1;
+                        end
+                    end
+                    2'b01: begin  // 向下计数
+                        if (counter_reg == 0) begin
+                            counter_reg <= arr_reg;
+                            update_flag <= 1;
+                            if (one_pulse) enable <= 0;
+                        end else begin
+                            counter_reg <= counter_reg - 1;
+                        end
+                    end
+                    2'b10: begin  // 中心对齐
+                        if (counting_up) begin
+                            if (counter_reg >= arr_reg) begin
+                                counter_reg <= counter_reg - 1;
+                                counting_up <= 0;
+                            end else begin
+                                counter_reg <= counter_reg + 1;
+                            end
+                        end else begin
+                            if (counter_reg == 0) begin
+                                counter_reg <= counter_reg + 1;
+                                counting_up <= 1;
+                                update_flag <= 1;
+                                if (one_pulse) enable <= 0;
+                            end else begin
+                                counter_reg <= counter_reg - 1;
+                            end
+                        end
+                    end
+                endcase
+            end
+        end
+    end
+
+    // 比较匹配检测
+    genvar i;
+    generate
+        for (i = 0; i < CHANNEL_NUM; i = i + 1) begin : compare
+            always @(*) begin
+                compare_match[i] = cc_enable[i] && (counter_reg == ccr_reg[i]);
+            end
+            assign compare_out[i] = compare_match[i];
+        end
+    endgenerate
+
+    // 输出
+    assign counter = counter_reg;
+    assign update_irq = irq_enable && update_flag;
+    assign compare_irq = compare_match & {CHANNEL_NUM{irq_enable}};
+
+    // 寄存器读操作
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        case (reg_addr)
+            5'h0: rdata = {30'h0, count_mode};
+            5'h1: rdata = {{32-COUNTER_WIDTH{1'b0}}, arr_reg};
+            5'h2: rdata = {{32-COUNTER_WIDTH{1'b0}}, psc_reg};
+            5'h3: rdata = {{32-COUNTER_WIDTH{1'b0}}, counter_reg};
+            5'h4: rdata = {{32-COUNTER_WIDTH{1'b0}}, ccr_reg[0]};
+            5'h5: rdata = {{32-COUNTER_WIDTH{1'b0}}, ccr_reg[1]};
+            5'h6: rdata = {{32-COUNTER_WIDTH{1'b0}}, ccr_reg[2]};
+            5'h7: rdata = {{32-COUNTER_WIDTH{1'b0}}, ccr_reg[3]};
+            5'h8: rdata = {{32-CHANNEL_NUM{1'b0}}, cc_enable};
+            5'h9: rdata = {{32-CHANNEL_NUM{1'b0}}, cc_mode};
+            5'hA: rdata = {31'h0, irq_enable};
+            5'hB: rdata = {31'h0, one_pulse};
+            default: rdata = 32'h0;
+        endcase
+    end
+
+    assign reg_rdata = rdata;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 输入捕获功能</h2>
+          <div class="card">
+            <h3 class="card-title">输入捕获原理</h3>
+            <p class="card-text">输入捕获用于测量外部信号的脉宽、周期、频率等参数：</p>
+            <p class="card-text">1. 外部信号连接到定时器输入通道</p>
+            <p class="card-text">2. 配置捕获触发条件（上升沿、下降沿、双边沿）</p>
+            <p class="card-text">3. 触发时自动保存计数器值到捕获寄存器</p>
+            <p class="card-text">4. 可配置产生中断或DMA请求</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📡</span> 输入捕获模块设计</h2>
+          <pre class="code-block"><code>// 输入捕获模块
+module input_capture #(
+    parameter COUNTER_WIDTH = 32
+) (
+    input  wire                      clk,
+    input  wire                      rst_n,
+    input  wire                      enable,         // 捕获使能
+    input  wire [COUNTER_WIDTH-1:0]  counter,        // 定时器计数器
+    input  wire                      capture_pin,    // 捕获输入引脚
+
+    // 配置
+    input  wire [1:0]                edge_sel,       // 边沿选择：00=无, 01=上升, 10=下降, 11=双边
+    input  wire                      filter_en,      // 滤波使能
+    input  wire [3:0]                filter_cnt,     // 滤波计数
+
+    // 输出
+    output reg  [COUNTER_WIDTH-1:0]  capture_val,    // 捕获值
+    output reg                       capture_flag,   // 捕获标志
+    output wire                      capture_irq     // 捕获中断
+);
+
+    // 输入同步和滤波
+    reg [3:0] pin_sync;
+    reg pin_filtered;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pin_sync <= 0;
+            pin_filtered <= 0;
+        end else begin
+            pin_sync <= {pin_sync[2:0], capture_pin};
+
+            if (filter_en) begin
+                // 数字滤波：连续N个采样相同才确认
+                if (pin_sync == {4{capture_pin}}) begin
+                    pin_filtered <= capture_pin;
+                end
+            end else begin
+                pin_filtered <= pin_sync[0];
+            end
+        end
+    end
+
+    // 边沿检测
+    reg pin_prev;
+    wire rising_edge = pin_filtered & ~pin_prev;
+    wire falling_edge = ~pin_filtered & pin_prev;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pin_prev <= 0;
+        end else begin
+            pin_prev <= pin_filtered;
+        end
+    end
+
+    // 捕获逻辑
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            capture_val <= 0;
+            capture_flag <= 0;
+        end else if (enable) begin
+            capture_flag <= 0;
+
+            case (edge_sel)
+                2'b01: begin  // 上升沿捕获
+                    if (rising_edge) begin
+                        capture_val <= counter;
+                        capture_flag <= 1;
+                    end
+                end
+                2'b10: begin  // 下降沿捕获
+                    if (falling_edge) begin
+                        capture_val <= counter;
+                        capture_flag <= 1;
+                    end
+                end
+                2'b11: begin  // 双边沿捕获
+                    if (rising_edge || falling_edge) begin
+                        capture_val <= counter;
+                        capture_flag <= 1;
+                    end
+                end
+            endcase
+        end
+    end
+
+    assign capture_irq = capture_flag;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 系统滴答定时器（SysTick）</h2>
+          <div class="card">
+            <h3 class="card-title">SysTick概述</h3>
+            <p class="card-text">SysTick是ARM Cortex-M内核的标准外设，用于为RTOS提供系统时基：</p>
+            <p class="card-text">• 24位递减计数器</p>
+            <p class="card-text">• 可编程的重装载值</p>
+            <p class="card-text">• 可配置中断</p>
+            <p class="card-text">• 独立于厂商，可移植性好</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 定时器配置寄存器</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">控制寄存器（TIM_CTRL）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [7] | ARPE | 自动重装载预装载使能 |</p>
+              <p class="card-text">| [3] | OPM | 单脉冲模式 |</p>
+              <p class="card-text">| [2] | URS | 更新请求源 |</p>
+              <p class="card-text">| [1:0] | CEN | 计数器使能 |</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">状态寄存器（TIM_STATUS）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [0] | UIF | 更新中断标志 |</p>
+              <p class="card-text">| [4:1] | CCIF | 捕获/比较中断标志 |</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 定时精度不足</strong><br>症状：定时不准确<br>解决：检查时钟源精度，优化预分频配置</p>
+              <p><strong>2. 中断丢失</strong><br>症状：定时中断不触发<br>解决：检查中断优先级，确保中断服务程序及时处理</p>
+              <p><strong>3. 输入捕获抖动</strong><br>症状：捕获值不稳定<br>解决：使能输入滤波，优化边沿检测</p>
+              <p><strong>4. 多通道冲突</strong><br>症状：多通道同时工作异常<br>解决：检查通道配置，避免资源冲突</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 定时器是嵌入式系统的重要外设，用于精确计时和事件控制</li>
+                <li>• 定时器分为基本、通用、高级、看门狗、RTC等多种类型</li>
+                <li>• 支持向上、向下、中心对齐等多种计数模式</li>
+                <li>• 输入捕获功能用于测量外部信号参数</li>
+                <li>• SysTick是ARM Cortex-M的标准系统时基</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-5-PWM设计.html">← 上一节</a>
+          <a href="52-7-看门狗设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

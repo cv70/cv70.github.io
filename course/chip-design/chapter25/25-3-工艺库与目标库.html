@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.3 工艺库与目标库 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.3 工艺库与目标库</h1>
+          <p class="subtitle">综合所需的库文件配置与使用</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解工艺库的基本概念和组成</li>
+            <li>掌握目标库、链接库的配置方法</li>
+            <li>了解工艺角和条件设置</li>
+            <li>学会选择合适的工艺库进行综合</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">什么是工艺库</h3>
+          <p class="card-text">
+            <strong>工艺库（Technology Library）</strong>是Foundry提供的标准单元库，
+            包含了特定工艺节点下所有可用逻辑单元的物理、时序和功耗信息。
+            综合工具通过读取工艺库来选择合适的单元实现设计。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> 工艺库的组成</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>组成部分</th>
+                <th>说明</th>
+                <th>文件格式</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>单元库</td>
+                <td>逻辑单元的功能描述</td>
+                <td>.db, .lib</td>
+              </tr>
+              <tr>
+                <td>时序库</td>
+                <td>单元的时序参数</td>
+                <td>.lib, .db</td>
+              </tr>
+              <tr>
+                <td>功耗库</td>
+                <td>单元的功耗参数</td>
+                <td>.lib, .db</td>
+              </tr>
+              <tr>
+                <td>物理库</td>
+                <td>单元的物理信息</td>
+                <td>.lef, .gds</td>
+              </tr>
+              <tr>
+                <td>符号库</td>
+                <td>单元的图形符号</td>
+                <td>.sdb</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 库文件配置</h2>
+
+          <h3>目标库（Target Library）</h3>
+          <p>用于映射和优化的目标单元库：</p>
+          <div class="code-block">
+# 单个工艺角
+set target_library [list saed90nm_typ.db]
+
+# 多工艺角
+set target_library [list \
+    saed90nm_ss.db \
+    saed90nm_tt.db \
+    saed90nm_ff.db \
+]
+
+# 多阈值电压
+set target_library [list \
+    saed90nm_hvt.db \
+    saed90nm_lvt.db \
+    saed90nm_rvt.db \
+]
+          </div>
+
+          <h3>链接库（Link Library）</h3>
+          <p>用于解析模块实例化的库：</p>
+          <div class="code-block">
+# 包含目标库和通配符
+set link_library "* $target_library"
+
+# 添加额外的IP库
+set link_library "* $target_library memory_block.db"
+          </div>
+
+          <h3>符号库（Symbol Library）</h3>
+          <div class="code-block">
+set symbol_library saed90nm.sdb
+          </div>
+
+          <h3>搜索路径（Search Path）</h3>
+          <div class="code-block">
+set search_path [list \
+    ./rtl \
+    ./lib \
+    ./scripts \
+    /foundry/libraries/saed90nm/ \
+]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌡️</span> 工艺角（Process Corner）</h2>
+          <p>工艺角描述了制造过程中的工艺变异，综合时需要考虑不同工艺角：</p>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">SS (Slow-Slow)</h3>
+              <p class="card-text">最差时序，用于setup分析</p>
+              <p>温度：125°C | 电压：0.9V</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">FF (Fast-Fast)</h3>
+              <p class="card-text">最佳时序，用于hold分析</p>
+              <p>温度：-40°C | 电压：1.1V</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">TT (Typical-Typical)</h3>
+              <p class="card-text">典型条件，用于功能验证</p>
+              <p>温度：25°C | 电压：1.0V</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">SF/FS</h3>
+              <p class="card-text">混合角，考虑跨角变异</p>
+              <p>用于OCV分析</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 工艺条件设置</h2>
+          <div class="code-block">
+# 设置操作条件
+set_operating_conditions -min BCCOM -max WCCOM
+
+# 或使用自定义条件
+set_operating_conditions -analysis_type on_chip_variation \
+    -min Pacific_min -max Pacific_max
+
+# 设置线负载模型
+set_wire_load_model -name TSMC12_WLM
+set_wire_load_mode top
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">选择建议</div>
+            <p>对于综合，通常使用<strong>TT（典型）</strong>工艺角进行初始综合，
+            然后在后续的STA中使用SS和FF角进行时序验证。这样可以平衡综合速度和结果准确性。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 工艺库包含单元的时序、功耗和物理信息</li>
+                <li>• 需要配置目标库、链接库和符号库</li>
+                <li>• 工艺角描述制造过程中的变异</li>
+                <li>• 合理选择工艺角对综合结果至关重要</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-2-综合流程详解.html">← 上一节</a>
+          <a href="25-4-Design Compiler使用.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

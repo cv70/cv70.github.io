@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.8 Verilog 仿真基础 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>13.8 Verilog 仿真基础</h1>
+          <p class="subtitle">测试平台与仿真验证</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解测试平台的基本概念</li>
+            <li>掌握initial块的使用方法</li>
+            <li>学会生成时钟和复位信号</li>
+            <li>了解常用的系统任务和函数</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧪</span> 测试平台概述</h2>
+          <div class="card">
+            <h3 class="card-title">Testbench</h3>
+            <p>测试平台（Testbench）是用于验证设计功能的Verilog代码。它不对应实际硬件，仅用于仿真。测试平台实例化被测设计（DUT），施加激励，并检查响应。</p>
+          </div>
+
+          <div class="code-block">
+<pre><code>// 测试平台基本结构
+module tb;
+    // 信号声明
+    reg clk, rst_n;
+    reg [7:0] data_in;
+    wire [7:0] data_out;
+
+    // 实例化被测设计
+    dut u_dut (
+        .clk(clk),
+        .rst_n(rst_n),
+        .data_in(data_in),
+        .data_out(data_out)
+    );
+
+    // 生成激励
+    initial begin
+        // 初始化
+        clk = 0;
+        rst_n = 0;
+        data_in = 0;
+
+        // 复位
+        #100;
+        rst_n = 1;
+
+        // 施加激励
+        @(posedge clk);
+        data_in = 8'hAA;
+        @(posedge clk);
+        data_in = 8'h55;
+
+        // 结束仿真
+        #100;
+        $finish;
+    end
+
+    // 生成时钟
+    always #10 clk = ~clk;
+
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🕐</span> 时间控制</h2>
+          <div class="code-block">
+<pre><code>// 延迟控制
+#10;           // 延迟10个时间单位
+#5 a = b;      // 延迟5个时间单位后赋值
+
+// 事件控制
+@(posedge clk);      // 等待时钟上升沿
+@(negedge rst_n);    // 等待复位下降沿
+@(a or b);           // 等待a或b变化
+@(posedge clk iff enable);  // 条件事件控制
+
+// 等待表达式
+wait (ready);        // 等待ready为真
+wait (count == 10);  // 等待count等于10</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏰</span> 时钟与复位生成</h2>
+          <div class="code-block">
+<pre><code>// 方法1：always块生成时钟
+reg clk = 0;
+always #10 clk = ~clk;  // 50MHz时钟（周期20ns）
+
+// 方法2：initial块生成时钟
+reg clk;
+initial begin
+    clk = 0;
+    forever #10 clk = ~clk;
+end
+
+// 方法3：可配置时钟
+parameter CLK_PERIOD = 20;
+reg clk = 0;
+always #(CLK_PERIOD/2) clk = ~clk;
+
+// 复位信号生成
+reg rst_n;
+initial begin
+    rst_n = 0;      // 复位有效
+    #100;          // 复位持续100ns
+    rst_n = 1;      // 释放复位
+end
+
+// 带释放的复位
+initial begin
+    rst_n = 0;
+    repeat(5) @(posedge clk);  // 等待5个时钟周期
+    rst_n = 1;
+end</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 系统任务与函数</h2>
+          <div class="code-block">
+<pre><code>// 显示任务
+$display("Hello World");                    // 显示字符串
+$display("Time=%0t, Value=%h", $time, data); // 格式化显示
+$display("Data: %b %d %h %o", a, a, a, a);   // 多种格式
+
+// 监控任务
+$monitor("Time=%0t, clk=%b, data=%h", $time, clk, data);
+// 当列表中任意信号变化时自动显示
+
+// 文件操作
+integer fd;
+initial begin
+    fd = $fopen("results.txt", "w");  // 打开文件
+    $fdisplay(fd, "Data=%h", data);    // 写入文件
+    $fclose(fd);                      // 关闭文件
+end
+
+// 读取文件
+$readmemh("data.hex", memory);  // 读取十六进制文件到存储器
+$readmemb("data.bin", memory);  // 读取二进制文件到存储器
+
+// 仿真控制
+$finish;       // 结束仿真
+$stop;         // 暂停仿真（交互式）
+
+// 时间函数
+$time;         // 返回当前仿真时间
+$realtime;     // 返回实数时间
+$stime;        // 返回短整数时间</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎲</span> 随机数生成</h2>
+          <div class="code-block">
+<pre><code>// 随机数生成
+reg [7:0] rand_data;
+rand_data = $random;           // 32位有符号随机数
+rand_data = $random % 256;     // 0-255的随机数
+rand_data = {$random} % 256;   // 无符号随机数
+
+// $urandom：无符号随机数
+rand_data = $urandom % 256;    // 0-255的随机数
+
+// $urandom_range：范围内的随机数
+rand_data = $urandom_range(0, 255);  // 0-255的随机数
+addr = $urandom_range(0, 1023);      // 0-1023的随机地址
+
+// 示例：随机数据流
+initial begin
+    for (integer i = 0; i < 100; i = i + 1) begin
+        @(posedge clk);
+        data_in = $urandom_range(0, 255);
+        valid = $urandom_range(0, 1);  // 50%概率valid
+    end
+end</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✅</span> 完整测试平台示例</h2>
+          <div class="code-block">
+<pre><code>// 被测设计：4位计数器
+module counter_4bit(
+    input        clk,
+    input        rst_n,
+    input        enable,
+    output reg [3:0] count
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            count <= 4'b0000;
+        else if (enable)
+            count <= count + 1;
+    end
+endmodule
+
+// 测试平台
+module tb_counter;
+    reg clk, rst_n, enable;
+    wire [3:0] count;
+
+    // 实例化DUT
+    counter_4bit u_dut (
+        .clk(clk),
+        .rst_n(rst_n),
+        .enable(enable),
+        .count(count)
+    );
+
+    // 生成时钟
+    always #10 clk = ~clk;
+
+    // 测试激励
+    initial begin
+        // 初始化
+        clk = 0;
+        rst_n = 0;
+        enable = 0;
+
+        // 打开文件记录结果
+        integer fd = $fopen("counter_results.txt", "w");
+        $fdisplay(fd, "Time, Count");
+
+        // 复位
+        #100;
+        rst_n = 1;
+
+        // 测试1：使能计数
+        $display("Test 1: Enable counting");
+        enable = 1;
+        repeat(20) begin
+            @(posedge clk);
+            $fdisplay(fd, "%0t, %d", $time, count);
+        end
+
+        // 测试2：禁止计数
+        $display("Test 2: Disable counting");
+        enable = 0;
+        repeat(5) begin
+            @(posedge clk);
+            $fdisplay(fd, "%0t, %d", $time, count);
+        end
+
+        // 测试3：重新使能
+        $display("Test 3: Re-enable");
+        enable = 1;
+        repeat(10) begin
+            @(posedge clk);
+            $fdisplay(fd, "%0t, %d", $time, count);
+        end
+
+        // 关闭文件并结束仿真
+        $fclose(fd);
+        #100;
+        $display("Simulation completed!");
+        $finish;
+    end
+
+    // 监控输出
+    initial begin
+        $monitor("Time=%0t, Count=%d", $time, count);
+    end
+
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">仿真建议</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 每个模块都应有对应的测试平台</li>
+              <li>• 覆盖正常和边界情况</li>
+              <li>• 使用文件记录仿真结果</li>
+              <li>• 保持测试代码清晰易读</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 测试平台用于验证设计功能</li>
+                <li>• initial块生成激励信号</li>
+                <li>• 系统任务用于显示和文件操作</li>
+                <li>• 随机数生成提高测试覆盖率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="13-7-模块实例化与层次引用.html">← 上一节</a>
+          <a href="../chapter14/14-1-任务（task）与函数（function）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

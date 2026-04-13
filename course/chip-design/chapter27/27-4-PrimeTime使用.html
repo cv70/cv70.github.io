@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.4 PrimeTime使用 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.4 PrimeTime使用</h1>
+          <p class="subtitle">Synopsys PrimeTime工具操作指南</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握PrimeTime的基本使用方法</li>
+            <li>学会编写PT分析脚本</li>
+            <li>了解PT的图形界面和命令行模式</li>
+            <li>掌握PT的常用命令和选项</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">PrimeTime简介</h3>
+          <p class="card-text">
+            <strong>PrimeTime（PT）</strong>是Synopsys公司开发的业界标准静态时序分析工具。
+            它提供了全面的时序分析能力，支持从综合到签收的完整时序验证流程，
+            是数字芯片设计流程中最常用的STA工具。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> PT启动方式</h2>
+
+          <div class="code-block">
+# 命令行模式
+pt_shell
+
+# 图形界面模式
+pt_shell -gui
+
+# 执行脚本文件
+pt_shell -f sta_analysis.tcl
+
+# 指定内存和CPU
+pt_shell -64bit -threads 8 -max_memory 32G
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📜</span> PT分析流程</h2>
+
+          <div class="code-block">
+#!/bin/tcl
+# ============================================================================
+# PrimeTime 时序分析脚本
+# ============================================================================
+
+# 1. 环境设置
+# ============================================
+set LIB_PATH "/foundry/libraries/saed90nm"
+set TECH_LIB "${LIB_PATH}/stdcell_rvt/db/saed90nm"
+
+# 设置目标库
+set target_library [list ${TECH_LIB}_ss.db ${TECH_LIB}_ff.db]
+
+# 设置链接库
+set link_library "* $target_library"
+
+# 设置搜索路径
+set search_path [list ./netlist ./lib ./sdc ${LIB_PATH}]
+
+# 2. 读入设计
+# ============================================
+# 读入网表
+read_verilog ./netlist/top_synth.v
+
+# 设置当前设计
+current_design top
+
+# 链接设计
+link
+
+# 更新时序
+update_timing
+
+# 3. 读入约束
+# ============================================
+read_sdc ./sdc/top_synth.sdc
+
+# 4. 时序分析
+# ============================================
+# 执行时序分析
+update_timing
+
+# 检查时序
+check_timing
+
+# 5. 生成报告
+# ============================================
+file mkdir reports
+
+# Setup时序报告
+report_timing -max_paths 20 -delay_type max \
+    -input_pins -nets -transition_time -capacitance \
+    > reports/setup.rpt
+
+# Hold时序报告
+report_timing -max_paths 20 -delay_type min \
+    -input_pins -nets -transition_time -capacitance \
+    > reports/hold.rpt
+
+# 时序违例报告
+report_constraint -all_violators \
+    > reports/violations.rpt
+
+# 时钟报告
+report_clock -attributes > reports/clocks.rpt
+
+# 时序路径组报告
+report_path_group > reports/path_groups.rpt
+
+# 6. 退出
+# ============================================
+# 保存会话
+save_session output/session
+
+# 退出
+exit
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> PT常用命令</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>命令类别</th>
+                <th>命令</th>
+                <th>功能说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>设计管理</td>
+                <td>read_verilog, read_lib</td>
+                <td>读入网表和库</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>current_design, link</td>
+                <td>设置和链接设计</td>
+              </tr>
+              <tr>
+                <td>约束管理</td>
+                <td>read_sdc, write_sdc</td>
+                <td>读入和写入SDC</td>
+              </tr>
+              <tr>
+                <td>时序分析</td>
+                <td>update_timing</td>
+                <td>更新时序</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>check_timing</td>
+                <td>检查时序</td>
+              </tr>
+              <tr>
+                <td>报告生成</td>
+                <td>report_timing</td>
+                <td>时序报告</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>report_constraint</td>
+                <td>约束报告</td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>report_clock</td>
+                <td>时钟报告</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌡️</span> 多角分析</h2>
+
+          <div class="code-block">
+# 定义工艺角
+set_corner ss_corner
+set_corner ff_corner
+
+# 为每个角设置库
+read_lib -corner ss_corner ${TECH_LIB}_ss.db
+read_lib -corner ff_corner ${TECH_LIB}_ff.db
+
+# 设置操作条件
+set_operating_conditions -corner ss_corner ss_0.9V_125C
+set_operating_conditions -corner ff_corner ff_1.1V_-40C
+
+# 为每个角生成报告
+foreach corner {ss_corner ff_corner} {
+    set_analysis_view -setup $corner $corner
+    report_timing -corner $corner -max_paths 10 \
+        > reports/timing_${corner}.rpt
+}
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">PT使用技巧</div>
+            <p>1）使用脚本化方式进行时序分析；2）合理设置多角分析；
+            3）定期保存会话以便调试；4）使用增量分析提高效率；
+            5）生成详细的报告用于问题诊断。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• PT是业界标准的STA工具</li>
+                <li>• 支持命令行和图形界面模式</li>
+                <li>• 脚本化是推荐的使用方式</li>
+                <li>• 多角分析确保设计可靠性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-3-建立时间与保持时间.html">← 上一节</a>
+          <a href="27-5-时序违例修复.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

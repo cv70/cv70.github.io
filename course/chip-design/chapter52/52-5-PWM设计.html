@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>52.5 PWM设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>52.5 PWM设计</h1>
+          <p class="subtitle">常用外设接口设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握PWM的基本原理与应用</li>
+            <li>理解PWM的生成方法与参数</li>
+            <li>学会PWM模块的硬件设计</li>
+            <li>了解PWM的高级功能</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> PWM概述</h2>
+          <div class="card">
+            <p class="card-text"><strong>PWM（Pulse Width Modulation）</strong>脉冲宽度调制是一种通过改变脉冲宽度来控制平均功率的技术。它广泛应用于电机控制、LED调光、电源管理、音频合成等领域。</p>
+          </div>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">PWM特点</div>
+              <p>• 数字控制：通过数字信号控制模拟量<br>• 高效率：功率器件工作在开关状态<br>• 精确控制：占空比可精确调节<br>• 易于实现：硬件结构简单</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> PWM基本原理</h2>
+          <div class="card">
+            <h3 class="card-title">PWM参数</h3>
+            <p class="card-text"><strong>周期（Period）：</strong>PWM信号的完整周期时间</p>
+            <p class="card-text"><strong>频率（Frequency）：</strong>周期的倒数，f = 1/T</p>
+            <p class="card-text"><strong>占空比（Duty Cycle）：</strong>高电平时间与周期的比值</p>
+            <p class="card-text"><strong>分辨率（Resolution）：</strong>占空比可调节的精度</p>
+          </div>
+          <div class="card">
+            <h3 class="card-title">占空比计算</h3>
+            <p class="card-text">Duty Cycle (%) = (Ton / T) × 100%</p>
+            <p class="card-text">其中：Ton = 高电平时间，T = 周期</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> PWM生成方法</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">计数比较法</h3>
+              <p class="card-text">使用计数器和比较器生成PWM：</p>
+              <p class="card-text">1. 计数器从0到Period-1循环计数</p>
+              <p class="card-text">2. 比较器将计数器值与Duty值比较</p>
+              <p class="card-text">3. 计数器 < Duty时输出高电平</p>
+              <p class="card-text">4. 计数器 ≥ Duty时输出低电平</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">相位累加法</h3>
+              <p class="card-text">使用相位累加器生成PWM：</p>
+              <p class="card-text">1. 相位累加器持续累加频率字</p>
+              <p class="card-text">2. 累加器高位作为比较基准</p>
+              <p class="card-text">3. 与占空比寄存器比较</p>
+              <p class="card-text">4. 生成精确的PWM输出</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> PWM模块设计</h2>
+          <pre class="code-block"><code>// PWM模块设计
+module pwm #(
+    parameter COUNTER_WIDTH = 16,    // 计数器位宽
+    parameter CHANNEL_NUM = 4,       // PWM通道数
+    parameter DEFAULT_FREQ = 1000,   // 默认频率(Hz)
+    parameter CLK_FREQ = 50_000_000  // 系统时钟频率
+) (
+    input  wire                          clk,
+    input  wire                          rst_n,
+    input  wire                          enable,         // PWM使能
+    input  wire [CHANNEL_NUM-1:0]         polarity,       // 极性（0=正极性, 1=负极性）
+
+    // 寄存器接口
+    input  wire                          reg_wr,
+    input  wire                          reg_rd,
+    input  wire [4:0]                    reg_addr,
+    input  wire [31:0]                   reg_wdata,
+    output wire [31:0]                   reg_rdata,
+
+    // PWM输出
+    output wire [CHANNEL_NUM-1:0]         pwm_out,
+
+    // 中断输出
+    output wire                          pwm_irq
+);
+
+    // 频率计算：Fpwm = Fclk / (Prescaler * Period)
+    // Period = Fclk / (Prescaler * Fpwm)
+
+    // 寄存器定义
+    reg [15:0] prescaler;        // 预分频器
+    reg [COUNTER_WIDTH-1:0] period_reg;   // 周期寄存器
+    reg [COUNTER_WIDTH-1:0] duty_reg [CHANNEL_NUM-1:0];  // 占空比寄存器
+    reg [CHANNEL_NUM-1:0] enable_reg;     // 通道使能
+    reg [CHANNEL_NUM-1:0] polarity_reg;   // 极性控制
+    reg irq_enable;            // 中断使能
+
+    // 状态寄存器
+    reg update_flag;           // 更新标志
+    reg period_match;          // 周期匹配标志
+
+    // 初始化默认周期（1kHz）
+    localparam DEFAULT_PERIOD = CLK_FREQ / DEFAULT_FREQ;
+
+    // 计数器
+    reg [COUNTER_WIDTH-1:0] counter;
+    wire counter_zero = (counter == 0);
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            counter <= 0;
+            prescaler <= 0;
+            period_reg <= DEFAULT_PERIOD[COUNTER_WIDTH-1:0];
+            enable_reg <= {CHANNEL_NUM{1'b1}};
+            polarity_reg <= {CHANNEL_NUM{1'b0}};
+            irq_enable <= 0;
+        end else if (enable) begin
+            // 计数器逻辑
+            if (counter >= period_reg) begin
+                counter <= 0;
+                period_match <= 1;
+            end else begin
+                counter <= counter + 1;
+                period_match <= 0;
+            end
+
+            // 寄存器写操作
+            if (reg_wr) begin
+                case (reg_addr)
+                    5'h0: prescaler <= reg_wdata[15:0];
+                    5'h1: period_reg <= reg_wdata[COUNTER_WIDTH-1:0];
+                    5'h2: begin
+                        duty_reg[0] <= reg_wdata[COUNTER_WIDTH-1:0];
+                        duty_reg[1] <= reg_wdata[COUNTER_WIDTH-1:0];
+                        duty_reg[2] <= reg_wdata[COUNTER_WIDTH-1:0];
+                        duty_reg[3] <= reg_wdata[COUNTER_WIDTH-1:0];
+                    end
+                    5'h8: enable_reg <= reg_wdata[CHANNEL_NUM-1:0];
+                    5'h9: polarity_reg <= reg_wdata[CHANNEL_NUM-1:0];
+                    5'hA: irq_enable <= reg_wdata[0];
+                endcase
+            end
+        end
+    end
+
+    // 生成PWM输出
+    genvar i;
+    generate
+        for (i = 0; i < CHANNEL_NUM; i = i + 1) begin : pwm_gen
+            reg pwm_raw;
+
+            always @(*) begin
+                if (enable_reg[i]) begin
+                    pwm_raw = (counter < duty_reg[i]);
+                end else begin
+                    pwm_raw = 0;
+                end
+            end
+
+            // 极性控制
+            assign pwm_out[i] = polarity_reg[i] ? ~pwm_raw : pwm_raw;
+        end
+    endgenerate
+
+    // 寄存器读操作
+    reg [31:0] rdata;
+    always @(*) begin
+        rdata = 32'h0;
+        case (reg_addr)
+            5'h0: rdata = {16'h0, prescaler};
+            5'h1: rdata = {{32-COUNTER_WIDTH{1'b0}}, period_reg};
+            5'h2: rdata = {{32-COUNTER_WIDTH{1'b0}}, duty_reg[0]};
+            5'h3: rdata = {{32-COUNTER_WIDTH{1'b0}}, duty_reg[1]};
+            5'h4: rdata = {{32-COUNTER_WIDTH{1'b0}}, duty_reg[2]};
+            5'h5: rdata = {{32-COUNTER_WIDTH{1'b0}}, duty_reg[3]};
+            5'h6: rdata = {{32-COUNTER_WIDTH{1'b0}}, counter};
+            5'h8: rdata = {{32-CHANNEL_NUM{1'b0}}, enable_reg};
+            5'h9: rdata = {{32-CHANNEL_NUM{1'b0}}, polarity_reg};
+            5'hA: rdata = {31'h0, irq_enable};
+            5'hB: rdata = {31'h0, period_match};
+            default: rdata = 32'h0;
+        endcase
+    end
+
+    assign reg_rdata = rdata;
+
+    // 中断输出
+    assign pwm_irq = irq_enable & period_match;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎛️</span> PWM高级功能</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">死区时间（Dead Time）</h3>
+              <p class="card-text">在互补PWM输出中插入死区时间，防止上下桥臂直通：</p>
+              <p class="card-text">• 防止开关管同时导通<br>• 保护功率器件<br>• 可编程死区时间</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">互补输出</h3>
+              <p class="card-text">生成两路互补的PWM信号：</p>
+              <p class="card-text">• 用于H桥驱动<br>• 自动插入死区<br>• 支持多种驱动模式</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">中心对齐PWM</h3>
+              <p class="card-text">对称的PWM波形：</p>
+              <p class="card-text">• 减少谐波失真<br>• 提高控制精度<br>• 适合电机控制</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">PWM同步</h3>
+              <p class="card-text">多个PWM通道同步：</p>
+              <p class="card-text">• 统一启动/停止<br>• 相位可调<br>• 适合多相控制</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 死区时间产生器</h2>
+          <pre class="code-block"><code>// 死区时间产生器
+module pwm_dead_time #(
+    parameter DEAD_TIME = 10  // 死区时间（时钟周期数）
+) (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire pwm_in,        // 输入PWM
+    output wire pwm_h,         // 高侧PWM
+    output wire pwm_l          // 低侧PWM
+);
+
+    // 上升沿和下降沿延迟
+    reg [3:0] rise_cnt, fall_cnt;
+    reg rise_delay, fall_delay;
+    wire pwm_rising = pwm_in & ~pwm_delayed;
+    wire pwm_falling = ~pwm_in & pwm_delayed;
+    reg pwm_delayed;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rise_cnt <= 0;
+            fall_cnt <= 0;
+            rise_delay <= 0;
+            fall_delay <= 0;
+            pwm_delayed <= 0;
+        end else begin
+            pwm_delayed <= pwm_in;
+
+            // 上升沿延迟
+            if (pwm_rising) begin
+                rise_cnt <= DEAD_TIME;
+                rise_delay <= 0;
+            end else if (rise_cnt > 0) begin
+                rise_cnt <= rise_cnt - 1;
+                if (rise_cnt == 1) rise_delay <= 1;
+            end else begin
+                rise_delay <= 1;
+            end
+
+            // 下降沿延迟
+            if (pwm_falling) begin
+                fall_cnt <= DEAD_TIME;
+                fall_delay <= 1;
+            end else if (fall_cnt > 0) begin
+                fall_cnt <= fall_cnt - 1;
+                if (fall_cnt == 1) fall_delay <= 0;
+            end else begin
+                fall_delay <= 0;
+            end
+        end
+    end
+
+    // 互补输出
+    assign pwm_h = pwm_in & fall_delay;
+    assign pwm_l = ~pwm_in | rise_delay;
+
+endmodule</code></pre>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> PWM应用场景</h2>
+          <table>
+            <thead><tr><th>应用</th><th>频率范围</th><th>特点</th><th>注意事项</th></tr></thead>
+            <tbody>
+              <tr><td>LED调光</td><td>100Hz-1kHz</td><td>频率低，人眼无闪烁</td><td>避免可见频闪</td></tr>
+              <tr><td>电机控制</td><td>10kHz-50kHz</td><td>频率适中，效率高</td><td>考虑电机电感</td></tr>
+              <tr><td>开关电源</td><td>100kHz-1MHz</td><td>频率高，体积小</td><td>EMI干扰大</td></tr>
+              <tr><td>D类功放</td><td>300kHz-1MHz</td><td>高保真，效率高</td><td>滤波器设计</td></tr>
+              <tr><td>伺服控制</td><td>50Hz</td><td>标准脉宽1-2ms</td><td>时序精度要求高</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> PWM配置寄存器</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">控制寄存器（PWM_CTRL）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [31:16] | PRESCALER | 预分频值 |</p>
+              <p class="card-text">| [15] | COUNTER_MODE | 0=递增, 1=递增递减 |</p>
+              <p class="card-text">| [14] | SYNC_MODE | 同步模式 |</p>
+              <p class="card-text">| [0] | ENABLE | PWM使能 |</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">通道控制寄存器（PWM_CH_CTRL）</h3>
+              <p class="card-text">| 位 | 名称 | 描述 |</p>
+              <p class="card-text">| [31:16] | DEAD_TIME | 死区时间 |</p>
+              <p class="card-text">| [3] | COMPLEMENT | 互补输出使能 |</p>
+              <p class="card-text">| [2] | INVERT | 输出反相 |</p>
+              <p class="card-text">| [0] | CH_EN | 通道使能 |</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐛</span> 常见问题与调试</h2>
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <p><strong>1. 频率不准确</strong><br>症状：输出频率与设置不符<br>解决：检查时钟频率和预分频值</p>
+              <p><strong>2. 占空比抖动</strong><br>症状：占空比不稳定<br>解决：确保时钟稳定，检查计数器位宽</p>
+              <p><strong>3. 死区时间不足</strong><br>症状：功率管损坏<br>解决：增加死区时间，考虑开关速度</p>
+              <p><strong>4. EMI干扰大</strong><br>症状：电磁干扰严重<br>解决：优化边沿速率，增加滤波电路</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• PWM通过改变脉冲宽度控制平均功率，是重要的数字控制技术</li>
+                <li>• PWM核心参数包括周期、频率、占空比和分辨率</li>
+                <li>• PWM可通过计数比较法或相位累加法生成</li>
+                <li>• 高级功能包括死区时间、互补输出、中心对齐、PWM同步</li>
+                <li>• 广泛应用于LED调光、电机控制、开关电源等领域</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="52-4-GPIO设计.html">← 上一节</a>
+          <a href="52-6-定时器设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

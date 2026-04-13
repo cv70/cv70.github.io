@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.3 时间序列数据处理 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>8.3 时间序列数据处理</h1>
+      <p class="subtitle">Python数据处理基础</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握Pandas时间序列数据的核心操作</li>
+        <li>理解时间索引的创建与使用</li>
+        <li>能够进行时间序列的切片、重采样和滑动窗口计算</li>
+        <li>学会在量化分析中处理复杂时间序列问题</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="时间序列数据" class="card-image">
+      <h3 class="card-title">时间序列数据处理</h3>
+      <p class="card-text"><strong>时间序列</strong>是金融数据的核心特征。Pandas提供了强大的时间序列处理能力，
+    包括时间索引创建、频率转换、重采样、滚动窗口等功能。本节将详细介绍时间序列数据处理的各种技巧。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">📚</span> 时间索引创建</h2>
+
+      <h3>创建时间索引</h3>
+      <pre><code>import pandas as pd
+import numpy as np
+
+# 从字符串创建时间索引
+dates = pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03'])
+print(dates)
+
+# 使用date_range创建时间范围
+# 日频率
+dates = pd.date_range('2024-01-01', '2024-01-31', freq='D')
+# 月频率
+dates = pd.date_range('2024-01-01', periods=12, freq='M')
+# 小时频率
+dates = pd.date_range('2024-01-01', periods=24, freq='H')
+
+# 创建时间序列DataFrame
+df = pd.DataFrame({
+    'price': np.random.randn(30).cumsum() + 100
+}, index=pd.date_range('2024-01-01', periods=30, freq='D'))
+
+# 设置列为索引
+df = df.set_index(pd.to_datetime(df['date']))
+</code></pre>
+
+      <h3>时间频率</h3>
+      <pre><code># 常见频率
+freq_options = {
+    'D': '日历日',
+    'B': '工作日',
+    'H': '小时',
+    'T': '分钟',
+    'S': '秒',
+    'L': '毫秒',
+    'M': '月末',
+    'MS': '月初',
+    'Q': '季度末',
+    'QS': '季度初',
+    'Y': '年末',
+    'YS': '年初',
+    'W': '周',
+}
+
+# 自定义频率
+# 每3天
+pd.date_range('2024-01-01', periods=10, freq='3D')
+# 每2小时
+pd.date_range('2024-01-01', periods=12, freq='2H')
+# 每月第一个周五
+pd.date_range('2024-01-01', periods=12, freq='WOM-1FRI')
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔍</span> 时间序列索引与切片</h2>
+
+      <h3>基本索引</h3>
+      <pre><code># 创建时间序列
+index = pd.date_range('2024-01-01', periods=100, freq='D')
+df = pd.DataFrame({
+    'price': np.random.randn(100).cumsum() + 100
+}, index=index)
+
+# 位置索引
+df.iloc[0]       # 第一行
+df.iloc[-1]      # 最后一行
+
+# 时间索引
+df.loc['2024-01-15']           # 特定日期
+df.loc['2024-01']             # 整月
+df.loc['2024-01-15':'2024-01-20']  # 日期范围
+
+# 部分字符串索引
+df['2024-01']        # 2024年1月
+df['2024']           # 2024年
+df['2024-01-15']     # 2024年1月15日
+</code></pre>
+
+      <h3>高级切片</h3>
+      <pre><code># 使用between_time选择特定时间段
+df = df.set_index(pd.date_range('2024-01-01', periods=1000, freq='T'))  # 分钟数据
+df.between_time('09:30', '11:30')  # 9:30-11:30
+
+# 使用at_time选择特定时间
+df.at_time('09:30')  # 每天9:30的数据
+
+# 使用asfreq设置频率
+df.asfreq('D')       # 每日数据
+df.asfreq('B')       # 工作日数据
+df.asfreq('H')       # 每小时数据
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 重采样与频率转换</h2>
+
+      <h3>降采样（从高频率到低频率）</h3>
+      <pre><code># 创建分钟数据
+index = pd.date_range('2024-01-01 09:30', periods=240, freq='T')
+df = pd.DataFrame({
+    'price': np.random.randn(240).cumsum() + 100,
+    'volume': np.random.randint(100, 1000, 240)
+}, index=index)
+
+# 重采样为5分钟
+df_5min = df.resample('5T').agg({
+    'price': ['first', 'max', 'min', 'last'],
+    'volume': 'sum'
+})
+
+# 重采样为日数据
+df_daily = df.resample('D').agg({
+    'price': ['first', 'max', 'min', 'last'],
+    'volume': 'sum'
+})
+
+# 重采样为周数据
+df_weekly = df.resample('W').agg({
+    'price': ['first', 'max', 'min', 'last'],
+    'volume': 'sum'
+})
+</code></pre>
+
+      <h3>升采样（从低频率到高频率）</h3>
+      <pre><code># 将日数据升采样为小时数据
+df_hourly = df.resample('H').asfreq()  # 使用asfreq填充NaN
+df_hourly = df.resample('H').ffill()   # 前向填充
+df_hourly = df.resample('H').interpolate()  # 插值填充
+
+# 填充方法
+df_hourly = df.resample('H').fillna(method='ffill')  # 前向填充
+df_hourly = df.resample('H').fillna(method='bfill')  # 后向填充
+df_hourly = df.resample('H').fillna(0)  # 填充0
+</code></pre>
+
+      <h3>常用聚合方法</h3>
+      <pre><code># Ohlcv重采样
+def ohlcv_resample(df, freq):
+    return df.resample(freq).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum'
+    })
+
+df_5min = ohlcv_resample(df, '5T')
+df_1h = ohlcv_resample(df, 'H')
+df_1d = ohlcv_resample(df, 'D')
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 滚动窗口与扩展窗口</h2>
+
+      <h3>滚动窗口</h3>
+      <pre><code># 创建价格数据
+df['MA5'] = df['close'].rolling(5).mean()
+df['MA20'] = df['close'].rolling(20).mean()
+
+# 滚动标准差
+df['std20'] = df['close'].rolling(20).std()
+
+# 滚动最大值和最小值
+df['max20'] = df['close'].rolling(20).max()
+df['min20'] = df['close'].rolling(20).min()
+
+# 滚动相关系数
+df['corr'] = df['close'].rolling(30).corr(df['volume'])
+
+# 滚动回归系数
+def rolling_slope(y, window):
+    x = np.arange(len(y))
+    slope = [np.polyfit(x[i:i+window], y[i:i+window], 1)[0]
+             for i in range(len(y)-window+1)]
+    return [np.nan]*(window-1) + slope
+
+df['slope'] = rolling_slope(df['close'], 20)
+</code></pre>
+
+      <h3>扩展窗口</h3>
+      <pre><code># 扩展窗口计算
+df['expanding_mean'] = df['close'].expanding().mean()
+df['expanding_std'] = df['close'].expanding().std()
+df['expanding_max'] = df['close'].expanding().max()
+
+# 扩展窗口应用自定义函数
+def custom_expanding_apply(series, func):
+    result = []
+    for i in range(1, len(series)+1):
+        result.append(func(series[:i]))
+    return result
+
+df['expanding_custom'] = custom_expanding_apply(df['close'], lambda x: x.std())
+</code></pre>
+
+      <h3>指数加权移动</h3>
+      <pre><code># 指数加权移动平均
+df['EMA12'] = df['close'].ewm(span=12).mean()
+df['EMA26'] = df['close'].ewm(span=26).mean()
+
+# 指数加权标准差
+df['ewm_std'] = df['close'].ewm(span=20).std()
+
+# 自定义衰减
+df['ewm_alpha'] = df['close'].ewm(alpha=0.1).mean()
+</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 时间序列分析示例</h2>
+
+      <h3>计算收益率和波动率</h3>
+      <pre><code># 日收益率
+df['daily_return'] = df['close'].pct_change()
+
+# 累计收益率
+df['cumulative_return'] = (1 + df['daily_return']).cumprod()
+
+# 对数收益率
+df['log_return'] = np.log(df['close'] / df['close'].shift(1))
+
+# 滚动波动率
+df['volatility_20d'] = df['daily_return'].rolling(20).std()
+
+# 年化波动率
+df['annualized_vol'] = df['volatility_20d'] * np.sqrt(252)
+</code></pre>
+
+      <h3>交易信号生成</h3>
+      <pre><code># 计算移动平均交叉
+df['MA_short'] = df['close'].rolling(5).mean()
+df['MA_long'] = df['close'].rolling(20).mean()
+
+# 生成信号
+df['signal'] = 0
+df.loc[df['MA_short'] > df['MA_long'], 'signal'] = 1  # 买入
+df.loc[df['MA_short'] < df['MA_long'], 'signal'] = -1  # 卖出
+
+# 计算仓位变化
+df['position'] = df['signal'].diff()
+</code></pre>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">时间序列处理技巧</div>
+        <p>1. 使用datetime64[ns]类型提高性能<br>
+        2. 合理使用索引加快查询速度<br>
+        3. 重采样时注意聚合函数的选择<br>
+        4. 滚动窗口计算考虑边界效应<br>
+        5. 处理交易日时使用freq='B'</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了时间索引的创建和使用</li>
+            <li>• 学会了时间序列的切片和查询</li>
+            <li>• 熟练使用重采样和频率转换</li>
+            <li>• 能够进行滚动窗口和扩展窗口计算</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="8-2-Pandas核心操作.html">← 上一节</a>
+      <a href="8-4-数据清洗与预处理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

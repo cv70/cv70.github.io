@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.6 存储器接口设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header"><h1>15.6 存储器接口设计</h1><p class="subtitle">Verilog设计实例</p></header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list"><li>掌握SRAM接口设计</li><li>理解DRAM基本接口</li><li>学会FIFO缓存设计</li><li>能够设计存储控制器</li></ul>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">💾</span> SRAM接口</h2>
+          <div class="code-block">
+<pre><code>// SRAM控制器
+module sram_controller(
+    input  clk,
+    input  rst_n,
+    input        read_req,
+    input        write_req,
+    input  [15:0] addr,
+    input  [7:0]  wdata,
+    output reg [7:0]  rdata,
+    output       rdata_valid,
+    // SRAM接口
+    output        sram_ce_n,
+    output        sram_oe_n,
+    output        sram_we_n,
+    output [15:0] sram_addr,
+    inout  [7:0]  sram_data
+);
+    reg [1:0] state;
+    reg [7:0] sram_data_out;
+    
+    assign sram_ce_n = 1'b0;
+    assign sram_oe_n = (state != 2'b10);
+    assign sram_we_n = (state != 2'b01);
+    assign sram_addr = addr;
+    assign sram_data = (state == 2'b01) ? sram_data_out : 8'hzz;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= 2'b00;
+            rdata <= 0;
+            rdata_valid <= 0;
+        end
+        else begin
+            case (state)
+                2'b00: begin
+                    rdata_valid <= 0;
+                    if (write_req) begin
+                        state <= 2'b01;
+                        sram_data_out <= wdata;
+                    end
+                    else if (read_req)
+                        state <= 2'b10;
+                end
+                2'b01: state <= 2'b00;
+                2'b10: begin
+                    rdata <= sram_data;
+                    rdata_valid <= 1;
+                    state <= 2'b00;
+                end
+            endcase
+        end
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success"><span class="icon">✅</span><div class="content"><ul style="list-style: none; padding: 0;"><li>• SRAM接口相对简单</li><li>• 需要正确控制时序</li><li>• FIFO用于数据缓冲</li><li>• 状态机管理读写操作</li></ul></div></div>
+        </div>
+        <div class="chapter-nav"><a href="15-5-状态机设计实例.html">← 上一节</a><a href="15-7-通信接口设计.html">下一节 →</a></div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

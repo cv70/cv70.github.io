@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>76.3 风险管理设计 - 期货CTA策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>76.3 风险管理设计</h1>
+      <p class="subtitle">项目二：期货CTA策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握期货交易的风险特征</li>
+        <li>学会止损止盈设计</li>
+        <li>理解仓位管理方法</li>
+        <li>能够构建完整的风控体系</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800" alt="风险管理设计" class="card-image">
+      <h3 class="card-title">期货风险管理设计</h3>
+      <p class="card-text"><strong>风险管理</strong>是期货交易的生命线。本节将详细介绍止损止盈、仓位管理等风险管理技术。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 期货交易风险</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">市场风险</h3>
+          <ul class="feature-list">
+            <li>价格波动风险</li>
+            <li>流动性风险</li>
+            <li>跳空风险</li>
+            <li>极端行情风险</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">杠杆风险</h3>
+          <ul class="feature-list">
+            <li>保证金风险</li>
+            <li>强平风险</li>
+            <li>爆仓风险</li>
+            <li>追保风险</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">操作风险</h3>
+          <ul class="feature-list">
+            <li>系统故障</li>
+            <li>网络延迟</li>
+            <li>人为错误</li>
+            <li>数据错误</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 止损策略</h2>
+      <div class="code-block">
+        <pre><code class="language-python">class RiskManagement:
+    """
+    风险管理模块
+    """
+
+    def __init__(self, config):
+        self.config = config
+
+    def atr_stop_loss(self, entry_price, atr, multiplier=2):
+        """
+        ATR动态止损
+        """
+        long_stop = entry_price - atr * multiplier
+        short_stop = entry_price + atr * multiplier
+        return long_stop, short_stop
+
+    def percentage_stop_loss(self, entry_price, percentage=0.02):
+        """
+        百分比止损
+        """
+        long_stop = entry_price * (1 - percentage)
+        short_stop = entry_price * (1 + percentage)
+        return long_stop, short_stop
+
+    def volatility_stop_loss(self, entry_price, volatility, multiplier=2):
+        """
+        波动率止损
+        """
+        return self.atr_stop_loss(entry_price, volatility, multiplier)
+
+    def trailing_stop(self, current_price, current_stop, trail_percent=0.5):
+        """
+        移动止损
+        """
+        new_stop_long = current_price * (1 - trail_percent)
+        new_stop_short = current_price * (1 + trail_percent)
+
+        if current_price > entry_price:  # 多头盈利
+            return max(current_stop, new_stop_long)
+        else:  # 空头盈利
+            return min(current_stop, new_stop_short)
+
+    def check_stop_loss(self, position, current_price):
+        """
+        检查止损触发
+        """
+        if position['direction'] == 'long':
+            return current_price <= position['stop_loss']
+        else:
+            return current_price >= position['stop_loss']</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 仓位管理</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def calculate_position_size(account_value, risk_per_trade=0.02,
+                          entry_price, stop_loss_price, lot_size=10):
+    """
+    计算仓位大小（固定风险法）
+    """
+    # 风险金额
+    risk_amount = account_value * risk_per_trade
+
+    # 单手风险
+    risk_per_lot = abs(entry_price - stop_loss_price) * lot_size
+
+    # 仓位大小
+    position_lots = risk_amount / risk_per_lot
+
+    return int(position_lots)
+
+def kelly_position_size(win_rate, win_loss_ratio, account_value=100000):
+    """
+    凯利公式仓位管理
+    """
+    # 凯利比例
+    kelly_ratio = (win_rate * win_loss_ratio - (1 - win_rate)) / win_loss_ratio
+
+    # 限制最大仓位
+    kelly_ratio = min(max(kelly_ratio, 0), 0.25)
+
+    position_value = account_value * kelly_ratio
+
+    return position_value, kelly_ratio
+
+def risk_parity_allocation(capital, risk_contributions):
+    """
+    风险平价配置
+    """
+    # 标准化风险贡献
+    total_risk = sum(risk_contributions.values())
+    weights = {k: v/total_risk for k, v in risk_contributions.items()}
+
+    # 分配资金
+    allocations = {k: capital * v for k, v in weights.items()}
+
+    return allocations, weights</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🚦</span> 风控限额</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>限额类型</th>
+            <th>参数</th>
+            <th>控制措施</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>单品种限额</td>
+            <td>< 30%总资产</td>
+            <td>超限禁止开仓</td>
+          </tr>
+          <tr>
+            <td>单日亏损限额</td>
+            <td>< 5%总资产</td>
+            <td>触发后停止交易</td>
+          </tr>
+          <tr>
+            <td>最大持仓限额</td>
+            <td>< 90%总资产</td>
+            <td>保留现金缓冲</td>
+          </tr>
+          <tr>
+            <td>波动率限额</td>
+            <td>VaR < 5%</td>
+            <td>降低仓位</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">风险控制原则</div>
+        <p>1）永远设置止损；2）单笔风险<2%；3）总仓位<80%；4）分散投资；5）严格纪律执行。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了期货交易的主要风险</li>
+            <li>• 掌握了多种止损方法</li>
+            <li>• 学会了仓位管理技术</li>
+            <li>• 建立了完善的风控体系</li>
+            <li>• 制定了风控限额标准</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="76-2-趋势跟踪策略设计.html">← 上一节</a>
+      <a href="76-4-回测验证.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

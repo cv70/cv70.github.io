@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.2 算术运算单元设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.2 算术运算单元设计</h1>
+          <p class="subtitle">Verilog设计实例</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握加法器的设计方法</li>
+            <li>理解减法器的实现</li>
+            <li>学会乘法器的基本设计</li>
+            <li>能够设计ALU算术逻辑单元</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">➕</span> 行波进位加法器</h2>
+          <div class="code-block">
+<pre><code>// 半加器
+module half_adder(
+    input  a,
+    input  b,
+    output sum,
+    output cout
+);
+    assign sum  = a ^ b;
+    assign cout = a & b;
+endmodule
+
+// 全加器
+module full_adder(
+    input  a,
+    input  b,
+    input  cin,
+    output sum,
+    output cout
+);
+    assign sum  = a ^ b ^ cin;
+    assign cout = (a & b) | (b & cin) | (a & cin);
+endmodule
+
+// 4位行波进位加法器
+module ripple_carry_adder_4bit(
+    input  [3:0] a,
+    input  [3:0] b,
+    input        cin,
+    output [3:0] sum,
+    output       cout
+);
+    wire c0, c1, c2;
+
+    full_adder fa0 (.a(a[0]), .b(b[0]), .cin(cin), .sum(sum[0]), .cout(c0));
+    full_adder fa1 (.a(a[1]), .b(b[1]), .cin(c0),  .sum(sum[1]), .cout(c1));
+    full_adder fa2 (.a(a[2]), .b(b[2]), .cin(c1),  .sum(sum[2]), .cout(c2));
+    full_adder fa3 (.a(a[3]), .b(b[3]), .cin(c2),  .sum(sum[3]), .cout(cout));
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">➖</span> 减法器</h2>
+          <div class="code-block">
+<pre><code>// 4位减法器
+module subtractor_4bit(
+    input  [3:0] a,
+    input  [3:0] b,
+    output [3:0] diff,
+    output       borrow
+);
+    wire [4:0] result;
+    assign result = {1'b0, a} - {1'b0, b};
+    assign diff = result[3:0];
+    assign borrow = result[4];
+endmodule
+
+// 加减法器（带选择信号）
+module add_sub_4bit(
+    input  [3:0] a,
+    input  [3:0] b,
+    input        sub,
+    output [3:0] result,
+    output       overflow
+);
+    wire [3:0] b_neg;
+    wire [4:0] sum;
+
+    assign b_neg = sub ? ~b + 1 : b;
+    assign sum = {a[3], a} + {b_neg[3], b_neg} + {4'b0, sub};
+    assign result = sum[3:0];
+    assign overflow = sum[4];
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✖️</span> 乘法器</h2>
+          <div class="code-block">
+<pre><code>// 4x4阵列乘法器
+module array_multiplier_4x4(
+    input  [3:0] a,
+    input  [3:0] b,
+    output [7:0] product
+);
+    wire [3:0] p0, p1, p2, p3;
+    wire [4:0] s1, s2, s3;
+
+    // 生成部分积
+    assign p0 = {4{a[0]}} & b;
+    assign p1 = {4{a[1]}} & b;
+    assign p2 = {4{a[2]}} & b;
+    assign p3 = {4{a[3]}} & b;
+
+    // 部分积相加
+    assign s1 = {1'b0, p0} + {p1, 1'b0};
+    assign s2 = s1 + {p2, 2'b00};
+    assign s3 = s2 + {p3, 3'b000};
+
+    assign product = s3[7:0];
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 简单ALU设计</h2>
+          <div class="code-block">
+<pre><code>// 4位ALU
+module alu_4bit(
+    input  [3:0] a,
+    input  [3:0] b,
+    input  [2:0] op,
+    output [3:0] result,
+    output       zero,
+    output       carry,
+    output       overflow
+);
+    reg [3:0] result_reg;
+    reg [4:0] temp;
+
+    always @(*) begin
+        case (op)
+            3'b000: temp = a + b;           // ADD
+            3'b001: temp = a - b;           // SUB
+            3'b010: temp = a & b;           // AND
+            3'b011: temp = a | b;           // OR
+            3'b100: temp = a ^ b;           // XOR
+            3'b101: temp = ~a;              // NOT
+            3'b110: temp = (a < b) ? 1 : 0; // SLT
+            3'b111: temp = a + 1;           // INC
+            default: temp = 0;
+        endcase
+        result_reg = temp[3:0];
+    end
+
+    assign result = result_reg;
+    assign zero = (result == 0);
+    assign carry = temp[4];
+    assign overflow = (a[3] == b[3]) && (result[3] != a[3]);
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 全加器是加法器的基础单元</li>
+                <li>• 减法器通过补码实现</li>
+                <li>• 乘法器使用部分积相加</li>
+                <li>• ALU集成多种运算功能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="15-1-基本组合逻辑电路实例.html">← 上一节</a>
+          <a href="15-3-基本时序电路实例.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

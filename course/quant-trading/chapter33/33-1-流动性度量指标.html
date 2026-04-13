@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33.1 流动性度量指标 - 量化交易</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>33.1 流动性度量指标</h1>
+      <p class="subtitle">流动性风险管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解流动性的概念与重要性</li>
+        <li>掌握各类流动性度量指标</li>
+        <li>学习指标的计算方法与应用</li>
+        <li>了解不同指标的特点与局限</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1611974765270-ca1258634369?w=800" alt="流动性度量指标" class="card-image">
+      <h3 class="card-title">流动性度量指标</h3>
+      <p class="card-text"><strong>流动性</strong>是指在不影响价格的情况下快速买卖资产的能力。
+    流动性是量化交易的"生命线"，准确度量流动性对风险管理至关重要。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💧</span> 流动性的维度</h2>
+      <div class="tip-box info">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">流动性的四个维度</div>
+          <p><strong>宽度</strong>：买卖价差大小，价差越小流动性越好</p>
+          <p><strong>深度</strong>：订单簿深度，深度越大流动性越好</p>
+          <p><strong>即时性</strong>：完成交易所需时间，时间越短流动性越好</p>
+          <p><strong>弹性</strong>：交易后价格恢复速度，恢复越快流动性越好</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 核心流动性指标</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>定义</th>
+            <th>计算方法</th>
+            <th>特点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>买卖价差</td>
+            <td>最优买价与卖价之差</td>
+            <td>S = P_ask - P_bid</td>
+            <td>直接、直观</td>
+          </tr>
+          <tr>
+            <td>相对价差</td>
+            <td>价差占中间价的百分比</td>
+            <td>RS = (P_ask-P_bid)/((P_ask+P_bid)/2)</td>
+            <td>可比较不同价格资产</td>
+          </tr>
+          <tr>
+            <td>成交量</td>
+            <td>一段时间内的交易量</td>
+            <td>累计成交量</td>
+            <td>反映市场活跃度</td>
+          </tr>
+          <tr>
+            <td>换手率</td>
+            <td>成交量占流通市值的比例</td>
+            <td>成交量/流通市值</td>
+            <td>可比较不同规模资产</td>
+          </tr>
+          <tr>
+            <td>Amihud非流动性</td>
+            <td>单位成交额引起的价格变化</td>
+            <td>|r|/Vol</td>
+            <td>综合衡量流动性</td>
+          </tr>
+          <tr>
+            <td>Kyle's Lambda</td>
+            <td>价格对交易量的敏感度</td>
+            <td>回归系数</td>
+            <td>学术常用指标</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 流动性指标Python实现</h2>
+      <div class="card">
+        <h3 class="card-title">Python代码示例</h3>
+        <pre><code class="language-python">import numpy as np
+import pandas as pd
+
+def calculate_spread(bid_price, ask_price):
+    """计算买卖价差"""
+    spread = ask_price - bid_price
+    relative_spread = (ask_price - bid_price) / ((ask_price + bid_price) / 2)
+    return spread, relative_spread
+
+def calculate_turnover(volume, market_cap):
+    """计算换手率"""
+    return volume / market_cap
+
+def calculate_amihud_illiquidity(returns, volume):
+    """计算Amihud非流动性指标"""
+    illiquidity = abs(returns) / volume
+    return illiquidity.mean()
+
+def calculate_kyle_lambda(returns, volume):
+    """计算Kyle's Lambda"""
+    df = pd.DataFrame({'r': returns, 'v': volume})
+    model = np.polyfit(df['v'], df['r'], 1)
+    lambda_kyle = model[0]
+    return lambda_kyle
+
+def order_book_depth(ask_prices, ask_volumes, bid_prices, bid_volumes, depth=5):
+    """计算订单簿深度"""
+    ask_depth = ask_volumes[:depth].sum()
+    bid_depth = bid_volumes[:depth].sum()
+    total_depth = ask_depth + bid_depth
+    return ask_depth, bid_depth, total_depth
+
+def liquidity_score(spread, turnover, volume, depth):
+    """综合流动性得分（得分越高流动性越好）"""
+    # 归一化各项指标（示例）
+    norm_spread = 1 / (1 + spread)  # 价差越小越好
+    norm_turnover = min(turnover / 0.1, 1)  # 换手率越高越好
+    norm_volume = min(volume / 1e6, 1)  # 成交量越大越好
+    norm_depth = min(depth / 1e6, 1)  # 深度越大越好
+
+    # 加权平均
+    score = (0.3 * norm_spread +
+             0.3 * norm_turnover +
+             0.2 * norm_volume +
+             0.2 * norm_depth)
+    return score</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 指标对比与选择</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>应用场景</th>
+            <th>推荐指标</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>实时监控</td>
+            <td>买卖价差、成交量</td>
+            <td>实时可得、计算简单</td>
+          </tr>
+          <tr>
+            <td>历史分析</td>
+            <td>Amihud、Kyle's Lambda</td>
+            <td>综合指标、学术认可</td>
+          </tr>
+          <tr>
+            <td>跨市场比较</td>
+            <td>相对价差、换手率</td>
+            <td>可比较不同价格资产</td>
+          </tr>
+          <tr>
+            <td>订单簿分析</td>
+            <td>深度、斜率</td>
+            <td>反映即时流动性</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 流动性指标注意事项</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">使用注意事项</div>
+          <p><strong>时点性</strong>：大多数指标是时点指标，需要综合多个时点</p>
+          <p><strong>交易规模</strong>：不同交易规模下的流动性可能不同</p>
+          <p><strong>市场状态</strong>：流动性随市场条件大幅变化</p>
+          <p><strong>数据频率</strong>：高频数据更准确但计算复杂</p>
+          <p><strong>异常值</strong>：极端事件可能扭曲指标</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 流动性指标在风险管理中的应用</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">应用场景</h3>
+          <ul class="feature-list">
+            <li><strong>资产选择</strong> - 选择流动性好的资产</li>
+            <li><strong>仓位管理</strong> - 根据流动性调整仓位</li>
+            <li><strong>交易执行</strong> - 优化执行策略</li>
+            <li><strong>风险限额</strong> - 设置流动性相关限额</li>
+            <li><strong>策略设计</strong> - 设计流动性敏感策略</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">流动性要求</h3>
+          <ul class="feature-list">
+            <li><strong>高频策略</strong> - 极高流动性要求</li>
+            <li><strong>中低频策略</strong> - 中等流动性要求</li>
+            <li><strong>长期持有</strong> - 较低流动性要求</li>
+            <li><strong>大资金</strong> - 更高流动性要求</li>
+            <li><strong>小资金</strong> - 流动性要求相对较低</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>使用多个流动性指标综合评估。建立流动性监控仪表盘，实时跟踪关键指标。根据流动性动态调整仓位和交易策略。设置流动性预警阈值，及时应对流动性变化。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了流动性的概念与维度</li>
+            <li>• 掌握了各类流动性度量指标</li>
+            <li>• 学习了指标的计算方法与应用</li>
+            <li>• 了解了不同指标的特点与局限</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter32/32-7-市场极端事件应对.html">← 上一节</a>
+      <a href="33-2-买卖价差分析.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

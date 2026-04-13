@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.4 中断管理 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>50.4 中断管理</h1>
+      <p class="subtitle">SoC中断系统设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解中断系统的基本概念</li>
+        <li>掌握中断控制器的设计原理</li>
+        <li>了解中断优先级和嵌套机制</li>
+        <li>熟悉ARM GIC中断控制器</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚡</span> 中断系统概述</h2>
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">中断的定义</div>
+          <p><strong>中断</strong>是一种机制，允许外部设备或内部模块在需要时暂停当前程序的执行，转而处理紧急事件。处理完成后，再返回原程序继续执行。</p>
+          <p><strong>中断的优点</strong>：提高系统响应速度、实现多任务处理、降低CPU轮询开销。</p>
+        </div>
+      </div>
+
+      <h3>中断与轮询的对比</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>特性</th>
+            <th>中断方式</th>
+            <th>轮询方式</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>响应速度</td>
+            <td>快（微秒级）</td>
+            <td>慢（取决于轮询周期）</td>
+          </tr>
+          <tr>
+            <td>CPU开销</td>
+            <td>事件触发时产生</td>
+            <td>持续占用CPU</td>
+          </tr>
+          <tr>
+            <td>实现复杂度</td>
+            <td>较复杂</td>
+            <td>简单</td>
+          </tr>
+          <tr>
+            <td>适用场景</td>
+            <td>异步事件、实时系统</td>
+            <td>同步事件、简单系统</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 中断控制器设计</h2>
+      <h3>中断控制器基本功能</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">输入管理</h3>
+          <ul class="feature-list">
+            <li>接收多个中断源</li>
+            <li>边沿/电平触发检测</li>
+            <li>中断信号同步</li>
+            <li>中断去抖动</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">优先级管理</h3>
+          <ul class="feature-list">
+            <li>固定优先级</li>
+            <li>动态优先级</li>
+            <li>优先级编码</li>
+            <li>优先级比较</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">屏蔽控制</h3>
+          <ul class="feature-list">
+            <li>全局中断使能</li>
+            <li>单独中断屏蔽</li>
+            <li>优先级屏蔽</li>
+            <li>嵌套中断控制</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">状态管理</h3>
+          <ul class="feature-list">
+            <li>中断挂起状态</li>
+            <li>中断激活状态</li>
+            <li>中断完成确认</li>
+            <li>中断状态查询</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>中断控制器示例（简化版）</h3>
+      <div class="code-block">
+<pre>
+module interrupt_controller (
+    input  clk,
+    input  rst_n,
+    input  [31:0] irq_in,      // 32个中断输入
+    input  [31:0] irq_mask,    // 中断屏蔽
+    input  [31:0] irq_priority, // 中断优先级
+    input  irq_ack,            // 中断确认
+    output reg   irq_out,      // 中断输出
+    output reg [4:0] irq_vector // 中断向量
+);
+
+reg [31:0] irq_pending;
+
+// 边沿检测
+reg [31:0] irq_in_d1, irq_in_d2;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        irq_in_d1 <= 0;
+        irq_in_d2 <= 0;
+    end else begin
+        irq_in_d1 <= irq_in;
+        irq_in_d2 <= irq_in_d1;
+    end
+end
+
+// 上升沿检测
+wire [31:0] irq_edge = irq_in_d1 & ~irq_in_d2;
+
+// 挂起中断更新
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        irq_pending <= 0;
+    end else begin
+        irq_pending <= (irq_pending | irq_edge) & ~irq_mask;
+    end
+end
+
+// 优先级编码（简化）
+always @(*) begin
+    irq_out = 0;
+    irq_vector = 0;
+    if (|irq_pending) begin
+        // 查找最高优先级的挂起中断
+        for (int i = 31; i >= 0; i--) begin
+            if (irq_pending[i]) begin
+                irq_out = 1;
+                irq_vector = i;
+                break;
+            end
+        end
+    end
+end
+
+// 中断确认
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        // no action
+    end else if (irq_ack) begin
+        irq_pending[irq_vector] <= 0;
+    end
+end
+
+endmodule</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏆</span> ARM GIC中断控制器</h2>
+      <h3>GIC架构概述</h3>
+      <p>ARM Generic Interrupt Controller（GIC）是ARM架构的标准中断控制器，支持多核处理器的中断分发和优先级管理。</p>
+
+      <h3>GIC版本演进</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>版本</th>
+            <th>特点</th>
+            <th>支持的处理器</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GICv1</td>
+            <td>基础功能，支持多核</td>
+            <td>Cortex-A7/A9</td>
+          </tr>
+          <tr>
+            <td>GICv2</td>
+            <td>增加虚拟化支持</td>
+            <td>Cortex-A15/A17</td>
+          </tr>
+          <tr>
+            <td>GICv3</td>
+            <td>支持Message Signaled Interrupts（MSI）</td>
+            <td>Cortex-A53/A57/A72</td>
+          </tr>
+          <tr>
+            <td>GICv4</td>
+            <td>增强虚拟化，支持直接注入</td>
+            <td>Cortex-A76/A78</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>GIC中断类型</h3>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">SGI（软件生成中断）</h3>
+          <p class="card-text">ID: 0-15</p>
+          <p class="card-text">用于核间通信，由软件通过寄存器写入触发。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">PPI（私有外设中断）</h3>
+          <p class="card-text">ID: 16-31</p>
+          <p class="card-text">每个CPU私有的外设中断，如本地定时器。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">SPI（共享外设中断）</h3>
+          <p class="card-text">ID: 32-1019</p>
+          <p class="card-text">多个CPU共享的外设中断，可路由到任意CPU。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 中断处理流程</h2>
+      <div class="flowchart">
+        <div class="flow-step">外设产生中断信号</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">中断控制器接收并同步</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">中断挂起（Pending）</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">优先级仲裁</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">向CPU发送中断请求</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">CPU响应中断</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">执行中断服务程序（ISR）</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">中断完成确认</div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎚️</span> 中断优先级与嵌套</h2>
+      <h3>优先级设计原则</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">高优先级中断</h3>
+          <ul class="feature-list">
+            <li>系统定时器</li>
+            <li>看门狗中断</li>
+            <li>电源管理中断</li>
+            <li>安全相关中断</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">中优先级中断</h3>
+          <ul class="feature-list">
+            <li>网络数据包</li>
+            <li>存储操作完成</li>
+            <li>音频数据</li>
+            <li>关键传感器</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">低优先级中断</h3>
+          <ul class="feature-list">
+            <li>GPIO输入</li>
+            <li>低速外设</li>
+            <li>用户接口</li>
+            <li>非关键任务</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">优先级分配原则</h3>
+          <ul class="feature-list">
+            <li>实时性要求高的优先级高</li>
+            <li>处理时间短的优先级高</li>
+            <li>避免优先级反转</li>
+            <li>合理设置优先级阈值</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>中断嵌套</h3>
+      <p>中断嵌套允许高优先级中断打断低优先级中断的处理。需要保存上下文，正确管理堆栈。</p>
+      <div class="code-block">
+<pre>
+// 中断嵌套示例
+void __attribute__((interrupt("IRQ"))) IRQ_Handler(void) {
+    uint32_t irq_id = GIC_GetIRQID();
+
+    switch (irq_id) {
+        case TIMER_IRQ:
+            // 允许更高优先级中断
+            __enable_irq();
+            Timer_Handler();
+            __disable_irq();
+            break;
+
+        case UART_IRQ:
+            // 不允许中断嵌套
+            UART_Handler();
+            break;
+    }
+
+    GIC_EndInterrupt(irq_id);
+}</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 中断安全与防护</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">中断风暴防护</h3>
+          <ul class="feature-list">
+            <li>设置中断速率限制</li>
+            <li>实现中断节流</li>
+            <li>动态调整优先级</li>
+            <li>中断聚合</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">中断隔离</h3>
+          <ul class="feature-list">
+            <li>安全中断与非安全中断隔离</li>
+            <li>虚拟化中断支持</li>
+            <li>中断组配置</li>
+            <li>中断亲和性控制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 中断系统是SoC响应外部事件的关键机制</li>
+            <li>• 中断控制器负责管理多个中断源和优先级</li>
+            <li>• ARM GIC是标准的中断控制器架构</li>
+            <li>• 合理的优先级设计和嵌套机制对系统性能至关重要</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-3-地址映射.html">← 上一节</a>
+      <a href="50-5-时钟管理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

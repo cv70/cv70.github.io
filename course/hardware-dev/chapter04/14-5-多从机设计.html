@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.5 多从机设计 - 嵌入式硬件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>14.5 多从机设计</h1>
+      <p class="subtitle">第14章 SPI总线</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握SPI多从机连接的硬件设计方法</li>
+        <li>理解片选信号的分配与控制策略</li>
+        <li>能够设计稳定的多从机SPI网络</li>
+        <li>了解多从机通信的软件协议设计</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">多从机设计概述</h3>
+      <p class="card-text"><strong>SPI采用主从架构</strong>，一个主设备可以连接多个从设备。
+      多从机设计的关键在于片选(CS)信号的管理：每个从设备需要独立的CS线，
+      主设备通过拉低特定从机的CS来选择该设备进行通信。SCLK、MOSI、MISO可以共享。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 多从机架构解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 多从机优势</h3>
+          <p class="card-text">节省IO资源，方便扩展多个外设</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心机制</h3>
+          <p class="card-text">共享总线，独立片选</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何实现</h3>
+          <p class="card-text">分配独立CS线，控制片选信号</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 多从机连接方式</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>信号线</th>
+            <th>连接方式</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SCLK</td>
+            <td>共享连接</td>
+            <td>所有从设备共用同一时钟线</td>
+          </tr>
+          <tr>
+            <td>MOSI</td>
+            <td>共享连接</td>
+            <td>主设备的MOSI连接所有从设备的输入</td>
+          </tr>
+          <tr>
+            <td>MISO</td>
+            <td>共享连接</td>
+            <td>所有从设备的MISO连接主设备输入</td>
+          </tr>
+          <tr>
+            <td>CS1</td>
+            <td>独立连接</td>
+            <td>选择从设备1，低电平有效</td>
+          </tr>
+          <tr>
+            <td>CS2</td>
+            <td>独立连接</td>
+            <td>选择从设备2，低电平有效</td>
+          </tr>
+          <tr>
+            <td>CSn</td>
+            <td>独立连接</td>
+            <td>选择从设备n，低电平有效</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 片选分配策略</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>IO占用</th>
+            <th>优点</th>
+            <th>缺点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>独立GPIO</td>
+            <td>每个从设备1个IO</td>
+            <td>简单直观，灵活控制</td>
+            <td>IO占用多</td>
+          </tr>
+          <tr>
+            <td>IO扩展芯片</td>
+            <td>占用少量IO</td>
+            <td>节省IO资源</td>
+            <td>增加硬件成本</td>
+          </tr>
+          <tr>
+            <td>译码器(74HC138)</td>
+            <td>3个IO扩展8路</td>
+            <td>效率高</td>
+            <td>软件稍复杂</td>
+          </tr>
+          <tr>
+            <td>移位寄存器</td>
+            <td>2个IO扩展多路</td>
+            <td>扩展能力强</td>
+            <td>速度较慢</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>多从机设计要点：(1)CS信号加10kΩ上拉电阻确保空闲状态；(2)未使用的从设备保持CS为高电平；
+        (3)通信时先拉低CS，结束后拉高CS；(4)不同设备的SPI模式可能不同，需分别配置；
+        (5)高速应用时考虑信号反射和串扰。</p>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">注意事项</div>
+        <p>共享MISO线时，未选中的从设备必须将MISO配置为高阻态。
+        某些设备不支持三态输出，需要额外硬件隔离。通信时只能有一个从设备的CS为低，避免总线冲突。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• SPI支持一个主设备连接多个从设备，通过片选信号选择</li>
+            <li>• SCLK、MOSI、MISO共享，CS信号每个从设备独立</li>
+            <li>• 片选策略包括独立GPIO、译码器、移位寄存器等</li>
+            <li>• CS信号需上拉电阻，未选中的设备保持高阻态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="14-4-SPI硬件连接设计.html">← 上一节</a>
+      <a href="14-6-SPI-Flash应用.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.2 激励生成技术 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.2 激励生成技术</h1>
+          <p class="subtitle">产生有效的测试激励</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握时序控制方法</li>
+            <li>学习随机激励生成</li>
+            <li>了解约束随机技术</li>
+            <li>学会产生复杂激励模式</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">激励生成概述</h3>
+          <p class="card-text">
+            <strong>激励生成</strong>是Testbench的核心功能之一，用于产生各种输入信号驱动DUT。良好的激励生成技术能够覆盖各种边界情况和异常场景。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 时序控制方法</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>方法</th>
+                <th>用途</th>
+                <th>示例</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#delay</td>
+                <td>固定延迟</td>
+                <td>#10 data = 8'hFF;</td>
+              </tr>
+              <tr>
+                <td>repeat</td>
+                <td>重复执行</td>
+                <td>repeat(10) @(posedge clk);</td>
+              </tr>
+              <tr>
+                <td>for循环</td>
+                <td>迭代操作</td>
+                <td>for(i=0; i<100; i=i+1)</td>
+              </tr>
+              <tr>
+                <td>forever</td>
+                <td>无限循环</td>
+                <td>forever #5 clk = ~clk;</td>
+              </tr>
+              <tr>
+                <td>wait</td>
+                <td>等待条件</td>
+                <td>wait(valid);</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎲</span> 随机激励生成</h2>
+          <div class="code-block">
+<pre// 系统函数生成随机数
+initial begin
+    reg [7:0] rand_data;
+    integer i;
+
+    // 生成100个随机数据
+    for (i = 0; i < 100; i = i + 1) begin
+        rand_data = $random;  // 生成32位随机数
+        rand_data = $urandom_range(0, 255);  // 生成0-255随机数
+        @(posedge clk);
+        data_in <= rand_data;
+    end
+end
+
+// 带权重的随机选择
+function [7:0] weighted_random;
+    reg [7:0] r;
+    begin
+        r = $urandom_range(0, 100);
+        if (r < 50)
+            weighted_random = 8'h00;  // 50%概率为0
+        else if (r < 80)
+            weighted_random = 8'hFF;  // 30%概率为FF
+        else
+            weighted_random = $urandom;  // 20%随机
+    end
+endfunction</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 常用激励模式</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">数据模式</h3>
+              <ul class="feature-list">
+                <li>全0/全1模式</li>
+                <li>行走模式（walking 1/0）</li>
+                <li>棋盘格模式</li>
+                <li>随机数据模式</li>
+                <li>边界值模式</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">时序模式</h3>
+              <ul class="feature-list">
+                <li>连续传输模式</li>
+                <li>突发传输模式</li>
+                <li>背对背传输</li>
+                <li>间隔传输</li>
+                <li>随机时序</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 事务级激励生成</h2>
+          <div class="code-block">
+<pre// 事务生成器
+class Transaction;
+    rand bit [7:0] data;
+    rand bit        valid;
+    rand bit [3:0]  addr;
+
+    constraint c_addr {
+        addr inside {[0:7]};
+    }
+
+    constraint c_data {
+        data > 8'h10;
+    }
+endclass
+
+initial begin
+    Transaction tr;
+
+    repeat(1000) begin
+        tr = new();
+        if (!tr.randomize()) begin
+            $display("Randomization failed");
+            $finish;
+        end
+
+        @(posedge clk);
+        data_in  <= tr.data;
+        addr_in  <= tr.addr;
+        valid_in <= tr.valid;
+    end
+end</pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">验证策略</div>
+            <p>使用定向测试和随机测试相结合的策略。定向测试验证关键功能和边界情况，随机测试发现意外问题和corner case。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 时序控制是激励生成的基础</li>
+                <li>• 随机激励提高测试覆盖率</li>
+                <li>• 约束随机确保测试的有效性</li>
+                <li>• 事务级激励提高验证效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="20-1-Testbench概述.html">← 上一节</a>
+          <a href="20-3-响应检查方法.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

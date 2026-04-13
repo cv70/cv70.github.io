@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.3 订单状态管理 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>40.3 订单状态管理</h1>
+      <p class="subtitle">订单管理与路由</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解订单状态管理的核心原理与方法</li>
+        <li>掌握订单状态机的设计与实现</li>
+        <li>能够处理订单状态异常与恢复</li>
+        <li>了解订单状态同步与一致性问题</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="订单状态管理" class="card-image">
+      <h3 class="card-title">订单状态管理</h3>
+      <p class="card-text"><strong>订单状态管理</strong>是"订单管理与路由"这一章中的第3节内容。
+    订单状态管理是交易系统的核心功能，确保订单状态的准确性和一致性是系统可靠运行的保证。
+    本节深入探讨订单状态管理的设计原则、实现方法和最佳实践。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 订单状态机设计</h2>
+      <div class="tip-box info">
+        <span class="icon">📊</span>
+        <div class="content">
+          <div class="title">订单状态转换规则</div>
+          <p>订单状态机定义了订单状态之间的合法转换路径。设计原则：</p>
+          <ul>
+            <li><strong>状态唯一</strong>：订单在任何时刻只能处于一个状态</li>
+            <li><strong>转换明确</strong>：每个状态转换都有明确的触发条件</li>
+            <li><strong>可追溯</strong>：记录所有状态变化的历史</li>
+            <li><strong>可恢复</strong>：异常情况下能够恢复到正确状态</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 订单状态详解与处理逻辑</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>进入条件</th>
+            <th>退出条件</th>
+            <th>关键处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>NEW</td>
+            <td>订单创建</td>
+            <td>验证通过/失败</td>
+            <td>参数验证、初始化数据</td>
+          </tr>
+          <tr>
+            <td>PENDING_SUBMIT</td>
+            <td>验证通过</td>
+            <td>发送成功/失败</td>
+            <td>队列管理、发送重试</td>
+          </tr>
+          <tr>
+            <td>SUBMITTED</td>
+            <td>发送成功</td>
+            <td>收到确认/拒绝</td>
+            <td>设置超时定时器</td>
+          </tr>
+          <tr>
+            <td>ACKNOWLEDGED</td>
+            <td>收到确认</td>
+            <td>开始成交/撤销</td>
+            <td>更新订单簿位置</td>
+          </tr>
+          <tr>
+            <td>PARTIALLY_FILLED</td>
+            <td>部分成交</td>
+            <td>继续成交/全部成交/撤销</td>
+            <td>更新持仓、计算成本</td>
+          </tr>
+          <tr>
+            <td>FILLED</td>
+            <td>全部成交</td>
+            <td>结算完成</td>
+            <td>最终处理、通知策略</td>
+          </tr>
+          <tr>
+            <td>CANCELLED</td>
+            <td>撤销成功</td>
+            <td>处理完成</td>
+            <td>处理未成交部分</td>
+          </tr>
+          <tr>
+            <td>REJECTED</td>
+            <td>被拒绝</td>
+            <td>处理完成</td>
+            <td>记录原因、通知用户</td>
+          </tr>
+          <tr>
+            <td>ERROR</td>
+            <td>系统错误</td>
+            <td>恢复完成</td>
+            <td>错误处理、恢复逻辑</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 状态管理关键技术</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+          <h3 class="card-title">状态锁机制</h3>
+          <p class="card-text">防止并发状态变更冲突</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">📝</div>
+          <h3 class="card-title">状态日志</h3>
+          <p class="card-text">记录所有状态变化</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">事件驱动</h3>
+          <p class="card-text">通过事件触发状态变化</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">⏰</div>
+          <h3 class="card-title">超时处理</h3>
+          <p class="card-text">处理超时未响应的订单</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">💾</div>
+          <h3 class="card-title">数据持久化</h3>
+          <p class="card-text">确保持久化存储</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔍</div>
+          <h3 class="card-title">状态查询</h3>
+          <p class="card-text">提供高效查询接口</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 异常状态处理</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>异常类型</th>
+            <th>表现</th>
+            <th>原因</th>
+            <th>处理方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>状态不一致</td>
+            <td>本地状态与交易所状态不同步</td>
+            <td>消息丢失、乱序</td>
+            <td>主动查询、重新同步</td>
+          </tr>
+          <tr>
+            <td>超时未响应</td>
+            <td>发送订单后长期无响应</td>
+            <td>网络延迟、系统故障</td>
+            <td>重试、主动查询、人工介入</td>
+          </tr>
+          <tr>
+            <td>部分成交未完成</td>
+            <td>部分成交后长期未继续</td>
+            <td>市场流动性变化</td>
+            <td>调整价格、撤销重下</td>
+          </tr>
+          <tr>
+            <td>拒绝原因不明</td>
+            <td>被拒绝但原因不清楚</td>
+            <td>系统错误、信息不完整</td>
+            <td>联系券商、查看日志</td>
+          </tr>
+          <tr>
+            <td>订单重复</td>
+            <td>同一订单被重复提交</td>
+            <td>重试机制错误</td>
+            <td>去重检查、幂等性设计</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 状态同步与一致性</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">同步策略</h3>
+          <ul>
+            <li><strong>主动查询</strong>：定期查询交易所订单状态</li>
+            <li><strong>被动接收</strong>：接收交易所推送的状态更新</li>
+            <li><strong>混合模式</strong>：结合主动和被动方式</li>
+            <li><strong>触发查询</strong>：异常时触发状态查询</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">一致性保障</h3>
+          <ul>
+            <li><strong>幂等性设计</strong>：重复处理不会产生错误</li>
+            <li><strong>事务处理</strong>：关键操作使用事务</li>
+            <li><strong>版本控制</strong>：使用版本号防止冲突</li>
+            <li><strong>对账机制</strong>：定期对账发现问题</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 状态监控与告警</h2>
+      <div class="tip-box info">
+        <span class="icon">👀</span>
+        <div class="content">
+          <div class="title">关键监控指标</div>
+          <ul>
+            <li><strong>订单状态分布</strong>：各状态订单数量和占比</li>
+            <li><strong>状态转换延迟</strong>：状态变化的平均延迟</li>
+            <li><strong>异常订单数量</strong>：ERROR、REJECTED等状态订单</li>
+            <li><strong>超时订单数量</strong>：超时未响应的订单</li>
+            <li><strong>状态不一致订单</strong>：需要同步的订单</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">重要提醒</div>
+        <p>订单状态管理是交易系统的核心，任何错误都可能导致严重的资金风险。
+        建议：1）状态机设计要严谨，覆盖所有可能情况；
+        2）所有状态变更必须记录详细的日志；
+        3）建立完善的异常处理和恢复机制；
+        4）定期对账确保状态一致性；
+        5）状态管理代码要经过充分测试。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了订单状态机的设计原理</li>
+            <li>• 理解了各类订单状态的处理逻辑</li>
+            <li>• 学会了异常状态的处理方法</li>
+            <li>• 了解了状态同步与一致性的保障机制</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="40-2-订单类型详解.html">← 上一节</a>
+      <a href="40-4-智能订单路由（SOR）.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

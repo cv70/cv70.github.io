@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.3 AXI协议详解 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.3 AXI协议详解</h1>
+          <p class="subtitle">高性能片上总线协议</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握AXI协议的核心架构和特性</li>
+            <li>理解AXI的通道结构和信号定义</li>
+            <li>学习AXI的传输协议和时序</li>
+            <li>了解AXI4及其扩展版本</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">AXI协议简介</h3>
+          <p class="card-text"><strong>AXI（Advanced eXtensible Interface）</strong>是AMBA 3.0引入的高性能总线协议，是当前SoC设计中应用最广泛的高性能总线协议。AXI的设计目标是提供<strong>高带宽、低延迟、高灵活性</strong>的片上互联解决方案。</p>
+          <p class="card-text">AXI协议的核心创新在于其<strong>分离的读写通道</strong>设计，允许读写操作并行进行，大大提高了总线利用率。同时，AXI支持<strong>乱序传输</strong>和<strong>多主多从</strong>架构，能够满足复杂SoC系统的通信需求。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> AXI核心特性</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">分离通道</h3>
+              <ul class="feature-list">
+                <li>独立的读地址通道</li>
+                <li>独立的读数据通道</li>
+                <li>独立的写地址通道</li>
+                <li>独立的写数据通道</li>
+                <li>独立的写响应通道</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">乱序传输</h3>
+              <ul class="feature-list">
+                <li>支持Out-of-order完成</li>
+                <li>通过ID标识事务</li>
+                <li>提高总线利用率</li>
+                <li>减少等待时间</li>
+                <li>提升整体性能</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">突发传输</h3>
+              <ul class="feature-list">
+                <li>支持FIXED/INCR/WRAP</li>
+                <li>可配置突发长度</li>
+                <li>提高数据传输效率</li>
+                <li>减少握手开销</li>
+                <li>最大化带宽利用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AXI通道结构</h2>
+          <p class="card-text">AXI协议定义了5个独立的通道，每个通道都有自己的握手信号：</p>
+          <table>
+            <thead>
+              <tr>
+                <th>通道</th>
+                <th>方向</th>
+                <th>主要信号</th>
+                <th>功能</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>读地址通道（AR）</strong></td>
+                <td>主→从</td>
+                <td>ARADDR, ARLEN, ARSIZE, ARBURST, ARID</td>
+                <td>传输读事务的地址和控制信息</td>
+              </tr>
+              <tr>
+                <td><strong>读数据通道（R）</strong></td>
+                <td>从→主</td>
+                <td>RDATA, RRESP, RLAST, RID</td>
+                <td>传输读数据</td>
+              </tr>
+              <tr>
+                <td><strong>写地址通道（AW）</strong></td>
+                <td>主→从</td>
+                <td>AWADDR, AWLEN, AWSIZE, AWBURST, AWID</td>
+                <td>传输写事务的地址和控制信息</td>
+              </tr>
+              <tr>
+                <td><strong>写数据通道（W）</strong></td>
+                <td>主→从</td>
+                <td>WDATA, WSTRB, WLAST</td>
+                <td>传输写数据</td>
+              </tr>
+              <tr>
+                <td><strong>写响应通道（B）</strong></td>
+                <td>从→主</td>
+                <td>BRESP, BID</td>
+                <td>返回写操作的响应</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> AXI握手协议</h2>
+          <p class="card-text">AXI使用<strong>Valid/Ready握手机制</strong>来控制数据传输：</p>
+          <ul class="feature-list">
+            <li><strong>VALID信号：</strong>表示发送方已经准备好了有效的数据或控制信息</li>
+            <li><strong>READY信号：</strong>表示接收方准备好接收数据或控制信息</li>
+            <li><strong>传输条件：</strong>当VALID和READY同时为高时，传输发生</li>
+          </ul>
+
+          <div class="tip-box success" style="margin-top: 1.5rem;">
+            <span class="icon">🔄</span>
+            <div class="content">
+              <div class="title">握手规则</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 发送方在VALID变高后必须保持稳定，直到收到READY</li>
+                <li>• 接收方可以在VALID变高后再拉高READY，也可以提前拉高READY等待</li>
+                <li>• VALID和READY的顺序没有严格要求，可以同时变化</li>
+                <li>• 这种机制支持各种流控策略，设计非常灵活</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📏</span> AXI突发类型</h2>
+          <p class="card-text">AXI支持三种突发传输类型：</p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">FIXED（固定地址）</h3>
+              <ul class="feature-list">
+                <li>所有传输使用相同地址</li>
+                <li>常用于FIFO或寄存器访问</li>
+                <li>突发长度可配置</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">INCR（递增）</h3>
+              <ul class="feature-list">
+                <li>地址按传输大小递增</li>
+                <li>最常用的突发类型</li>
+                <li>用于连续内存访问</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">WRAP（回绕）</h3>
+              <ul class="feature-list">
+                <li>地址到达边界后回绕</li>
+                <li>用于Cache line访问</li>
+                <li>对齐到特定边界</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> AXI乱序传输</h2>
+          <p class="card-text">AXI支持乱序完成，这是其高性能的关键特性之一：</p>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">乱序机制</div>
+              <p>每个AXI事务都有一个ID标识，从设备可以按任意顺序完成具有不同ID的事务。这允许从设备优化其内部处理，例如重新排序以减少访问延迟。对于相同ID的事务，必须按顺序完成以保持数据一致性。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> AXI4新特性</h2>
+          <p class="card-text">AXI4是AMBA 4.0引入的升级版本，相比AXI3有重要改进：</p>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>AXI3</th>
+                <th>AXI4</th>
+                <th>优势</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>最大突发长度</strong></td>
+                <td>16次传输</td>
+                <td>256次传输</td>
+                <td>支持更大突发，提高效率</td>
+              </tr>
+              <tr>
+                <td><strong>独占访问</strong></td>
+                <td>支持</td>
+                <td>支持</td>
+                <td>保持原子操作能力</td>
+              </tr>
+              <tr>
+                <td><strong>区域信号</strong></td>
+                <td>支持</td>
+                <td>移除</td>
+                <td>简化设计</td>
+              </tr>
+              <tr>
+                <td><strong>写数据选通</strong></td>
+                <td>字节粒度</td>
+                <td>字节粒度</td>
+                <td>支持部分写入</td>
+              </tr>
+              <tr>
+                <td><strong>QoS支持</strong></td>
+                <td>有限</td>
+                <td>增强</td>
+                <td>更好的服务质量</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📐</span> AXI-Lite</h2>
+          <p class="card-text"><strong>AXI-Lite</strong>是AXI的简化版本，用于配置和寄存器访问：</p>
+          <ul class="feature-list">
+            <li><strong>简化设计：</strong>只支持单次传输，不支持突发</li>
+            <li><strong>小面积：</strong>信号数量大幅减少，逻辑简单</li>
+            <li><strong>低功耗：</strong>适合低功耗应用</li>
+            <li><strong>应用场景：</strong>寄存器配置、状态读取、控制接口</li>
+          </ul>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">AXI设计注意事项</div>
+            <p>AXI虽然功能强大，但设计复杂度也较高。在设计AXI接口时需要注意：ID分配策略、QoS优先级设置、超时处理机制、错误恢复策略等。建议使用ARM提供的AXI Protocol Checker等工具进行验证。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• AXI是高性能片上总线协议，支持分离通道和乱序传输</li>
+                <li>• 5个独立通道（AR/R/AW/W/B）提供灵活的通信机制</li>
+                <li>• Valid/Ready握手协议支持各种流控策略</li>
+                <li>• 支持三种突发类型：FIXED、INCR、WRAP</li>
+                <li>• AXI4相比AXI3有更大突发长度和更好的QoS支持</li>
+                <li>• AXI-Lite是简化版本，适合配置和寄存器访问</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-2-AMBA协议.html">← 上一节</a>
+          <a href="49-4-AHB协议详解.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.7 流水线冒险处理 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.7 流水线冒险处理</h1>
+          <p class="subtitle">RISC-V 处理器设计实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解流水线冒险的类型和原因</li>
+            <li>掌握数据冒险的检测和处理</li>
+            <li>了解控制冒险的解决方法</li>
+            <li>熟悉结构冒险的避免策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">流水线冒险概述</h3>
+          <p class="card-text">
+            <strong>流水线冒险（Pipeline Hazard）</strong>是指由于指令之间的依赖关系或资源冲突，
+            导致流水线无法按正常节奏执行的情况。冒险分为数据冒险、控制冒险和结构冒险三类，
+            正确处理冒险是高性能处理器设计的关键。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 冒险类型</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">数据冒险</h3>
+              <p class="card-text">指令间数据依赖<br>RAW/WAR/WAW</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔀</div>
+              <h3 class="card-title">控制冒险</h3>
+              <p class="card-text">分支/跳转指令<br>改变PC流</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">⚙️</div>
+              <h3 class="card-title">结构冒险</h3>
+              <p class="card-text">资源冲突<br>访存/寄存器</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 数据冒险类型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>描述</th>
+                <th>示例</th>
+                <th>解决方法</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>RAW</td>
+                <td>读后写</td>
+                <td>add x1,x2,x3; sub x4,x1,x5</td>
+                <td>前递/停顿</td>
+              </tr>
+              <tr>
+                <td>WAR</td>
+                <td>写后读</td>
+                <td>add x1,x2,x3; sub x2,x4,x5</td>
+                <td>寄存器重命名</td>
+              </tr>
+              <tr>
+                <td>WAW</td>
+                <td>写后写</td>
+                <td>add x1,x2,x3; sub x1,x4,x5</td>
+                <td>寄存器重命名</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 数据前递</h2>
+          <div class="card">
+            <h3 class="card-title">前递检测逻辑</h3>
+            <div class="code-block">
+// EX-MEM前递检测
+wire ex_mem_hazard_rs1 = (EX_MEM_reg_write && EX_MEM_rd != 0 &&
+                          EX_MEM_rd == ID_EX_rs1);
+wire ex_mem_hazard_rs2 = (EX_MEM_reg_write && EX_MEM_rd != 0 &&
+                          EX_MEM_rd == ID_EX_rs2);
+
+// MEM-WB前递检测
+wire mem_wb_hazard_rs1 = (MEM_WB_reg_write && MEM_WB_rd != 0 &&
+                         MEM_WB_rd == ID_EX_rs1 && !ex_mem_hazard_rs1);
+wire mem_wb_hazard_rs2 = (MEM_WB_reg_write && MEM_WB_rd != 0 &&
+                         MEM_WB_rd == ID_EX_rs2 && !ex_mem_hazard_rs2);
+
+// 前递选择
+wire [31:0] forward_a = ex_mem_hazard_rs1 ? EX_MEM_result :
+                       (mem_wb_hazard_rs1 ? MEM_WB_result : reg_data1);
+wire [31:0] forward_b = ex_mem_hazard_rs2 ? EX_MEM_result :
+                       (mem_wb_hazard_rs2 ? MEM_WB_result : reg_data2);
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏸️</span> Load-Use冒险</h2>
+          <div class="card">
+            <h3 class="card-title">Load后立即使用</h3>
+            <p class="card-text">当Load指令的下一条指令需要使用Load的数据时，需要停顿一个周期。</p>
+            <div class="code-block">
+// Load-Use冒险检测
+wire load_use_hazard = (ID_EX_mem_read &&
+                        ((ID_EX_rd == IF_ID_rs1) ||
+                         (ID_EX_rd == IF_ID_rs2)));
+
+// 流水线停顿
+assign stall = load_use_hazard;
+
+// 插入气泡
+assign IF_ID_write = !stall;
+assign PC_write = !stall;
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 控制冒险</h2>
+          <div class="card">
+            <h3 class="card-title">分支预测与处理</h3>
+            <ul class="feature-list">
+              <li><strong>静态预测</strong> - 总是预测不跳转或总是预测跳转</li>
+              <li><strong>动态预测</strong> - BHT/BTB/PHT等硬件预测器</li>
+              <li><strong>延迟槽</strong> - RISC-V不使用延迟槽</li>
+              <li><strong>预测失败</strong> - 刷新流水线，重新取指</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">分支预测优化</div>
+            <p><strong>BTB（分支目标缓冲）</strong> - 缓存分支目标地址<br>
+            <strong>BHT（分支历史表）</strong> - 记录分支历史<br>
+            <strong>PHT（模式历史表）</strong> - 基于历史的预测<br>
+            <strong> Tournament预测器</strong> - 组合多种预测器</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 结构冒险</h2>
+          <div class="card">
+            <h3 class="card-title">避免策略</h3>
+            <ul class="feature-list">
+              <li><strong>哈佛架构</strong> - 指令和数据Cache分离</li>
+              <li><strong>双端口寄存器堆</strong> - 支持同时读写</li>
+              <li><strong>资源复制</strong> - 增加硬件资源</li>
+              <li><strong>流水线停顿</strong> - 资源冲突时停顿</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能影响</h2>
+          <div class="card">
+            <h3 class="card-title">冒险对CPI的影响</h3>
+            <p class="card-text">理想CPI = 1（每个周期完成一条指令）<br>
+            实际CPI = 1 + 数据冒险停顿 + 控制冒险停顿 + 结构冒险停顿</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 流水线冒险分为数据、控制、结构三类</li>
+                <li>• 数据冒险通过前递和停顿解决</li>
+                <li>• 控制冒险通过分支预测解决</li>
+                <li>• 结构冒险通过资源分离避免</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-6-写回单元设计.html">← 上一节</a>
+          <a href="47-8-处理器验证与优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

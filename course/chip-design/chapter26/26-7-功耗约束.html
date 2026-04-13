@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.7 功耗约束 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.7 功耗约束</h1>
+          <p class="subtitle">设计功耗优化与约束方法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解功耗约束的基本概念</li>
+            <li>掌握动态功耗和静态功耗的区别</li>
+            <li>学会设置功耗约束</li>
+            <li>了解功耗优化的方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 功耗组成</h2>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">动态功耗</h3>
+              <p class="card-text">由电路开关活动产生</p>
+              <p>P_dyn = αCV²f</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">静态功耗</h3>
+              <p class="card-text">由漏电流产生</p>
+              <p>P_leak = I_leak × V</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">总功耗</h3>
+              <p class="card-text">动态+静态之和</p>
+              <p>P_total = P_dyn + P_leak</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 功耗约束设置</h2>
+
+          <h3>设置最大功耗</h3>
+          <div class="code-block">
+# 设置最大动态功耗
+set_max_dynamic_power 0.5 [current_design]
+
+# 设置最大静态功耗
+set_max_leakage_power 0.1 [current_design]
+
+# 设置总功耗上限
+set_max_total_power 0.6 [current_design]
+
+# 针对特定模块
+set_max_total_power 0.1 [get_cells cpu_core]
+          </div>
+
+          <h3>开关活动设置</h3>
+          <div class="code-block">
+# 设置网络开关活动率
+set_switching_activity -activity 0.1 [get_nets quiet*]
+set_switching_activity -activity 0.5 [get_nets data*]
+set_switching_activity -activity 0.9 [get_nets clock*]
+
+# 设置静态概率
+set_static_probability -probability 0.5 [get_nets data*]
+
+# 从文件读取活动率
+read_activity_file -format saif activity.saif
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 功耗优化技术</h2>
+
+          <h3>1. 时钟门控</h3>
+          <div class="code-block">
+# 插入时钟门控
+insert_clock_gating
+
+# 设置时钟门控风格
+set_clock_gating_style \
+    -sequential_cell latch \
+    -control_point before \
+    -positive_edge_logic {NAND} \
+    -negative_edge_logic {NOR} \
+    -minimum_bitwidth 4 \
+    -max_fanout 20
+
+# 针对特定模块
+current_design sub_module
+insert_clock_gating
+          </div>
+
+          <h3>2. 多阈值电压设计</h3>
+          <div class="code-block">
+# 设置不同Vt单元
+set_target_library [list \
+    saed90nm_hvt.db \  # 高Vt，低漏电
+    saed90nm_rvt.db \  # 标准Vt
+    saed90nm_lvt.db \  # 低Vt，高性能
+]
+
+# 启用漏电优化
+set_leakage_optimization true
+
+# 为非关键路径使用HVT
+set_attribute -type boolean \
+    is_high_Vt true [get_cells non_critical*]
+          </div>
+
+          <h3>3. 操作电压调节</h3>
+          <div class="code-block">
+# 设置不同电压域
+set_voltage 1.1 -object_list [get_cells core_a]
+set_voltage 0.9 -object_list [get_cells core_b]
+
+# 电压岛约束
+create_voltage_domain -name CORE_HIGH_V \
+    -voltage 1.1 \
+    -objects [get_cells high_perf*]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 功耗报告分析</h2>
+
+          <h3>生成功耗报告</h3>
+          <div class="code-block">
+# 总功耗报告
+report_power > reports/power.rpt
+
+# 层次化功耗报告
+report_power -hierarchy > reports/power_hier.rpt
+
+# 按单元类型统计
+report_power -cell > reports/power_cell.rpt
+
+# 详细功耗分析
+report_power -analysis_effort high > reports/power_detail.rpt
+          </div>
+
+          <h3>功耗报告解读</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>功耗类型</th>
+                <th>含义</th>
+                <th>优化方向</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Internal Power</td>
+                <td>单元内部功耗</td>
+                <td>降低开关活动</td>
+              </tr>
+              <tr>
+                <td>Switching Power</td>
+                <td>网络开关功耗</td>
+                <td>减少负载电容</td>
+              </tr>
+              <tr>
+                <td>Leakage Power</td>
+                <td>静态漏电功耗</td>
+                <td>使用HVT单元</td>
+              </tr>
+              <tr>
+                <td>Total Power</td>
+                <td>总功耗</td>
+                <td>综合优化</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 功耗约束实例</h2>
+
+          <div class="code-block">
+# ============================================================================
+# 功耗约束与优化示例
+# ============================================================================
+
+# ========== 功耗约束 ==========
+set_max_total_power 0.8 [current_design]
+set_max_dynamic_power 0.7 [current_design]
+set_max_leakage_power 0.1 [current_design]
+
+# ========== 开关活动设置 ==========
+# 时钟网络
+set_switching_activity -activity 0.5 \
+    [get_nets -filter "is_clock == true"]
+
+# 数据网络
+set_switching_activity -activity 0.2 [get_nets data*]
+set_switching_activity -activity 0.1 [get_nets control*]
+
+# 静态网络
+set_switching_activity -activity 0.01 [get_nets config*]
+
+# ========== 时钟门控 ==========
+set_clock_gating_style \
+    -minimum_bitwidth 4 \
+    -max_fanout 20 \
+    -control_point before
+
+insert_clock_gating
+
+# ========== 漏电优化 ==========
+set_leakage_optimization true
+set_power_effort high
+
+# ========== 编译 ==========
+compile_ultra -power_effort high
+
+# ========== 功耗报告 ==========
+report_power -hierarchy > reports/power_hier.rpt
+report_power -cell > reports/power_cell.rpt
+report_clock_gating > reports/clock_gating.rpt
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">功耗优化建议</div>
+            <p>1）在设计早期考虑功耗约束；2）使用准确的开关活动数据；
+            3）优先采用时钟门控；4）合理使用多Vt单元；
+            5）平衡功耗、时序和面积的需求。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 功耗包含动态和静态两部分</li>
+                <li>• 时钟门控是最有效的动态功耗优化方法</li>
+                <li>• 多Vt设计用于降低静态功耗</li>
+                <li>• 准确的开关活动数据对功耗分析很重要</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-6-面积约束.html">← 上一节</a>
+          <a href="26-8-约束最佳实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

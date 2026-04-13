@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.4 多通道采样切换 - 嵌入式硬件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>19.4 多通道采样切换</h1>
+      <p class="subtitle">多路信号采集技术</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解多通道ADC的工作原理与切换方式</li>
+        <li>掌握模拟开关与多路复用器的设计</li>
+        <li>能够处理多通道采样的串扰与精度问题</li>
+        <li>了解多通道采样的同步与时序控制</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="多通道采样切换" class="card-image">
+      <h3 class="card-title">多通道采样切换</h3>
+      <p class="card-text"><strong>多通道ADC</strong>允许使用单个模数转换器采集多路模拟信号。
+    通过多路复用技术，可以在多个输入通道间进行切换，实现多通道信号的高效采集。本节将深入讲解多通道采样的技术要点。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 多通道采样全景解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 为什么要用</h3>
+          <p class="card-text">理解多通道采样的成本与效率优势</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心原理</h3>
+          <p class="card-text">掌握多路复用与通道切换技术</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何实现</h3>
+          <p class="card-text">学会设计多通道采样系统</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 多通道ADC类型</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>特点</th>
+            <th>优势</th>
+            <th>局限性</th>
+            <th>应用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>时分复用型</td>
+            <td>单个ADC通过模拟开关切换多路输入</td>
+            <td>成本低、通道数多</td>
+            <td>采样率受限、串扰问题</td>
+            <td>温度监测、低速多路采集</td>
+          </tr>
+          <tr>
+            <td>并行采样型</td>
+            <td>每通道独立ADC</td>
+            <td>同步采样、高采样率</td>
+            <td>成本高、通道数受限</td>
+            <td>电力监测、振动分析</td>
+          </tr>
+          <tr>
+            <td>流水线型</td>
+            <td>多个ADC流水线工作</td>
+            <td>高吞吐率</td>
+            <td>延迟较大</td>
+            <td>高速数据采集</td>
+          </tr>
+          <tr>
+            <td>Sigma-Delta型</td>
+            <td>多位调制器+数字滤波</td>
+            <td>高精度、内置PGA</td>
+            <td>采样率低</td>
+            <td>精密测量、工业控制</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 模拟开关设计要点</h2>
+      <div class="card">
+        <h3 class="card-title">模拟开关关键参数</h3>
+        <div class="grid grid-3" style="margin-top: 1rem;">
+          <div style="padding: 1rem; background: #f5f5f5; border-radius: 8px;">
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">导通电阻（Ron）</h4>
+            <p style="font-size: 0.9rem;">典型值1-100Ω，影响信号衰减和建立时间。选择低Ron开关以提高精度。</p>
+          </div>
+          <div style="padding: 1rem; background: #f5f5f5; border-radius: 8px;">
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">通道间隔离度</h4>
+            <p style="font-size: 0.9rem;">通常60-90dB，决定了通道间的串扰程度。高隔离度对多通道精度至关重要。</p>
+          </div>
+          <div style="padding: 1rem; background: #f5f5f5; border-radius: 8px;">
+            <h4 style="color: #2196F3; margin-bottom: 0.5rem;">开关时间</h4>
+            <p style="font-size: 0.9rem;">包括开启时间和关闭时间，影响通道切换速度。高速采样需选择快速开关。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 多通道采样时序控制</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">顺序采样模式</h3>
+          <p class="card-text">按顺序依次采样各通道，简单易实现。各通道采样时刻不同，不适用于需要相位信息的场合。采样间隔 = 总通道数 × 单通道采样时间。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">同时采样模式</h3>
+          <p class="card-text">使用采样保持器同时捕获所有通道信号，然后依次转换。各通道数据同步，适用于需要相位关系的应用。成本较高。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 多通道采样常见问题</h2>
+      <div class="card">
+        <h3 class="card-title">问题与解决方案</h3>
+        <table style="margin-top: 1rem;">
+          <thead>
+            <tr>
+              <th>问题</th>
+              <th>原因</th>
+              <th>解决方案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>通道串扰</td>
+              <td>开关电容耦合、寄生参数</td>
+              <td>增加开关隔离、优化PCB布局</td>
+            </tr>
+            <tr>
+              <td>采样建立时间不足</td>
+              <td>切换后立即采样</td>
+              <td>增加通道切换后的等待时间</td>
+            </tr>
+            <tr>
+              <td>电荷注入</td>
+              <td>开关断开时的电荷转移</td>
+              <td>选择低电荷注入开关、补偿电路</td>
+            </tr>
+            <tr>
+              <td>输入阻抗变化</td>
+              <td>不同通道源阻抗不同</td>
+              <td>统一源阻抗、使用缓冲器</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>多通道采样设计建议：1）根据精度要求选择合适的开关类型；2）确保足够的建立时间，避免切换瞬态影响；3）对于高精度应用，考虑使用独立ADC或多通道同步ADC；4）合理安排采样顺序，将高优先级或快速变化信号放在前面；5）通过校准补偿通道间偏差；6）使用 differential 输入提高共模抑制能力。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了多通道ADC的工作原理与类型</li>
+            <li>• 掌握了模拟开关的设计要点</li>
+            <li>• 能够处理多通道采样的时序与串扰问题</li>
+            <li>• 了解了多通道采样的最佳实践</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="19-3-采样电路设计.html">← 上一节</a>
+      <a href="19-5-外部ADC芯片应用.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

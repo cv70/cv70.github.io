@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.5 数据透视与聚合 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>8.5 数据透视与聚合</h1>
+      <p class="subtitle">Python数据处理基础</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握Pandas的groupby分组聚合操作</li>
+        <li>学会使用数据透视表进行多维度分析</li>
+        <li>掌握各种聚合函数的应用场景</li>
+        <li>了解金融数据分析中的典型聚合操作</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据透视与聚合" class="card-image">
+      <h3 class="card-title">数据透视与聚合</h3>
+      <p class="card-text"><strong>数据聚合</strong>是将原始数据转换为更高层次汇总数据的过程，是量化分析中的核心技能。
+      通过分组、透视和聚合，我们可以从不同维度深入分析市场特征。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> GroupBy分组聚合</h2>
+
+      <h3>基本分组操作</h3>
+      <pre><code>import pandas as pd
+import numpy as np
+
+# 创建示例数据
+data = {
+    'symbol': ['AAPL', 'MSFT', 'GOOG', 'AAPL', 'MSFT', 'GOOG'] * 100,
+    'date': pd.date_range('2024-01-01', periods=600),
+    'price': np.random.randn(600) * 10 + 100,
+    'volume': np.random.randint(1000000, 10000000, 600)
+}
+df = pd.DataFrame(data)
+
+# 单列分组
+symbol_groups = df.groupby('symbol')
+print(symbol_groups.size())
+
+# 多列分组
+date_symbol_groups = df.groupby(['symbol', df['date'].dt.month])
+print(date_symbol_groups.size())
+
+# 计算分组统计
+print(symbol_groups['price'].mean())
+print(symbol_groups['volume'].sum())</code></pre>
+
+      <h3>聚合函数</h3>
+      <pre><code># 内置聚合函数
+agg_result = df.groupby('symbol').agg({
+    'price': ['mean', 'std', 'min', 'max'],
+    'volume': ['sum', 'mean']
+})
+
+# 自定义聚合函数
+def range_func(x):
+    return x.max() - x.min()
+
+symbol_groups['price'].agg(range_func)
+
+# 多种聚合方式
+result = df.groupby('symbol').agg({
+    'price': {
+        'avg_price': 'mean',
+        'price_volatility': 'std',
+        'max_price': 'max'
+    }
+})</code></pre>
+
+      <h3>分组操作</h3>
+      <pre><code># 分组后过滤
+filtered = df.groupby('symbol').filter(
+    lambda x: len(x) > 100
+)
+
+# 分组后转换
+df['price_zscore'] = df.groupby('symbol')['price'].transform(
+    lambda x: (x - x.mean()) / x.std()
+)
+
+# 分组后应用
+result = df.groupby('symbol').apply(
+    lambda x: x.sort_values('date', ascending=False).head(10)
+)
+
+# 分组迭代
+for symbol, group in symbol_groups:
+    print(f"Symbol: {symbol}, Shape: {group.shape}")</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 数据透视表</h2>
+
+      <h3>基本透视表</h3>
+      <pre><code># 创建透视表
+pivot = pd.pivot_table(
+    df,
+    values='price',
+    index='symbol',
+    columns=df['date'].dt.month,
+    aggfunc='mean'
+)
+
+# 多值透视表
+pivot_multi = pd.pivot_table(
+    df,
+    values=['price', 'volume'],
+    index='symbol',
+    columns=df['date'].dt.month,
+    aggfunc={'price': 'mean', 'volume': 'sum'}
+)
+
+# 添加汇总
+pivot_with_totals = pd.pivot_table(
+    df,
+    values='price',
+    index='symbol',
+    columns=df['date'].dt.month,
+    aggfunc='mean',
+    margins=True,
+    margins_name='总计'
+)</code></pre>
+
+      <h3>交叉表</h3>
+      <pre><code># 创建交叉表
+df['price_range'] = pd.cut(df['price'], bins=5, labels=['极低', '低', '中', '高', '极高'])
+
+crosstab = pd.crosstab(
+    index=df['symbol'],
+    columns=df['price_range'],
+    margins=True
+)
+
+# 百分比交叉表
+crosstab_pct = pd.crosstab(
+    index=df['symbol'],
+    columns=df['price_range'],
+    normalize='index'
+)</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 金融数据分析应用</h2>
+
+      <h3>股票收益率聚合</h3>
+      <pre><code># 计算日收益率
+df['returns'] = df.groupby('symbol')['price'].pct_change()
+
+# 按股票汇总收益率
+stock_returns = df.groupby('symbol')['returns'].agg({
+    'annual_return': lambda x: (1 + x).prod() - 1,
+    'daily_mean': 'mean',
+    'daily_std': 'std',
+    'sharpe_ratio': lambda x: x.mean() / x.std() * np.sqrt(252)
+})
+
+# 按时间段聚合
+monthly_returns = df.set_index('date').groupby([
+    pd.Grouper(freq='M'),  # 按月
+    'symbol'
+])['returns'].agg(['mean', 'std'])</code></pre>
+
+      <h3>技术指标聚合</h3>
+      <pre><code># 移动平均
+df['ma5'] = df.groupby('symbol')['price'].transform(
+    lambda x: x.rolling(5).mean()
+)
+
+df['ma20'] = df.groupby('symbol')['price'].transform(
+    lambda x: x.rolling(20).mean()
+)
+
+# 波动率
+df['volatility'] = df.groupby('symbol')['returns'].transform(
+    lambda x: x.rolling(20).std()
+)
+
+# 相对强弱指标
+def calculate_rsi(returns, periods=14):
+    delta = returns.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(periods).mean()
+    avg_loss = loss.rolling(periods).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+df['rsi'] = df.groupby('symbol')['price'].apply(calculate_rsi)</code></pre>
+
+      <h3>行业分析聚合</h3>
+      <pre><code># 按行业分组
+df['industry'] = df['symbol'].map({
+    'AAPL': 'Technology',
+    'MSFT': 'Technology',
+    'GOOG': 'Technology'
+})
+
+industry_stats = df.groupby('industry').agg({
+    'price': ['mean', 'std', 'count'],
+    'volume': ['sum', 'mean'],
+    'returns': ['mean', 'std']
+})
+
+# 行业间比较
+industry_comparison = pd.pivot_table(
+    df,
+    values='returns',
+    index=df['date'].dt.month,
+    columns='industry',
+    aggfunc='mean'
+)</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 高级聚合技巧</h2>
+
+      <h3>时间窗口聚合</h3>
+      <pre><code># 重采样（降采样）
+daily = df.set_index('date')
+weekly = daily.groupby('symbol').resample('W').agg({
+    'price': ['first', 'last', 'mean'],
+    'volume': 'sum'
+})
+
+# 升采样
+hourly = daily.groupby('symbol').resample('H').asfreq()
+
+# 滚动窗口聚合
+df['rolling_mean'] = df.groupby('symbol')['price'].transform(
+    lambda x: x.rolling(window=20).mean()
+)
+
+df['rolling_std'] = df.groupby('symbol')['price'].transform(
+    lambda x: x.rolling(window=20).std()
+)</code></pre>
+
+      <h3>多级索引聚合</h3>
+      <pre><code># 创建多级索引
+multi_index_df = df.set_index(['symbol', 'date'])
+
+# 在多级索引上聚合
+symbol_monthly = multi_index_df.groupby([
+    pd.Grouper(level='symbol'),
+    pd.Grouper(level='date', freq='M')
+]).agg({
+    'price': 'mean',
+    'volume': 'sum'
+})
+
+# 多级聚合
+result = df.groupby([
+    'symbol',
+    pd.Grouper(key='date', freq='M'),
+    'industry'
+]).agg({
+    'price': ['mean', 'std'],
+    'volume': 'sum'
+})</code></pre>
+    </div>
+
+    <div class="tip-box info">
+      <span class="icon">💡</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>1. 合理选择分组粒度，避免过度细分<br>
+        2. 使用命名聚合提高代码可读性<br>
+        3. 注意聚合后的数据结构变化<br>
+        4. 大数据集使用agg而非apply提高性能<br>
+        5. 理解不同聚合函数的金融含义</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了GroupBy分组聚合操作</li>
+            <li>• 学会了数据透视表的使用方法</li>
+            <li>• 理解了各种聚合函数的应用</li>
+            <li>• 掌握了金融数据分析中的聚合技巧</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="8-4-数据清洗与预处理.html">← 上一节</a>
+      <a href="8-6-缺失值处理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

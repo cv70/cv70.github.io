@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.2 时钟约束 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.2 时钟约束</h1>
+          <p class="subtitle">时钟定义与时钟属性设置</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握时钟约束的基本方法</li>
+            <li>理解时钟属性的含义</li>
+            <li>学会处理多时钟和异步时钟</li>
+            <li>了解生成时钟的约束方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏰</span> 基本时钟定义</h2>
+
+          <h3>create_clock命令</h3>
+          <div class="code-block">
+# 基本时钟定义
+create_clock -name CLK -period 10.0 [get_ports clk]
+
+# 带波形的时钟（50%占空比）
+create_clock -name CLK -period 10.0 \
+    -waveform {0.0 5.0} [get_ports clk]
+
+# 带波形的时钟（30%占空比）
+create_clock -name CLK -period 8.0 \
+    -waveform {0.0 2.4} [get_ports clk]
+
+# 添加名称和注释
+create_clock -name SYS_CLK -period 6.66 \
+    -waveform {0.0 3.33} [get_ports sys_clk] \
+    -comment "150MHz系统时钟"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 时钟属性设置</h2>
+
+          <h3>时钟不确定性（Uncertainty）</h3>
+          <div class="code-block">
+# Setup不确定性
+set_clock_uncertainty -setup 0.3 [get_clocks CLK]
+
+# Hold不确定性
+set_clock_uncertainty -hold 0.1 [get_clocks CLK]
+
+# 同时设置setup和hold
+set_clock_uncertainty [get_clocks CLK] 0.3
+          </div>
+
+          <h3>时钟延迟（Latency）</h3>
+          <div class="code-block">
+# 源延迟（时钟源到端口）
+set_clock_latency -source -max 0.5 [get_clocks CLK]
+set_clock_latency -source -min 0.2 [get_clocks CLK]
+
+# 网络延迟（端口到寄存器）
+set_clock_latency -max 1.5 [get_clocks CLK]
+set_clock_latency -min 0.8 [get_clocks CLK]
+
+# 或使用propagated模式让工具计算
+set_propagated_clock [get_clocks CLK]
+          </div>
+
+          <h3>时钟转换时间（Transition）</h3>
+          <div class="code-block">
+# 设置最大转换时间
+set_clock_transition -max 0.3 [get_clocks CLK]
+
+# 设置最小转换时间
+set_clock_transition -min 0.1 [get_clocks CLK]
+
+# 按上升/下降分别设置
+set_clock_transition -rise -max 0.25 [get_clocks CLK]
+set_clock_transition -fall -max 0.35 [get_clocks CLK]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 生成时钟（Generated Clock）</h2>
+
+          <h3>分频时钟</h3>
+          <div class="code-block">
+# 2分频时钟
+create_generated_clock -name CLK_DIV2 \
+    -source [get_pins clk_div_reg/Q] \
+    -divide_by 2 [get_ports clk_div2]
+
+# 4分频时钟
+create_generated_clock -name CLK_DIV4 \
+    -source [get_pins clk_div_reg/Q] \
+    -divide_by 4 [get_ports clk_div4]
+          </div>
+
+          <h3>倍频时钟</h3>
+          <div class="code-block">
+# PLL输出时钟（倍频）
+create_generated_clock -name CLK_PLL \
+    -source [get_pins pll/ref_clk] \
+    -multiply_by 4 [get_ports pll_clk]
+
+# 带相位偏移的生成时钟
+create_generated_clock -name CLK_PHASE \
+    -source [get_pins clk_buf/A] \
+    -phase 90 [get_ports clk_phase]
+          </div>
+
+          <h3>组合逻辑生成的时钟</h3>
+          <div class="code-block">
+# 门控时钟
+create_generated_clock -name GATED_CLK \
+    -source [get_pins clk_gate/CLK] \
+    -master_clock [get_clocks CLK] \
+    -add [get_ports gated_clk]
+
+# 反相时钟
+create_generated_clock -name CLK_INV \
+    -source [get_pins inv/A] \
+    -invert [get_pins inv/Y]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 多时钟处理</h2>
+
+          <h3>异步时钟</h3>
+          <div class="code-block">
+# 定义两个异步时钟
+create_clock -name CLK1 -period 10.0 [get_ports clk1]
+create_clock -name CLK2 -period 15.0 [get_ports clk2]
+
+# 声明它们异步
+set_clock_groups -asynchronous \
+    -group [get_clocks CLK1] \
+    -group [get_clocks CLK2]
+          </div>
+
+          <h3>时钟组</h3>
+          <div class="code-block">
+# 按功能分组时钟
+set_clock_groups -logically_exclusive \
+    -group {CLK_A CLK_B} \
+    -group {CLK_C CLK_D}
+
+# 按物理分组时钟
+set_clock_groups -physically_exclusive \
+    -group {CLK_FAST} \
+    -group {CLK_SLOW}
+
+# 异步组（跨时钟域）
+set_clock_groups -asynchronous \
+    -group [get_clocks -filter "period < 10"] \
+    -group [get_clocks -filter "period >= 10"]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 时钟约束实例</h2>
+
+          <h3>SoC时钟域约束示例</h3>
+          <div class="code-block">
+# ============================================================================
+# SoC多时钟域约束
+# ============================================================================
+
+# 主系统时钟（200MHz）
+create_clock -name SYS_CLK -period 5.0 \
+    -waveform {0.0 2.5} [get_ports sys_clk]
+set_clock_uncertainty -setup 0.25 [get_clocks SYS_CLK]
+set_clock_uncertainty -hold 0.10 [get_clocks SYS_CLK]
+
+# 外设时钟（100MHz）
+create_clock -name PERI_CLK -period 10.0 \
+    -waveform {0.0 5.0} [get_ports peri_clk]
+set_clock_uncertainty -setup 0.30 [get_clocks PERI_CLK]
+set_clock_uncertainty -hold 0.10 [get_clocks PERI_CLK]
+
+# DDR时钟（400MHz差分）
+create_clock -name DDR_CLK_P -period 2.5 \
+    -waveform {0.0 1.25} [get_ports ddr_clk_p]
+create_clock -name DDR_CLK_N -period 2.5 \
+    -waveform {1.25 2.5} [get_ports ddr_clk_n]
+
+# USB时钟（48MHz）
+create_clock -name USB_CLK -period 20.83 \
+    -waveform {0.0 10.41} [get_ports usb_clk]
+
+# 声明时钟组关系
+set_clock_groups -asynchronous \
+    -group [get_clocks SYS_CLK] \
+    -group [get_clocks PERI_CLK] \
+    -group [get_clocks DDR_CLK_P DDR_CLK_N] \
+    -group [get_clocks USB_CLK]
+
+# 生成时钟约束
+create_generated_clock -name CPU_DIV2 \
+    -source [get_pins cpu_clk_div/Q] \
+    -divide_by 2 [get_pins cpu_clk_div_reg/CK]
+
+create_generated_clock -name AUDIO_MCLK \
+    -source [get_pins audio_pll/CLK_OUT] \
+    -multiply_by 2 [get_ports audio_mclk]
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">时钟约束注意事项</div>
+            <p>1）避免过度约束时钟不确定性，这会导致过度设计；
+            2）正确处理异步时钟域，避免误报时序违例；
+            3）生成时钟必须正确指定源点；
+            4）时钟约束应该与实际时钟设计一致。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 时钟约束是时序分析的基础</li>
+                <li>• 需要设置周期、不确定性、延迟等属性</li>
+                <li>• 生成时钟需要正确指定源点</li>
+                <li>• 多时钟系统需要正确的时钟组声明</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-1-SDC约束语言.html">← 上一节</a>
+          <a href="26-3-输入输出延时约束.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

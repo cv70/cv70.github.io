@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.3 RISC-V特权级架构 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>46.3 RISC-V特权级架构</h1>
+          <p class="subtitle">RISC-V 架构精讲</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解RISC-V的特权级架构设计</li>
+            <li>掌握特权级寄存器（CSR）的作用</li>
+            <li>了解中断与异常的处理机制</li>
+            <li>熟悉虚拟内存管理的基础</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">特权级架构概述</h3>
+          <p class="card-text">
+            <strong>RISC-V特权级架构</strong>定义了操作系统和硬件之间的接口，包括特权级、控制状态寄存器（CSR）、
+            中断/异常处理和内存管理。这些机制是构建安全、可靠操作系统的硬件基础。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏛️</span> 特权级模式</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">机器模式（M-Mode）</h3>
+              <ul class="feature-list">
+                <li>最高特权级，必须实现</li>
+                <li>用于初始化、调试和异常处理</li>
+                <li>可访问所有硬件资源</li>
+                <li>通常用于Bootloader和监控程序</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">监管者模式（S-Mode）</h3>
+              <ul class="feature-list">
+                <li>次高特权级，可选实现</li>
+                <li>用于运行操作系统内核</li>
+                <li>支持虚拟内存和页表</li>
+                <li>提供用户态隔离保护</li>
+              </ul>
+            </div>
+          </div>
+          <div class="grid grid-2" style="margin-top: 1rem;">
+            <div class="card">
+              <h3 class="card-title">用户模式（U-Mode）</h3>
+              <ul class="feature-list">
+                <li>最低特权级，必须实现</li>
+                <li>用于运行应用程序</li>
+                <li>受特权级保护</li>
+                <li>只能通过系统调用进入更高特权级</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">超级监管者模式（HS-Mode）</h3>
+              <ul class="feature-list">
+                <li>用于虚拟化支持</li>
+                <li>运行Hypervisor</li>
+                <li>管理多个虚拟机</li>
+                <li>可选实现</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">特权级转换</div>
+            <p>低特权级可以通过<strong>异常（Exception）</strong>或<strong>中断（Interrupt）</strong>进入高特权级，
+            高特权级通过<strong>返回指令</strong>返回低特权级。这种机制保证了系统安全和隔离。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 控制状态寄存器（CSR）</h2>
+          <p class="card-text">CSR是特权级架构的核心，用于控制和监控处理器行为。CSR通过专门的CSR指令访问。</p>
+          <table>
+            <thead>
+              <tr>
+                <th>CSR地址</th>
+                <th>名称</th>
+                <th>描述</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>0xF11</td>
+                <td>mvendorid</td>
+                <td>厂商ID</td>
+              </tr>
+              <tr>
+                <td>0xF12</td>
+                <td>marchid</td>
+                <td>架构ID</td>
+              </tr>
+              <tr>
+                <td>0xF13</td>
+                <td>mimpid</td>
+                <td>实现ID</td>
+              </tr>
+              <tr>
+                <td>0xF14</td>
+                <td>mhartid</td>
+                <td>硬件线程ID</td>
+              </tr>
+              <tr>
+                <td>0x300</td>
+                <td>mstatus</td>
+                <td>机器状态寄存器</td>
+              </tr>
+              <tr>
+                <td>0x301</td>
+                <td>mie</td>
+                <td>机器中断使能</td>
+              </tr>
+              <tr>
+                <td>0x341</td>
+                <td>mip</td>
+                <td>机器中断挂起</td>
+              </tr>
+              <tr>
+                <td>0x342</td>
+                <td>mtvec</td>
+                <td>机器异常入口地址</td>
+              </tr>
+              <tr>
+                <td>0x343</td>
+                <td>mcause</td>
+                <td>机器异常原因</td>
+              </tr>
+              <tr>
+                <td>0x344</td>
+                <td>mtval</td>
+                <td>机器异常附加信息</td>
+              </tr>
+              <tr>
+                <td>0x345</td>
+                <td>mip</td>
+                <td>机器中断指针</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 中断与异常处理</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">异常类型</h3>
+              <ul class="feature-list">
+                <li>非法指令</li>
+                <li>断点异常</li>
+                <li>加载/存储对齐错误</li>
+                <li>访问权限错误</li>
+                <li>系统调用</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">中断类型</h3>
+              <ul class="feature-list">
+                <li>软件中断</li>
+                <li>定时器中断</li>
+                <li>外部中断</li>
+                <li>平台特定中断</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 异常处理流程</h2>
+          <div class="card">
+            <h3 class="card-title">异常处理步骤</h3>
+            <ol class="feature-list">
+              <li>保存当前PC到mepc寄存器</li>
+              <li>保存当前特权级到mstatus的MPP字段</li>
+              <li>根据异常类型设置mcause寄存器</li>
+              <li>保存异常相关信息到mtval寄存器</li>
+              <li>禁用中断（设置mstatus.MIE=0）</li>
+              <li>跳转到mtvec指定的异常处理程序</li>
+              <li>异常处理程序执行</li>
+              <li>使用mret指令返回</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">CSR访问指令</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• <strong>csrrw rd, csr, rs1</strong> - 读写CSR，将旧值写入rd</li>
+              <li>• <strong>csrrs rd, csr, rs1</strong> - 读CSR并置位</li>
+              <li>• <strong>csrrc rd, csr, rs1</strong> - 读CSR并清零</li>
+              <li>• <strong>csrrwi rd, csr, imm</strong> - 立即数版本</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 代码示例</h2>
+          <div class="card">
+            <h3 class="card-title">异常处理程序框架</h3>
+            <div class="code-block">
+# 异常处理入口
+trap_handler:
+  # 保存通用寄存器
+  addi sp, sp, -128
+  sw ra, 0(sp)
+  sw t0, 4(sp)
+  # ... 保存其他寄存器
+
+  # 读取异常原因
+  csrr t0, mcause
+  li t1, 8  # 系统调用异常号
+  beq t0, t1, syscall_handler
+
+  # 处理其他异常
+  j handle_exception
+
+syscall_handler:
+  # 处理系统调用
+  call do_syscall
+
+  # 恢复寄存器并返回
+  lw ra, 0(sp)
+  lw t0, 4(sp)
+  # ... 恢复其他寄存器
+  addi sp, sp, 128
+  mret
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• RISC-V支持多级特权级：M、S、U、HS</li>
+                <li>• CSR是特权级架构的核心控制机制</li>
+                <li>• 异常和中断处理通过CSR寄存器管理</li>
+                <li>• mret指令用于从异常处理返回</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="46-2-RISC-V基础指令集RV32I.html">← 上一节</a>
+          <a href="46-4-RISC-V内存管理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

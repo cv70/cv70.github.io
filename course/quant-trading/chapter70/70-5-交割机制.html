@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>70.5 交割机制 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>70.5 交割机制</h1>
+      <p class="subtitle">商品期货量化</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解期货交割的基本原理</li>
+        <li>掌握实物交割与现金交割的区别</li>
+        <li>能够管理交割相关风险</li>
+        <li>了解交割对期货价格的影响</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800" alt="交割机制" class="card-image">
+      <h3 class="card-title">交割机制</h3>
+      <p class="card-text"><strong>期货交割</strong>是期货合约到期时的最终结算方式，分为实物交割和现金交割两种。理解交割机制对于期货交易者至关重要，特别是在临近交割期时，合约价格会向现货价格收敛，流动性也会发生变化。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 交割方式</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">实物交割</h3>
+          <ul class="feature-list">
+            <li>买方交付资金，接收商品</li>
+            <li>卖方交付商品，接收资金</li>
+            <li>适用于商品期货</li>
+            <li>需要处理仓储、运输等问题</li>
+            <li>中国商品期货主要采用</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">现金交割</h3>
+          <ul class="feature-list">
+            <li>按最后结算价现金结算</li>
+            <li>无需实物交割</li>
+            <li>适用于金融期货</li>
+            <li>结算效率高</li>
+            <li>股指期货主要采用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 交割流程</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>时间</th>
+            <th>关键事项</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>交割月前</td>
+            <td>交割月前1-2个月</td>
+            <td>持仓限制收紧，逐步移仓</td>
+          </tr>
+          <tr>
+            <td>最后交易日</td>
+            <td>交割月的特定日期</td>
+            <td>新开仓截止，可平仓</td>
+          </tr>
+          <tr>
+            <td>最后交割日</td>
+            <td>最后交易日后的几日内</td>
+            <td>实物交割完成</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 交割风险</h2>
+      <div class="tip-box warning">
+        <span class="icon">📋</span>
+        <div class="content">
+          <div class="title">主要交割风险</div>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li><strong>被动交割</strong>: 未及时平仓被强制交割，可能造成损失</li>
+            <li><strong>流动性风险</strong>: 临近交割流动性下降，滑点增大</li>
+            <li><strong>交割成本</strong>: 仓储费、运输费等额外成本</li>
+            <li><strong>质量差异</strong>: 交割品与预期不符</li>
+            <li><strong>交割失败</strong>: 无法完成交割导致违约</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Python实现示例</h2>
+      <pre><code class="language-python"># 交割风险管理
+import pandas as pd
+from datetime import datetime, timedelta
+
+class DeliveryRiskManager:
+    """交割风险管理器"""
+
+    def __init__(self):
+        self.contracts = {}
+        self.delivery_calendar = {}
+
+    def check_delivery_risk(self, symbol, contract_month, current_date):
+        """检查交割风险"""
+        delivery_date = self.delivery_calendar.get(f"{symbol}_{contract_month}")
+
+        if not delivery_date:
+            return {'risk': 'unknown', 'days_to_delivery': None}
+
+        days_to_delivery = (delivery_date - current_date).days
+
+        if days_to_delivery <= 0:
+            risk_level = "critical"
+            action = "立即平仓，避免被动交割"
+        elif days_to_delivery <= 5:
+            risk_level = "high"
+            action = "建议尽快移仓或平仓"
+        elif days_to_delivery <= 20:
+            risk_level = "medium"
+            action = "关注移仓机会"
+        else:
+            risk_level = "low"
+            action = "风险可控"
+
+        return {
+            'risk_level': risk_level,
+            'days_to_delivery': days_to_delivery,
+            'delivery_date': delivery_date,
+            'action': action
+        }
+
+    def calculate_rolling_cost(self, near_price, far_price, contract_size):
+        """计算移仓成本"""
+        price_diff = far_price - near_price
+        rolling_cost_pct = price_diff / near_price
+        rolling_cost_abs = price_diff * contract_size
+
+        return {
+            'rolling_cost_pct': rolling_cost_pct,
+            'rolling_cost_abs': rolling_cost_abs,
+            'favorable': rolling_cost_pct < 0  # 负成本表示展期收益
+        }
+
+    def generate_rolling_signal(self, current_contract, next_contract):
+        """生成移仓信号"""
+        # 检查当前合约交割风险
+        risk = self.check_delivery_risk(
+            current_contract['symbol'],
+            current_contract['month'],
+            datetime.now()
+        )
+
+        if risk['risk_level'] in ['critical', 'high']:
+            # 计算移仓成本
+            cost = self.calculate_rolling_cost(
+                current_contract['price'],
+                next_contract['price'],
+                current_contract['size']
+            )
+
+            if cost['rolling_cost_pct'] < 0.02:  # 移仓成本小于2%
+                return {
+                    'signal': 'roll',
+                    'from': current_contract['contract'],
+                    'to': next_contract['contract'],
+                    'cost': cost['rolling_cost_pct'],
+                    'action': '建议移仓至远月合约'
+                }
+            else:
+                return {
+                    'signal': 'close',
+                    'action': '移仓成本过高，建议平仓'
+                }
+
+        return {
+            'signal': 'hold',
+            'action': '保持当前持仓'
+        }
+
+# 使用示例
+manager = DeliveryRiskManager()
+
+# 设置交割日历
+manager.delivery_calendar['RB_2405'] = datetime(2024, 5, 15)
+manager.delivery_calendar['RB_2406'] = datetime(2024, 6, 15)
+
+# 检查交割风险
+risk = manager.check_delivery_risk('RB', '2405', datetime(2024, 4, 20))
+print("Delivery Risk:", risk)
+
+# 计算移仓成本
+cost = manager.calculate_rolling_cost(3800, 3850, 10)
+print("Rolling Cost:", cost)
+</code></pre>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>交割管理建议：1）提前了解交割规则和日期；2）在交割月前1-2个月开始移仓；3）设置交割日历提醒；4）避免持有临近交割的合约；5）关注持仓限制和交割手续费；6）做好移仓成本计算；7）建立交割风险监控系统。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了期货交割的基本原理</li>
+            <li>• 掌握了实物交割与现金交割的区别</li>
+            <li>• 能够管理交割相关风险</li>
+            <li>• 了解了交割对期货价格的影响</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="70-4-基本面量化.html">← 上一节</a>
+      <a href="70-6-保证金管理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

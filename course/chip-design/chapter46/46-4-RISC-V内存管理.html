@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>46.4 RISC-V内存管理 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>46.4 RISC-V内存管理</h1>
+          <p class="subtitle">RISC-V 架构精讲</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解RISC-V的虚拟内存机制</li>
+            <li>掌握页表结构与地址转换过程</li>
+            <li>了解内存保护与访问控制</li>
+            <li>熟悉TLB（Translation Lookaside Buffer）的作用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">虚拟内存概述</h3>
+          <p class="card-text">
+            <strong>虚拟内存</strong>是现代操作系统的核心功能，它将程序的逻辑地址空间映射到物理内存空间。
+            RISC-V的虚拟内存机制（Sv32/Sv39/Sv48）提供了灵活的内存管理和保护能力。
+          </p>
+          <p class="card-text">
+            虚拟内存的主要优势：内存隔离、地址空间扩展、内存共享、按需加载。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 虚拟内存配置</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>配置</th>
+                <th>虚拟地址位宽</th>
+                <th>物理地址位宽</th>
+                <th>页大小</th>
+                <th>页表级数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Sv32</td>
+                <td>32位</td>
+                <td>32位</td>
+                <td>4KB</td>
+                <td>2级</td>
+              </tr>
+              <tr>
+                <td>Sv39</td>
+                <td>39位</td>
+                <td>56位</td>
+                <td>4KB</td>
+                <td>3级</td>
+              </tr>
+              <tr>
+                <td>Sv48</td>
+                <td>48位</td>
+                <td>56位</td>
+                <td>4KB</td>
+                <td>4级</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧩</span> 页表结构（Sv39）</h2>
+          <div class="card">
+            <h3 class="card-title">三级页表转换</h3>
+            <div class="code-block">
+虚拟地址（39位）：
+[38:30] - VPN[2] (第3级页表索引)
+[29:21] - VPN[1] (第2级页表索引)
+[20:12] - VPN[0] (第1级页表索引)
+[11:0]  - 页内偏移
+
+转换过程：
+1. 使用satp寄存器获取根页表基址
+2. VPN[2]索引根页表，获取中间页表基址
+3. VPN[1]索引中间页表，获取叶页表基址
+4. VPN[0]索引叶页表，获取物理页号（PPN）
+5. PPN + 页内偏移 = 物理地址
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 页表项（PTE）格式</h2>
+          <div class="card">
+            <h3 class="card-title">Sv39 PTE格式（64位）</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>位</th>
+                  <th>字段</th>
+                  <th>描述</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>63:54</td>
+                  <td>RSVD</td>
+                  <td>保留</td>
+                </tr>
+                <tr>
+                  <td>53:10</td>
+                  <td>PPN</td>
+                  <td>物理页号</td>
+                </tr>
+                <tr>
+                  <td>9:8</td>
+                  <td>RSW</td>
+                  <td>软件可用</td>
+                </tr>
+                <tr>
+                  <td>7</td>
+                  <td>D</td>
+                  <td>Dirty标志</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td>A</td>
+                  <td>Accessed标志</td>
+                </tr>
+                <tr>
+                  <td>5</td>
+                  <td>G</td>
+                  <td>Global标志</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td>U</td>
+                  <td>User可访问</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>X</td>
+                  <td>可执行</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>W</td>
+                  <td>可写</td>
+                </tr>
+                <tr>
+                  <td>1</td>
+                  <td>R</td>
+                  <td>可读</td>
+                </tr>
+                <tr>
+                  <td>0</td>
+                  <td>V</td>
+                  <td>Valid标志</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">PTE标志位说明</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• <strong>V (Valid)</strong> - 页表项有效</li>
+              <li>• <strong>R/W/X</strong> - 读/写/执行权限</li>
+              <li>• <strong>U (User)</strong> - 用户态可访问</li>
+              <li>• <strong>G (Global)</strong> - 全局页，不随ASID刷新</li>
+              <li>• <strong>A (Accessed)</strong> - 页已被访问</li>
+              <li>• <strong>D (Dirty)</strong> - 页已被修改</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> TLB（Translation Lookaside Buffer）</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">TLB的作用</h3>
+              <ul class="feature-list">
+                <li>缓存最近使用的页表项</li>
+                <li>加速地址转换</li>
+                <li>减少内存访问次数</li>
+                <li>通常由硬件管理</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">TLB相关指令</h3>
+              <ul class="feature-list">
+                <li>sfence.vma - 刷新TLB</li>
+                <li>支持按地址或ASID刷新</li>
+                <li>保证内存一致性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 内存保护机制</h2>
+          <div class="card">
+            <h3 class="card-title">访问控制</h3>
+            <ul class="feature-list">
+              <li><strong>读保护</strong> - PTE.R=0时禁止读访问</li>
+              <li><strong>写保护</strong> - PTE.W=0时禁止写访问</li>
+              <li><strong>执行保护</strong> - PTE.X=0时禁止执行</li>
+              <li><strong>用户/内核隔离</strong> - PTE.U控制用户态访问</li>
+              <li><strong>权限最小化</strong> - 根据需要分配最小权限</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">地址转换异常</div>
+            <p>当发生以下情况时，处理器会产生页面错误异常：
+            <br>• PTE.V=0（无效页表项）
+            <br>• 访问权限不足（R/W/X/U）
+            <br>• 物理地址超出范围
+            <br>操作系统需要处理这些异常，可能涉及缺页处理、换页等。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• RISC-V支持Sv32/Sv39/Sv48三种虚拟内存配置</li>
+                <li>• 使用多级页表进行地址转换</li>
+                <li>• PTE包含丰富的权限和保护标志</li>
+                <li>• TLB加速地址转换，减少内存访问</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="46-3-RISC-V特权级架构.html">← 上一节</a>
+          <a href="46-5-RISC-V中断与异常处理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

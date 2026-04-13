@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.7 模块实例化与层次引用 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>13.7 模块实例化与层次引用</h1>
+          <p class="subtitle">构建层次化设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握模块实例化的基本方法</li>
+            <li>学会使用位置关联和命名关联</li>
+            <li>理解层次化设计的概念</li>
+            <li>能够引用其他模块的信号</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 模块实例化概述</h2>
+          <p>模块实例化是将一个模块作为组件在另一个模块中使用的过程。通过实例化，可以构建层次化的设计结构。</p>
+          <div class="code-block">
+<pre><code>// 实例化基本语法
+模块名 实例名 (
+    .端口名(连接信号),
+    .端口名(连接信号)
+);</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 命名关联（推荐）</h2>
+          <div class="card">
+            <h3 class="card-title">.port(signal)</h3>
+            <p>命名关联明确指定端口和信号的对应关系，代码可读性高，不易出错。</p>
+          </div>
+
+          <div class="code-block">
+<pre><code>// D触发器模块
+module dff(
+    input  clk,
+    input  rst_n,
+    input  d,
+    output q
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            q <= 1'b0;
+        else
+            q <= d;
+    end
+endmodule
+
+// 实例化D触发器
+module shift_reg(
+    input  clk,
+    input  rst_n,
+    input  data_in,
+    output data_out
+);
+    wire q0, q1, q2;
+
+    // 使用命名关联实例化
+    dff u0 (
+        .clk(clk),       // 端口clk连接到信号clk
+        .rst_n(rst_n),   // 端口rst_n连接到信号rst_n
+        .d(data_in),     // 端口d连接到信号data_in
+        .q(q0)           // 端口q连接到信号q0
+    );
+
+    dff u1 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .d(q0),
+        .q(q1)
+    );
+
+    dff u2 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .d(q1),
+        .q(data_out)
+    );
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📍</span> 位置关联</h2>
+          <div class="card">
+            <h3 class="card-title">(signal1, signal2, ...)</h3>
+            <p>位置关联按照端口声明的顺序连接信号，简洁但易错，不推荐用于复杂设计。</p>
+          </div>
+
+          <div class="code-block">
+<pre><code>// 使用位置关联实例化
+dff u0 (clk, rst_n, data_in, q0);  // 按顺序：clk, rst_n, d, q
+dff u1 (clk, rst_n, q0, q1);
+dff u2 (clk, rst_n, q1, data_out);
+
+// ⚠️ 注意：位置关联容易出错，特别是端口较多时</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 层次引用</h2>
+          <div class="card">
+            <h3 class="card-title">层次路径</h3>
+            <p>层次引用允许访问设计树中任何模块的信号，常用于调试和仿真。</p>
+          </div>
+
+          <div class="code-block">
+<pre><code>// 层次路径格式
+顶层模块名.子模块名.信号名
+
+// 示例层次结构
+top
+  ├── cpu
+  │   ├── alu
+  │   └── reg_file
+  └── memory
+      └── cache
+
+// 层次引用示例
+top.cpu.alu.result        // 访问CPU中ALU的result信号
+top.memory.cache.valid    // 访问cache的valid信号
+
+// 在测试平台中使用层次引用
+module tb;
+    reg clk;
+    wire [31:0] data;
+
+    top u_top (
+        .clk(clk),
+        .data(data)
+    );
+
+    initial begin
+        // 监控层次信号
+        $monitor("Time=%0t, ALU Result=%h",
+                 $time, u_top.cpu.alu.result);
+    end
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 完整示例：4位加法器</h2>
+          <div class="code-block">
+<pre><code>// 1位全加器
+module full_adder(
+    input  a,
+    input  b,
+    input  cin,
+    output sum,
+    output cout
+);
+    assign sum  = a ^ b ^ cin;
+    assign cout = (a & b) | (b & cin) | (a & cin);
+endmodule
+
+// 4位行波进位加法器
+module adder_4bit(
+    input  [3:0] a,
+    input  [3:0] b,
+    input        cin,
+    output [3:0] sum,
+    output       cout
+);
+    wire c0, c1, c2;
+
+    // 实例化4个全加器
+    full_adder fa0 (
+        .a(a[0]),
+        .b(b[0]),
+        .cin(cin),
+        .sum(sum[0]),
+        .cout(c0)
+    );
+
+    full_adder fa1 (
+        .a(a[1]),
+        .b(b[1]),
+        .cin(c0),
+        .sum(sum[1]),
+        .cout(c1)
+    );
+
+    full_adder fa2 (
+        .a(a[2]),
+        .b(b[2]),
+        .cin(c1),
+        .sum(sum[2]),
+        .cout(c2)
+    );
+
+    full_adder fa3 (
+        .a(a[3]),
+        .b(b[3]),
+        .cin(c2),
+        .sum(sum[3]),
+        .cout(cout)
+    );
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 参数传递</h2>
+          <div class="code-block">
+<pre><code>// 带参数的模块
+module counter #(parameter WIDTH = 8)(
+    input             clk,
+    input             rst_n,
+    input             enable,
+    output reg [WIDTH-1:0] count
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            count <= 0;
+        else if (enable)
+            count <= count + 1;
+    end
+endmodule
+
+// 实例化时传递参数
+module top;
+    reg clk, rst_n, enable;
+    wire [7:0]  count8;
+    wire [15:0] count16;
+
+    // 使用默认参数
+    counter #(.WIDTH(8)) u_counter8 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .enable(enable),
+        .count(count8)
+    );
+
+    // 传递新参数
+    counter #(.WIDTH(16)) u_counter16 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .enable(enable),
+        .count(count16)
+    );
+endmodule</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 优先使用命名关联而非位置关联</li>
+              <li>• 实例名使用有意义的名称（如u_alu而非u1）</li>
+              <li>• 保持层次结构清晰，避免过深嵌套</li>
+              <li>• 使用参数化设计提高复用性</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 模块实例化是构建层次化设计的基础</li>
+                <li>• 命名关联比位置关联更安全</li>
+                <li>• 层次引用用于访问任意模块信号</li>
+                <li>• 参数传递提高模块复用性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="13-6-条件语句与循环语句.html">← 上一节</a>
+          <a href="13-8-Verilog 仿真基础.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

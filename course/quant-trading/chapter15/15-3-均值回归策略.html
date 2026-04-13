@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.3 均值回归策略 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>15.3 均值回归策略</h1>
+      <p class="subtitle">交易策略概览</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解均值回归策略的理论基础与核心思想</li>
+        <li>掌握均值回归的识别方法和交易逻辑</li>
+        <li>能够实现基础的均值回归策略</li>
+        <li>了解均值回归策略的风险与适用场景</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800" alt="均值回归策略" class="card-image">
+      <h3 class="card-title">均值回归策略</h3>
+      <p class="card-text"><strong>均值回归策略</strong>（Mean Reversion）基于价格会回归其均值的理论假设。当价格偏离均值过大时，预期价格会回归均值，因此在价格过高时做空，在价格过低时买入。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 均值回归理论基础</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">📐</div>
+          <h3 class="card-title">价格均衡</h3>
+          <p class="card-text">价格围绕均值波动，偏离后会回归</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">⚖️</div>
+          <h3 class="card-title">价值回归</h3>
+          <p class="card-text">过度反应后的价格调整</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔄</div>
+          <h3 class="card-title">周期性</h3>
+          <p class="card-text">市场情绪的周期性波动</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 均值回归识别方法</h2>
+
+      <h3>1. 统计学方法</h3>
+      <div class="code-block">
+        <pre><code># Z-Score均值回归信号
+def zscore_mean_reversion(data, window=20, threshold=2.0):
+    """
+    Z-Score标准化
+    Z-Score > 2: 超买，做空信号
+    Z-Score < -2: 超卖，做多信号
+    """
+    data['mean'] = data['close'].rolling(window=window).mean()
+    data['std'] = data['close'].rolling(window=window).std()
+    data['zscore'] = (data['close'] - data['mean']) / data['std']
+
+    data['signal'] = 0
+    data.loc[data['zscore'] > threshold, 'signal'] = -1  # 超买做空
+    data.loc[data['zscore'] < -threshold, 'signal'] = 1   # 超卖做多
+
+    return data</code></pre>
+      </div>
+
+      <h3>2. 技术指标方法</h3>
+      <ul class="feature-list">
+        <li><strong>RSI指标：</strong>RSI > 70超买，RSI < 30超卖</li>
+        <li><strong>KD指标：</strong>KD超买超卖信号</li>
+        <li><strong>布林带：</strong>价格触及上下轨时的回归</li>
+        <li><strong>MACD：</strong>背离信号</li>
+      </ul>
+
+      <h3>3. 配对交易</h3>
+      <div class="card">
+        <p class="card-text">基于两相关性高的资产价格差进行均值回归，做多相对便宜的资产，做空相对昂贵的资产。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 均值回归策略要素</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>要素</th>
+            <th>作用</th>
+            <th>关键参数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>均值计算</td>
+            <td>确定回归目标</td>
+            <td>窗口期、加权方式</td>
+          </tr>
+          <tr>
+            <td>偏离度量</td>
+            <td>量化偏离程度</td>
+            <td>Z-Score阈值、标准差倍数</td>
+          </tr>
+          <tr>
+            <td>入场时机</td>
+            <td>确定开仓条件</td>
+            <td>超买超卖阈值</td>
+          </tr>
+          <tr>
+            <td>出场时机</td>
+            <td>确定平仓条件</td>
+            <td>回归目标、止损</td>
+          </tr>
+          <tr>
+            <td>止损设置</td>
+            <td>防止趋势延续</td>
+            <td>止损幅度、ATR</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> 经典均值回归策略</h2>
+
+      <h3>1. RSI均值回归策略</h3>
+      <div class="card">
+        <p class="card-text">利用RSI指标识别超买超卖状态，RSI > 70卖出，RSI < 30买入，适合震荡市场。</p>
+      </div>
+
+      <h3>2. 布林带均值回归策略</h3>
+      <div class="card">
+        <p class="card-text">价格触及上轨时做空，触及下轨时做多，回归中轨时平仓。</p>
+      </div>
+
+      <h3>3. 配对交易策略</h3>
+      <div class="card">
+        <p class="card-text">选择高相关性股票对，在价差偏离均值时进行套利，等待价差回归。</p>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">均值回归策略的挑战</div>
+        <p>1. 趋势市场中的逆势操作导致亏损<br>2. 均值漂移问题，均值不稳定<br>3. 回归时间不确定，资金占用时间长<br>4. 需要严格止损防止趋势延续</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎯</span> 均值回归策略优化</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3 class="card-title">动态均值</h3>
+          <p class="card-text">使用自适应方法计算均值，适应市场变化</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">多品种组合</h3>
+          <p class="card-text">分散投资降低单一品种风险</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">趋势过滤</h3>
+          <p class="card-text">只在震荡市场执行均值回归</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚔️</span> 趋势跟踪 vs 均值回归</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>对比维度</th>
+            <th>趋势跟踪</th>
+            <th>均值回归</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>核心理念</td>
+            <td>趋势延续</td>
+            <td>均值回归</td>
+          </tr>
+          <tr>
+            <td>适用市场</td>
+            <td>趋势市场</td>
+            <td>震荡市场</td>
+          </tr>
+          <tr>
+            <td>交易频率</td>
+            <td>中等</td>
+            <td>较高</td>
+          </tr>
+          <tr>
+            <td>持仓周期</td>
+            <td>较长</td>
+            <td>较短</td>
+          </tr>
+          <tr>
+            <td>风险特征</td>
+            <td>大行情大收益，震荡期亏损</td>
+            <td>小利累积，趋势时亏损</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>均值回归策略关键在于：1) 选择合适的均值计算方法；2) 设置合理的入场阈值；3) 严格执行止损；4) 结合市场环境选择策略。将趋势跟踪和均值回归策略组合使用，可以适应不同市场环境。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了均值回归策略的理论基础</li>
+            <li>• 掌握了均值回归的识别方法</li>
+            <li>• 了解了经典均值回归策略</li>
+            <li>• 学习了策略优化的关键要点</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="15-2-趋势跟踪策略.html">← 上一节</a>
+      <a href="15-4-套利策略类型.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

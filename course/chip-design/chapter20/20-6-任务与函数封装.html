@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.6 任务与函数封装 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.6 任务与函数封装</h1>
+          <p class="subtitle">提高Testbench的可重用性</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解任务和函数的区别</li>
+            <li>掌握任务的定义和调用</li>
+            <li>学会函数的使用方法</li>
+            <li>了解代码复用技巧</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">任务与函数概述</h3>
+          <p class="card-text">
+            <strong>任务（task）</strong>和<strong>函数（function）</strong>是Verilog中用于代码封装和复用的机制。它们可以将常用操作封装成模块，提高Testbench的可读性和可维护性。
+          </p>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 任务 vs 函数</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>任务（task）</th>
+                <th>函数（function）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>返回值</td>
+                <td>无（通过参数返回）</td>
+                <td>有（返回一个值）</td>
+              </tr>
+              <tr>
+                <td>时序控制</td>
+                <td>可以包含时序控制</td>
+                <td>不能包含时序控制</td>
+              </tr>
+              <tr>
+                <td>调用位置</td>
+                <td>可以在过程块中调用</td>
+                <td>可以在表达式中调用</td>
+              </tr>
+              <tr>
+                <td>用途</td>
+                <td>复杂操作、时序相关</td>
+                <td>计算、转换</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 任务示例</h2>
+          <div class="code-block">
+<pre// 写数据任务
+task write_data;
+    input [7:0] addr;
+    input [31:0] data;
+    begin
+        @(posedge clk);
+        wr_en   <= 1'b1;
+        rd_en   <= 1'b0;
+        addr_in <= addr;
+        data_in <= data;
+        $display("[%0t] Write: addr=%h, data=%h", $time, addr, data);
+        @(posedge clk);
+        wr_en <= 1'b0;
+    end
+endtask
+
+// 读数据任务
+task read_data;
+    input  [7:0]  addr;
+    output [31:0] data;
+    begin
+        @(posedge clk);
+        wr_en   <= 1'b0;
+        rd_en   <= 1'b1;
+        addr_in <= addr;
+        @(posedge clk);
+        rd_en <= 1'b0;
+        @(posedge clk);  // 等待数据有效
+        data = data_out;
+        $display("[%0t] Read: addr=%h, data=%h", $time, addr, data);
+    end
+endtask
+
+// 使用任务
+initial begin
+    write_data(8'h00, 32'hDEADBEEF);
+    write_data(8'h04, 32'h12345678);
+    read_data(8'h00, rdata1);
+    read_data(8'h04, rdata2);
+end</pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 函数示例</h2>
+          <div class="code-block">
+<pre// 计算校验和函数
+function [7:0] calc_checksum;
+    input [31:0] data;
+    begin
+        calc_checksum = data[7:0] ^ data[15:8] ^
+                        data[23:16] ^ data[31:24];
+    end
+endfunction
+
+// CRC计算函数
+function [15:0] calc_crc16;
+    input [7:0] data;
+    input [15:0] crc_prev;
+    reg [15:0] crc;
+    integer i;
+    begin
+        crc = crc_prev ^ {8'h00, data};
+        for (i = 0; i < 8; i = i + 1) begin
+            if (crc[0])
+                crc = (crc >> 1) ^ 16'hA001;
+            else
+                crc = crc >> 1;
+        end
+        calc_crc16 = crc;
+    end
+endfunction
+
+// 使用函数
+always @(posedge clk) begin
+    if (data_valid) begin
+        checksum <= calc_checksum(data);
+        crc_reg   <= calc_crc16(data, crc_reg);
+    end
+end</pre>
+          </div>
+        </div>
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">封装建议</div>
+            <p>将常用的操作封装成任务或函数，如读写操作、计算函数、检查函数等。这样可以提高代码的可读性和可维护性。</p>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 任务用于封装时序相关的操作</li>
+                <li>• 函数用于纯计算和转换</li>
+                <li>• 封装提高代码复用性</li>
+                <li>• 合理的封装使Testbench更清晰</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="20-5-文件IO操作.html">← 上一节</a>
+          <a href="20-7-参数化Testbench.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

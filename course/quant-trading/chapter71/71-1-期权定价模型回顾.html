@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>71.1 期权定价模型回顾 - 量化交易开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>71.1 期权定价模型回顾</h1>
+      <p class="subtitle">期权量化策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>回顾Black-Scholes模型及其应用</li>
+        <li>理解二叉树模型的定价方法</li>
+        <li>掌握隐含波动率的计算与应用</li>
+        <li>了解期权定价模型的局限与改进</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800" alt="期权定价模型" class="card-image">
+      <h3 class="card-title">期权定价模型回顾</h3>
+      <p class="card-text"><strong>期权定价模型</strong>是期权量化交易的基础理论框架。从经典的Black-Scholes模型到数值方法，理解这些模型对于期权定价、风险管理和策略构建至关重要。本节将系统回顾主要期权定价模型。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> Black-Scholes模型</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">基本假设</h3>
+          <ul class="feature-list">
+            <li>标的资产价格服从几何布朗运动</li>
+            <li>无交易成本和税收</li>
+            <li>市场无摩擦</li>
+            <li>无风险利率恒定</li>
+            <li>可以无限借贷</li>
+            <li>期权为欧式</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">主要参数</h3>
+          <ul class="feature-list">
+            <li>S: 标的资产当前价格</li>
+            <li>K: 执行价格</li>
+            <li>T: 到期时间（年）</li>
+            <li>r: 无风险利率</li>
+            <li>σ: 波动率</li>
+            <li>d1, d2: 中间变量</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 二叉树模型</h2>
+      <div class="tip-box info">
+        <span class="icon">📋</span>
+        <div class="content">
+          <div class="title">二叉树方法</div>
+          <p>二叉树模型通过构建标的资产价格的树形结构来定价期权。每个节点代表未来某个时刻的价格，通过向后递推计算期权价值。该方法适用于美式期权和复杂衍生品定价，比Black-Scholes模型更灵活。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📉</span> 隐含波动率</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>定义</th>
+            <th>应用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>历史波动率</td>
+            <td>基于历史价格计算的波动率</td>
+            <td>评估历史风险</td>
+          </tr>
+          <tr>
+            <td>隐含波动率</td>
+            <td>通过期权价格反推的波动率</td>
+            <td>市场预期、期权定价</td>
+          </tr>
+          <tr>
+            <td>波动率微笑</td>
+            <td>不同执行价格的隐含波动率差异</td>
+            <td>市场异常、套利机会</td>
+          </tr>
+          <tr>
+            <td>波动率期限结构</td>
+            <td>不同到期期限的隐含波动率</td>
+            <td>选择最优到期日</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> Python实现示例</h2>
+      <pre><code class="language-python"># 期权定价模型实现
+import numpy as np
+import pandas as pd
+from scipy.stats import norm
+from typing import Dict, Tuple
+
+class BlackScholes:
+    """Black-Scholes期权定价模型"""
+
+    @staticmethod
+    def d1(S, K, T, r, sigma):
+        """计算d1参数"""
+        return (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+
+    @staticmethod
+    def d2(S, K, T, r, sigma):
+        """计算d2参数"""
+        return BlackScholes.d1(S, K, T, r, sigma) - sigma * np.sqrt(T)
+
+    @staticmethod
+    def call_price(S, K, T, r, sigma):
+        """计算看涨期权价格"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        d2 = BlackScholes.d2(S, K, T, r, sigma)
+        return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+
+    @staticmethod
+    def put_price(S, K, T, r, sigma):
+        """计算看跌期权价格"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        d2 = BlackScholes.d2(S, K, T, r, sigma)
+        return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+    @staticmethod
+    def implied_volatility(option_price, S, K, T, r, option_type='call', tol=1e-6, max_iter=100):
+        """计算隐含波动率（牛顿迭代法）"""
+        sigma = 0.3  # 初始猜测
+
+        for i in range(max_iter):
+            if option_type == 'call':
+                price = BlackScholes.call_price(S, K, T, r, sigma)
+                vega = BlackScholes.vega(S, K, T, r, sigma)
+            else:
+                price = BlackScholes.put_price(S, K, T, r, sigma)
+                vega = BlackScholes.vega(S, K, T, r, sigma)
+
+            diff = price - option_price
+
+            if abs(diff) < tol:
+                return sigma
+
+            sigma = sigma - diff / vega
+
+        return sigma
+
+    @staticmethod
+    def delta(S, K, T, r, sigma, option_type='call'):
+        """计算Delta"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        if option_type == 'call':
+            return norm.cdf(d1)
+        else:
+            return norm.cdf(d1) - 1
+
+    @staticmethod
+    def gamma(S, K, T, r, sigma):
+        """计算Gamma"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        return norm.pdf(d1) / (S * sigma * np.sqrt(T))
+
+    @staticmethod
+    def vega(S, K, T, r, sigma):
+        """计算Vega"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        return S * norm.pdf(d1) * np.sqrt(T)
+
+    @staticmethod
+    def theta(S, K, T, r, sigma, option_type='call'):
+        """计算Theta"""
+        d1 = BlackScholes.d1(S, K, T, r, sigma)
+        d2 = BlackScholes.d2(S, K, T, r, sigma)
+
+        if option_type == 'call':
+            term1 = -S * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
+            term2 = -r * K * np.exp(-r * T) * norm.cdf(d2)
+            return term1 + term2
+        else:
+            term1 = -S * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
+            term2 = r * K * np.exp(-r * T) * norm.cdf(-d2)
+            return term1 + term2
+
+class BinomialTree:
+    """二叉树期权定价模型"""
+
+    def __init__(self, steps: int = 100):
+        self.steps = steps
+
+    def calculate_parameters(self, S, K, T, r, sigma):
+        """计算树形参数"""
+        dt = T / self.steps
+        u = np.exp(sigma * np.sqrt(dt))  # 上涨因子
+        d = 1 / u  # 下跌因子
+        p = (np.exp(r * dt) - d) / (u - d)  # 上涨概率
+
+        return u, d, p, dt
+
+    def european_option_price(self, S, K, T, r, sigma, option_type='call'):
+        """欧式期权定价"""
+        u, d, p, dt = self.calculate_parameters(S, K, T, r, sigma)
+
+        # 构建终端时刻的期权价值
+        final_prices = S * (u ** np.arange(self.steps, -1, -1)) * (d ** np.arange(self.steps + 1))
+
+        if option_type == 'call':
+            final_values = np.maximum(final_prices - K, 0)
+        else:
+            final_values = np.maximum(K - final_prices, 0)
+
+        # 向后递推
+        for step in range(self.steps - 1, -1, -1):
+            final_values = (p * final_values[:-1] + (1 - p) * final_values[1:]) * np.exp(-r * dt)
+
+        return final_values[0]
+
+    def american_option_price(self, S, K, T, r, sigma, option_type='call'):
+        """美式期权定价"""
+        u, d, p, dt = self.calculate_parameters(S, K, T, r, sigma)
+
+        # 构建价格树
+        prices = np.zeros((self.steps + 1, self.steps + 1))
+        for i in range(self.steps + 1):
+            for j in range(i + 1):
+                prices[i, j] = S * (u ** j) * (d ** (i - j))
+
+        # 构建期权价值树
+        option_values = np.zeros((self.steps + 1, self.steps + 1))
+
+        # 终端时刻的期权价值
+        if option_type == 'call':
+            option_values[self.steps, :] = np.maximum(prices[self.steps, :] - K, 0)
+        else:
+            option_values[self.steps, :] = np.maximum(K - prices[self.steps, :], 0)
+
+        # 向后递推
+        for i in range(self.steps - 1, -1, -1):
+            for j in range(i + 1):
+                # 持有期权的期望价值
+                hold_value = (p * option_values[i + 1, j + 1] +
+                            (1 - p) * option_values[i + 1, j]) * np.exp(-r * dt)
+
+                # 提前行权价值
+                if option_type == 'call':
+                    exercise_value = max(prices[i, j] - K, 0)
+                else:
+                    exercise_value = max(K - prices[i, j], 0)
+
+                # 美式期权选择两者中的较大者
+                option_values[i, j] = max(hold_value, exercise_value)
+
+        return option_values[0, 0]
+
+# 使用示例
+if __name__ == '__main__':
+    # Black-Scholes定价
+    bs = BlackScholes()
+
+    S = 100  # 标的资产价格
+    K = 105  # 执行价格
+    T = 0.5  # 到期时间（年）
+    r = 0.05  # 无风险利率
+    sigma = 0.2  # 波动率
+
+    call_price = bs.call_price(S, K, T, r, sigma)
+    put_price = bs.put_price(S, K, T, r, sigma)
+
+    print(f"Call Price: {call_price:.2f}")
+    print(f"Put Price: {put_price:.2f}")
+
+    # 计算希腊字母
+    delta = bs.delta(S, K, T, r, sigma)
+    gamma = bs.gamma(S, K, T, r, sigma)
+    vega = bs.vega(S, K, T, r, sigma)
+    theta = bs.theta(S, K, T, r, sigma)
+
+    print(f"Delta: {delta:.4f}")
+    print(f"Gamma: {gamma:.4f}")
+    print(f"Vega: {vega:.4f}")
+    print(f"Theta: {theta:.4f}")
+
+    # 计算隐含波动率
+    market_call_price = 5.5
+    implied_vol = bs.implied_volatility(market_call_price, S, K, T, r, 'call')
+    print(f"Implied Volatility: {implied_vol:.4f}")
+
+    # 二叉树定价
+    tree = BinomialTree(steps=100)
+    tree_call_price = tree.european_option_price(S, K, T, r, sigma, 'call')
+    tree_put_price = tree.american_option_price(S, K, T, r, sigma, 'put')
+
+    print(f"Tree Call Price: {tree_call_price:.2f}")
+    print(f"Tree Put Price: {tree_put_price:.2f}")
+</code></pre>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">模型局限性</div>
+        <p>Black-Scholes模型局限性：1）假设波动率恒定，实际市场波动率变化；2）假设资产价格连续，实际存在跳跃；3）假设市场无摩擦，实际存在交易成本；4）假设可以无限借贷，实际有杠杆限制；5）不适用于美式期权。建议使用更复杂的模型或数值方法。</p>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>期权定价实践建议：1）理解模型假设与实际情况的差异；2）使用历史波动率与隐含波动率对比；3）关注波动率微笑和期限结构；4）选择合适的定价方法（BS/二叉树/蒙特卡洛）；5）定期校准模型参数；6）结合市场数据验证定价准确性。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 回顾了Black-Scholes模型及其应用</li>
+            <li>• 理解了二叉树模型的定价方法</li>
+            <li>• 掌握了隐含波动率的计算与应用</li>
+            <li>• 了解了期权定价模型的局限与改进</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="../chapter70/70-7-商品CTA策略.html">← 上一节</a>
+      <a href="71-2-希腊字母与风险管理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

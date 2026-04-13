@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.3 波动率计算 - 量化交易</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>32.3 波动率计算</h1>
+      <p class="subtitle">市场风险管理</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解波动率的概念与重要性</li>
+        <li>掌握各种波动率计算方法</li>
+        <li>学习隐含波动率的计算</li>
+        <li>了解波动率在风险管理中的应用</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1611974765270-ca1258634369?w=800" alt="波动率计算" class="card-image">
+      <h3 class="card-title">波动率计算</h3>
+      <p class="card-text"><strong>波动率</strong>是衡量价格变动幅度的核心指标，是市场风险管理的基础。
+    准确计算和预测波动率对于VaR计算、期权定价、风险管理都至关重要。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 波动率的类型</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">历史波动率</h3>
+          <ul class="feature-list">
+            <li>基于历史价格数据计算</li>
+            <li>反映过去的波动情况</li>
+            <li>方法简单、易于理解</li>
+            <li>假设历史代表未来</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">隐含波动率</h3>
+          <ul class="feature-list">
+            <li>从期权价格反推得出</li>
+            <li>反映市场对未来波动的预期</li>
+            <li>包含市场情绪信息</li>
+            <li>需要期权市场数据</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> 历史波动率计算方法</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>方法</th>
+            <th>公式</th>
+            <th>特点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>简单标准差</td>
+            <td>σ = √[Σ(r-r̄)²/(n-1)]</td>
+            <td>所有数据等权重</td>
+            <td>平稳波动环境</td>
+          </tr>
+          <tr>
+            <td>指数加权(EWMA)</td>
+            <td>σ²t = λσ²t-1 + (1-λ)r²t</td>
+            <td>近期数据权重更高</td>
+            <td>波动率变化明显</td>
+          </tr>
+          <tr>
+            <td>GARCH模型</td>
+            <td>σ²t = ω + αε²t-1 + βσ²t-1</td>
+            <td>波动率聚集效应</td>
+            <td>金融时间序列</td>
+          </tr>
+          <tr>
+            <td>已实现波动率</td>
+            <td>RV = Σ(高频收益)²</td>
+            <td>使用高频数据</td>
+            <td>日内风险管理</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 波动率Python实现</h2>
+      <div class="card">
+        <h3 class="card-title">Python代码示例</h3>
+        <pre><code class="language-python">import numpy as np
+import pandas as pd
+
+# 1. 简单标准差法
+def historical_volatility(prices, annualization=252):
+    """计算历史波动率"""
+    returns = np.log(prices / prices.shift(1)).dropna()
+    volatility = returns.std() * np.sqrt(annualization)
+    return volatility
+
+# 2. 指数加权移动平均(EWMA)
+def ewma_volatility(returns, lambda_param=0.94):
+    """EWMA波动率"""
+    var = returns.var()
+    for r in returns:
+        var = lambda_param * var + (1 - lambda_param) * r**2
+    return np.sqrt(var)
+
+# 3. GARCH模型
+from arch import arch_model
+def garch_volatility(returns):
+    """GARCH(1,1)波动率"""
+    model = arch_model(returns, vol='Garch', p=1, q=1)
+    res = model.fit(disp='off')
+    forecast = res.forecast(horizon=1)
+    return np.sqrt(forecast.variance.iloc[-1, 0])
+
+# 4. 已实现波动率
+def realized_volatility(high_prices, low_prices):
+    """基于高低价的已实现波动率"""
+    returns = np.log(high_prices / low_prices)
+    return returns.mean() * np.sqrt(252)</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📈</span> GARCH模型详解</h2>
+      <div class="tip-box info">
+        <span class="icon">📚</span>
+        <div class="content">
+          <div class="title">GARCH(1,1)模型</div>
+          <p><strong>条件方差方程</strong>：σ²t = ω + αε²t-1 + βσ²t-1</p>
+          <p>其中：ω是长期平均方差，α是ARCH项系数（新信息的影响），β是GARCH项系数（过去波动的影响）</p>
+          <p><strong>波动率聚集</strong>：GARCH模型捕捉了金融时间序列中"大波动后跟大波动，小波动后跟小波动"的现象</p>
+          <p><strong>模型选择</strong>：通常GARCH(1,1)已经足够，复杂模型可能过拟合</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 隐含波动率计算</h2>
+      <div class="card">
+        <h3 class="card-title">隐含波动率求解方法</h3>
+        <ol class="feature-list">
+          <li><strong>Black-Scholes模型</strong> - 使用期权定价公式反推波动率</li>
+          <li><strong>数值求解</strong> - 通过Newton-Raphson等迭代方法求解</li>
+          <li><strong>二分法</strong> - 简单稳定的数值方法</li>
+          <li><strong>插值法</strong> - 从已知隐含波动率插值得到目标值</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 波动率在风险管理中的应用</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>应用领域</th>
+            <th>具体用途</th>
+            <th>关键点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>VaR计算</td>
+            <td>作为VaR公式的核心输入</td>
+            <td>波动率准确性直接影响VaR</td>
+          </tr>
+          <tr>
+            <td>期权定价</td>
+            <td>作为期权定价模型的关键参数</td>
+            <td>隐含波动率用于定价，历史波动率用于验证</td>
+          </tr>
+          <tr>
+            <td>风险限额</td>
+            <td>基于波动率设定动态限额</td>
+            <td>波动率升高时收紧限额</td>
+          </tr>
+          <tr>
+            <td>仓位管理</td>
+            <td>根据波动率调整仓位大小</td>
+            <td>高波动时降低仓位</td>
+          </tr>
+          <tr>
+            <td>策略调整</td>
+            <td>识别波动率交易机会</td>
+            <td>隐含波动率vs历史波动率差异</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 波动率计算的注意事项</h2>
+      <div class="tip-box warning">
+        <span class="icon">⚠️</span>
+        <div class="content">
+          <div class="title">常见问题</div>
+          <p><strong>年化因子</strong>：不同频率数据需要使用不同年化因子（日度252，周度52，月度12）</p>
+          <p><strong>数据长度</strong>：数据太短不稳定，太长反映不了近期变化</p>
+          <p><strong>异常值</strong>：极端事件会显著影响波动率估计</p>
+          <p><strong>跳空处理</strong>：隔夜跳空如何处理需要明确</p>
+          <p><strong>日历效应</strong>：某些日期波动率特征不同（如财报日）</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>使用多种方法计算波动率并对比。根据市场条件选择合适的模型（平静期用简单方法，动荡期用GARCH）。定期回测波动率预测的准确性。结合隐含波动率和历史波动率综合判断。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了波动率的概念与类型</li>
+            <li>• 掌握了各种波动率计算方法</li>
+            <li>• 学习了隐含波动率的计算</li>
+            <li>• 了解了波动率在风险管理中的应用</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="32-2-CVaR(条件在险价值).html">← 上一节</a>
+      <a href="32-4-相关性风险.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

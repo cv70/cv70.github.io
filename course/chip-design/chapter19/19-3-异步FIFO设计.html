@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>19.3 异步FIFO设计 - 芯片设计开发手册</title>
+  <title>19.3 异步FIFO设计 - 芯片设计开发</title>
   <link rel="shortcut icon" href="/assets/img/favicon.ico">
   <link rel="stylesheet" href="../styles.css">
 </head>
@@ -12,124 +12,155 @@
 
   <div class="course-layout">
     <div id="sidebar-container"></div>
-
     <main class="course-main">
-  <div class="container" style="padding: 0;">
-    <header class="page-header">
-      <h1>19.3 异步FIFO设计</h1>
-      <p class="subtitle">RTL 设计方法论</p>
-    </header>
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>19.3 异步FIFO设计</h1>
+          <p class="subtitle">跨时钟域数据传输的利器</p>
+        </header>
 
-    <div class="content-block animate-fade-in-up">
-      <h2><span class="icon">🎯</span> 学习目标</h2>
-      <ul class="feature-list">
-        <li>理解异步FIFO的工作原理</li>
-        <li>掌握格雷码在FIFO中的应用</li>
-        <li>了解空满标志的产生方法</li>
-        <li>能够设计可靠的异步FIFO</li>
-      </ul>
-    </div>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解异步FIFO的工作原理</li>
+            <li>掌握格雷码在FIFO中的应用</li>
+            <li>学会设计异步FIFO</li>
+            <li>了解FIFO的满空判断逻辑</li>
+          </ul>
+        </div>
 
-    <div class="card">
-      <h3 class="card-title">异步FIFO概述</h3>
-      <p class="card-text"><strong>异步FIFO</strong>是一种先进先出缓冲器，其读写操作使用不同的时钟。它是跨时钟域数据传输最常用的方法，广泛应用于多时钟域SoC设计中。</p>
-      <p class="card-text">异步FIFO设计的核心挑战是如何正确判断空满状态，避免读空和写满导致的错误。</p>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">📊</span> 异步FIFO结构</h2>
-      <div class="grid grid-2">
         <div class="card">
-          <h3 class="card-title">核心组件</h3>
-          <ul>
-            <li>双端口RAM存储数据</li>
-            <li>写指针和读指针</li>
-            <li>格雷码指针同步器</li>
-            <li>空满标志生成逻辑</li>
-          </ul>
+          <h3 class="card-title">什么是异步FIFO</h3>
+          <p class="card-text">
+            <strong>异步FIFO（First In First Out）</strong>是一种先进先出的存储结构，读写操作使用不同的时钟。它主要用于跨时钟域的数据传输，是解决CDC问题的有效方法。
+          </p>
         </div>
-        <div class="card">
-          <h3 class="card-title">设计要点</h3>
-          <ul>
-            <li>指针使用格雷码编码</li>
-            <li>读写指针跨时钟域同步</li>
-            <li>空满判断需要额外一位</li>
-            <li>FIFO深度通常为2的幂次</li>
-          </ul>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 异步FIFO的组成</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📦</div>
+              <h3 class="card-title">双端口RAM</h3>
+              <p class="card-text">存储数据主体</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+              <h3 class="card-title">读写指针</h3>
+              <p class="card-text">格雷码编码</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">⚡</div>
+              <h3 class="card-title">同步器</h3>
+              <p class="card-text">跨时钟域传递</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 格雷码的优势</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>二进制码</th>
+                <th>格雷码</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>相邻值变化</td>
+                <td>可能多bit变化</td>
+                <td>仅1bit变化</td>
+              </tr>
+              <tr>
+                <td>亚稳态风险</td>
+                <td>高</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>适用场景</td>
+                <td>同步设计</td>
+                <td>跨时钟域</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 格雷码转换代码</h2>
+          <div class="code-block">
+<pre>// 二进制转格雷码
+function [ADDR_WIDTH-1:0] bin2gray;
+    input [ADDR_WIDTH-1:0] binary;
+    begin
+        bin2gray = binary ^ (binary >> 1);
+    end
+endfunction
+
+// 格雷码转二进制
+function [ADDR_WIDTH-1:0] gray2bin;
+    input [ADDR_WIDTH-1:0] gray;
+    integer i;
+    begin
+        gray2bin[ADDR_WIDTH-1] = gray[ADDR_WIDTH-1];
+        for (i = ADDR_WIDTH-2; i >= 0; i = i-1) begin
+            gray2bin[i] = gray2bin[i+1] ^ gray[i];
+        end
+    end
+endfunction</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 满空判断逻辑</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">FIFO空判断</h3>
+              <p class="card-text">当读指针追上写指针时，FIFO为空</p>
+              <div class="code-block">empty = (rd_ptr_gray == rd_ptr_gray_sync)</div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">FIFO满判断</h3>
+              <p class="card-text">当写指针即将追上读指针时，FIFO为满</p>
+              <div class="code-block">full = (wr_ptr_gray_next == {~rd_ptr_gray_sync[ADDR_WIDTH:ADDR_WIDTH-1], rd_ptr_gray_sync[ADDR_WIDTH-2:0]})</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">设计技巧</div>
+            <p>使用格雷码的额外MSB（最高位）作为翻转位，可以区分FIFO是空还是满。当读写指针相等且最高位相同时为空，相等但最高位不同时为满。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 异步FIFO是跨时钟域数据传输的有效方法</li>
+                <li>• 格雷码在FIFO指针中用于避免亚稳态</li>
+                <li>• 读写指针需要通过同步器传递</li>
+                <li>• 通过指针比较判断FIFO的满空状态</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="19-2-时钟域与跨时钟域设计.html">← 上一节</a>
+          <a href="19-4-总线接口设计.html">下一节 →</a>
         </div>
       </div>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">💡</span> 格雷码的优势</h2>
-      <div class="tip-box info">
-        <span class="icon">💡</span>
-        <div class="content">
-          <div class="title">为什么使用格雷码？</div>
-          <p>格雷码（Gray Code）相邻两个值只有一位不同。在跨时钟域传输时，即使指针被采样的时刻不准确，也只会出现前后一个地址的偏差，不会产生错误的中间状态。</p>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr><th>二进制</th><th>格雷码</th><th>变化位数</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>000</td><td>000</td><td>-</td></tr>
-          <tr><td>001</td><td>001</td><td>1位</td></tr>
-          <tr><td>010</td><td>011</td><td>1位</td></tr>
-          <tr><td>011</td><td>010</td><td>1位</td></tr>
-          <tr><td>100</td><td>110</td><td>1位</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">🔧</span> 空满判断原理</h2>
-      <div class="card">
-        <h3 class="card-title">判断方法</h3>
-        <p class="card-text"><strong>空判断</strong>：读指针（同步到写域后）= 写指针，且最高位相同</p>
-        <p class="card-text"><strong>满判断</strong>：读指针（同步到写域后）= 写指针，但最高位不同</p>
-        <p class="card-text">通过增加一位MSB来区分空和满状态，这是异步FIFO设计的关键技巧。</p>
-      </div>
-    </div>
-
-    <div class="tip-box warning">
-      <span class="icon">⚠️</span>
-      <div class="content">
-        <div class="title">设计注意事项</div>
-        <p>1. FIFO深度建议为2的幂次，便于格雷码转换<br>
-        2. 空满标志会产生一定的延迟，设计时需考虑<br>
-        3. 建议使用成熟的FIFO IP核或经验证的代码<br>
-        4. 进行充分的跨时钟域验证</p>
-      </div>
-    </div>
-
-    <div class="content-block">
-      <h2><span class="icon">📝</span> 本节小结</h2>
-      <div class="tip-box success">
-        <span class="icon">✅</span>
-        <div class="content">
-          <ul style="list-style: none; padding: 0;">
-            <li>• 异步FIFO是跨时钟域数据传输的标准方法</li>
-            <li>• 格雷码确保跨时钟域传输的可靠性</li>
-            <li>• 通过MSB区分空满状态</li>
-            <li>• 建议使用成熟IP核，避免重复造轮子</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="chapter-nav">
-      <a href="19-2-时钟域与跨时钟域设计.html">← 上一节</a>
-      <a href="19-4-总线接口设计.html">下一节 →</a>
-    </div>
-  </div>
     </main>
   </div>
 
   <script src="/assets/js/dark-mode.js"></script>
   <script src="../load-sidebar.js"></script>
-
     <div id="footer-container"></div>
     <script src="/assets/js/load-components.js"></script>
 </body>

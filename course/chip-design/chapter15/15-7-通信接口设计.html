@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.7 通信接口设计 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header"><h1>15.7 通信接口设计</h1><p class="subtitle">Verilog设计实例</p></header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list"><li>掌握UART接口设计</li><li>理解SPI接口实现</li><li>学会I2C接口设计</li><li>能够设计并行接口</li></ul>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📡</span> UART发送器</h2>
+          <div class="code-block">
+<pre><code>// UART发送器（8N1格式）
+module uart_tx(
+    input  clk,
+    input  rst_n,
+    input        tx_start,
+    input  [7:0] tx_data,
+    output       tx,
+    output       tx_busy
+);
+    parameter CLK_FREQ = 50_000_000;
+    parameter BAUD_RATE = 115200;
+    parameter BAUD_DIV = CLK_FREQ / BAUD_RATE;
+
+    reg [15:0] baud_counter;
+    reg [3:0]  bit_counter;
+    reg [9:0]  shift_reg;
+    reg        busy;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            baud_counter <= 0;
+            bit_counter <= 0;
+            shift_reg <= 0;
+            busy <= 0;
+            tx <= 1;
+        end
+        else if (tx_start && !busy) begin
+            shift_reg <= {1'b1, tx_data, 1'b0};
+            bit_counter <= 10;
+            baud_counter <= 0;
+            busy <= 1;
+        end
+        else if (busy) begin
+            if (baud_counter == BAUD_DIV - 1) begin
+                baud_counter <= 0;
+                shift_reg <= {1'b1, shift_reg[9:1]};
+                tx <= shift_reg[0];
+                if (bit_counter > 0)
+                    bit_counter <= bit_counter - 1;
+                else
+                    busy <= 0;
+            end
+            else
+                baud_counter <= baud_counter + 1;
+        end
+    end
+
+    assign tx_busy = busy;
+endmodule</code></pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success"><span class="icon">✅</span><div class="content"><ul style="list-style: none; padding: 0;"><li>• UART是异步串行接口</li><li>• SPI是同步串行接口</li><li>• I2C是双线接口</li><li>• 时序控制是关键</li></ul></div></div>
+        </div>
+        <div class="chapter-nav"><a href="15-6-存储器接口设计.html">← 上一节</a><a href="15-8-综合项目实例.html">下一节 →</a></div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

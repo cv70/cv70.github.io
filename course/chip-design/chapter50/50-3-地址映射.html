@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.3 地址映射 - 芯片设计开发手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>50.3 地址映射</h1>
+      <p class="subtitle">SoC地址空间规划与映射</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解SoC地址空间的概念</li>
+        <li>掌握地址映射的基本方法</li>
+        <li>了解内存保护机制</li>
+        <li>熟悉地址映射的设计要点</li>
+      </ul>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📍</span> 地址空间概述</h2>
+      <div class="tip-box info">
+        <span class="icon">💡</span>
+        <div class="content">
+          <div class="title">地址空间的定义</div>
+          <p><strong>物理地址空间</strong>：处理器可以直接访问的硬件地址范围，由处理器的地址总线宽度决定。32位处理器为4GB（2^32），64位处理器为更大空间（实际使用通常小于2^64）。</p>
+          <p><strong>虚拟地址空间</strong>：操作系统和应用程序看到的逻辑地址空间，通过MMU（内存管理单元）映射到物理地址空间。</p>
+        </div>
+      </div>
+
+      <h3>地址空间容量示例</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>地址位宽</th>
+            <th>地址空间大小</th>
+            <th>典型应用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>32位</td>
+            <td>4 GB</td>
+            <td>嵌入式系统、Cortex-M系列</td>
+          </tr>
+          <tr>
+            <td>36位</td>
+            <td>64 GB</td>
+            <td>部分ARM Cortex-A系列</td>
+          </tr>
+          <tr>
+            <td>40位</td>
+            <td>1 TB</td>
+            <td>中高端SoC</td>
+          </tr>
+          <tr>
+            <td>48位</td>
+            <td>256 TB</td>
+            <td>高性能SoC</td>
+          </tr>
+          <tr>
+            <td>64位</td>
+            <td>16 EB</td>
+            <td>服务器级处理器</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🗺️</span> 地址映射原理</h2>
+      <p>地址映射是将总线地址（或物理地址）映射到具体存储设备或外设寄存器地址的过程。通过地址译码器实现。</p>
+
+      <div class="code-block">
+<pre>
+// 地址译码器示例（简化版）
+module address_decoder (
+    input  [31:0] addr,       // 总线地址
+    input        wr_en,       // 写使能
+    input        rd_en,       // 读使能
+    output reg   sram_cs,     // SRAM片选
+    output reg   flash_cs,    // Flash片选
+    output reg   uart_cs,     // UART片选
+    output reg   gpio_cs      // GPIO片选
+);
+
+// 地址空间定义
+parameter SRAM_BASE  = 32'h0000_0000;
+parameter SRAM_SIZE  = 32'h0010_0000;  // 1MB
+
+parameter FLASH_BASE = 32'h0800_0000;
+parameter FLASH_SIZE = 32'h0080_0000;  // 8MB
+
+parameter UART_BASE  = 32'h4000_0000;
+parameter UART_SIZE  = 32'h0000_1000;  // 4KB
+
+parameter GPIO_BASE  = 32'h4001_0000;
+parameter GPIO_SIZE  = 32'h0000_1000;  // 4KB
+
+always @(*) begin
+    sram_cs  = 0;
+    flash_cs = 0;
+    uart_cs  = 0;
+    gpio_cs  = 0;
+
+    if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE)
+        sram_cs = 1;
+    else if (addr >= FLASH_BASE && addr < FLASH_BASE + FLASH_SIZE)
+        flash_cs = 1;
+    else if (addr >= UART_BASE && addr < UART_BASE + UART_SIZE)
+        uart_cs = 1;
+    else if (addr >= GPIO_BASE && addr < GPIO_BASE + GPIO_SIZE)
+        gpio_cs = 1;
+end
+
+endmodule</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 地址空间规划</h2>
+      <h3>典型SoC地址映射表</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>起始地址</th>
+            <th>结束地址</th>
+            <th>大小</th>
+            <th>设备</th>
+            <th>访问属性</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0x0000_0000</td>
+            <td>0x000F_FFFF</td>
+            <td>1MB</td>
+           >ITCM</td>
+            <td>Execute-only</td>
+          </tr>
+          <tr>
+            <td>0x0010_0000</td>
+            <td>0x001F_FFFF</td>
+            <td>1MB</td>
+            <td>DTCM</td>
+            <td>RW, Non-cacheable</td>
+          </tr>
+          <tr>
+            <td>0x0800_0000</td>
+            <td>0x0FFF_FFFF</td>
+            <td>128MB</td>
+            <td>Flash</td>
+            <td>RX, Non-cacheable</td>
+          </tr>
+          <tr>
+            <td>0x2000_0000</td>
+            <td>0x3FFF_FFFF</td>
+            <td>512MB</td>
+            <td>SRAM</td>
+            <td>RW, Cacheable</td>
+          </tr>
+          <tr>
+            <td>0x4000_0000</td>
+            <td>0x5FFF_FFFF</td>
+            <td>512MB</td>
+            <td>AXI外设</td>
+            <td>RW, Non-cacheable</td>
+          </tr>
+          <tr>
+            <td>0x6000_0000</td>
+            <td>0x7FFF_FFFF</td>
+            <td>512MB</td>
+            <td>AHB外设</td>
+            <td>RW, Non-cacheable</td>
+          </tr>
+          <tr>
+            <td>0x8000_0000</td>
+            <td>0x8FFF_FFFF</td>
+            <td>256MB</td>
+            <td>DDR</td>
+            <td>RW, Cacheable</td>
+          </tr>
+          <tr>
+            <td>0xE000_0000</td>
+            <td>0xE00F_FFFF</td>
+            <td>1MB</td>
+            <td>私有外设总线</td>
+            <td>RW, Non-cacheable</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🛡️</span> 内存保护机制</h2>
+      <h3>MPU（Memory Protection Unit）</h3>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">MPU功能</h3>
+          <ul class="feature-list">
+            <li>定义内存区域的访问权限</li>
+            <li>支持特权级和用户级访问</li>
+            <li>可配置的内存区域</li>
+            <li>违规时触发异常</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">访问属性</h3>
+          <ul class="feature-list">
+            <li>Read/Write/Execute权限</li>
+            <li>Cacheable/Non-cacheable</li>
+            <li>Bufferable/Non-bufferable</li>
+            <li>Shareable/Non-shareable</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>MPU配置示例</h3>
+      <div class="code-block">
+<pre>
+// MPU区域配置示例
+// Region 0: Flash (Execute-only)
+MPU_RNR  = 0;
+MPU_RBAR = 0x0800_0000;  // 基地址
+MPU_RASR = (0x1F << 1) |  // Region size: 2^31
+           (0x1 << 28) |  // XN=0 (可执行)
+           (0x0 << 24) |  // AP=0 (只读，特权级)
+           (0x1 << 16);   // Enable region
+
+// Region 1: SRAM (Read/Write, Cacheable)
+MPU_RNR  = 1;
+MPU_RBAR = 0x2000_0000;  // 基地址
+MPU_RASR = (0x1E << 1) |  // Region size: 2^30
+           (0x1 << 28) |  // XN=1 (不可执行)
+           (0x3 << 24) |  // AP=3 (读写，全访问)
+           (0x1 << 2) |   // B=1 (Bufferable)
+           (0x1 << 0);    // C=1 (Cacheable)</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> 地址重映射</h2>
+      <p>地址重映射允许在运行时改变地址空间的映射关系，常用于启动时从Boot ROM切换到外部Flash。</p>
+
+      <div class="code-block">
+<pre>
+// 地址重映射控制器（简化）
+module address_remapper (
+    input  [31:0] addr_in,
+    input        remap_enable,
+    output [31:0] addr_out
+);
+
+// 0x0000_0000: Boot ROM (1KB)
+// 0x0800_0000: External Flash (remap target)
+
+assign addr_out = remap_enable ?
+                  (addr_in < 32'h0000_0400 ? addr_in + 32'h0800_0000 : addr_in) :
+                  addr_in;
+
+endmodule</pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 地址映射设计要点</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">对齐要求</h3>
+          <ul class="feature-list">
+            <li>外设寄存器通常4KB对齐</li>
+            <li>存储器块大小应为2的幂</li>
+            <li>考虑DMA传输的对齐要求</li>
+            <li>Cache line对齐考虑</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">预留空间</h3>
+          <ul class="feature-list">
+            <li>为未来扩展预留地址空间</li>
+            <li>考虑IP升级的地址需求</li>
+            <li>保留一定的地址间隙</li>
+            <li>避免地址碎片化</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">访问属性</h3>
+          <ul class="feature-list">
+            <li>正确配置Cache属性</li>
+            <li>区分可执行和非可执行区域</li>
+            <li>设置适当的访问权限</li>
+            <li>考虑多核的一致性要求</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">安全考虑</h3>
+          <ul class="feature-list">
+            <li>使用MPU保护关键区域</li>
+            <li>隔离安全世界和非安全世界</li>
+            <li>防止未授权的寄存器访问</li>
+            <li>支持TrustZone安全扩展</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 常见问题</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">地址冲突</h3>
+          <p class="card-text">多个设备映射到同一地址空间。解决方法：使用互斥的地址范围，通过译码器确保只有一个设备被选中。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">地址重叠</h3>
+          <p class="card-text">设备地址范围部分重叠。解决方法：明确地址边界，避免重叠区域。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">未映射区域</h3>
+          <p class="card-text">访问未映射的地址空间。解决方法：添加默认错误响应，触发总线异常。</p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">大小不匹配</h3>
+          <p class="card-text">IP要求的地址空间大于分配空间。解决方法：重新规划地址映射或更换IP。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 地址映射是将总线地址映射到具体设备地址的过程</li>
+            <li>• 地址空间规划需要考虑对齐、预留、属性等因素</li>
+            <li>• MPU提供内存保护机制，防止未授权访问</li>
+            <li>• 地址重映射允许运行时改变地址映射关系</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="50-2-SoC架构设计.html">← 上一节</a>
+      <a href="50-4-中断管理.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

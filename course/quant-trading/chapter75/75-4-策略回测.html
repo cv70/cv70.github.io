@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>75.4 策略回测 - 多因子选股策略</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>75.4 策略回测</h1>
+      <p class="subtitle">项目一：多因子选股策略</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握完整的回测流程</li>
+        <li>学会回测参数配置</li>
+        <li>理解交易成本建模</li>
+        <li>能够独立运行策略回测</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="策略回测" class="card-image">
+      <h3 class="card-title">策略回测</h3>
+      <p class="card-text"><strong>策略回测</strong>是验证多因子选股策略有效性的关键环节。本节将详细介绍回测的完整流程和注意事项。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📋</span> 回测流程</h2>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>1. 数据准备</h4>
+            <p>加载历史数据、因子数据，进行数据清洗</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>2. 参数设置</h4>
+            <p>配置回测参数：起始日期、初始资金、手续费等</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>3. 策略初始化</h4>
+            <p>初始化策略，设置调仓频率、选股数量等</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>4. 运行回测</h4>
+            <p>执行策略，记录每笔交易</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>5. 绩效分析</h4>
+            <p>计算各项绩效指标，生成分析报告</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <h4>6. 结果验证</h4>
+            <p>样本外测试，验证策略稳健性</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> 交易成本模型</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title">固定成本</h3>
+          <div class="code-block">
+            <pre><code class="language-python">class FixedCommission(bt.Commission):
+    """
+    固定手续费模型
+    """
+    params = (
+        ('commission', 0.0003),  # 万三手续费
+    )
+
+    def _getcommission(self, size, price, pseudoexec):
+        """计算手续费"""
+        return abs(size) * price * self.p.commission</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">滑点模型</h3>
+          <div class="code-block">
+            <pre><code class="language-python">class PercentageSlippage(bt.Slipper):
+    """
+    百分比滑点模型
+    """
+    params = (
+        ('perc', 0.001),  # 千分之一滑点
+    )
+
+    def _getprice(self, price, pseudoexec):
+        """计算滑点"""
+        if pseudoexec:
+            return price
+        # 买入价上浮，卖出价下浮
+        return price * (1 + self.p.perc)</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">💻</span> 完整回测示例</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def complete_backtest_example():
+    """
+    完整回测示例
+    """
+    # 1. 加载数据
+    start_date = '2015-01-01'
+    end_date = '2023-12-31'
+
+    # 加载因子数据
+    factor_data = load_factor_data(start_date, end_date)
+
+    # 加载收益率数据
+    returns_data = load_returns_data(start_date, end_date)
+
+    # 2. 回测参数配置
+    backtest_params = {
+        'initial_cash': 10000000,  # 初始资金1000万
+        'commission': 0.0003,      # 手续费万三
+        'slippage': 0.001,         # 滑点千一
+        'lookback': 20,            # 因子回看期20天
+        'top_n': 50,               # 选股50只
+        'rebalance_freq': 20,      # 每月调仓
+    }
+
+    # 3. 初始化回测引擎
+    cerebro = bt.Cerebro()
+
+    # 添加策略
+    cerebro.addstrategy(
+        MultiFactorStrategy,
+        lookback=backtest_params['lookback'],
+        top_n=backtest_params['top_n'],
+        rebalance_freq=backtest_params['rebalance_freq']
+    )
+
+    # 加载数据
+    for ticker in factor_data.columns:
+        data = prepare_data_feed(factor_data, returns_data, ticker)
+        cerebro.adddata(data)
+
+    # 设置初始资金
+    cerebro.broker.setcash(backtest_params['initial_cash'])
+
+    # 设置手续费
+    cerebro.broker.setcommission(
+        commission=backtest_params['commission']
+    )
+
+    # 设置滑点
+    cerebro.broker.set_slippage_perc(perc=backtest_params['slippage'])
+
+    # 添加分析器
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+    cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
+    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+
+    # 4. 运行回测
+    print(f'初始资金: {cerebro.broker.getvalue():,.2f}')
+    results = cerebro.run()
+
+    # 5. 分析结果
+    strat = results[0]
+    final_value = cerebro.broker.getvalue()
+
+    print(f'期末资金: {final_value:,.2f}')
+    print(f'总收益率: {(final_value/backtest_params["initial_cash"]-1)*100:.2f}%')
+
+    # 获取绩效指标
+    sharpe = strat.analyzers.sharpe.get_analysis()
+    drawdown = strat.analyzers.drawdown.get_analysis()
+    returns = strat.analyzers.returns.get_analysis()
+    trades = strat.analyzers.trades.get_analysis()
+
+    print(f"夏普比率: {sharpe.get('sharperatio', 0):.2f}")
+    print(f"最大回撤: {drawdown.get('max', {}).get('drawdown', 0):.2f}%")
+    print(f"年化收益: {returns.get('rnorm100', 0):.2f}%")
+
+    # 6. 可视化
+    cerebro.plot(style='candle', barup='red', bardown='green')
+
+    return results
+
+# 运行回测
+results = complete_backtest_example()</code></pre>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 样本外测试</h2>
+      <div class="code-block">
+        <pre><code class="language-python">def out_of_sample_test():
+    """
+    样本外测试
+    """
+    # 训练集：2015-2020
+    train_start = '2015-01-01'
+    train_end = '2020-12-31'
+
+    # 测试集：2021-2023
+    test_start = '2021-01-01'
+    test_end = '2023-12-31'
+
+    # 1. 训练集回测
+    print("========== 训练集回测 ==========")
+    train_results = run_backtest(train_start, train_end)
+
+    # 2. 测试集回测
+    print("\n========== 测试集回测 ==========")
+    test_results = run_backtest(test_start, test_end)
+
+    # 3. 对比分析
+    print("\n========== 对比分析 ==========")
+    print(f"训练集年化收益: {train_results['annual_return']:.2%}")
+    print(f"测试集年化收益: {test_results['annual_return']:.2%}")
+
+    print(f"训练集夏普比率: {train_results['sharpe_ratio']:.2f}")
+    print(f"测试集夏普比率: {test_results['sharpe_ratio']:.2f}")
+
+    print(f"训练集最大回撤: {train_results['max_drawdown']:.2%}")
+    print(f"测试集最大回撤: {test_results['max_drawdown']:.2%}")
+
+    # 判断是否存在过拟合
+    performance_drop = (train_results['annual_return'] -
+                      test_results['annual_return'])
+
+    if performance_drop > 0.05:  # 下降超过5%
+        print("\n⚠️ 警告: 策略可能存在过拟合")
+    else:
+        print("\n✅ 策略表现稳定")
+
+    return train_results, test_results</code></pre>
+      </div>
+    </div>
+
+    <div class="tip-box warning">
+      <span class="icon">⚠️</span>
+      <div class="content">
+        <div class="title">回测常见陷阱</div>
+        <p>1）前视偏差：使用未来数据；2）幸存者偏差：剔除退市股票；3）过拟合：过度优化参数；4）忽略交易成本；5）样本数据不足。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了完整的回测流程</li>
+            <li>• 学会了交易成本建模方法</li>
+            <li>• 实现了完整的策略回测</li>
+            <li>• 理解了样本外测试的重要性</li>
+            <li>• 识别了回测中的常见陷阱</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="75-3-回测框架搭建.html">← 上一节</a>
+      <a href="75-5-结果分析与优化.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

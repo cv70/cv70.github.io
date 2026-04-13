@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.2 时钟电路设计 - 嵌入式硬件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>10.2 时钟电路设计</h1>
+      <p class="subtitle">最小系统设计</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>理解MCU时钟电路的基本原理</li>
+        <li>掌握外部晶振电路的设计方法</li>
+        <li>了解内部时钟和PLL配置</li>
+        <li>能够设计稳定的MCU时钟电路</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=800" alt="时钟电路设计" class="card-image">
+      <h3 class="card-title">时钟电路设计</h3>
+      <p class="card-text"><strong>时钟电路设计</strong>是"最小系统设计"这一章中的第2节内容。
+    时钟信号是MCU的心跳，为所有同步逻辑提供时基。时钟电路设计不当会导致MCU无法启动或工作不稳定。
+    本节将详细介绍MCU时钟电路的设计要点和注意事项。</p>
+    </div>
+
+
+    <div class="content-block">
+      <h2><span class="icon">💡</span> 时钟电路设计全景解析</h2>
+      <div class="grid grid-3">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
+          <h3 class="card-title">Why - 为什么重要</h3>
+          <p class="card-text">时钟是MCU工作的时基，直接影响系统性能和稳定性</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3 class="card-title">What - 核心内容</h3>
+          <p class="card-text">掌握外部晶振电路设计、PLL配置和时钟分配</p>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 1rem;">🏗️</div>
+          <h3 class="card-title">How - 如何落地</h3>
+          <p class="card-text">根据MCU需求设计高稳定性的时钟电路</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚙️</span> MCU时钟源类型</h2>
+
+      <h3>内部时钟源</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>频率</th>
+            <th>精度</th>
+            <th>特点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>内部HSI</td>
+            <td>8MHz/16MHz</td>
+            <td>±1%</td>
+            <td>无需外部元件、快速启动</td>
+            <td>启动时钟、低精度应用</td>
+          </tr>
+          <tr>
+            <td>内部LSI</td>
+            <td>32kHz/40kHz</td>
+            <td>±5%</td>
+            <td>功耗极低</td>
+            <td>RTC、看门狗</td>
+          </tr>
+          <tr>
+            <td>内部MSI</td>
+            <td>100kHz-48MHz</td>
+            <td>±1%</td>
+            <td>多档可调</td>
+            <td>低功耗应用</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>外部时钟源</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>类型</th>
+            <th>频率范围</th>
+            <th>精度</th>
+            <th>特点</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>外部晶振</td>
+            <td>32kHz-48MHz</td>
+            <td>±10-100ppm</td>
+            <td>精度高、稳定</td>
+            <td>主时钟、RTC</td>
+          </tr>
+          <tr>
+            <td>外部时钟</td>
+            <td>DC-100MHz</td>
+            <td>取决于源</td>
+            <td>直接输入</td>
+            <td>从外部获取时钟</td>
+          </tr>
+          <tr>
+            <td>陶瓷谐振器</td>
+            <td>4MHz-20MHz</td>
+            <td>±0.5%</td>
+            <td>成本低、启动快</td>
+            <td>低成本应用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔧</span> 外部晶振电路设计</h2>
+
+      <h3>基本电路结构</h3>
+      <p>典型的外部晶振电路包含：</p>
+      <ul class="feature-list">
+        <li><strong>晶振</strong>：提供精确的振荡频率</li>
+        <li><strong>负载电容</strong>：C1、C2，与晶振的负载电容匹配</li>
+        <li><strong>反馈电阻</strong>：Rf（部分MCU内部集成）</li>
+        <li><strong>限流电阻</strong>：Rext，防止驱动电流过大</li>
+      </ul>
+
+      <h3>负载电容计算</h3>
+      <div class="tip-box info">
+        <span class="icon">ℹ️</span>
+        <div class="content">
+          <div class="title">负载电容计算公式</div>
+          <p><strong>C1 = C2 = 2 × (CL - Cstray)</strong></p>
+          <p>其中：CL = 晶振的负载电容（数据手册给出）</p>
+          <p>Cstray = PCB走线寄生电容（通常取3-5pF）</p>
+          <p>示例：晶振CL=18pF，Cstray=4pF，则C1=C2=2×(18-4)=28pF</p>
+          <p>可选最接近的标称值：27pF或33pF</p>
+        </div>
+      </div>
+
+      <h3>晶振选型要点</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>参数</th>
+            <th>说明</th>
+            <th>选型建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>频率</td>
+            <td>晶振的振荡频率</td>
+            <td>根据MCU要求选择常用频率（8M、12M、16M、25M）</td>
+          </tr>
+          <tr>
+            <td>精度</td>
+            <td>频率偏差范围</td>
+            <td>通信应用选±20ppm，一般应用选±50ppm</td>
+          </tr>
+          <tr>
+            <td>稳定性</td>
+            <td>温度范围内的频率变化</td>
+            <td>宽温应用选高稳定性型号</td>
+          </tr>
+          <tr>
+            <td>负载电容</td>
+            <td>匹配的负载电容值</td>
+            <td>常见值：6pF、9pF、12.5pF、18pF、20pF</td>
+          </tr>
+          <tr>
+            <td>功耗</td>
+            <td>驱动电流</td>
+            <td>低功耗应用选低功耗晶振</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📊</span> 晶振电路布局要点</h2>
+
+      <h3>PCB布局原则</h3>
+      <ul class="feature-list">
+        <li><strong>靠近MCU</strong>：晶振尽可能靠近MCU的时钟引脚</li>
+        <li><strong>走线最短</strong>：晶振到MCU的走线尽量短</li>
+        <li><strong>对称走线</strong>：XIN和XOUT走线长度和特性阻抗对称</li>
+        <li><strong>地平面保护</strong>：晶振下方铺设完整地平面</li>
+        <li><strong>避免干扰</strong>：远离高速信号和电源线</li>
+      </ul>
+
+      <h3>常见问题</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>问题</th>
+            <th>原因</th>
+            <th>解决方案</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>晶振不起振</td>
+            <td>负载电容不匹配、走线过长</td>
+            <td>调整电容值、缩短走线</td>
+          </tr>
+          <tr>
+            <td>频率偏移</td>
+            <td>负载电容误差、温度变化</td>
+            <td>选用高精度晶振、调整电容值</td>
+          </tr>
+          <tr>
+            <td>波形失真</td>
+            <td>过驱动、负载电容过小</td>
+            <td>增加限流电阻、调整电容</td>
+          </tr>
+          <tr>
+            <td>启动慢</td>
+            <td>负载电容过大、晶振质量差</td>
+            <td>减小电容、更换晶振</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔄</span> PLL配置</h2>
+
+      <h3>PLL工作原理</h3>
+      <p>PLL（锁相环）用于倍频和分频：</p>
+      <ul class="feature-list">
+        <li><strong>输入分频</strong>：将输入时钟分频</li>
+        <li><strong>压控振荡器</strong>：产生高频振荡信号</li>
+        <li><strong>反馈分频</strong>：将输出时钟分频反馈</li>
+        <li><strong>相位比较</strong>：比较参考时钟和反馈时钟</li>
+        <li><strong>输出分频</strong>：产生所需的输出频率</li>
+      </ul>
+
+      <h3>PLL配置示例</h3>
+      <div class="tip-box info">
+        <span class="icon">ℹ️</span>
+        <div class="content">
+          <div class="title">STM32 PLL配置示例</div>
+          <p>输入：8MHz外部晶振</p>
+          <p>目标：72MHz系统时钟</p>
+          <p>配置：PLLM=1, PLLN=9, PLLP=2</p>
+          <p>计算：8MHz × 9 ÷ 2 = 36MHz × 2 = 72MHz</p>
+          <p>注意：必须确保PLL输出频率在MCU规格范围内</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">⚠️</span> 时钟电路注意事项</h2>
+      <ul class="feature-list">
+        <li><strong>启动时间</strong>：考虑晶振启动时间，确保复位时间足够</li>
+        <li><strong>时钟切换</strong>：时钟切换时要确保无毛刺</li>
+        <li><strong>EMI问题</strong>：高频时钟是EMI的主要来源之一</li>
+        <li><strong>低功耗</strong>：不用的时钟源要关闭</li>
+        <li><strong>精度要求</strong>：通信和RTC应用注意时钟精度</li>
+      </ul>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">最佳实践</div>
+        <p>时钟电路设计建议：1）优先使用MCU推荐的晶振型号和参数；
+        2）晶振电路尽可能靠近MCU时钟引脚；3）使用厂商推荐的PCB布局；
+        4）预留测试点方便测量时钟波形；5）通信应用选用高精度晶振；
+        6）RTC选用32.768kHz晶振；7）低功耗应用尽量用内部时钟。</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 理解了MCU内部时钟源和外部时钟源的特点</li>
+            <li>• 掌握了外部晶振电路的设计方法和负载电容计算</li>
+            <li>• 学会了晶振电路的PCB布局要点</li>
+            <li>• 能够设计稳定可靠的MCU时钟电路</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="10-1-电源电路设计.html">← 上一节</a>
+      <a href="10-3-复位电路设计.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

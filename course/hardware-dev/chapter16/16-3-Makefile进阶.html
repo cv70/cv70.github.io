@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.3 Makefile进阶 - 嵌入式软件开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+  <div class="container" style="padding: 0;">
+    <header class="page-header">
+      <h1>16.3 Makefile进阶</h1>
+      <p class="subtitle">构建系统与工具链</p>
+    </header>
+
+    <div class="content-block animate-fade-in-up">
+      <h2><span class="icon">🎯</span> 学习目标</h2>
+      <ul class="feature-list">
+        <li>掌握Makefile的基本语法和规则</li>
+        <li>理解变量、函数和条件判断</li>
+        <li>学会编写模块化的Makefile</li>
+        <li>能够组织大型嵌入式项目的构建</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <img src="https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=800" alt="Makefile进阶" class="card-image">
+      <h3 class="card-title">Makefile进阶</h3>
+      <p class="card-text"><strong>Makefile进阶</strong>是"构建系统与工具链"这一章中的第3节内容。
+    Make是Unix/Linux系统中最流行的构建工具，通过编写Makefile可以自动化编译过程。
+    本节将深入讲解Makefile的高级特性，帮助你构建高效的嵌入式项目构建系统。</p>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📐</span> Makefile基本结构</h2>
+      <h3>规则语法</h3>
+      <pre><code class="language-makefile">目标: 依赖1 依赖2 ...
+    命令1
+    命令2
+    ...
+
+# 示例
+main.o: main.c main.h
+    arm-none-eabi-gcc -c -O2 -Wall $< -o $@</code></pre>
+
+      <h3>核心概念</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>概念</th>
+            <th>说明</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>目标(Target)</td>
+            <td>要生成的文件</td>
+            <td>main.elf</td>
+          </tr>
+          <tr>
+            <td>依赖(Prerequisite)</td>
+            <td>生成目标所需的文件</td>
+            <td>main.o utils.o</td>
+          </tr>
+          <tr>
+            <td>命令(Command)</td>
+            <td>生成目标的shell命令</td>
+            <td>gcc -c main.c</td>
+          </tr>
+          <tr>
+            <td>伪目标</td>
+            <td>不对应文件的标签</td>
+            <td>clean、all</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>自动变量</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>变量</th>
+            <th>含义</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>$@</td>
+            <td>当前目标文件名</td>
+            <td>main.o</td>
+          </tr>
+          <tr>
+            <td>$&lt;</td>
+            <td>第一个依赖文件名</td>
+            <td>main.c</td>
+          </tr>
+          <tr>
+            <td>$^</td>
+            <td>所有依赖文件（去重）</td>
+            <td>main.c utils.c</td>
+          </tr>
+          <tr>
+            <td>$+</td>
+            <td>所有依赖文件（不去重）</td>
+            <td>main.c main.c</td>
+          </tr>
+          <tr>
+            <td>$?</td>
+            <td>比目标新的依赖</td>
+            <td>main.c</td>
+          </tr>
+          <tr>
+            <td>$*</td>
+            <td>目标的主文件名</td>
+            <td>main</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🔤</span> 变量定义</h2>
+      <h3>变量类型</h3>
+      <pre><code class="language-makefile"># 简单变量（:= 立即求值）
+CC := arm-none-eabi-gcc
+CFLAGS := -Wall -O2
+
+# 递归变量（= 延迟求值）
+SRC = $(wildcard *.c)
+
+# 条件赋值（?= 未定义时赋值）
+DEBUG_LEVEL ?= 0
+
+# 追加赋值（+=）
+CFLAGS += -g
+
+# shell命令
+TODAY := $(shell date +%Y-%m-%d)</code></pre>
+
+      <h3>内置变量</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>变量</th>
+            <th>默认值</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CC</td>
+            <td>cc</td>
+            <td>C编译器</td>
+          </tr>
+          <tr>
+            <td>CXX</td>
+            <td>g++</td>
+            <td>C++编译器</td>
+          </tr>
+          <tr>
+            <td>LD</td>
+            <td>ld</td>
+            <td>链接器</td>
+          </tr>
+          <tr>
+            <td>AR</td>
+            <td>ar</td>
+            <td>归档工具</td>
+          </tr>
+          <tr>
+            <td>RANLIB</td>
+            <td>ranlib</td>
+            <td>归档索引工具</td>
+          </tr>
+          <tr>
+            <td>CFLAGS</td>
+            <td>-</td>
+            <td>C编译选项</td>
+          </tr>
+          <tr>
+            <td>CXXFLAGS</td>
+            <td>-</td>
+            <td>C++编译选项</td>
+          </tr>
+          <tr>
+            <td>LDFLAGS</td>
+            <td>-</td>
+            <td>链接选项</td>
+          </tr>
+          <tr>
+            <td>CPPFLAGS</td>
+            <td>-</td>
+            <td>C预处理器选项</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🎨</span> 文本处理函数</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>函数</th>
+            <th>语法</th>
+            <th>功能</th>
+            <th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>wildcard</td>
+            <td>$(wildcard pattern)</td>
+            <td>匹配文件</td>
+            <td>$(wildcard *.c)</td>
+          </tr>
+          <tr>
+            <td>patsubst</td>
+            <td>$(patsubst pattern,replacement)</td>
+            <td>模式替换</td>
+            <td>$(patsubst %.c,%.o,$(SRC))</td>
+          </tr>
+          <tr>
+            <td>subst</td>
+            <td>$(subst from,to,text)</td>
+            <td>字符串替换</td>
+            <td>$(subst .c,.o,$(SRC))</td>
+          </tr>
+          <tr>
+            <td>addprefix</td>
+            <td>$(addprefix prefix,names...)</td>
+            <td>添加前缀</td>
+            <td>$(addprefix src/,$(SRC))</td>
+          </tr>
+          <tr>
+            <td>addsuffix</td>
+            <td>$(addsuffix suffix,names...)</td>
+            <td>添加后缀</td>
+            <td>$(addsuffix .o,$(OBJS))</td>
+          </tr>
+          <tr>
+            <td>basename</td>
+            <td>$(basename names...)</td>
+            <td>取文件名</td>
+            <td>$(basename foo.c) → foo</td>
+          </tr>
+          <tr>
+            <td>notdir</td>
+            <td>$(notdir names...)</td>
+            <td>去目录</td>
+            <td>$(notdir src/foo.c) → foo.c</td>
+          </tr>
+          <tr>
+            <td>dir</td>
+            <td>$(dir names...)</td>
+            <td>取目录</td>
+            <td>$(dir src/foo.c) → src/</td>
+          </tr>
+          <tr>
+            <td>filter</td>
+            <td>$(filter pattern...,text)</td>
+            <td>过滤匹配</td>
+            <td>$(filter %.c,$(FILES))</td>
+          </tr>
+          <tr>
+            <td>filter-out</td>
+            <td>$(filter-out pattern...,text)</td>
+            <td>过滤不匹配</td>
+            <td>$(filter-out %.c,$(FILES))</td>
+          </tr>
+          <tr>
+            <td>foreach</td>
+            <td>$(foreach var,list,text)</td>
+            <td>循环遍历</td>
+            <td>$(foreach f,$(SRC),$(f:.c=.o))</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>条件判断函数</h3>
+      <pre><code class="language-makefile"># if语法
+ifeq ($(DEBUG),1)
+    CFLAGS += -g -DDEBUG
+else
+    CFLAGS += -O2 -DNDEBUG
+endif
+
+# ifneq语法
+ifneq ($(V),)
+    QUIET :=
+else
+    QUIET := @
+endif
+
+# ifdef语法
+ifdef USE_HAL
+    CFLAGS += -DUSE_HAL_DRIVER
+endif
+
+# ifndef语法
+ifndef VERBOSE
+    .SILENT:
+endif</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">🏗️</span> 嵌入式Makefile模板</h2>
+      <pre><code class="language-makefile"># ==================== 配置部分 ====================
+TARGET := firmware.elf
+CC := arm-none-eabi-gcc
+LD := arm-none-eabi-gcc
+OBJCOPY := arm-none-eabi-objcopy
+SIZE := arm-none-eabi-size
+
+# 编译选项
+CFLAGS := -Wall -Wextra -Werror
+CFLAGS += -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
+CFLAGS += -ffunction-sections -fdata-sections
+CFLAGS += -DSTM32F407xx -DUSE_HAL_DRIVER
+
+# 调试/发布配置
+DEBUG ?= 0
+ifeq ($(DEBUG),1)
+    CFLAGS += -g -Og -DDEBUG
+else
+    CFLAGS += -Os -DNDEBUG
+endif
+
+# 链接选项
+LDFLAGS := -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
+LDFLAGS += -specs=nano.specs -specs=nosys.specs
+LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(TARGET:.elf=.map)
+
+# 包含路径
+INC_DIRS := ./Inc
+INC_DIRS += ./Drivers/STM32F4xx_HAL_Driver/Inc
+INC_DIRS += ./Drivers/CMSIS/Device/ST/STM32F4xx/Include
+INC_DIRS += ./Drivers/CMSIS/Include
+
+INCLUDES := $(addprefix -I,$(INC_DIRS))
+
+# 源文件
+SRC_DIRS := ./Src
+SRC_DIRS += ./Drivers/STM32F4xx_HAL_Driver/Src
+
+SRC := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))
+
+# 目标文件
+OBJ := $(SRC:.c=.o)
+OBJ += $(ASM:.s=.o)
+
+# ==================== 规则部分 ====================
+.PHONY: all clean flash
+
+all: $(TARGET) $(TARGET:.elf=.hex) $(TARGET:.elf=.bin)
+    @$(SIZE) $(TARGET)
+
+$(TARGET): $(OBJ)
+    @echo "  LD      $@"
+    $(QUIET)$(LD) $(LDFLAGS) $(OBJ) -o $@
+
+%.hex: %.elf
+    @echo "  HEX     $@"
+    $(QUIET)$(OBJCOPY) -O ihex $< $@
+
+%.bin: %.elf
+    @echo "  BIN     $@"
+    $(QUIET)$(OBJCOPY) -O binary $< $@
+
+%.o: %.c
+    @echo "  CC      $<"
+    $(QUIET)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+%.o: %.s
+    @echo "  AS      $<"
+    $(QUIET)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+clean:
+    @echo "  CLEAN"
+    $(QUIET)rm -f $(OBJ) $(TARGET) $(TARGET:.elf=.map)
+    $(QUIET)rm -f $(TARGET:.elf=.hex) $(TARGET:.elf=.bin)
+
+flash: all
+    @echo "  FLASH   $(TARGET:.elf=.hex)"
+    st-flash write $(TARGET:.elf=.hex) 0x8000000
+
+# ==================== 依赖关系 ====================
+-include $(OBJ:.o=.d)</code></pre>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📦</span> 模块化组织</h2>
+      <h3>多文件结构</h3>
+      <pre><code class="language-bash">project/
+├── Makefile          # 主Makefile
+├── config.mk         # 配置文件
+├── src/
+│   └── Makefile      # 源文件Makefile
+├── lib/
+│   ├── lib1/
+│   │   └── Makefile
+│   └── lib2/
+│       └── Makefile
+└── build/
+    └── Makefile      # 构建文件Makefile</code></pre>
+
+      <h3>包含其他Makefile</h3>
+      <pre><code class="language-makefile"># 包含配置文件
+include config.mk
+
+# 包含子目录
+include src/Makefile
+include lib/lib1/Makefile
+include lib/lib2/Makefile</code></pre>
+    </div>
+
+    <div class="tip-box success">
+      <span class="icon">✨</span>
+      <div class="content">
+        <div class="title">Makefile最佳实践</div>
+        <p>1）使用变量提高可维护性
+        2）使用模式规则简化编译规则
+        3）生成自动依赖关系
+        4）使用伪目标（.PHONY）
+        5）添加详细注释
+        6）分离配置和规则
+        7）使用自动变量简化命令
+        8）合理使用函数处理文件列表</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <h2><span class="icon">📝</span> 本节小结</h2>
+      <div class="tip-box success">
+        <span class="icon">✅</span>
+        <div class="content">
+          <ul style="list-style: none; padding: 0;">
+            <li>• 掌握了Makefile的基本语法</li>
+            <li>• 理解了变量和函数的使用</li>
+            <li>• 学会了编写模块化Makefile</li>
+            <li>• 能够组织大型项目的构建</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="chapter-nav">
+      <a href="16-2-GCC编译选项详解.html">← 上一节</a>
+      <a href="16-4-CMake构建系统.html">下一节 →</a>
+    </div>
+  </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

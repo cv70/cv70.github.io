@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.4 时钟与复位生成 - 芯片设计开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.4 时钟与复位生成</h1>
+          <p class="subtitle">仿真环境的时序控制</p>
+        </header>
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握时钟生成方法</li>
+            <li>学习复位序列设计</li>
+            <li>了解多时钟域处理</li>
+            <li>学会时钟偏移模拟</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card-title">时钟与复位概述</h3>
+          <p class="card-text">
+            <strong>时钟和复位</strong>是数字系统运行的基础。在Testbench中正确生成时钟和复位信号，对于准确验证DUT功能至关重要。
+          </p>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">⏰</span> 时钟生成方法</h2>
+          <div class="code-block">
+<pre// 基本时钟生成
+parameter CLK_PERIOD = 10;  // 100MHz
+
+reg clk;
+initial begin
+    clk = 0;
+    forever #(CLK_PERIOD/2) clk = ~clk;
+end
+
+// 多相位时钟
+reg clk_0, clk_90, clk_180, clk_270;
+initial begin
+    clk_0 = 0; clk_90 = 0; clk_180 = 0; clk_270 = 0;
+    forever begin
+        #(CLK_PERIOD/4) clk_0   = ~clk_0;
+        #(CLK_PERIOD/4) clk_90  = ~clk_90;
+        #(CLK_PERIOD/4) clk_180 = ~clk_180;
+        #(CLK_PERIOD/4) clk_270 = ~clk_270;
+    end
+end
+
+// 可变占空比时钟
+parameter CLK_HIGH = 3;
+parameter CLK_LOW  = 7;
+reg clk_var;
+initial begin
+    clk_var = 0;
+    forever begin
+        #CLK_HIGH clk_var = 1;
+        #CLK_LOW  clk_var = 0;
+    end
+end</pre>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 复位生成</h2>
+          <div class="code-block">
+<pre// 同步复位序列
+reg rst_n;
+initial begin
+    rst_n = 0;
+    #(CLK_PERIOD * 5);  // 复位保持5个时钟周期
+    rst_n = 1;
+end
+
+// 异步复位序列
+initial begin
+    rst_n = 0;
+    repeat(10) @(posedge clk);
+    @(negedge clk);  // 在时钟下降沿释放复位
+    rst_n = 1;
+end
+
+// 多次复位测试
+task apply_reset;
+    input [7:0] cycles;
+    begin
+        rst_n = 0;
+        repeat(cycles) @(posedge clk);
+        @(negedge clk);
+        rst_n = 1;
+    end
+endtask
+
+initial begin
+    apply_reset(5);
+    // 运行测试
+    apply_reset(10);  // 再次复位
+end</pre>
+          </div>
+        </div>
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <p>复位释放的时机很重要，应该在时钟的稳定边沿释放，避免产生亚稳态。异步复位应该同步释放。</p>
+          </div>
+        </div>
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 使用forever循环生成时钟信号</li>
+                <li>• 复位应该保持足够长的时间</li>
+                <li>• 复位释放应避免亚稳态</li>
+                <li>• 使用任务封装复位逻辑</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chapter-nav">
+          <a href="20-3-响应检查方法.html">← 上一节</a>
+          <a href="20-5-文件IO操作.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>
