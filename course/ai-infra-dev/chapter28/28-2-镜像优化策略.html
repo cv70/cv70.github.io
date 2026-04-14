@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.2 镜像优化策略 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>28.2 镜像优化策略</h1>
+          <p class="subtitle">减少镜像体积与提高构建效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握减少AI镜像体积的多种技巧</li>
+            <li>学会优化镜像构建速度</li>
+            <li>理解镜像分层的原理</li>
+            <li>了解AI特有的优化策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="镜像优化" class="card-image">
+          <h3 class="card-title">镜像优化的重要性</h3>
+          <p class="card-text">
+            AI镜像通常体积较大（几GB到几十GB），优化镜像可以显著减少存储成本、
+            提高部署速度、降低网络带宽消耗。有效的优化策略可以减少50-90%的镜像体积。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 镜像大小分析</h2>
+
+          <h3>分析工具</h3>
+          <div class="code-block">
+# 使用docker history查看各层大小
+docker history myapp:latest
+
+# 使用dive深入分析
+dive myapp:latest
+
+# 输出示例：
+# Layer: 502MB
+#   - /usr/local/cuda: 450MB
+#   - /usr/local/lib/python3.10/site-packages: 30MB
+# Layer: 200MB
+#   - /app/models: 180MB
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">AI镜像典型组成</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 基础镜像（CUDA）：1-3GB</li>
+                <li>• 深度学习框架：500MB-2GB</li>
+                <li>• Python依赖：500MB-1GB</li>
+                <li>• 模型文件：100MB-10GB+</li>
+                <li>• 应用代码：10-100MB</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 基础镜像优化</h2>
+
+          <h3>选择最小化基础镜像</h3>
+          <div class="code-block">
+# ❌ 避免使用过于臃肿的镜像
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04  # ~4GB
+
+# ✅ 使用运行时镜像
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04  # ~2GB
+
+# ✅ 使用精简版基础镜像
+FROM ubuntu:22.04  # ~70MB
+# + 单独安装CUDA Runtime
+          </div>
+
+          <h3>Alpine替代方案</h3>
+          <div class="code-block">
+# Python AI应用（需谨慎使用Alpine）
+FROM python:3.10-alpine
+
+# 安装必要的系统库
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc \
+    libgomp \
+    ca-certificates
+
+# 注意：某些Python包在Alpine上需要特殊处理
+# NumPy, SciPy等可能需要编译
+# PyTorch/ TensorFlow官方不提供Alpine版本
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">Alpine与CUDA</div>
+              <p>Alpine Linux与CUDA兼容性较差，GPU应用建议使用Ubuntu或Debian基础镜像。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 依赖优化</h2>
+
+          <h3>精确指定依赖版本</h3>
+          <div class="code-block">
+# ❌ 不好的做法
+pip install transformers
+
+# ✅ 好的做法
+pip install transformers==4.27.4
+
+# ✅ 更好的做法（固定传递依赖）
+pip install --no-deps transformers==4.27.4
+pip install tokenizers==0.13.3
+pip install filelock==3.11.0
+# 只列出直接依赖
+          </div>
+
+          <h3>排除不必要的依赖</h3>
+          <div class="code-block">
+# 只安装运行时依赖
+pip install --no-cache-dir \
+    torch==2.0.0 \
+    torchvision==0.15.0
+
+# 不安装开发依赖
+# dev: pytest, black, mypy, etc.
+
+# 排除可选依赖
+pip install --no-cache-dir \
+    package[core]  # 只安装核心功能
+          </div>
+
+          <h3>使用wheel包</h3>
+          <div class="code-block">
+# 预下载wheel包
+pip download --platform manylinux2014_x86_64 \
+    --only-binary=:all: \
+    --dest /wheels \
+    -r requirements.txt
+
+# 从本地wheel安装（避免编译）
+pip install --no-cache-dir --no-index \
+    --find-links=/wheels \
+    -r requirements.txt
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗂️</span> 层合并优化</h2>
+
+          <h3>减少层数量</h3>
+          <div class="code-block">
+# ❌ 多个小层
+FROM python:3.10
+RUN apt-get update
+RUN apt-get install -y package1
+RUN apt-get install -y package2
+RUN rm -rf /var/lib/apt/lists/*
+
+# ✅ 合并为一层
+FROM python:3.10
+RUN apt-get update && \
+    apt-get install -y package1 package2 && \
+    rm -rf /var/lib/apt/lists/*
+          </div>
+
+          <h3>利用构建缓存</h3>
+          <div class="code-block">
+# ✅ 从不常变化的文件开始
+FROM python:3.10-slim
+
+# 1. 复制依赖文件（很少变化）
+COPY requirements.txt /tmp/
+RUN pip install -r /tmp/requirements.txt
+
+# 2. 复制配置文件（偶尔变化）
+COPY config.yaml /app/
+
+# 3. 复制源代码（经常变化）
+COPY src/ /app/src/
+
+# 4. 复制模型文件（很少变化）
+COPY models/ /app/models/
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">层缓存原则</div>
+              <p>将不常变化的指令放在前面，常变化的指令放在后面，最大化利用Docker层缓存。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗑️</span> 清理冗余文件</h2>
+
+          <h3>清理APT缓存</h3>
+          <div class="code-block">
+# ✅ 清理APT缓存和临时文件
+RUN apt-get update && \
+    apt-get install -y package && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# 使用--no-install-recommends
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    package && \
+    rm -rf /var/lib/apt/lists/*
+          </div>
+
+          <h3>清理Pip缓存</h3>
+          <div class="code-block">
+# ✅ 不缓存下载的包
+pip install --no-cache-dir package
+
+# ✅ 清理构建临时文件
+RUN pip install --no-cache-dir -r requirements.txt && \
+    rm -rf /root/.cache/pip/*
+          </div>
+
+          <h3>清理Python缓存</h3>
+          <div class="code-block">
+# ✅ 删除__pycache__
+RUN find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# ✅ 删除.pyc文件
+RUN find /app -type f -name "*.pyc" -delete
+
+# ✅ 在.dockerignore中排除
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> AI特有优化</h2>
+
+          <h3>模型文件优化</h3>
+          <div class="code-block">
+# ✅ 使用量化模型
+# 原始模型: model.pt (500MB)
+# 量化模型: model_quant.pt (125MB)
+
+# ✅ 使用共享卷
+# 不将模型打包到镜像中
+FROM python:3.10
+# 镜像不包含模型
+# 模型通过挂载卷或下载获取
+
+# ✅ 使用模型仓库
+FROM python:3.10
+COPY download_model.sh /app/
+RUN chmod +x /app/download_model.sh
+# 运行时下载模型
+          </code-block>
+
+          <h3>框架优化</h3>
+          <div class="code-block">
+# ✅ 使用推理优化框架
+# PyTorch -> TorchScript
+import torch
+model = torch.load('model.pt')
+traced_model = torch.jit.trace(model, example_input)
+traced_model.save('model_traced.pt')
+
+# TensorFlow -> TensorFlow Lite
+import tensorflow as tf
+converter = tf.lite.TFLiteConverter.from_saved_model('saved_model')
+tflite_model = converter.convert()
+with open('model.tflite', 'wb') as f:
+    f.write(tflite_model)
+
+# ONNX格式（跨框架通用）
+import torch
+model = torch.load('model.pt')
+torch.onnx.export(model, example_input, 'model.onnx')
+          </code-block>
+
+          <h3>库文件优化</h3>
+          <div class="code-block">
+# ✅ 只安装需要的CUDA库
+FROM nvidia/cuda:11.8.0-base-ubuntu22.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libnvinfer8=8.6.1.6-1 \
+        libnvinfer-plugin8=8.6.1.6-1 \
+        libcudnn8=8.9.2.26-1+cuda11.8 \
+        && rm -rf /var/lib/apt/lists/*
+
+# ✅ 使用动态链接而非静态
+# 静态链接: 50MB+
+# 动态链接: 共享库 10MB
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 构建速度优化</h2>
+
+          <h3>并行构建</h3>
+          <div class="code-block">
+# 使用BuildKit并行层
+# syntax=docker/dockerfile:1
+FROM python:3.10
+
+# 并行下载多个包
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+    package1 package2 package3 package4
+
+# 多阶段构建可并行
+FROM builder1 AS stage1
+...
+
+FROM builder2 AS stage2
+...
+
+# 最终镜像合并
+FROM final
+COPY --from=stage1 /app1 /app/
+COPY --from=stage2 /app2 /app/
+          </code-block>
+
+          <h3>缓存挂载</h3>
+          <div class="code-block">
+# 使用BuildKit缓存挂载
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y package
+
+# 缓存Pip下载
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+          </code-block>
+
+          <h3>远程缓存</h3>
+          <div class="code-block">
+# 使用Registry作为缓存
+docker buildx build \
+  --cache-from type=registry,ref=myapp:cache \
+  --cache-to type=registry,ref=myapp:cache,mode=max \
+  -t myapp:latest .
+
+# 使用本地缓存
+docker buildx build \
+  --cache-from type=local,src=/path/to/cache \
+  --cache-to type=local,dest=/path/to/cache \
+  -t myapp:latest .
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 优化效果对比</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>优化策略</th>
+                <th>优化前</th>
+                <th>优化后</th>
+                <th>减少比例</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>使用运行时镜像</td>
+                <td>4.2 GB</td>
+                <td>2.1 GB</td>
+                <td>50%</td>
+              </tr>
+              <tr>
+                <td>多阶段构建</td>
+                <td>2.1 GB</td>
+                <td>1.3 GB</td>
+                <td>38%</td>
+              </tr>
+              <tr>
+                <td>清理缓存</td>
+                <td>1.3 GB</td>
+                <td>1.1 GB</td>
+                <td>15%</td>
+              </tr>
+              <tr>
+                <td>模型外部化</td>
+                <td>1.1 GB</td>
+                <td>300 MB</td>
+                <td>73%</td>
+              </tr>
+              <tr>
+                <td>总计</td>
+                <td>4.2 GB</td>
+                <td>300 MB</td>
+                <td>93%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">优化收益</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 存储成本降低90%+</li>
+                <li>• 镜像拉取速度提升5-10倍</li>
+                <li>• 部署时间减少50-70%</li>
+                <li>• 网络带宽消耗大幅降低</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与验证</h2>
+
+          <h3>持续监控镜像大小</h3>
+          <div class="code-block">
+# CI/CD中集成镜像大小检查
+IMAGE_SIZE=$(docker images myapp:latest --format "{{.Size}}")
+echo "Image size: $IMAGE_SIZE"
+
+# 设置阈值
+if [ "$(docker images myapp:latest --format "{{.Size}}")" \
+     -gt "500MB" ]; then
+    echo "Error: Image too large!"
+    exit 1
+fi
+          </div>
+
+          <h3>验证功能完整性</h3>
+          <div class="code-block">
+# 确保优化不影响功能
+docker run --rm myapp:latest python -c "import torch; print(torch.cuda.is_available())"
+docker run --rm myapp:latest python -c "from transformers import pipeline; print('OK')"
+docker run --rm myapp:latest pytest tests/
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践总结</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 选择最小化的基础镜像</li>
+              <li>• 使用多阶段构建分离构建和运行时</li>
+              <li>• 精确管理依赖版本</li>
+              <li>• 及时清理缓存和临时文件</li>
+              <li>• 将大文件（模型、数据）外部化</li>
+              <li>• 利用BuildKit加速构建</li>
+              <li>• 持续监控和验证</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 镜像优化可减少50-90%的体积</li>
+                <li>• 多阶段构建是最有效的优化手段</li>
+                <li>• AI场景需特别关注模型和框架优化</li>
+                <li>• 优化后必须验证功能完整性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="28-1-AI容器镜像构建.html">← 上一节</a>
+          <a href="28-3-容器安全.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.4 DeepSpeed配置详解 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>18.4 DeepSpeed配置详解</h1>
+          <p class="subtitle">全面掌握DeepSpeed配置选项</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握DeepSpeed配置文件的结构</li>
+            <li>理解各个配置选项的含义</li>
+            <li>学会针对不同场景调优配置</li>
+            <li>了解配置最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="DeepSpeed配置" class="card-image">
+          <h3 class="card-title">DeepSpeed配置概述</h3>
+          <p class="card-text">
+            DeepSpeed通过JSON配置文件控制训练行为。配置文件包含多个部分：
+            训练批次、优化器、ZeRO设置、混合精度、梯度累积、流水线并行等。
+            正确的配置是高效训练的关键，需要根据模型规模、硬件配置等仔细调优。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 配置文件结构</h2>
+          <div class="card">
+            <h3 class="card-title">完整配置模板</h3>
+            <div class="code-block">
+{
+    // ========== 基本训练配置 ==========
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 1,
+    "gradient_accumulation_steps": 1,
+
+    // ========== 优化器配置 ==========
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 1e-4,
+            "betas": [0.9, 0.999],
+            "eps": 1e-8,
+            "weight_decay": 0.01
+        }
+    },
+
+    // ========== 学习率调度器 ==========
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "total_num_steps": 100000,
+            "warmup_min_lr": 0,
+            "warmup_max_lr": 1e-4,
+            "warmup_num_steps": 10000
+        }
+    },
+
+    // ========== 混合精度 ==========
+    "fp16": {
+        "enabled": true,
+        "loss_scale": 0,
+        "initial_scale_power": 16,
+        "loss_scale_window": 1000,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+
+    // ========== BF16精度 ==========
+    "bf16": {
+        "enabled": false
+    },
+
+    // ========== 梯度裁剪 ==========
+    "gradient_clipping": 1.0,
+
+    // ========== ZeRO优化 ==========
+    "zero_optimization": {
+        "stage": 2,
+        "offload_optimizer": {
+            "device": "none"
+        },
+        "offload_param": {
+            "device": "none"
+        },
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "reduce_bucket_size": "auto",
+        "stage3_prefetch_bucket_size": "auto",
+        "stage3_param_persistence_threshold": "auto"
+    },
+
+    // ========== 流水线并行 ==========
+    "pipeline": {
+        "enabled": false,
+        "parallel_size": 1,
+        "schedule": "1f1b",
+        "activation_checkpointing": false
+    },
+
+    // ========== 激活值检查点 ==========
+    "activation_checkpointing": {
+        "partition_activations": false,
+        "cpu_checkpointing": false,
+        "contiguous_memory_optimization": false,
+        "number_checkpoints": null
+    },
+
+    // ========== 分布式训练 ==========
+    "communication_data_type": "fp16",
+    "prescale_gradients": false,
+    "postscale_gradients": false,
+
+    // ========== 训练监控 ==========
+    "steps_per_print": 10,
+    "gradient_accumulation_steps": 1,
+    "wall_clock_breakdown": false,
+
+    // ========== 数据加载 ==========
+    "data_efficiency": {
+        "enabled": false,
+        "data_sampling": null
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 批次配置</h2>
+          <div class="card">
+            <h3 class="card-title">批次大小相关配置</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>说明</th>
+                  <th>计算公式</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>train_batch_size</strong></td>
+                  <td>全局批次大小</td>
+                  <td>micro_batch_size × gradient_accumulation × num_gpus</td>
+                </tr>
+                <tr>
+                  <td><strong>train_micro_batch_size_per_gpu</strong></td>
+                  <td>每个GPU的微批次大小</td>
+                  <td>通常1-16</td>
+                </tr>
+                <tr>
+                  <td><strong>gradient_accumulation_steps</strong></td>
+                  <td>梯度累积步数</td>
+                  <td>train_batch_size / (micro_batch_size × num_gpus)</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+示例计算：
+
+硬件：8 GPU
+目标全局批次：512
+每GPU微批次：4
+
+gradient_accumulation_steps = 512 / (4 × 8) = 16
+
+配置：
+{
+    "train_batch_size": 512,
+    "train_micro_batch_size_per_gpu": 4,
+    "gradient_accumulation_steps": 16
+}
+
+效果：
+• 每个GPU处理4个样本
+• 累积16步后更新参数
+• 等效于每个GPU处理64个样本
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 优化器配置</h2>
+          <div class="card">
+            <h3 class="card-title">优化器类型与参数</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>优化器</th>
+                  <th>类型</th>
+                  <th>适用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>AdamW</strong></td>
+                  <td>AdamW</td>
+                  <td>Transformer模型</td>
+                </tr>
+                <tr>
+                  <td><strong>Adam</strong></td>
+                  <td>Adam</td>
+                  <td>通用场景</td>
+                </tr>
+                <tr>
+                  <td><strong>Lamb</strong></td>
+                  <td>LAMB</td>
+                  <td>大batch训练</td>
+                </tr>
+                <tr>
+                  <td><strong>SGD</strong></td>
+                  <td>SGD</td>
+                  <td>CNN模型</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+AdamW配置示例：
+
+{
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 1e-4,              // 学习率
+            "betas": [0.9, 0.999],  // Adam beta参数
+            "eps": 1e-8,            // 数值稳定性
+            "weight_decay": 0.01,    // 权重衰减
+            "correct_bias": true     // 偏差修正
+        }
+    }
+}
+
+LAMB配置示例（大batch训练）：
+
+{
+    "optimizer": {
+        "type": "Lamb",
+        "params": {
+            "lr": 0.01,             // LAMB需要较大的lr
+            "betas": [0.9, 0.999],
+            "eps": 1e-6,
+            "weight_decay": 0.01
+        }
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎛️</span> ZeRO配置详解</h2>
+          <div class="card">
+            <h3 class="card-title">ZeRO各阶段完整配置</h3>
+            <div class="code-block">
+ZeRO-1 配置：
+
+{
+    "zero_optimization": {
+        "stage": 1,
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "reduce_bucket_size": "auto",
+        "allgather_bucket_size": "auto"
+    }
+}
+
+ZeRO-2 配置：
+
+{
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "reduce_bucket_size": "auto",
+        "allgather_bucket_size": "auto",
+        "offload_optimizer": {
+            "device": "none"  // 或 "cpu" 开启offload
+        }
+    }
+}
+
+ZeRO-3 配置：
+
+{
+    "zero_optimization": {
+        "stage": 3,
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "reduce_bucket_size": "auto",
+        "stage3_prefetch_bucket_size": "auto",
+        "stage3_param_persistence_threshold": "auto",
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "none"  // 或 "cpu" 开启ZeRO-Infinity
+        }
+    }
+}
+
+参数说明：
+
+• stage：ZeRO阶段（1/2/3）
+• overlap_comm：通信与计算重叠
+• contiguous_gradients：使用连续梯度内存
+• sub_group_size：子通信组大小（减少通信量）
+• reduce_bucket_size：梯度聚合桶大小
+• stage3_prefetch_bucket_size：预取桶大小
+• stage3_param_persistence_threshold：
+  参数持久化阈值（小参数常驻GPU）
+• stage3_max_live_parameters：最大活动参数数
+• stage3_max_reuse_distance：最大重用距离
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="DeepSpeed配置">
+          <div class="caption">图：正确的DeepSpeed配置对训练性能至关重要</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 混合精度配置</h2>
+          <div class="card">
+            <h3 class="card-title">FP16和BF16配置</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>精度</th>
+                  <th>范围</th>
+                  <th>优点</th>
+                  <th>缺点</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>FP16</strong></td>
+                  <td>±65504</td>
+                  <td>速度快，广泛支持</td>
+                  <td>容易溢出</td>
+                </tr>
+                <tr>
+                  <td><strong>BF16</strong></td>
+                  <td>±3.3×10³⁸</td>
+                  <td>范围大，不易溢出</td>
+                  <td>需要Ampere+ GPU</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+FP16配置：
+
+{
+    "fp16": {
+        "enabled": true,
+        "loss_scale": 0,           // 0表示动态loss scale
+        "initial_scale_power": 16,  // 初始scale = 2^16 = 65536
+        "loss_scale_window": 1000,  // 成功步数窗口
+        "hysteresis": 2,           // 下溢/上溢阈值
+        "min_loss_scale": 1        // 最小scale
+    }
+}
+
+BF16配置（推荐Ampere+）：
+
+{
+    "bf16": {
+        "enabled": true
+    }
+}
+
+注意：BF16不需要loss scaling
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 场景化配置</h2>
+          <div class="card">
+            <h3 class="card-title">不同场景的推荐配置</h3>
+            <div class="code-block">
+场景1：小模型，单卡训练
+
+{
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 32,
+    "gradient_accumulation_steps": 1,
+    "fp16": {"enabled": true},
+    "zero_optimization": {"stage": 1}
+}
+
+场景2：中等模型，多卡训练
+
+{
+    "train_batch_size": 256,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 4,
+    "fp16": {"enabled": true},
+    "zero_optimization": {"stage": 2},
+    "gradient_clipping": 1.0
+}
+
+场景3：大模型，少GPU
+
+{
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 1,
+    "gradient_accumulation_steps": 4,
+    "bf16": {"enabled": true},
+    "zero_optimization": {
+        "stage": 2,
+        "offload_optimizer": {"device": "cpu"}
+    }
+}
+
+场景4：超大模型，多GPU
+
+{
+    "train_batch_size": 512,
+    "train_micro_batch_size_per_gpu": 1,
+    "gradient_accumulation_steps": 16,
+    "bf16": {"enabled": true},
+    "zero_optimization": {
+        "stage": 3,
+        "offload_param": {"device": "cpu"}
+    },
+    "activation_checkpointing": {
+        "partition_activations": true
+    }
+}
+
+场景5：超大模型，单GPU
+
+{
+    "train_batch_size": 1,
+    "train_micro_batch_size_per_gpu": 1,
+    "gradient_accumulation_steps": 1,
+    "bf16": {"enabled": true},
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": {"device": "cpu"},
+        "offload_param": {"device": "nvme"}
+    },
+    "activation_checkpointing": {
+        "partition_activations": true,
+        "cpu_checkpointing": true
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 高级配置</h2>
+          <div class="card">
+            <h3 class="card-title">其他重要配置</h3>
+            <div class="code-block">
+流水线并行配置：
+
+{
+    "pipeline": {
+        "enabled": true,
+        "parallel_size": 4,      // 流水线阶段数
+        "schedule": "1f1b",      // 调度策略
+        "activation_checkpointing": {
+            "partition_activations": true
+        }
+    }
+}
+
+激活值检查点：
+
+{
+    "activation_checkpointing": {
+        "partition_activations": false,
+        "cpu_checkpointing": false,
+        "contiguous_memory_optimization": false,
+        "number_checkpoints": null
+    }
+}
+
+通信配置：
+
+{
+    "communication_data_type": "fp16",  // 或 "fp32"
+    "prescale_gradients": false,
+    "postscale_gradients": false
+}
+
+训练监控：
+
+{
+    "steps_per_print": 10,
+    "wall_clock_breakdown": false,
+    "dump_state": false
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">配置调优建议</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>batch size：</strong>从大开始，逐步减小到显存允许的最大值</li>
+              <li><strong>learning rate：</strong>根据batch size线性缩放</li>
+              <li><strong>ZeRO阶段：</strong>从stage 1开始，逐步升级</li>
+              <li><strong>混合精度：</strong>Ampere+优先使用BF16</li>
+              <li><strong>梯度累积：</strong>使用梯度累积模拟大batch</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• DeepSpeed配置文件包含训练、优化器、ZeRO等部分</li>
+                <li>• 批次配置需要考虑micro_batch和梯度累积</li>
+                <li>• ZeRO有3个阶段，显存节省逐步增加</li>
+                <li>• BF16优于FP16（如果硬件支持）</li>
+                <li>• 需要根据场景调优配置参数</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="18-3-ZeRO-Offload与ZeRO-Infinity.html">← 上一节</a>
+          <a href="18-5-DeepSpeed性能调优.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

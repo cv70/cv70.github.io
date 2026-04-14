@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.2 向量索引算法 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>12.2 向量索引算法</h1>
+          <p class="subtitle">深入理解HNSW、IVF等核心索引算法</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解向量索引的基本原理</li>
+            <li>掌握HNSW算法的核心思想</li>
+            <li>学习IVF算法的工作机制</li>
+            <li>了解不同算法的适用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="索引结构示意图" class="card-image">
+          <h3 class="card-title">索引算法的重要性</h3>
+          <p class="card-text">
+            向量索引算法是向量数据库性能的核心。优秀的索引算法能够在保证召回率的前提下，
+            将搜索时间复杂度从O(n)降低到O(log n)甚至更低，使得在大规模向量数据上
+            实现实时相似度搜索成为可能。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 索引算法分类</h2>
+
+          <h3>算法家族</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">基于树的方法</h4>
+              <ul class="feature-list">
+                <li><strong>KD-Tree</strong>: 适用于低维数据（<20维）</li>
+                <li><strong>Ball Tree</strong>: 适用于中等维度的欧氏空间</li>
+                <li><strong>Annoy</strong>: 随机投影树，支持大规模数据</li>
+              </ul>
+              <p class="card-text">优点: 精确度高；缺点: 高维数据性能急剧下降</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">基于图的方法</h4>
+              <ul class="feature-list">
+                <li><strong>HNSW</strong>: 层次化小世界图，目前最流行</li>
+                <li><strong>NSG</strong>: 导航的小世界图</li>
+                <li><strong>SPTAG</strong>: 空间划分树+图</li>
+              </ul>
+              <p class="card-text">优点: 高性能、高召回率；缺点: 索引构建慢</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">基于量化的方法</h4>
+              <ul class="feature-list">
+                <li><strong>IVF</strong>: 倒排文件，分区+量化</li>
+                <li><strong>PQ</strong>: 乘积量化，压缩向量</li>
+                <li><strong>OPQ</strong>: 优化的乘积量化</li>
+              </ul>
+              <p class="card-text">优点: 内存效率高；缺点: 召回率相对较低</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">基于哈希的方法</h4>
+              <ul class="feature-list">
+                <li><strong>LSH</strong>: 局部敏感哈希</li>
+                <li><strong>Multi-probe LSH</strong>: 多探针LSH</li>
+              </ul>
+              <p class="card-text">优点: 构建速度快；缺点: 参数调整复杂</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🕸️</span> HNSW算法详解</h2>
+
+          <h3>算法原理</h3>
+          <p><strong>HNSW (Hierarchical Navigable Small World)</strong>是层次化的小世界图算法，
+            它借鉴了跳表（Skip List）的思想，通过多层图结构实现快速搜索。</p>
+
+          <div class="code-block"""
+HNSW结构:
+Level 0:     1 - 2 - 3 - 4 - 5 - 6 - 7 - 8  (最密集的层)
+Level 1:     1 --- 3 --- 5 --- 7
+Level 2:     1 ------- 5 ------- 8
+Level 3:     1 --------------- 8
+
+搜索过程:
+1. 从最高层的入口节点开始
+2. 在当前层进行贪心搜索，找到最近的邻居
+3. 如果可以找到更近的节点，继续搜索
+4. 否则，下降到下一层
+5. 重复步骤2-4，直到到达第0层
+6. 在第0层进行精细搜索，找到最终结果
+
+时间复杂度:
+- 构建: O(n log n)
+- 搜索: O(log n)
+          </div>
+
+          <h3>HNSW实现</h3>
+          <div class="code-block">
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
+from hnswlib import Index
+
+class HNSWIndex:
+    def __init__(self, dim, max_elements=100000, ef_construction=200, M=16):
+        """
+        初始化HNSW索引
+
+        参数:
+            dim: 向量维度
+            max_elements: 最大元素数量
+            ef_construction: 构建时的搜索宽度（越大索引质量越高）
+            M: 每个节点的最大连接数（越大索引质量越高）
+        """
+        self.dim = dim
+        self.index = Index(space='cosine', dim=dim)
+        self.index.init_index(
+            max_elements=max_elements,
+            ef_construction=ef_construction,
+            M=M
+        )
+        self.index.set_ef(50)  # 查询时的搜索宽度
+
+    def add_items(self, vectors, ids=None):
+        """添加向量到索引"""
+        if ids is None:
+            self.index.add_items(vectors)
+        else:
+            self.index.add_items(vectors, ids)
+
+    def search(self, query_vectors, k=10):
+        """搜索最近的k个向量"""
+        labels, distances = self.index.knn_query(query_vectors, k=k)
+        return labels, distances
+
+    def save_index(self, filename):
+        """保存索引"""
+        self.index.save_index(filename)
+
+    def load_index(self, filename, max_elements=None):
+        """加载索引"""
+        self.index.load_index(filename, max_elements=max_elements)
+
+# 使用示例
+index = HNSWIndex(dim=384, max_elements=1000000)
+
+# 添加向量
+vectors = np.random.random((10000, 384)).astype('float32')
+index.add_items(vectors)
+
+# 搜索
+query = np.random.random((1, 384)).astype('float32')
+labels, distances = index.search(query, k=10)
+print(f"Top-10 indices: {labels}")
+print(f"Distances: {distances}")
+          </div>
+
+          <h3>参数调优</h3>
+          <div class="code-block"""
+HNSW关键参数:
+
+1. M (Max connections)
+   - 范围: 5-48
+   - 影响: 图的连通性
+   - 建议: 高召回率用32-48，速度优先用8-16
+   - 权衡: M越大，内存占用越大，但召回率越高
+
+2. ef_construction (Construction ef)
+   - 范围: 20-500
+   - 影响: 索引构建质量和时间
+   - 建议: 默认200，需要高质量时提高到400
+   - 权衡: ef_construction越大，构建时间越长
+
+3. ef (Search ef)
+   - 范围: k-max_elements
+   - 影响: 查询质量和速度
+   - 建议: ef = k * 2 到 k * 10
+   - 权衡: ef越大，查询越准确但越慢
+
+最佳实践:
+- 离线构建: ef_construction=400, M=32
+- 在线查询: ef=50-100
+- 快速查询: ef=10-20
+- 高召回率: ef=200+
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📁</span> IVF算法详解</h2>
+
+          <h3>算法原理</h3>
+          <p><strong>IVF (Inverted File)</strong>算法通过聚类将向量空间划分为多个 Voronoi 单元，
+            每个单元有一个中心点。搜索时只搜索最相关的几个单元，而不是整个数据集。</p>
+
+          <div class="code-block"""
+IVF结构:
+向量空间
+├── 单元1 (Cluster 1)
+│   ├── 向量A
+│   ├── 向量B
+│   └── 向量C
+├── 单元2 (Cluster 2)
+│   ├── 向量D
+│   └── 向量E
+└── 单元3 (Cluster 3)
+    ├── 向量F
+    └── 向量G
+
+搜索过程:
+1. 将查询向量与所有中心点比较
+2. 找到最近的n个中心点（nprobe）
+3. 只在这n个单元内搜索
+4. 计算这些单元内向量与查询的距离
+5. 返回最近的k个结果
+
+时间复杂度:
+- 构建: O(n * d * log n)
+- 搜索: O(nprobe * n/nclusters * d)
+          </div>
+
+          <h3>IVF实现</h3>
+          <div class="code-block">
+import numpy as np
+import faiss
+
+class IVFIndex:
+    def __init__(self, dim, nlist=100, nprobe=10, metric='L2'):
+        """
+        初始化IVF索引
+
+        参数:
+            dim: 向量维度
+            nlist: 聚类中心数量
+            nprobe: 搜索时探查的聚类数量
+            metric: 距离度量 ('L2' 或 'IP')
+        """
+        self.dim = dim
+        self.nlist = nlist
+        self.nprobe = nprobe
+
+        # 选择度量方式
+        if metric == 'L2':
+            quantizer = faiss.IndexFlatL2(dim)
+            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist)
+        elif metric == 'IP':
+            quantizer = faiss.IndexFlatIP(dim)
+            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist)
+
+        self.index.nprobe = nprobe
+        self.is_trained = False
+
+    def train(self, vectors):
+        """训练索引（聚类）"""
+        self.index.train(vectors)
+        self.is_trained = True
+
+    def add(self, vectors, ids=None):
+        """添加向量"""
+        if not self.is_trained:
+            raise ValueError("Index must be trained before adding vectors")
+
+        if ids is not None:
+            self.index.add_with_ids(vectors, ids)
+        else:
+            self.index.add(vectors)
+
+    def search(self, query, k=10):
+        """搜索最近的k个向量"""
+        distances, indices = self.index.search(query, k)
+        return indices, distances
+
+    def set_nprobe(self, nprobe):
+        """设置搜索时的探查数量"""
+        self.nprobe = nprobe
+        self.index.nprobe = nprobe
+
+# 使用示例
+index = IVFIndex(dim=384, nlist=100, nprobe=10)
+
+# 训练索引
+vectors = np.random.random((100000, 384)).astype('float32')
+index.train(vectors)
+
+# 添加向量
+index.add(vectors)
+
+# 搜索
+query = np.random.random((1, 384)).astype('float32')
+indices, distances = index.search(query, k=10)
+print(f"Top-10 indices: {indices}")
+          </div>
+
+          <h3>IVF-PQ组合</h3>
+          <div class="code-block">
+class IVFPQIndex:
+    def __init__(self, dim, nlist=100, m=64, nbits=8, nprobe=10):
+        """
+        IVF + PQ组合索引
+
+        参数:
+            dim: 向量维度
+            nlist: 聚类中心数量
+            m: PQ子向量数量
+            nbits: 每个子向量的量化位数
+            nprobe: 搜索时探查的聚类数量
+        """
+        self.dim = dim
+        quantizer = faiss.IndexFlatL2(dim)
+
+        # IVF + PQ
+        self.index = faiss.IndexIVFPQ(
+            quantizer,
+            dim,
+            nlist,
+            m,
+            nbits
+        )
+        self.index.nprobe = nprobe
+
+    def train(self, vectors):
+        """训练索引"""
+        self.index.train(vectors)
+
+    def add(self, vectors, ids=None):
+        """添加向量"""
+        if ids is not None:
+            self.index.add_with_ids(vectors, ids)
+        else:
+            self.index.add(vectors)
+
+    def search(self, query, k=10):
+        """搜索"""
+        distances, indices = self.index.search(query, k)
+        return indices, distances
+
+# PQ压缩比计算
+# 原始: dim * 32 bits
+# PQ: m * nbits
+# 压缩比 = (dim * 32) / (m * nbits)
+#
+# 示例: dim=768, m=64, nbits=8
+# 原始: 768 * 32 = 24576 bits
+# PQ: 64 * 8 = 512 bits
+# 压缩比: 48x
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 算法对比与选择</h2>
+
+          <h3>性能对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>算法</th>
+                <th>构建速度</th>
+                <th>查询速度</th>
+                <th>召回率</th>
+                <th>内存占用</th>
+                <th>适用规模</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>暴力搜索</td>
+                <td>O(n)</td>
+                <td>O(n)</td>
+                <td>100%</td>
+                <td>高</td>
+                <td>< 100万</td>
+              </tr>
+              <tr>
+                <td>KD-Tree</td>
+                <td>O(n log n)</td>
+                <td>O(log n)</td>
+                <td>100%</td>
+                <td>中</td>
+                <td>< 100万，低维</td>
+              </tr>
+              <tr>
+                <td>Annoy</td>
+                <td>O(n log n)</td>
+                <td>O(log n)</td>
+                <td>90-95%</td>
+                <td>中</td>
+                <td>100万-1亿</td>
+              </tr>
+              <tr>
+                <td>HNSW</td>
+                <td>O(n log n)</td>
+                <td>O(log n)</td>
+                <td>95-99%</td>
+                <td>高</td>
+                <td>100万-10亿</td>
+              </tr>
+              <tr>
+                <td>IVF</td>
+                <td>O(n log n)</td>
+                <td>O(n/nclusters)</td>
+                <td>90-98%</td>
+                <td>中</td>
+                <td>100万-10亿</td>
+              </tr>
+              <tr>
+                <td>IVF-PQ</td>
+                <td>O(n log n)</td>
+                <td>O(n/nclusters)</td>
+                <td>85-95%</td>
+                <td>低</td>
+                <td>1亿-100亿</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>选择建议</h3>
+          <div class="code-block"""
+数据规模选择:
+
+< 100万向量:
+- 优先选择暴力搜索（简单、准确）
+- 或使用KD-Tree（低维数据）
+
+100万 - 1亿向量:
+- 追求高召回率: HNSW
+- 追求速度: IVF或Annoy
+- 内存受限: IVF-PQ
+
+> 1亿向量:
+- 必须使用IVF-PQ或HNSW
+- 考虑分布式部署
+
+特殊场景:
+
+- 实时插入更新: HNSW
+- 内存受限: IVF-PQ
+- 需要精确搜索: 暴力搜索或KD-Tree
+- 向量维度>1000: HNSW或IVF
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> FAISS实战</h2>
+
+          <h3>完整示例</h3>
+          <div class="code-block">
+import faiss
+import numpy as np
+import time
+
+class VectorSearchBenchmark:
+    def __init__(self, dim=768):
+        self.dim = dim
+
+    def generate_data(self, n_vectors=1000000):
+        """生成测试数据"""
+        print(f"Generating {n_vectors} vectors...")
+        return np.random.random((n_vectors, self.dim)).astype('float32')
+
+    def benchmark_index(self, vectors, index_type='hnsw'):
+        """测试不同索引的性能"""
+        d = self.dim
+        n = len(vectors)
+
+        # 准备查询数据
+        nq = 100
+        query = np.random.random((nq, d)).astype('float32')
+
+        if index_type == 'flat':
+            print("\nTesting Flat index...")
+            index = faiss.IndexFlatL2(d)
+            index.add(vectors)
+
+        elif index_type == 'hnsw':
+            print("\nTesting HNSW index...")
+            index = faiss.IndexHNSWFlat(d, M=32)
+            index.hnsw.efConstruction = 200
+            index.add(vectors)
+
+        elif index_type == 'ivf':
+            print("\nTesting IVF index...")
+            quantizer = faiss.IndexFlatL2(d)
+            index = faiss.IndexIVFFlat(quantizer, d, 100)
+            index.train(vectors)
+            index.add(vectors)
+            index.nprobe = 10
+
+        elif index_type == 'ivfpq':
+            print("\nTesting IVF-PQ index...")
+            quantizer = faiss.IndexFlatL2(d)
+            index = faiss.IndexIVFPQ(quantizer, d, 100, 64, 8)
+            index.train(vectors)
+            index.add(vectors)
+            index.nprobe = 10
+
+        # 测试查询性能
+        start = time.time()
+        D, I = index.search(query, k=10)
+        search_time = time.time() - start
+
+        print(f"Search time: {search_time * 1000:.2f} ms")
+        print(f"QPS: {nq / search_time:.2f}")
+
+        return {
+            'index_type': index_type,
+            'search_time_ms': search_time * 1000,
+            'qps': nq / search_time
+        }
+
+# 运行基准测试
+benchmark = VectorSearchBenchmark(dim=768)
+vectors = benchmark.generate_data(n_vectors=1000000)
+
+results = []
+for index_type in ['flat', 'hnsw', 'ivf', 'ivfpq']:
+    result = benchmark.benchmark_index(vectors, index_type)
+    results.append(result)
+
+# 比较结果
+for r in results:
+    print(f"{r['index_type']:10s}: {r['search_time_ms']:7.2f} ms, QPS: {r['qps']:7.0f}")
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">性能优化技巧</div>
+              <p>1）使用GPU加速可以显著提升性能；2）批量查询比单个查询效率高；3）合理的nprobe设置平衡速度和召回率；4）定期重建索引以保持性能；5）使用SIMD指令加速距离计算。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="算法可视化">
+          <div class="caption">图：选择合适的索引算法是向量数据库性能的关键</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 向量索引算法是实现高效相似度搜索的核心</li>
+                <li>• HNSW是目前最流行和高效的索引算法之一</li>
+                <li>• IVF系列算法在内存效率方面有优势</li>
+                <li>• 根据数据规模和应用需求选择合适的索引算法</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="12-1-向量数据库概述.html">← 上一节</a>
+          <a href="12-3-主流向量数据库.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

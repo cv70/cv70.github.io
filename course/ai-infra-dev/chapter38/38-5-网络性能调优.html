@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.5 网络性能调优 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>38.5 网络性能调优</h1>
+          <p class="subtitle">优化分布式训练的网络性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解网络性能影响因素</li>
+            <li>掌握网络性能测试方法</li>
+            <li>学习网络调优技术</li>
+            <li>实践分布式训练优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络性能" class="card-image">
+          <h3 class="card-title">网络性能优化</h3>
+          <p class="card-text">
+            <strong>网络性能</strong>是分布式AI训练的关键因素，直接影响训练效率。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 网络性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>带宽</td>
+                <td>数据传输速率</td>
+                <td>接近线路容量</td>
+              </tr>
+              <tr>
+                <td>延迟</td>
+                <td>数据传输时间</td>
+                <td><1ms（内部）</td>
+              </tr>
+              <tr>
+                <td>丢包率</td>
+                <td>丢失数据包比例</td>
+                <td><0.01%</td>
+              </tr>
+              <tr>
+                <td>抖动</td>
+                <td>延迟变化幅度</td>
+                <td><0.1ms</td>
+              </tr>
+              <tr>
+                <td>吞吐量</td>
+                <td>实际传输速率</td>
+                <td>80%+ 带宽</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 网络性能测试工具</h2>
+          <div class="code-block">
+# 1. iperf3 - 带宽测试
+# 服务器端
+iperf3 -s -p 5001
+
+# 客户端
+iperf3 -c server_ip -p 5001 -t 30 -P 4
+# -t: 测试时长（秒）
+# -P: 并发连接数
+
+# 双向测试
+iperf3 -c server_ip -p 5001 -t 30 --bidir
+
+# 2. ping - 延迟测试
+ping -c 100 target_host
+
+# 精确时间戳
+ping -i 0.001 -c 1000 target_host
+
+# 3. traceroute - 路由追踪
+traceroute target_host
+
+# 4. netstat - 连接统计
+netstat -an | grep ESTABLISHED | wc -l
+
+# 查看端口连接
+netstat -an | grep :5000
+
+# 5. ss - 更快的socket统计
+ss -s
+
+# 查看特定端口
+ss -tnlp | grep :5000
+
+# 6. ethtool - 网卡状态
+ethtool eth0
+
+# 查看网卡统计
+ethtool -S eth0
+
+# 7. sar - 网络统计
+sar -n DEV 1 10
+
+# 8. iftop - 实时流量监控
+iftop -i eth0
+
+# 9. nload - 流量监控
+nload -u M eth0
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 网络配置优化</h2>
+          <div class="code-block">
+# 1. 网卡配置优化
+
+## 启用多队列网卡
+ethtool -L eth0 combined 16
+
+## 设置MTU（最大传输单元）
+# 巨型帧（9000字节）提高吞吐
+ip link set eth0 mtu 9000
+
+## 关闭网卡中断合并
+ethtool -C eth0 rx-usecs 0
+
+## 启用网卡多队列RSS
+ethtool -X eth0 equal 16
+
+# 2. 系统网络参数优化
+# /etc/sysctl.conf
+
+## TCP缓冲区大小
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 65536 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+
+## TCP连接优化
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+
+## 网络队列优化
+net.core.netdev_max_backlog = 5000
+
+# 应用配置
+sysctl -p
+
+# 3. NUMA优化
+
+## 绑定网卡到NUMA节点
+numactl --cpunodebind=0 --membind=0 iperf3 -s
+
+# 4. CPU亲和性
+
+## 绑定中断到特定CPU
+echo 2-4 > /proc/irq/24/smp_affinity
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 分布式训练网络优化</h2>
+          <div class="code-block">
+# PyTorch分布式训练网络优化
+
+# 1. NCCL环境变量优化
+import os
+import torch.distributed as dist
+
+# NCCL调试
+os.environ['NCCL_DEBUG'] = 'INFO'
+
+# NCCL通信协议
+# IB: InfiniBand
+# Socket: 基于TCP/IP
+# SHM: 共享内存（单机）
+os.environ['NCCL_IB_DISABLE'] = '0'  # 启用InfiniBand
+
+# NCCL网络接口
+os.environ['NCCL_SOCKET_IFNAME'] = 'ib0'  # 指定网卡
+
+# NCCL缓冲区大小
+os.environ['NCCL_BUFFSIZE'] = '8388608'  # 8MB
+
+# NCCL异步通信
+os.environ['NCCL_ASYNC_ERROR_HANDLING'] = '1'
+
+# NCCL超时设置
+os.environ['NCCL_BLOCKING_WAIT'] = '1'
+
+# 2. 通信优化技巧
+
+## 使用梯度累积减少通信
+def train_with_gradient_accumulation(model, dataloader, accum_steps=4):
+    optimizer.zero_grad()
+    for i, batch in enumerate(dataloader):
+        output = model(batch)
+        loss = criterion(output, target)
+        loss = loss / accum_steps
+        loss.backward()
+
+        if (i + 1) % accum_steps == 0:
+            # 减少通信频率
+            optimizer.step()
+            optimizer.zero_grad()
+
+## 使用混合精度减少通信量
+from torch.cuda.amp import autocast, GradScaler
+
+with autocast():
+    output = model(batch)
+    loss = criterion(output, target)
+
+# FP16减少了一半的通信量
+
+## 梯度压缩
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    checkpoint_wrapper,
+    apply_activation_checkpointing,
+)
+
+def apply_gradient_compression(model):
+    # 使用梯度压缩减少通信量
+    # PyTorch的FP16/FP32混合精度
+    pass
+
+## 通信与计算重叠
+class OverlappingTraining:
+    def __init__(self, model):
+        self.model = model
+        self.stream = torch.cuda.Stream()
+
+    def train_step(self, batch):
+        # 计算在一个stream
+        with torch.cuda.stream(self.stream):
+            output = self.model(batch)
+            loss = criterion(output, target)
+            loss.backward()
+
+        # 通信在另一个stream
+        with torch.cuda.stream(self.stream):
+            dist.all_reduce(self.model.parameters(), op=dist.ReduceOp.SUM)
+
+        # 等待所有stream完成
+        torch.cuda.synchronize()
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 网络优化策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">硬件优化</h3>
+              <ul class="feature-list">
+                <li>使用高速网络（InfiniBand/RoCE）</li>
+                <li>启用网卡多队列</li>
+                <li>配置巨型帧（MTU 9000）</li>
+                <li>使用RDMA加速通信</li>
+                <li>NUMA亲和性配置</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">软件优化</h3>
+              <ul class="feature-list">
+                <li>优化TCP参数</li>
+                <li>使用高性能协议</li>
+                <li>通信计算重叠</li>
+                <li>梯度压缩</li>
+                <li>异步通信</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 网络性能监控</h2>
+          <div class="code-block">
+# 实时网络监控脚本
+import psutil
+import time
+
+def monitor_network(interval=1):
+    prev_net_io = psutil.net_io_counters()
+    prev_time = time.time()
+
+    while True:
+        time.sleep(interval)
+        curr_net_io = psutil.net_io_counters()
+        curr_time = time.time()
+
+        elapsed = curr_time - prev_time
+        sent_bytes = curr_net_io.bytes_sent - prev_net_io.bytes_sent
+        recv_bytes = curr_net_io.bytes_recv - prev_net_io.bytes_recv
+
+        sent_mb = sent_bytes / 1024 / 1024 / elapsed
+        recv_mb = recv_bytes / 1024 / 1024 / elapsed
+
+        print(f"Sent: {sent_mb:.2f} MB/s, Recv: {recv_mb:.2f} MB/s")
+
+        prev_net_io = curr_net_io
+        prev_time = curr_time
+
+# 分布式训练网络监控
+import torch.distributed as dist
+
+def monitor_nccl_communication():
+    if dist.is_initialized():
+        # 监控NCCL通信
+        # 可以通过环境变量NCCL_DEBUG获取详细信息
+        pass
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 网络调优最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">优化建议</h3>
+            <ul class="feature-list">
+              <li><strong>选择合适协议</strong> - 根据网络类型选择IB/RoCE/Ethernet</li>
+              <li><strong>优化通信频率</strong> - 减少不必要的通信</li>
+              <li><strong>利用硬件加速</strong> - 使用RDMA和GPU Direct</li>
+              <li><strong>平衡计算通信</strong> - 计算通信重叠</li>
+              <li><strong>监控网络状态</strong> - 实时监控网络性能</li>
+              <li><strong>定期性能测试</strong> - 验证网络配置效果</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络监控">
+          <div class="caption">图：网络性能监控</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">网络优化注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 网络优化需要配合整体架构设计</li>
+              <li>• 不同网络环境需要不同优化策略</li>
+              <li>• 监控工具本身会影响网络性能</li>
+              <li>• 优化前需要建立性能基线</li>
+              <li>• 考虑故障切换和容错机制</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 网络性能受带宽、延迟、丢包率等因素影响</li>
+                <li>• 使用专业工具测试和监控网络性能</li>
+                <li>• 硬件和软件协同优化网络性能</li>
+                <li>• 分布式训练优化减少通信开销</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="38-4-I-O瓶颈分析.html">← 上一节</a>
+          <a href="../chapter39/39-1-常见故障类型.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

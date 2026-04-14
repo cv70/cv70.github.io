@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.5 存储管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.5 存储管理</h1>
+          <p class="subtitle">PV与PVC详解</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解PV和PVC的概念与关系</li>
+            <li>掌握存储类的动态供给机制</li>
+            <li>学会配置不同类型的存储卷</li>
+            <li>了解存储卷的生命周期管理</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 存储概念概述</h2>
+          <div class="card">
+            <h3 class="card-title">为什么需要存储管理？</h3>
+            <p class="card-text">
+              容器是临时的，容器重启后数据会丢失。Kubernetes通过<strong>存储卷（Volume）</strong>
+              提供持久化存储能力，让数据独立于容器生命周期。
+            </p>
+          </div>
+
+          <div class="image-container">
+            <img src="https://kubernetes.io/images/docs/volumes.svg" alt="Kubernetes存储架构">
+            <div class="caption">图：Kubernetes存储架构</div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 核心概念</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">PV</h3>
+              <p class="card-text"><strong>PersistentVolume</strong></p>
+              <p>集群级别的存储资源，由管理员或存储系统动态创建。</p>
+              <div class="tip-box info">
+                <span class="icon">📌</span>
+                <div class="content">
+                  <p>独立于Pod生命周期存在</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">PVC</h3>
+              <p class="card-text"><strong>PersistentVolumeClaim</strong></p>
+              <p>命名空间级别的存储请求，用户申请存储资源的方式。</p>
+              <div class="tip-box info">
+                <span class="icon">📌</span>
+                <div class="content">
+                  <p>绑定到特定的PV</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">StorageClass</h3>
+              <p class="card-text"><strong>存储类</strong></p>
+              <p>定义存储的"类型"，支持动态供给存储。</p>
+              <div class="tip-box info">
+                <span class="icon">📌</span>
+                <div class="content">
+                  <p>动态创建PV</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> PV生命周期</h2>
+          <div class="code-block">
+Available（可用） → Bound（已绑定） → Released（已释放） → Failed（失败）
+                              ↓
+                          Retained（保留）
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>阶段</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Available</td>
+                <td>PV可用，未被任何PVC绑定</td>
+              </tr>
+              <tr>
+                <td>Bound</td>
+                <td>PV已与PVC绑定</td>
+              </tr>
+              <tr>
+                <td>Released</td>
+                <td>PVC被删除，但PV中的数据还未处理</td>
+              </tr>
+              <tr>
+                <td>Failed</td>
+                <td>自动回收失败</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">回收策略</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Retain</strong>：手动回收，需要管理员清理数据</li>
+                <li>• <strong>Delete</strong>：自动删除底层存储资源</li>
+                <li>• <strong>Recycle</strong>：已废弃，使用Delete替代</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 静态供给示例</h2>
+
+          <h3>1. 创建PV</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  nfs:
+    server: 192.168.1.100
+    path: /data/nfs
+          </div>
+
+          <h3>2. 创建PVC</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-nfs
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: nfs
+          </div>
+
+          <h3>3. 在Pod中使用</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-pvc
+spec:
+  containers:
+  - name: app
+    image: nginx
+    volumeMounts:
+    - name: data
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: pvc-nfs
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 动态供给</h2>
+          <div class="card">
+            <h3 class="card-title">动态供给优势</h3>
+            <ul class="feature-list">
+              <li>无需预先创建PV</li>
+              <li>自动匹配PVC和StorageClass</li>
+              <li>支持多种存储后端</li>
+              <li>简化存储管理</li>
+            </ul>
+          </div>
+
+          <h3>StorageClass示例</h3>
+          <div class="code-block">
+# AWS EBS StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-sc
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# NFS StorageClass（需要NFS CSI驱动）
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-sc
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.100
+  share: /data/nfs
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: Immediate
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">卷绑定模式</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Immediate</strong>：PVC创建时立即绑定</li>
+                <li>• <strong>WaitForFirstConsumer</strong>：延迟到Pod使用时绑定，支持拓扑感知</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 访问模式</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>访问模式</th>
+                <th>说明</th>
+                <th>支持的后端</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>RWO</td>
+                <td>ReadWriteOnce：单节点读写</td>
+                <td>大多数存储</td>
+              </tr>
+              <tr>
+                <td>RWX</td>
+                <td>ReadWriteMany：多节点读写</td>
+                <td>NFS, CephFS</td>
+              </tr>
+              <tr>
+                <td>ROX</td>
+                <td>ReadOnlyMany：多节点只读</td>
+                <td>NFS, CephFS</td>
+              </tr>
+              <tr>
+                <td>RWOP</td>
+                <td>ReadWriteOncePod：单Pod读写</td>
+                <td>部分CSI驱动</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 常用存储类型</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">临时存储</h4>
+              <ul class="feature-list">
+                <li>emptyDir：临时目录</li>
+                <li>Pod删除后数据丢失</li>
+                <li>用于缓存、临时文件</li>
+              </ul>
+              <div class="code-block">
+volumes:
+- name: cache
+  emptyDir:
+    sizeLimit: 1Gi
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">节点本地存储</h4>
+              <ul class="feature-list">
+                <li>hostPath：节点路径</li>
+                <li>Pod重启数据保留</li>
+                <li>节点故障数据丢失</li>
+              </ul>
+              <div class="code-block">
+volumes:
+- name: host-data
+  hostPath:
+    path: /data
+    type: DirectoryOrCreate
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">配置存储</h4>
+              <ul class="feature-list">
+                <li>configMap：配置文件</li>
+                <li>secret：敏感信息</li>
+                <li>downwardAPI：Pod信息</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">云存储</h4>
+              <ul class="feature-list">
+                <li>AWS EBS</li>
+                <li>Azure Disk</li>
+                <li>GCE PD</li>
+                <li>阿里云盘</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 状态查询</h2>
+          <div class="code-block">
+# 查看PV
+kubectl get pv
+kubectl describe pv pv-name
+
+# 查看PVC
+kubectl get pvc -A
+kubectl describe pvc pvc-name
+
+# 查看StorageClass
+kubectl get sc
+kubectl describe sc sc-name
+
+# 查看PV使用情况
+kubectl get pv -o custom-columns=NAME:.metadata.name,CAPACITY:.spec.capacity.storage,STATUS:.status.phase
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 常见问题</h2>
+          <div class="grid grid-2">
+            <div class="tip-box warning">
+              <span class="icon">⚠️</span>
+              <div class="content">
+                <div class="title">PVC一直Pending</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• 没有匹配的PV</li>
+                  <li>• StorageClass不存在</li>
+                  <li>• 访问模式不匹配</li>
+                  <li>• 容量不足</li>
+                </ul>
+              </div>
+            </div>
+            <div class="tip-box warning">
+              <span class="icon">⚠️</span>
+              <div class="content">
+                <div class="title">Pod无法挂载</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• CSI驱动未安装</li>
+                  <li>• 存储后端连接失败</li>
+                  <li>• 权限不足</li>
+                  <li>• 卷已绑定给其他PVC</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 生产环境优先使用动态供给</li>
+              <li>• 为不同工作负载创建不同的StorageClass</li>
+              <li>• 设置合理的资源请求和限制</li>
+              <li>• 定期监控存储使用情况</li>
+              <li>• 制定数据备份策略</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• PV是存储资源，PVC是存储请求</li>
+                <li>• StorageClass支持动态供给存储</li>
+                <li>• 根据访问模式选择合适的存储类型</li>
+                <li>• 合理配置回收策略和扩容策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-4-配置管理-ConfigMap-Secret.html">← 上一节</a>
+          <a href="../chapter27/27-1-GPU设备插件.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

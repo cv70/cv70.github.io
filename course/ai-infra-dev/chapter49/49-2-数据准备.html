@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.2 数据准备 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.2 数据准备</h1>
+          <p class="subtitle">为大模型训练准备高质量数据</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握数据准备流程</li>
+            <li>学会数据清洗方法</li>
+            <li>了解数据格式标准化</li>
+            <li>掌握数据质量评估</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 数据准备流程</h2>
+          <div class="card">
+            <h3 class="card-title">处理流水线</h3>
+            <div class="grid grid-5">
+              <div class="step-card">
+                <div class="step-number">1</div>
+                <div class="step-title">数据收集</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">2</div>
+                <div class="step-title">数据清洗</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">3</div>
+                <div class="step-title">数据格式化</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">4</div>
+                <div class="step-title">数据验证</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">5</div>
+                <div class="step-title">数据分发</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧹</span> 数据清洗</h2>
+          <div class="code-block">
+<pre><code># 数据清洗脚本
+import re
+from langdetect import detect
+
+class DataCleaner:
+    def __init__(self):
+        # 噪声模式
+        self.noise_patterns = [
+            r'http\S+',  # URL
+            r'www\.\S+',  # 网址
+            r'[<>{}]',    # 特殊字符
+            r'[^a-zA-Z0-9\u4e00-\u9fff\s.,!?;:]',  # 非中英文
+        ]
+
+    def clean_text(self, text):
+        """清洗文本"""
+        # 移除噪声
+        for pattern in self.noise_patterns:
+            text = re.sub(pattern, ' ', text)
+
+        # 标准化空格
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        # 移除过短文本
+        if len(text) < 10:
+            return None
+
+        # 语言检测
+        try:
+            lang = detect(text)
+            if lang not in ['en', 'zh', 'zh-cn']:
+                return None
+        except:
+            return None
+
+        return text
+
+    def remove_duplicates(self, dataset):
+        """去重"""
+        seen = set()
+        unique_data = []
+        for item in dataset:
+            text_hash = hash(item['text'])
+            if text_hash not in seen:
+                seen.add(text_hash)
+                unique_data.append(item)
+        return unique_data
+
+    def filter_by_length(self, dataset, min_len=10, max_len=2048):
+        """按长度过滤"""
+        filtered = []
+        for item in dataset:
+            text_len = len(item['text'])
+            if min_len <= text_len <= max_len:
+                filtered.append(item)
+        return filtered</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 数据格式化</h2>
+          <div class="code-block">
+<pre><code># 数据格式化
+
+# 文本数据格式
+{
+    "id": "doc_000001",
+    "text": "这是训练文本...",
+    "metadata": {
+        "source": "web",
+        "language": "zh",
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
+}
+
+# 指令微调数据格式
+{
+    "id": "instruction_000001",
+    "instruction": "解释什么是机器学习",
+    "input": "",
+    "output": "机器学习是...",
+    "metadata": {
+        "category": "knowledge",
+        "difficulty": "easy"
+    }
+}
+
+# 使用Hugging Face数据集格式
+from datasets import Dataset
+
+# 创建数据集
+data = {
+    "text": ["文本1", "文本2", ...],
+    "label": [0, 1, ...]
+}
+
+dataset = Dataset.from_dict(data)
+
+# 保存为Arrow格式
+dataset.save_to_disk("training_data")
+
+# 保存为Parquet格式
+dataset.to_parquet("training_data.parquet")
+
+# Tokenize数据
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+def tokenize_function(examples):
+    return tokenizer(
+        examples["text"],
+        padding="max_length",
+        truncation=True,
+        max_length=2048
+    )
+
+tokenized_datasets = dataset.map(tokenize_function, batched=True)</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✅</span> 数据质量评估</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>方法</th>
+                <th>阈值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>数据完整性</td>
+                <td>检查缺失值</td>
+                <td>>95%</td>
+              </tr>
+              <tr>
+                <td>数据唯一性</td>
+                <td>去重率</td>
+                <td><5%</td>
+              </tr>
+              <tr>
+                <td>语言质量</td>
+                <td>人工抽样</td>
+                <td>>90%</td>
+              </tr>
+              <tr>
+                <td>格式一致性</td>
+                <td>自动检查</td>
+                <td>100%</td>
+              </tr>
+              <tr>
+                <td>标签准确性</td>
+                <td>交叉验证</td>
+                <td>>95%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 数据分发优化</h2>
+          <div class="code-block">
+<pre><code># 高效数据加载
+import torch
+from torch.utils.data import Dataset, DataLoader
+import numpy as np
+
+class EfficientDataset(Dataset):
+    def __init__(self, data_path, cache_size=10000):
+        self.data_path = data_path
+        self.cache_size = cache_size
+        self.cache = {}
+
+        # 预加载索引
+        self.indexes = np.load(f"{data_path}/indexes.npy")
+
+    def __len__(self):
+        return len(self.indexes)
+
+    def __getitem__(self, idx):
+        # 检查缓存
+        if idx in self.cache:
+            return self.cache[idx]
+
+        # 加载数据
+        data = np.load(f"{self.data_path}/{idx}.npy")
+
+        # 更新缓存
+        if len(self.cache) < self.cache_size:
+            self.cache[idx] = data
+        elif len(self.cache) >= self.cache_size:
+            # 移除最旧的缓存
+            oldest_key = list(self.cache.keys())[0]
+            del self.cache[oldest_key]
+            self.cache[idx] = data
+
+        return data
+
+# 创建DataLoader
+dataset = EfficientDataset("training_data")
+
+# 使用多进程加载
+dataloader = DataLoader(
+    dataset,
+    batch_size=64,
+    shuffle=True,
+    num_workers=8,
+    pin_memory=True,
+    prefetch_factor=2
+)</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">数据准备最佳实践</div>
+            <p><strong>分布式处理</strong>：使用分布式框架处理大规模数据。<strong>增量更新</strong>：支持增量数据处理，避免全量重跑。<strong>版本管理</strong>：使用DVC等工具管理数据版本。<strong>数据备份</strong>：重要数据多份备份，防止丢失。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 数据准备包括收集、清洗、格式化、验证、分发五个步骤</li>
+                <li>• 数据清洗是保证训练质量的关键</li>
+                <li>• 标准化的数据格式提高训练效率</li>
+                <li>• 数据质量评估确保数据满足训练要求</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-1-训练任务规划.html">← 上一节</a>
+          <a href="49-3-分布式训练部署.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

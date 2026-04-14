@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11.5 模型压缩与存储优化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>11.5 模型压缩与存储优化</h1>
+          <p class="subtitle">降低模型存储成本与提升加载速度</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型压缩的基本原理</li>
+            <li>掌握模型量化的存储优化方法</li>
+            <li>学习模型剪枝技术</li>
+            <li>了解模型压缩的评估方法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="数据压缩概念图" class="card-image">
+          <h3 class="card-title">模型压缩的价值</h3>
+          <p class="card-text">
+            随着模型规模的快速增长，存储成本和传输带宽成为关键瓶颈。
+            模型压缩技术可以在保持模型性能的同时，显著减少模型大小，
+            从而降低存储成本、加快加载速度、提升推理效率。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 模型压缩技术概览</h2>
+
+          <h3>压缩技术对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>压缩比</th>
+                <th>精度损失</th>
+                <th>实现难度</th>
+                <th>推理加速</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>FP32 → FP16</td>
+                <td>2x</td>
+                <td>极小</td>
+                <td>简单</td>
+                <td>2-4x</td>
+                <td>通用</td>
+              </tr>
+              <tr>
+                <td>FP32 → INT8</td>
+                <td>4x</td>
+                <td>小</td>
+                <td>中等</td>
+                <td>4-8x</td>
+                <td>推理</td>
+              </tr>
+              <tr>
+                <td>结构化剪枝</td>
+                <td>2-5x</td>
+                <td>小</td>
+                <td>中等</td>
+                <td>2-5x</td>
+                <td>结构规则</td>
+              </tr>
+              <tr>
+                <td>非结构化剪枝</td>
+                <td>5-10x</td>
+                <td>中等</td>
+                <td>中等</td>
+                <td>1-2x</td>
+                <td>稀疏硬件</td>
+              </tr>
+              <tr>
+                <td>知识蒸馏</td>
+                <td>2-4x</td>
+                <td>小</td>
+                <td>复杂</td>
+                <td>2-4x</td>
+                <td>有教师模型</td>
+              </tr>
+              <tr>
+                <td>低秩分解</td>
+                <td>2-3x</td>
+                <td>小</td>
+                <td>中等</td>
+                <td>1-2x</td>
+                <td>特定层</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 量化压缩</h2>
+
+          <h3>量化类型</h3>
+          <div class="code-block"""
+FP32: 32位浮点数，范围约 ±3.4e38
+FP16: 16位浮点数，范围约 ±6.5e4
+BF16: 16位Brain浮点数，与FP32相同范围
+INT8: 8位整数，范围 -128 到 127
+INT4: 4位整数，范围 -8 到 7
+          </div>
+
+          <h3>FP16量化</h3>
+          <div class="code-block">
+import torch
+
+# 模型转换为FP16
+model_fp16 = model.half()
+
+# 保存FP16模型
+torch.save(model_fp16.state_dict(), 'model_fp16.pt')
+
+# 加载FP16模型
+model = MyModel()
+model.load_state_dict(torch.load('model_fp16.pt'))
+model.half()  # 确保模型在FP16模式
+
+# 推理时使用FP16
+with torch.cuda.amp.autocast():
+    output = model_fp16(input_data)
+          </div>
+
+          <h3>INT8量化</h3>
+          <div class="code-block">
+import torch
+from torch.quantization import quantize_dynamic
+
+# 动态量化（权重量化）
+quantized_model = quantize_dynamic(
+    model,
+    {torch.nn.Linear, torch.nn.Conv2d},
+    dtype=torch.qint8
+)
+
+# 保存量化模型
+torch.save(quantized_model.state_dict(), 'model_int8.pt')
+
+# 静态量化（需要校准）
+model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+torch.quantization.prepare(model, inplace=True)
+
+# 校准
+with torch.no_grad():
+    for data in calibration_dataloader:
+        model(data)
+
+# 转换为量化模型
+quantized_model = torch.quantization.convert(model, inplace=True)
+          </div>
+
+          <h3>后训练量化（PTQ）</h3>
+          <div class="code-block">
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+# 使用BitsAndBytes进行INT4量化
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4"
+)
+
+# 加载量化模型
+model = AutoModelForCausalLM.from_pretrained(
+    "model_name",
+    quantization_config=quantization_config
+)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✂️</span> 剪枝压缩</h2>
+
+          <h3>非结构化剪枝</h3>
+          <div class="code-block">
+import torch.nn.utils.prune as prune
+
+# 全局非结构化剪枝
+def global_prune(model, pruning_ratio=0.3):
+    """全局剪枝所有参数"""
+    parameters_to_prune = []
+
+    # 收集所有可剪枝的参数
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Linear, torch.nn.Conv2d)):
+            parameters_to_prune.append((module, 'weight'))
+
+    # 全局剪枝
+    prune.global_unstructured(
+        parameters_to_prune,
+        pruning_method=prune.L1Unstructured,
+        amount=pruning_ratio
+    )
+
+    # 移除剪枝掩码
+    for module, _ in parameters_to_prune:
+        prune.remove(module, 'weight')
+
+    return model
+
+# 局部非结构化剪枝
+def local_prune(model, layer_name, pruning_ratio=0.5):
+    """局部剪枝特定层"""
+    for name, module in model.named_modules():
+        if name == layer_name:
+            prune.l1_unstructured(module, name='weight', amount=pruning_ratio)
+            prune.remove(module, 'weight')
+            break
+
+    return model
+          </div>
+
+          <h3>结构化剪枝</h3>
+          <div class="code-block">
+import torch.nn.utils.prune as prune
+
+# 结构化剪枝（剪枝整个通道）
+def structured_prune(model, pruning_ratio=0.2):
+    """结构化剪枝，移除整个通道"""
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Conv2d):
+            # 按L2范数排序通道
+            l2_norm = torch.norm(module.weight.data, dim=(1, 2, 3))
+            num_channels = module.out_channels
+            num_pruned = int(pruning_ratio * num_channels)
+
+            # 找到要剪枝的通道索引
+            indices_to_prune = torch.argsort(l2_norm)[:num_pruned]
+
+            # 创建结构化剪枝
+            mask = torch.ones(num_channels)
+            mask[indices_to_pruned] = 0
+            prune.custom_from_mask(module, 'weight', mask.unsqueeze(1).unsqueeze(1).unsqueeze(1))
+            prune.remove(module, 'weight')
+
+    return model
+          </div>
+
+          <h3>迭代式剪枝</h3>
+          <div class="code-block">
+class IterativePruner:
+    def __init__(self, model, initial_sparsity=0.2, final_sparsity=0.7, steps=10):
+        self.model = model
+        self.initial_sparsity = initial_sparsity
+        self.final_sparsity = final_sparsity
+        self.steps = steps
+        self.current_step = 0
+
+    def prune_step(self):
+        """执行一次剪枝步骤"""
+        if self.current_step >= self.steps:
+            return
+
+        # 计算当前剪枝率
+        current_sparsity = self._calculate_sparsity(
+            self.initial_sparsity,
+            self.final_sparsity,
+            self.current_step,
+            self.steps
+        )
+
+        # 执行剪枝
+        self._apply_pruning(current_sparsity)
+
+        self.current_step += 1
+        print(f"Step {self.current_step}: sparsity = {current_sparsity:.2%}")
+
+    def _calculate_sparsity(self, initial, final, step, total_steps):
+        """计算当前剪枝率（多项式衰减）"""
+        return final + (initial - final) * (1 - step / total_steps) ** 3
+
+    def _apply_pruning(self, sparsity):
+        """应用剪枝"""
+        for module in self.model.modules():
+            if isinstance(module, (torch.nn.Linear, torch.nn.Conv2d)):
+                prune.l1_unstructured(module, name='weight', amount=sparsity)
+                prune.remove(module, 'weight')
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📉</span> 知识蒸馏</h2>
+
+          <h3>基本原理</h3>
+          <div class="code-block"""
+教师模型 (大模型)
+     ↓ 输出 + 软标签 (温度T)
+学生模型 (小模型)
+     ↓
+蒸馏损失 = α * KL(软标签) + (1-α) * CE(硬标签)
+          </div>
+
+          <h3>蒸馏训练</h3>
+          <div class="code-block">
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class DistillationLoss(nn.Module):
+    def __init__(self, temperature=4.0, alpha=0.7):
+        super().__init__()
+        self.temperature = temperature
+        self.alpha = alpha
+
+    def forward(self, student_logits, teacher_logits, labels):
+        """计算蒸馏损失"""
+        # 软标签损失（KL散度）
+        soft_teacher = F.softmax(teacher_logits / self.temperature, dim=-1)
+        soft_student = F.log_softmax(student_logits / self.temperature, dim=-1)
+        distill_loss = F.kl_div(
+            soft_student,
+            soft_teacher,
+            reduction='batchmean'
+        ) * (self.temperature ** 2)
+
+        # 硬标签损失（交叉熵）
+        hard_loss = F.cross_entropy(student_logits, labels)
+
+        # 组合损失
+        return self.alpha * distill_loss + (1 - self.alpha) * hard_loss
+
+# 训练循环
+def distill_train(student_model, teacher_model, train_loader,
+                  epochs=10, temperature=4.0, alpha=0.7):
+    teacher_model.eval()  # 教师模型不训练
+    student_model.train()
+
+    criterion = DistillationLoss(temperature, alpha)
+    optimizer = torch.optim.Adam(student_model.parameters())
+
+    for epoch in range(epochs):
+        total_loss = 0
+
+        for batch_idx, (data, labels) in enumerate(train_loader):
+            # 前向传播
+            with torch.no_grad():
+                teacher_logits = teacher_model(data)
+
+            student_logits = student_model(data)
+
+            # 计算损失
+            loss = criterion(student_logits, teacher_logits, labels)
+
+            # 反向传播
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        print(f"Epoch {epoch}, Loss: {total_loss / len(train_loader)}")
+          </div>
+
+          <h3>多层蒸馏</h3>
+          <div class="code-block">
+class MultiLayerDistillation(nn.Module):
+    def __init__(self, student_model, teacher_model):
+        super().__init__()
+        self.student = student_model
+        self.teacher = teacher_model
+
+        # 注册钩子获取中间层输出
+        self.teacher_features = {}
+        self.student_features = {}
+
+        self._register_hooks()
+
+    def _register_hooks(self):
+        """注册前向钩子"""
+        def teacher_hook(module, input, output):
+            self.teacher_features[module] = output
+
+        def student_hook(module, input, output):
+            self.student_features[module] = output
+
+        # 为对应层注册钩子
+        for teacher_layer, student_layer in zip(self.teacher.layers, self.student.layers):
+            teacher_layer.register_forward_hook(teacher_hook)
+            student_layer.register_forward_hook(student_hook)
+
+    def feature_distillation_loss(self):
+        """计算特征蒸馏损失"""
+        loss = 0
+
+        for teacher_layer, student_layer in zip(self.teacher.layers, self.student.layers):
+            teacher_feat = self.teacher_features[teacher_layer]
+            student_feat = self.student_features[student_layer]
+
+            # 使用MSE损失
+            loss += F.mse_loss(student_feat, teacher_feat.detach())
+
+        return loss / len(self.teacher.layers)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗜️</span> 存储格式优化</h2>
+
+          <h3>压缩格式</h3>
+          <div class="code-block">
+import gzip
+import lz4.frame
+import zstandard as zstd
+
+def compress_model(model_path, algorithm='zstd', level=3):
+    """压缩模型文件"""
+    with open(model_path, 'rb') as f:
+        model_data = f.read()
+
+    if algorithm == 'gzip':
+        compressed = gzip.compress(model_data, compresslevel=level)
+        suffix = '.gz'
+
+    elif algorithm == 'lz4':
+        compressed = lz4.frame.compress(model_data, compression_level=level)
+        suffix = '.lz4'
+
+    elif algorithm == 'zstd':
+        cctx = zstd.ZstdCompressor(level=level)
+        compressed = cctx.compress(model_data)
+        suffix = '.zst'
+
+    else:
+        raise ValueError(f"Unknown compression algorithm: {algorithm}")
+
+    compressed_path = model_path + suffix
+    with open(compressed_path, 'wb') as f:
+        f.write(compressed)
+
+    original_size = len(model_data)
+    compressed_size = len(compressed)
+    ratio = (1 - compressed_size / original_size) * 100
+
+    print(f"Compression ratio: {ratio:.1f}%")
+    print(f"Original: {original_size / 1024 / 1024:.1f} MB")
+    print(f"Compressed: {compressed_size / 1024 / 1024:.1f} MB")
+
+    return compressed_path
+          </div>
+
+          <h3>增量存储</h3>
+          <div class="code-block">
+import numpy as np
+
+class DeltaStorage:
+    def __init__(self, base_version_path):
+        self.base_version = np.load(base_version_path)
+
+    def save_delta(self, new_version, delta_path):
+        """保存增量差异"""
+        delta = new_version - self.base_version
+
+        # 保存差异
+        np.save(delta_path, delta)
+
+        # 计算压缩比
+        original_size = new_version.nbytes
+        delta_size = delta.nbytes
+        ratio = (1 - delta_size / original_size) * 100
+
+        return ratio
+
+    def load_delta(self, delta_path):
+        """加载增量版本"""
+        delta = np.load(delta_path)
+        return self.base_version + delta
+
+# 使用示例
+delta_storage = DeltaStorage('model_v1.0.npy')
+compression_ratio = delta_storage.save_delta(model_v2.0, 'delta_v2.0.npy')
+print(f"Delta compression ratio: {compression_ratio:.1f}%")
+          </div>
+
+          <h3>共享参数存储</h3>
+          <div class="code-block">
+class SharedParameterStorage:
+    def __init__(self):
+        self.parameter_cache = {}
+
+    def save_model(self, model, model_name):
+        """保存模型，共享相同参数"""
+        saved_state = {}
+
+        for name, param in model.named_parameters():
+            param_hash = hash_param(param.data)
+
+            if param_hash in self.parameter_cache:
+                # 参数已存在，只保存引用
+                saved_state[name] = {
+                    'reference': self.parameter_cache[param_hash],
+                    'shape': param.shape
+                }
+            else:
+                # 保存新参数
+                param_path = f"shared_params/{param_hash}.npy"
+                np.save(param_path, param.data.cpu().numpy())
+
+                saved_state[name] = {
+                    'path': param_path,
+                    'hash': param_hash,
+                    'shape': param.shape
+                }
+
+                self.parameter_cache[param_hash] = param_path
+
+        # 保存模型配置
+        np.save(f"{model_name}_config.npy", saved_state)
+
+def hash_param(tensor):
+    """计算参数的哈希值"""
+    return hash(tensor.data.tobytes())
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 压缩效果评估</h2>
+
+          <h3>评估指标</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">存储指标</h4>
+              <ul class="feature-list">
+                <li>模型大小 (MB)</li>
+                <li>压缩比</li>
+                <li>加载时间</li>
+                <li>存储成本</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">性能指标</h4>
+              <ul class="feature-list">
+                <li>准确率下降</li>
+                <li>推理延迟</li>
+                <li>吞吐量</li>
+                <li>能耗</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>评估脚本</h3>
+          <div class="code-block">
+import time
+import torch
+
+class CompressionEvaluator:
+    def __init__(self, original_model, compressed_model, test_data):
+        self.original = original_model
+        self.compressed = compressed_model
+        self.test_data = test_data
+
+    def evaluate(self):
+        """全面评估压缩效果"""
+        results = {}
+
+        # 1. 模型大小
+        results['original_size'] = self._get_model_size(self.original)
+        results['compressed_size'] = self._get_model_size(self.compressed)
+        results['compression_ratio'] = (
+            results['original_size'] / results['compressed_size']
+        )
+
+        # 2. 准确率
+        results['original_acc'] = self._evaluate_accuracy(self.original)
+        results['compressed_acc'] = self._evaluate_accuracy(self.compressed)
+        results['acc_drop'] = (
+            results['original_acc'] - results['compressed_acc']
+        )
+
+        # 3. 推理性能
+        results['original_latency'] = self._measure_latency(self.original)
+        results['compressed_latency'] = self._measure_latency(self.compressed)
+        results['speedup'] = (
+            results['original_latency'] / results['compressed_latency']
+        )
+
+        # 4. 加载时间
+        results['load_time'] = self._measure_load_time()
+
+        return results
+
+    def _get_model_size(self, model):
+        """获取模型大小"""
+        param_size = sum(p.numel() * p.element_size() for p in model.parameters())
+        return param_size / 1024 / 1024  # MB
+
+    def _evaluate_accuracy(self, model):
+        """评估准确率"""
+        model.eval()
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for data, target in self.test_data:
+                output = model(data)
+                pred = output.argmax(dim=1)
+                correct += (pred == target).sum().item()
+                total += target.size(0)
+
+        return correct / total
+
+    def _measure_latency(self, model):
+        """测量推理延迟"""
+        model.eval()
+        latencies = []
+
+        with torch.no_grad():
+            for i in range(100):  # 预热
+                model(self.test_data[0][0:1])
+
+            for data, _ in self.test_data:
+                start = time.time()
+                _ = model(data[0:1])
+                end = time.time()
+                latencies.append(end - start)
+
+        return np.mean(latencies) * 1000  # ms
+
+    def print_report(self, results):
+        """打印评估报告"""
+        print("=" * 50)
+        print("压缩效果评估报告")
+        print("=" * 50)
+        print(f"模型大小:")
+        print(f"  原始: {results['original_size']:.2f} MB")
+        print(f"  压缩: {results['compressed_size']:.2f} MB")
+        print(f"  压缩比: {results['compression_ratio']:.2f}x")
+        print()
+        print(f"准确率:")
+        print(f"  原始: {results['original_acc']:.4f}")
+        print(f"  压缩: {results['compressed_acc']:.4f}")
+        print(f"  下降: {results['acc_drop']:.4f}")
+        print()
+        print(f"推理延迟:")
+        print(f"  原始: {results['original_latency']:.2f} ms")
+        print(f"  压缩: {results['compressed_latency']:.2f} ms")
+        print(f"  加速: {results['speedup']:.2f}x")
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">压缩注意事项</div>
+            <p>1）在压缩前评估模型对精度的敏感度；2）保留原始模型作为基准；3）在真实数据上验证压缩后的模型；4）监控压缩后的模型性能；5）定期评估是否需要重新压缩。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据存储优化">
+          <div class="caption">图：合理的模型压缩策略可以显著降低存储成本</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 模型压缩可以显著减少存储需求和传输时间</li>
+                <li>• 量化是最常用的压缩技术，平衡了精度和性能</li>
+                <li>• 剪枝和蒸馏适用于特定场景</li>
+                <li>• 压缩效果需要综合评估存储和性能指标</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="11-4-Checkpoint管理.html">← 上一节</a>
+          <a href="../chapter12/12-1-向量数据库概述.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

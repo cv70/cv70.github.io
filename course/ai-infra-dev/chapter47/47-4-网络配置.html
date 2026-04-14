@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.4 网络配置 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.4 网络配置</h1>
+          <p class="subtitle">优化训练集群的网络性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解训练集群的网络需求</li>
+            <li>掌握InfiniBand配置方法</li>
+            <li>了解RoCE网络配置</li>
+            <li>学会网络性能优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=800" alt="网络互联" class="card-image">
+          <h3 class="card-title">网络的重要性</h3>
+          <p class="card-text">
+            在分布式训练中，网络性能直接影响训练效率。高效的互联网络可以显著加速梯度同步，提升集群整体性能。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 网络技术对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>带宽</th>
+                <th>延迟</th>
+                <th>成本</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>InfiniBand</td>
+                <td>200-400Gbps</td>
+                <td><1μs</td>
+                <td>高</td>
+                <td>高性能集群</td>
+              </tr>
+              <tr>
+                <td>RoCE v2</td>
+                <td>100-200Gbps</td>
+                <td>2-5μs</td>
+                <td>中</td>
+                <td>企业集群</td>
+              </tr>
+              <tr>
+                <td>TCP/IP</td>
+                <td>10-100Gbps</td>
+                <td>10-100μs</td>
+                <td>低</td>
+                <td>入门集群</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> InfiniBand配置</h2>
+          <div class="code-block">
+<pre><code># 安装OFED驱动
+# 下载MLNX_OFED
+wget https://content.mellanox.com/ofed/MLNX_OFED-5.9-0.5.6.0/MLNX_OFED_LINUX-5.9-0.5.6.0-ubuntu22.04-x86_64.tgz
+
+# 安装
+tar xzf MLNX_OFED_LINUX-5.9-0.5.6.0-ubuntu22.04-x86_64.tgz
+cd MLNX_OFED_LINUX-5.9-0.5.6.0-ubuntu22.04-x86_64
+./mlnxofedinstall --all
+
+# 启动服务
+systemctl start opensmd
+systemctl enable opensmd
+
+# 验证IB状态
+ibv_devinfo
+
+# 查看端口状态
+ibstat
+
+# 测试IB带宽
+ib_write_bw -d mlx5_0 -i 1 -s 4096 -t 60 -r</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> RoCE v2配置</h2>
+          <div class="code-block">
+<pre><code># 加载RDMA模块
+modprobe rdma_cm
+modprobe ib_core
+modprobe ib_uverbs
+
+# 配置PFC（Priority Flow Control）
+# /etc/mlx/fw.conf
+PCIE_SRIOV_EN=1
+SRIOV_NUM_VF=4
+
+# 启用RoCE
+echo 1 > /sys/module/rdma_core/parameters/roce_mode
+
+# 配置DCB（Data Center Bridging）
+# /etc/sysconfig/network-scripts/ifcfg-eth0
+ETHTOOL_OPTS="-C eth0 rx-usecs 100 tx-usecs 100 rx-frames 100 tx-frames 100"
+
+# 验证RoCE
+rdma link show
+
+# 测试RDMA性能
+rping -s -a 192.168.0.101 -v</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> NCCL网络配置</h2>
+          <div class="code-block">
+<pre><code># NCCL环境变量配置
+# /etc/profile.d/nccl-env.sh
+export NCCL_DEBUG=INFO
+export NCCL_IB_DISABLE=0
+export NCCL_IB_GID_INDEX=3
+export NCCL_NET_PLUGIN=none
+export NCCL_SOCKET_IFNAME=eth0
+export NCCL_IB_HCA=mlx5_0:1
+export NCCL_IB_TIMEOUT=22
+export NCCL_IB_RETRY_CNT=7
+export NCCL_IB_SL=0
+
+# 启用共享内存
+export NCCL_SHM_DISABLE=0
+
+# 启用P2P
+export NCCL_P2P_DISABLE=0
+export NCCL_P2P_LEVEL=5
+
+# 优化网络缓冲区
+export NCCL_NET_BUFFSIZE=8388608
+
+# 测试NCCL性能
+nccl-tests/build/all_reduce_perf -b 8 -e 128M -f 2 -g <ngpus></code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 网络拓扑设计</h2>
+          <div class="card">
+            <h3 class="card-title">Fat-Tree拓扑（小规模）</h3>
+            <div class="code-block" style="font-size: 0.85rem;">
+<pre><code># 4节点集群的Fat-Tree拓扑
+# 使用单层架构，所有节点连接到同一交换机
+
+   [交换机]
+     |
+  +--+--+
+  |  |  |
+G1 G2 G3 G4
+
+# IP分配
+# 数据网络：192.168.0.0/24
+# 每个节点2个端口，用于冗余</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 网络性能监控</h2>
+          <div class="code-block">
+<pre><code># 安装监控工具
+apt install -y perf-tools net-tools ethtool
+
+# 网络带宽监控
+iftop -i eth0
+
+# 网络延迟监控
+ping -c 100 -i 0.01 192.168.0.102
+
+# 网络吞吐测试
+iperf3 -s  # 服务端
+iperf3 -c 192.168.0.101 -t 60  # 客户端
+
+# 查看网络接口统计
+ethtool -S eth0
+
+# 查看网络连接状态
+ss -ant</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 网络优化技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">硬件优化</h3>
+              <ul class="feature-list">
+                <li>使用高品质线缆</li>
+                <li>确保光纤长度合适</li>
+                <li>定期检查接口清洁度</li>
+                <li>使用冗余链路</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">软件优化</h3>
+              <ul class="feature-list">
+                <li>调整MTU大小（9000）</li>
+                <li>启用巨帧（Jumbo Frames）</li>
+                <li>优化中断合并</li>
+                <li>调整TCP参数</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">网络故障排查</div>
+            <p><strong>链路不通</strong>：检查光纤连接、交换机端口状态。<strong>性能不佳</strong>：检查MTU配置、流控设置。<strong>丢包严重</strong>：检查拥塞控制、QoS配置。<strong>NCCL错误</strong>：检查IB设备状态、环境变量配置。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 网络配置是训练集群性能的关键</li>
+                <li>• InfiniBand提供最佳性能，RoCE是性价比之选</li>
+                <li>• NCCL配置直接影响分布式训练效率</li>
+                <li>• 需持续监控和优化网络性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-3-系统部署.html">← 上一节</a>
+          <a href="47-5-验收测试.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

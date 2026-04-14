@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>34.4 Agent执行环境 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>34.4 Agent执行环境</h1>
+          <p class="title">构建安全可控的Agent运行环境</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Agent执行环境的需求</li>
+            <li>掌握容器化部署方案</li>
+            <li>学习沙箱隔离技术</li>
+            <li>了解资源管理与监控</li>
+            <li>认识执行环境的安全挑战</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Agent执行环境" class="card-image">
+          <h3 class="card-title">执行环境概述</h3>
+          <p class="card-text">
+            <strong>Agent执行环境</strong>提供Agent运行所需的<strong>计算资源</strong>、<strong>工具依赖</strong>、<strong>安全隔离</strong>和<strong>监控能力</strong>。一个良好的执行环境确保Agent<strong>稳定运行</strong>、<strong>安全可控</strong>、<strong>资源高效</strong>。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 执行环境架构</h2>
+          <div class="card">
+            <h3 class="card-title">Agent执行环境分层</h3>
+            <div class="code-block">
+<pre>Agent执行环境架构：
+
+┌─────────────────────────────────────┐
+│         应用层                      │
+│  ├── Agent Runtime                 │
+│  ├── 工具框架                        │
+│  └── 业务逻辑                        │
+└─────────────────────────────────────┘
+                  │
+┌─────────────────────────────────────┐
+│         容器层                      │
+│  ├── Docker容器                    │
+│  ├── 依赖管理                        │
+│  ├── 环境隔离                        │
+│  └── 配置管理                        │
+└─────────────────────────────────────┘
+                  │
+┌─────────────────────────────────────┐
+│         沙箱层                      │
+│  ├── 权限控制                        │
+│  ├── 资源限制                        │
+│  ├── 网络隔离                        │
+│  └── 文件隔离                        │
+└─────────────────────────────────────┘
+                  │
+┌─────────────────────────────────────┐
+│         基础设施层                    │
+│  ├── 计算资源（CPU/GPU）             │
+│  ├── 存储资源                        │
+│  ├── 网络资源                        │
+│  └── 安全策略                        │
+└─────────────────────────────────────┘</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> 容器化部署</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>容器化技术</th>
+                <th>特点</th>
+                <th>优势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Docker</td>
+                <td>容器运行时</td>
+                <td>轻量、快速、易用</td>
+                <td>标准部署</td>
+              </tr>
+              <tr>
+                <td>Kubernetes</td>
+                <td>容器编排</td>
+                <td>可扩展、高可用</td>
+                <td>大规模部署</td>
+              </tr>
+              <tr>
+                <td>Docker Compose</td>
+                <td>本地编排</td>
+                <td>简单、快速</td>
+                <td>开发测试</td>
+              </tr>
+              <tr>
+                <td>Podman</td>
+                <td>无守护进程</td>
+                <td>安全、轻量</td>
+                <td>安全场景</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> Docker配置</h2>
+          <div class="card">
+            <h3 class="card-title">Agent容器化</h3>
+            <div class="code-block">
+<pre># Dockerfile
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制代码
+COPY . .
+
+# 创建非root用户
+RUN useradd -m -u 1000 agent
+USER agent
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令
+CMD ["python", "main.py"]
+
+# requirements.txt
+langchain==0.1.0
+openai==1.0.0
+requests==2.31.0
+python-dotenv==1.0.0
+
+# docker-compose.yml
+version: '3.8'
+
+services:
+  agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AGENT_NAME=${AGENT_NAME}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge</pre>
+            </div>
+            <p class="card-text">
+              Docker容器化确保Agent在不同环境中<strong>一致运行</strong>，简化部署和管理。
+            </p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 沙箱隔离</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">隔离层级</h3>
+              <ul class="feature-list">
+                <li>进程隔离：独立进程空间</li>
+                <li>网络隔离：限制网络访问</li>
+                <li>文件隔离：受限文件系统</li>
+                <li>资源隔离：CPU/内存限制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">安全措施</h3>
+              <ul class="feature-list">
+                <li>最小权限原则</li>
+                <li>只读文件系统</li>
+                <li>网络白名单</li>
+                <li>资源配额</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> Kubernetes部署</h2>
+          <div class="card">
+            <h3 class="card-title">K8s Agent部署</h3>
+            <div class="code-block">
+<pre># agent-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      containers:
+      - name: agent
+        image: agent:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: openai-key
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-service
+spec:
+  selector:
+    app: agent
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer</pre>
+            </div>
+            <p class="card-text">
+              Kubernetes提供<strong>可扩展</strong>、<strong>高可用</strong>的Agent部署，支持<strong>自动扩缩容</strong>和<strong>滚动更新</strong>。
+            </p>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">K8s安全配置</div>
+            <p>使用<strong>SecurityContext</strong>、<strong>NetworkPolicy</strong>、<strong>PodSecurityPolicy</strong>强化K8s安全。限制权限，最小化攻击面。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 资源管理</h2>
+          <div class="card">
+            <h3 class="card-title">资源配额与限制</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>资源类型</th>
+                  <th>配置项</th>
+                  <th>推荐值</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CPU</td>
+                  <td>requests/limits</td>
+                  <td>500m/2000m</td>
+                  <td>保证和限制CPU</td>
+                </tr>
+                <tr>
+                  <td>内存</td>
+                  <td>requests/limits</td>
+                  <td>1Gi/4Gi</td>
+                  <td>防止OOM</td>
+                </tr>
+                <tr>
+                  <td>GPU</td>
+                  <td>limits</td>
+                  <td>nvidia.com/gpu: 1</td>
+                  <td>GPU配额</td>
+                </tr>
+                <tr>
+                  <td>存储</td>
+                  <td>volume size</td>
+                  <td>10Gi-100Gi</td>
+                  <td>数据存储</td>
+                </tr>
+                <tr>
+                  <td>网络</td>
+                  <td>bandwidth</td>
+                  <td>1Gbps</td>
+                  <td>网络带宽</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 执行环境配置</h2>
+          <div class="card">
+            <h3 class="card-title">Python Agent运行时</h3>
+            <div class="code-block">
+<pre>import os
+from dotenv import load_dotenv
+import logging
+from functools import wraps
+import time
+
+# 加载环境变量
+load_dotenv()
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/app/logs/agent.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# 资源监控装饰器
+def monitor_resource(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        import psutil
+        process = psutil.Process()
+
+        # 记录初始资源
+        start_memory = process.memory_info().rss / 1024 / 1024  # MB
+        start_time = time.time()
+
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            # 记录结束资源
+            end_memory = process.memory_info().rss / 1024 / 1024  # MB
+            end_time = time.time()
+
+            logger.info(f"Function {func.__name__}: "
+                       f"Memory: {start_memory:.2f}MB -> {end_memory:.2f}MB, "
+                       f"Time: {end_time - start_time:.2f}s")
+
+    return wrapper
+
+# Agent运行时
+class AgentRuntime:
+    def __init__(self):
+        self.agent_config = self._load_config()
+        self._setup_environment()
+
+    def _load_config(self):
+        """加载配置"""
+        return {
+            "openai_api_key": os.getenv("OPENAI_API_KEY"),
+            "max_tokens": int(os.getenv("MAX_TOKENS", 2000)),
+            "timeout": int(os.getenv("TIMEOUT", 60)),
+            "max_retries": int(os.getenv("MAX_RETRIES", 3))
+        }
+
+    def _setup_environment(self):
+        """设置环境"""
+        logger.info("Setting up Agent environment")
+
+        # 检查资源
+        self._check_resources()
+
+        # 初始化工具
+        self._initialize_tools()
+
+    @monitor_resource
+    def _check_resources(self):
+        """检查资源"""
+        import psutil
+        cpu = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory().percent
+
+        logger.info(f"System resources - CPU: {cpu}%, Memory: {memory}%")
+
+        if memory > 90:
+            logger.warning("High memory usage detected")
+
+    def run_agent(self, task):
+        """运行Agent"""
+        logger.info(f"Running agent with task: {task}")
+        # 实现Agent逻辑
+        pass</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 监控与告警</h2>
+          <div class="card">
+            <h3 class="card-title">监控指标</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>监控维度</th>
+                  <th>关键指标</th>
+                  <th>告警阈值</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>资源指标</td>
+                  <td>CPU、内存、磁盘使用率</td>
+                  <td>>90%</td>
+                </tr>
+                <tr>
+                  <td>性能指标</td>
+                  <td>响应时间、吞吐量</td>
+                  <td>P99 > 5s</td>
+                </tr>
+                <tr>
+                  <td>业务指标</td>
+                  <td>任务成功率、错误率</td>
+                  <td>成功率 < 95%</td>
+                </tr>
+                <tr>
+                  <td>安全指标</td>
+                  <td>异常访问、权限违规</td>
+                  <td>任何异常</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">安全注意事项</div>
+            <p>Agent执行环境要严格<strong>最小权限</strong>、<strong>网络隔离</strong>、<strong>定期审计</strong>。防止Agent被恶意利用或产生意外行为。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 执行环境提供Agent运行所需的基础设施</li>
+                <li>• 容器化确保环境一致性和可移植性</li>
+                <li>• 沙箱隔离保障系统安全</li>
+                <li>• Kubernetes支持大规模Agent部署</li>
+                <li>• 完善的监控确保稳定运行</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="34-3-多Agent协作.html">← 上一节</a>
+          <a href="34-5-安全与沙箱.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

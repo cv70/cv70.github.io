@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>45.4 节能调度 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>45.4 节能调度</h1>
+          <p class="subtitle">优化资源调度降低能耗</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解节能调度的原理</li>
+            <li>掌握多种节能调度策略</li>
+            <li>了解碳感知调度</li>
+            <li>学会实施节能调度系统</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="节能调度概念图" class="card-image">
+          <h3 class="card-title">节能调度概述</h3>
+          <p class="card-text">
+            <strong>节能调度</strong>是指在满足性能要求的前提下，通过优化资源分配
+            和任务调度来降低能耗的调度策略。对于AI基础设施而言，
+            节能调度是实现绿色计算的关键技术。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 调度策略</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔄</div>
+              <h3 class="card-title">动态功耗管理</h3>
+              <p class="card-text">根据负载调整功耗</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🌱</div>
+              <h3 class="card-title">碳感知调度</h3>
+              <p class="card-text">考虑碳排放强度</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🌙</div>
+              <h3 class="card-title">时段调度</h3>
+              <p class="card-text">利用低谷时段</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> DVFS技术</h2>
+          <div class="code-block">
+<pre class="language-python"># 动态电压频率调整（DVFS）
+class DVFSScheduler:
+    def __init__(self, gpu):
+        self.gpu = gpu
+        self.frequencies = [335, 450, 565, 680, 795, 910]  # MHz
+        self.current_freq = 910
+
+    def adjust_frequency(self, utilization):
+        """根据利用率调整频率"""
+        if utilization > 0.9:
+            # 高负载：最高频率
+            target_freq = self.frequencies[-1]
+        elif utilization > 0.7:
+            # 中高负载：较高频率
+            target_freq = self.frequencies[-2]
+        elif utilization > 0.5:
+            # 中等负载：中等频率
+            target_freq = self.frequencies[-3]
+        elif utilization > 0.3:
+            # 中低负载：较低频率
+            target_freq = self.frequencies[-4]
+        else:
+            # 低负载：最低频率
+            target_freq = self.frequencies[0]
+
+        if target_freq != self.current_freq:
+            self.gpu.set_frequency(target_freq)
+            self.current_freq = target_freq
+            print(f"调整频率: {target_freq} MHz")
+
+    def get_power_savings(self, utilization):
+        """估算节能比例"""
+        # 简化模型：功耗与频率的立方成正比
+        power_ratio = (utilization ** 3)
+        return (1 - power_ratio) * 100</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌱</span> 碳感知调度</h2>
+          <div class="code-block">
+<pre class="language-python"># 碳感知调度器
+class CarbonAwareScheduler:
+    def __init__(self, carbon_api):
+        self.carbon_api = carbon_api
+
+    def get_carbon_forecast(self, hours=24):
+        """获取碳排放预测"""
+        return self.carbon_api.get_forecast(hours)
+
+    def schedule_task(self, task, deadline):
+        """调度任务到低碳时段"""
+        # 获取碳排放预测
+        forecast = self.get_carbon_forecast()
+
+        # 找到满足截止时间且碳排放最低的时段
+        best_time = None
+        min_carbon = float('inf')
+
+        for i, carbon in enumerate(forecast):
+            if i <= deadline:
+                if carbon < min_carbon:
+                    min_carbon = carbon
+                    best_time = i
+
+        return {
+            'start_time': best_time,
+            'carbon_intensity': min_carbon,
+            'expected_carbon': task.energy_kwh * min_carbon
+        }
+
+    def optimize_batch(self, tasks):
+        """优化批量任务调度"""
+        # 按灵活度和优先级排序
+        flexible_tasks = [t for t in tasks if t.flexible]
+        urgent_tasks = [t for t in tasks if not t.flexible]
+
+        # 紧急任务立即执行
+        schedule = [self.schedule_task(t, 0) for t in urgent_tasks]
+
+        # 灵活任务调度到低碳时段
+        carbon_forecast = self.get_carbon_forecast()
+        low_carbon_periods = sorted(enumerate(carbon_forecast), key=lambda x: x[1])
+
+        for task in flexible_tasks:
+            # 找到最早的低碳时段
+            for period, carbon in low_carbon_periods:
+                if period >= len(schedule):
+                    schedule.append({
+                        'task': task,
+                        'start_time': period,
+                        'carbon_intensity': carbon
+                    })
+                    break
+
+        return schedule</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌙</span> 时段调度策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>时段</th>
+                <th>特点</th>
+                <th>适用任务</th>
+                <th>节能效果</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>低谷时段</td>
+                <td>电价低、碳排放低</td>
+                <td>可延迟的训练任务</td>
+                <td>30-50%</td>
+              </tr>
+              <tr>
+                <td>平段</td>
+                <td>正常电价</td>
+                <td>常规推理任务</td>
+                <td>10-20%</td>
+              </tr>
+              <tr>
+                <td>高峰时段</td>
+                <td>电价高、碳排放高</td>
+                <td>紧急任务</td>
+                <td>0%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 负载聚合</h2>
+          <div class="code-block">
+<pre class="language-python"># 负载聚合调度
+class LoadAggregationScheduler:
+    def aggregate_tasks(self, tasks):
+        """聚合小任务提高利用率"""
+        # 按资源需求分类
+        tasks_by_size = {
+            'small': [t for t in tasks if t.gpu_count == 1],
+            'medium': [t for t in tasks if t.gpu_count == 2],
+            'large': [t for t in tasks if t.gpu_count >= 4]
+        }
+
+        # 聚合小任务
+        batch_size = 4  # 每4个小任务合并
+        aggregated_tasks = []
+
+        for i in range(0, len(tasks_by_size['small']), batch_size):
+            batch = tasks_by_size['small'][i:i+batch_size]
+            if len(batch) == batch_size:
+                aggregated_tasks.append({
+                    'type': 'batch',
+                    'tasks': batch,
+                    'gpu_count': 4,
+                    'priority': max(t.priority for t in batch)
+                })
+
+        # 添加中大型任务
+        aggregated_tasks.extend(tasks_by_size['medium'])
+        aggregated_tasks.extend(tasks_by_size['large'])
+
+        return aggregated_tasks
+
+    def calculate_efficiency(self, tasks, gpu_count):
+        """计算资源利用率"""
+        total_demand = sum(t.gpu_count for t in tasks)
+        utilization = total_demand / gpu_count
+        return min(utilization, 1.0)</pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">调度平衡</div>
+            <p>节能调度需要平衡能耗和性能。
+            过度节能可能导致任务延迟，需要根据业务需求调整。</p>
+          </div>
+        </tip-box>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 系统集成</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Kubernetes</h3>
+              <ul class="feature-list">
+                <li>KEDA自动伸缩</li>
+                <li>自定义调度器</li>
+                <li>资源请求限制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Slurm</h3>
+              <ul class="feature-list">
+                <li>节能插件</li>
+                <li>低优先级任务</li>
+                <li>动态分区</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 节能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>PUE</td>
+                <td>总能耗/IT能耗</td>
+                <td>&lt; 1.3</td>
+              </tr>
+              <tr>
+                <td>节能率</td>
+                <td>节能能耗/总能耗</td>
+                <td>&gt; 20%</td>
+              </tr>
+              <tr>
+                <td>碳排放减少</td>
+                <td>碳排放减少量</td>
+                <td>&gt; 15%</td>
+              </tr>
+              <tr>
+                <td>性能影响</td>
+                <td>性能损失比例</td>
+                <td>&lt; 5%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">实施挑战</div>
+            <ul>
+              <li><strong>复杂性</strong>: 增加调度复杂性</li>
+              <li><strong>性能权衡</strong>: 可能影响任务性能</li>
+              <li><strong>可预测性</strong>: 预测准确性有限</li>
+              <li><strong>用户体验</strong>: 可能影响用户体验</li>
+            </ul>
+          </div>
+        </tip-box>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 实施流程</h2>
+          <div class="code-block">
+<pre>节能调度实施流程
+
+1. 需求分析
+   ├─ 分析工作负载特征
+   ├─ 确定节能目标
+   └─ 评估灵活性
+
+2. 策略设计
+   ├─ 选择调度策略
+   ├─ 设计调度算法
+   └─ 定义SLA约束
+
+3. 系统集成
+   ├─ 开发调度器
+   ├─ 集成到现有系统
+   ├─ 配置监控
+   └─ 测试验证
+
+4. 持续优化
+   ├─ 监控节能效果
+   ├─ 分析性能影响
+   ├─ 调整策略参数
+   └─ 迭代改进</pre>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="节能调度">
+          <div class="caption">图：多策略的节能调度系统</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 节能调度有效降低能耗</li>
+                <li>• 多种策略可结合使用</li>
+                <li>• 需要平衡性能和节能</li>
+                <li>• 持续优化效果显著</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="45-3-碳足迹追踪.html">← 上一节</a>
+          <a href="45-5-可持续AI.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

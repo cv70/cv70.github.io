@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.1 KV Cache优化 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>24.1 KV Cache优化</h1>
+          <p class="subtitle">优化大模型推理的KV缓存机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解KV Cache的原理和作用</li>
+            <li>掌握KV Cache的内存挑战</li>
+            <li>学习KV Cache优化策略</li>
+            <li>了解KV Cache共享技术</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="KV Cache" class="card-image">
+          <h3 class="card-title">什么是KV Cache</h3>
+          <p class="card-text">
+            <strong>KV Cache</strong>（Key-Value Cache）是大语言模型推理中的关键技术。
+            它缓存了自注意力机制中所有历史token的Key和Value矩阵，
+            避免了每次生成新token时重新计算之前的注意力，大幅提升了推理速度。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> 自注意力机制回顾</h2>
+          <div class="card">
+            <h3 class="card-title">注意力计算公式</h3>
+            <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; margin-top: 15px; font-size: 1.1em;">
+              <div style="text-align: center;">
+                Attention(Q, K, V) = softmax(QK^T / √d) · V
+              </div>
+            </div>
+            <div style="margin-top: 20px;">
+              <p>在自注意力中：</p>
+              <ul class="feature-list">
+                <li><strong>Q</strong>：当前token的Query</li>
+                <li><strong>K</strong>：所有历史token的Keys（需要缓存）</li>
+                <li><strong>V</strong>：所有历史token的Values（需要缓存）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> KV Cache的作用</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">无KV Cache</h3>
+              <ul class="feature-list">
+                <li>每步重新计算所有token</li>
+                <li>复杂度：O(n²)</li>
+                <li>显存占用：小</li>
+                <li>推理速度：慢</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">有KV Cache</h3>
+              <ul class="feature-list">
+                <li>只计算新token</li>
+                <li>复杂度：O(n)</li>
+                <li>显存占用：大</li>
+                <li>推理速度：快</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> KV Cache的挑战</h2>
+          <div class="card">
+            <h3 class="card-title">内存需求问题</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #F44336; background: #FFEBEE;">
+                <div style="font-weight: bold; margin-bottom: 5px;">线性增长</div>
+                <div style="font-size: 0.85em; color: #D32F2F;">缓存随序列长度线性增长</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #F44336; background: #FFEBEE;">
+                <div style="font-weight: bold; margin-bottom: 5px;">显存瓶颈</div>
+                <div style="font-size: 0.85em; color: #D32F2F;">长序列导致显存不足</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #F44336; background: #FFEBEE;">
+                <div style="font-weight: bold; margin-bottom: 5px;">并发受限</div>
+                <div style="font-size: 0.85em; color: #D32F2F;">每请求独立缓存占用</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #F44336; background: #FFEBEE;">
+                <div style="font-weight: bold; margin-bottom: 5px;">带宽压力</div>
+                <div style="font-size: 0.85em; color: #D32F2F;">大量KV数据加载</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU显存">
+          <div class="caption">图：KV Cache占用GPU显存示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> KV Cache优化策略</h2>
+          <div class="card">
+            <h3 class="card-title">主要优化技术</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: #E8F5E9;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #388E3C;">量化</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">FP16/INT8量化KV Cache</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: #E3F2FD;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #1976D2;">分页管理</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">PagedAttention动态分配</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: #FFF3E0;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #F57C00;">压缩</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">剪枝不重要的KV</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: #F3E5F5;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #7B1FA2;">共享</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">前缀共享和复用</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #E91E63; background: #FCE4EC;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #C2185B;">分层</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">不同层使用不同精度</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #00BCD4; background: #E0F7FA;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #0097A7;">缓存</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">多级缓存策略</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> KV Cache实现示例</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.nn as nn
+
+class KVCache:
+    """
+    KV Cache实现
+    """
+    def __init__(self, batch_size, num_heads, head_dim, max_seq_len, dtype=torch.float16):
+        self.batch_size = batch_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.max_seq_len = max_seq_len
+        self.dtype = dtype
+
+        # 初始化KV缓存
+        self.k_cache = torch.zeros(
+            batch_size, num_heads, max_seq_len, head_dim,
+            dtype=dtype, device='cuda'
+        )
+        self.v_cache = torch.zeros(
+            batch_size, num_heads, max_seq_len, head_dim,
+            dtype=dtype, device='cuda'
+        )
+
+        self.current_seq_len = 0
+
+    def update(self, new_k, new_v):
+        """
+        更新KV缓存
+        Args:
+            new_k: 新的Key (batch, num_heads, 1, head_dim)
+            new_v: 新的Value (batch, num_heads, 1, head_dim)
+        """
+        seq_len = new_k.shape[2]
+
+        # 将新的KV写入缓存
+        self.k_cache[:, :, self.current_seq_len:self.current_seq_len+seq_len, :] = new_k
+        self.v_cache[:, :, self.current_seq_len:self.current_seq_len+seq_len, :] = new_v
+
+        self.current_seq_len += seq_len
+
+    def get(self):
+        """
+        获取所有KV缓存
+        """
+        return self.k_cache[:, :, :self.current_seq_len, :], \
+               self.v_cache[:, :, :self.current_seq_len, :]
+
+    def get_slice(self, start, end):
+        """
+        获取指定范围的KV
+        """
+        return self.k_cache[:, :, start:end, :], \
+               self.v_cache[:, :, start:end, :]
+
+    def reset(self):
+        """
+        重置缓存
+        """
+        self.k_cache.zero_()
+        self.v_cache.zero_()
+        self.current_seq_len = 0
+
+# 量化的KV Cache
+class QuantizedKVCache:
+    """
+    量化KV Cache（INT8）
+    """
+    def __init__(self, batch_size, num_heads, head_dim, max_seq_len):
+        self.batch_size = batch_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.max_seq_len = max_seq_len
+
+        # INT8缓存
+        self.k_cache_int8 = torch.zeros(
+            batch_size, num_heads, max_seq_len, head_dim,
+            dtype=torch.int8, device='cuda'
+        )
+        self.v_cache_int8 = torch.zeros(
+            batch_size, num_heads, max_seq_len, head_dim,
+            dtype=torch.int8, device='cuda'
+        )
+
+        # 缩放因子
+        self.k_scale = torch.ones(
+            batch_size, num_heads, 1, 1,
+            dtype=torch.float16, device='cuda'
+        )
+        self.v_scale = torch.ones(
+            batch_size, num_heads, 1, 1,
+            dtype=torch.float16, device='cuda'
+        )
+
+        self.current_seq_len = 0
+
+    def quantize(self, x):
+        """
+        量化到INT8
+        """
+        # 计算缩放因子
+        scale = x.abs().max() / 127.0
+
+        # 量化
+        x_quant = (x / scale).round().clamp(-128, 127).to(torch.int8)
+
+        return x_quant, scale
+
+    def update(self, new_k, new_v):
+        """
+        更新量化缓存
+        """
+        seq_len = new_k.shape[2]
+
+        # 量化
+        k_quant, k_scale = self.quantize(new_k)
+        v_quant, v_scale = self.quantize(new_v)
+
+        # 写入缓存
+        self.k_cache_int8[:, :, self.current_seq_len:self.current_seq_len+seq_len, :] = k_quant
+        self.v_cache_int8[:, :, self.current_seq_len:self.current_seq_len+seq_len, :] = v_quant
+
+        # 更新缩放因子
+        self.k_scale = torch.maximum(self.k_scale, k_scale)
+        self.v_scale = torch.maximum(self.v_scale, v_scale)
+
+        self.current_seq_len += seq_len
+
+    def dequantize(self, cache_int8, scale):
+        """
+        反量化
+        """
+        return cache_int8.float() * scale
+
+    def get(self):
+        """
+        获取反量化后的KV
+        """
+        k = self.dequantize(
+            self.k_cache_int8[:, :, :self.current_seq_len, :],
+            self.k_scale
+        )
+        v = self.dequantize(
+            self.v_cache_int8[:, :, :self.current_seq_len, :],
+            self.v_scale
+        )
+        return k, v
+
+# 使用示例
+def example_usage():
+    """
+    使用KV Cache的示例
+    """
+    # 参数
+    batch_size = 4
+    num_heads = 32
+    head_dim = 128
+    max_seq_len = 4096
+
+    # 创建KV Cache
+    kv_cache = KVCache(batch_size, num_heads, head_dim, max_seq_len)
+
+    # 模拟推理过程
+    for i in range(100):
+        # 模拟新的K和V
+        new_k = torch.randn(batch_size, num_heads, 1, head_dim, device='cuda')
+        new_v = torch.randn(batch_size, num_heads, 1, head_dim, device='cuda')
+
+        # 更新KV Cache
+        kv_cache.update(new_k, new_v)
+
+        # 获取所有KV用于注意力计算
+        k, v = kv_cache.get()
+
+        # 进行注意力计算（省略）
+        pass
+
+    # 量化版本
+    kv_cache_quant = QuantizedKVCache(batch_size, num_heads, head_dim, max_seq_len)
+
+    for i in range(100):
+        new_k = torch.randn(batch_size, num_heads, 1, head_dim, device='cuda')
+        new_v = torch.randn(batch_size, num_heads, 1, head_dim, device='cuda')
+
+        kv_cache_quant.update(new_k, new_v)
+
+        k, v = kv_cache_quant.get()
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 优化效果对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>优化方法</th>
+                <th>显存减少</th>
+                <th>精度损失</th>
+                <th>性能影响</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>FP16量化</strong></td>
+                <td>50%</td>
+                <td>几乎无</td>
+                <td>提升</td>
+              </tr>
+              <tr>
+                <td><strong>INT8量化</strong></td>
+                <td>75%</td>
+                <td>小</td>
+                <td>提升</td>
+              </tr>
+              <tr>
+                <td><strong>PagedAttention</strong></td>
+                <td>30-50%</td>
+                <td>无</td>
+                <td>显著提升</td>
+              </tr>
+              <tr>
+                <td><strong>KV压缩</strong></td>
+                <td>60-80%</td>
+                <td>中</td>
+                <td>可能降低</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">KV Cache优化建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>FP16量化是性价比最高的选择</li>
+              <li>PagedAttention可以大幅提升显存利用率</li>
+              <li>INT8量化需要校准，精度损失可接受</li>
+              <li>长序列场景推荐组合使用多种优化</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• KV Cache是大模型推理的关键技术</li>
+                <li>• KV Cache随序列长度线性增长，是显存瓶颈</li>
+                <li>• 量化、分页、压缩等是主要优化方向</li>
+                <li>• PagedAttention是当前最优的解决方案</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter23/23-5-国产推理框架.html">← 上一节</a>
+          <a href="24-2-PagedAttention.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

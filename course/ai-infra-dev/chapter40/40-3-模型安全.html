@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.3 模型安全 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>40.3 模型安全</h1>
+          <p class="subtitle">保护AI模型的安全与完整性</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型安全威胁</li>
+            <li>掌握模型保护技术</li>
+            <li>学习模型水印技术</li>
+            <li>实践模型安全评估</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="模型安全" class="card-image">
+          <h3 class="card-title">模型安全</h3>
+          <p class="card-text">
+            <strong>模型安全</strong>保护模型免受攻击、泄露和盗用，是AI系统安全的重要组成部分。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 模型安全威胁</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">对抗攻击</h3>
+              <ul class="feature-list">
+                <li>对抗样本攻击</li>
+                <li>黑盒攻击</li>
+                <li>白盒攻击</li>
+                <li>物理对抗攻击</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">模型窃取</h3>
+              <ul class="feature-list">
+                <li>模型提取</li>
+                <li>模型逆向</li>
+                <li>模型蒸馏</li>
+                <li>权重推断</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">模型投毒</h3>
+              <ul class="feature-list">
+                <li>数据投毒</li>
+                <li>后门攻击</li>
+                <li>标签翻转</li>
+                <li>清洗攻击</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title>模型泄露</h3>
+              <ul class="feature-list">
+                <li>成员推断</li>
+                <li>属性推断</li>
+                <li>模型反演</li>
+                <li>梯度泄露</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 对抗训练</h2>
+          <div class="code-block">
+# 对抗训练实现
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.transforms as transforms
+
+class AdversarialTraining:
+    def __init__(self, model, device='cuda'):
+        self.model = model
+        self.device = device
+        self.model = self.model.to(device)
+
+    def fgsm_attack(self, data, target, epsilon=0.01):
+        """
+        FGSM对抗攻击生成
+        """
+        data.requires_grad = True
+
+        output = self.model(data)
+        loss = nn.CrossEntropyLoss()(output, target)
+
+        self.model.zero_grad()
+        loss.backward()
+
+        # 生成对抗样本
+        data_grad = data.grad.data
+        perturbed_data = data + epsilon * data_grad.sign()
+        perturbed_data = torch.clamp(perturbed_data, 0, 1)
+
+        return perturbed_data
+
+    def pgd_attack(self, data, target, epsilon=0.1, alpha=0.01, num_iter=10):
+        """
+        PGD对抗攻击生成
+        """
+        perturbed_data = data.clone().detach()
+        perturbed_data.requires_grad = True
+
+        for _ in range(num_iter):
+            output = self.model(perturbed_data)
+            loss = nn.CrossEntropyLoss()(output, target)
+
+            self.model.zero_grad()
+            loss.backward()
+
+            # 更新对抗样本
+            perturbed_data = perturbed_data + alpha * perturbed_data.grad.data.sign()
+            perturbed_data = torch.clamp(perturbed_data, data - epsilon, data + epsilon)
+            perturbed_data = torch.clamp(perturbed_data, 0, 1)
+
+        return perturbed_data.detach()
+
+    def train(self, train_loader, optimizer, epochs, attack_type='fgsm', epsilon=0.01):
+        """
+        对抗训练
+        """
+        self.model.train()
+
+        for epoch in range(epochs):
+            total_loss = 0
+            correct = 0
+            total = 0
+
+            for data, target in train_loader:
+                data, target = data.to(self.device), target.to(self.device)
+
+                # 生成对抗样本
+                if attack_type == 'fgsm':
+                    adversarial_data = self.fgsm_attack(data, target, epsilon)
+                elif attack_type == 'pgd':
+                    adversarial_data = self.pgd_attack(data, target, epsilon)
+
+                # 混合训练
+                mixed_data = torch.cat([data, adversarial_data], dim=0)
+                mixed_target = torch.cat([target, target], dim=0)
+
+                # 训练模型
+                optimizer.zero_grad()
+                output = self.model(mixed_data)
+                loss = nn.CrossEntropyLoss()(output, mixed_target)
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+                _, predicted = output.max(1)
+                total += target.size(0)
+                correct += predicted.eq(target).sum().item()
+
+            accuracy = 100. * correct / total
+            print(f'Epoch {epoch+1}, Loss: {total_loss/len(train_loader):.4f}, Accuracy: {accuracy:.2f}%')
+
+        return self.model
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 模型水印</h2>
+          <div class="code-block">
+# 模型水印实现
+
+import torch
+import torch.nn as nn
+import numpy as np
+
+class ModelWatermarking:
+    def __init__(self, model):
+        self.model = model
+
+    def add_weight_watermark(self, key, pattern_length=100):
+        """
+        在模型权重中添加水印
+        """
+        watermark = self._generate_watermark(key, pattern_length)
+
+        # 在第一层权重中嵌入水印
+        first_layer = list(self.model.children())[0]
+        with torch.no_grad():
+            weights = first_layer.weight.data
+            flat_weights = weights.flatten()
+
+            # 嵌入水印
+            for i, bit in enumerate(watermark):
+                idx = i * (len(flat_weights) // pattern_length)
+                if idx < len(flat_weights):
+                    if bit == 1:
+                        flat_weights[idx] = abs(flat_weights[idx])
+                    else:
+                        flat_weights[idx] = -abs(flat_weights[idx])
+
+            first_layer.weight.data = flat_weights.reshape(weights.shape)
+
+    def extract_weight_watermark(self, key, pattern_length=100):
+        """
+        提取权重水印
+        """
+        watermark = self._generate_watermark(key, pattern_length)
+
+        first_layer = list(self.model.children())[0]
+        weights = first_layer.weight.data
+        flat_weights = weights.flatten()
+
+        extracted_watermark = []
+        for i in range(pattern_length):
+            idx = i * (len(flat_weights) // pattern_length)
+            if idx < len(flat_weights):
+                extracted_watermark.append(1 if flat_weights[idx] >= 0 else 0)
+
+        # 验证水印
+        match = sum(1 for a, b in zip(extracted_watermark, watermark) if a == b)
+        accuracy = match / len(watermark)
+
+        return accuracy > 0.8  # 阈值判断
+
+    def add_output_watermark(self, key, num_classes=10):
+        """
+        在模型输出中添加水印
+        """
+        # 创建触发器集
+        trigger_patterns = self._generate_trigger_patterns(key, num_classes)
+
+        # 为触发器集创建标签
+        watermark_labels = torch.tensor([num_classes] * len(trigger_patterns))
+
+        return trigger_patterns, watermark_labels
+
+    def _generate_watermark(self, key, length):
+        """
+        生成水印序列
+        """
+        import hashlib
+
+        hash_obj = hashlib.sha256(key.encode())
+        hash_bytes = hash_obj.digest()
+
+        watermark = []
+        for byte in hash_bytes:
+            for bit in byte:
+                watermark.append(bit)
+
+        return watermark[:length]
+
+    def _generate_trigger_patterns(self, key, num_classes):
+        """
+        生成触发器模式
+        """
+        np.random.seed(hash(key))
+
+        # 生成随机触发器图像
+        triggers = []
+        for _ in range(10):
+            trigger = np.random.rand(32, 32, 3)
+            triggers.append(torch.tensor(trigger, dtype=torch.float32).permute(2, 0, 1))
+
+        return torch.stack(triggers)
+
+# 使用示例
+model = torchvision.models.resnet18(pretrained=True)
+watermarker = ModelWatermarking(model)
+
+# 添加水印
+watermarker.add_weight_watermark('secret_key')
+
+# 验证水印
+is_watermarked = watermarker.extract_weight_watermark('secret_key')
+print(f"Model is watermarked: {is_watermarked}")
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 模型混淆</h2>
+          <div class="code-block">
+# 模型混淆技术
+
+import torch
+import torch.nn as nn
+
+class ModelObfuscation:
+    def __init__(self, model):
+        self.model = model
+
+    def add_noise_weights(self, std=0.01):
+        """
+        在权重中添加噪声
+        """
+        for param in self.model.parameters():
+            noise = torch.randn_like(param) * std
+            param.data += noise
+
+    def shuffle_layers(self):
+        """
+        打乱层顺序（对于可交换的层）
+        """
+        # 这种方法只适用于某些架构
+        pass
+
+    def quantize_model(self, bits=8):
+        """
+        量化模型
+        """
+        # PyTorch量化
+        self.model.eval()
+        self.model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+        torch.quantization.prepare(self.model, inplace=True)
+
+        # 校准
+        with torch.no_grad():
+            for data, _ in calibration_loader:
+                self.model(data)
+
+        # 转换为量化模型
+        quantized_model = torch.quantization.convert(self.model, inplace=False)
+
+        return quantized_model
+
+    def add_dummy_layers(self):
+        """
+        添加虚假层
+        """
+        # 在模型中添加不产生实际影响的层
+        pass
+
+    def split_model(self, num_parts=3):
+        """
+        分割模型
+        """
+        layers = list(self.model.children())
+        part_size = len(layers) // num_parts
+
+        model_parts = []
+        for i in range(num_parts):
+            start_idx = i * part_size
+            end_idx = (i + 1) * part_size if i < num_parts - 1 else len(layers)
+            part = nn.Sequential(*layers[start_idx:end_idx])
+            model_parts.append(part)
+
+        return model_parts
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 模型安全评估</h2>
+          <div class="code-block">
+# 模型安全评估
+
+import torch
+import numpy as np
+from cleverhans.torch.attacks.fast_gradient_method import fast_gradient_method
+
+class ModelSecurityAssessment:
+    def __init__(self, model, device='cuda'):
+        self.model = model
+        self.device = device
+        self.model = self.model.to(device)
+        self.model.eval()
+
+    def adversarial_robustness_test(self, test_loader, epsilon=0.1):
+        """
+        对抗鲁棒性测试
+        """
+        correct = 0
+        total = 0
+
+        for data, target in test_loader:
+            data, target = data.to(self.device), target.to(self.device)
+
+            # 生成对抗样本
+            adv_data = fast_gradient_method(
+                self.model,
+                data,
+                eps=epsilon,
+                norm=np.inf,
+                clip_min=0.0,
+                clip_max=1.0
+            )
+
+            # 测试模型
+            with torch.no_grad():
+                output = self.model(adv_data)
+                pred = output.argmax(dim=1)
+                correct += (pred == target).sum().item()
+                total += target.size(0)
+
+        robust_accuracy = correct / total
+        return robust_accuracy
+
+    def membership_inference_test(self, training_data, test_data, num_samples=100):
+        """
+        成员推断测试
+        """
+        member_confidences = []
+        non_member_confidences = []
+
+        # 训练集样本
+        for i in range(min(num_samples, len(training_data))):
+            data, _ = training_data[i]
+            data = data.unsqueeze(0).to(self.device)
+
+            with torch.no_grad():
+                output = self.model(data)
+                confidence = output.max().item()
+                member_confidences.append(confidence)
+
+        # 测试集样本
+        for i in range(min(num_samples, len(test_data))):
+            data, _ = test_data[i]
+            data = data.unsqueeze(0).to(self.device)
+
+            with torch.no_grad():
+                output = self.model(data)
+                confidence = output.max().item()
+                non_member_confidences.append(confidence)
+
+        # 计算泄露风险
+        avg_member = np.mean(member_confidences)
+        avg_non_member = np.mean(non_member_confidences)
+
+        leakage_risk = abs(avg_member - avg_non_member)
+
+        return {
+            'member_confidence': avg_member,
+            'non_member_confidence': avg_non_member,
+            'leakage_risk': leakage_risk
+        }
+
+    def model_inversion_test(self, target_output, num_iterations=100, lr=0.01):
+        """
+        模型反演测试
+        """
+        # 初始化随机输入
+        input_data = torch.randn(1, 3, 32, 32).to(self.device)
+        input_data.requires_grad = True
+
+        optimizer = torch.optim.Adam([input_data], lr=lr)
+
+        for _ in range(num_iterations):
+            output = self.model(input_data)
+            loss = nn.MSELoss()(output, target_output)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # 约束输入范围
+            input_data.data = torch.clamp(input_data.data, 0, 1)
+
+        return input_data.detach()
+
+    def gradient_leakage_test(self, sample, target):
+        """
+        梯度泄露测试
+        """
+        self.model.zero_grad()
+
+        output = self.model(sample)
+        loss = nn.CrossEntropyLoss()(output, target)
+        loss.backward()
+
+        # 检查梯度信息
+        gradient_info = []
+        for name, param in self.model.named_parameters():
+            if param.grad is not None:
+                gradient_info.append({
+                    'name': name,
+                    'mean': param.grad.mean().item(),
+                    'std': param.grad.std().item()
+                })
+
+        return gradient_info
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 模型访问控制</h2>
+          <div class="code-block">
+# 模型访问控制
+
+from flask import Flask, request, jsonify
+import torch
+import hashlib
+
+app = Flask(__name__)
+
+class ModelAccessControl:
+    def __init__(self, model):
+        self.model = model
+        self.access_log = []
+
+    def check_permission(self, api_key):
+        """
+        检查API权限
+        """
+        # 简单的API key验证
+        valid_keys = [
+            'key1_hash',
+            'key2_hash'
+        ]
+
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        return key_hash in valid_keys
+
+    def log_access(self, api_key, action, success=True):
+        """
+        记录访问日志
+        """
+        log_entry = {
+            'api_key_hash': hashlib.sha256(api_key.encode()).hexdigest(),
+            'action': action,
+            'success': success,
+            'timestamp': datetime.now().isoformat()
+        }
+        self.access_log.append(log_entry)
+
+    def rate_limit(self, api_key, limit=100, window=3600):
+        """
+        访问频率限制
+        """
+        now = datetime.now().timestamp()
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+        # 统计时间窗口内的访问次数
+        recent_access = [
+            log for log in self.access_log
+            if log['api_key_hash'] == key_hash
+            and log['success']
+            and (now - datetime.fromisoformat(log['timestamp']).timestamp()) < window
+        ]
+
+        return len(recent_access) < limit
+
+# 使用示例
+model = torch.load('model.pt')
+access_control = ModelAccessControl(model)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    api_key = request.headers.get('X-API-Key')
+
+    # 检查权限
+    if not access_control.check_permission(api_key):
+        access_control.log_access(api_key, 'predict', success=False)
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # 频率限制
+    if not access_control.rate_limit(api_key):
+        return jsonify({'error': 'Rate limit exceeded'}), 429
+
+    # 获取输入
+    data = request.json.get('data')
+
+    # 模型推理
+    with torch.no_grad():
+        output = model(data)
+
+    # 记录访问
+    access_control.log_access(api_key, 'predict', success=True)
+
+    return jsonify({'prediction': output.tolist()})
+          </code>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="模型安全">
+          <div class="caption">图：模型安全防护</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">模型安全注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 定期进行安全评估</li>
+              <li>• 实施访问控制和监控</li>
+              <li>• 使用水印保护知识产权</li>
+              <li>• 限制模型暴露信息</li>
+              <li>• 建立应急响应机制</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 模型面临多种安全威胁</li>
+                <li>• 对抗训练提升模型鲁棒性</li>
+                <li>• 水印技术保护知识产权</li>
+                <li>• 访问控制限制模型滥用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="40-2-数据安全与隐私.html">← 上一节</a>
+          <a href="40-4-推理安全.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

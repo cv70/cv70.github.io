@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.3 容器安全 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>28.3 容器安全</h1>
+          <p class="subtitle">AI容器镜像的安全防护</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解容器安全面临的威胁与挑战</li>
+            <li>掌握镜像安全扫描与漏洞修复</li>
+            <li>学会配置容器运行时安全</li>
+            <li>了解AI应用特有的安全考虑</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800" alt="容器安全" class="card-image">
+          <h3 class="card-title">容器安全概述</h3>
+          <p class="card-text">
+            容器安全涵盖镜像构建、传输、运行全生命周期的安全防护。AI容器由于依赖复杂、
+            模型文件巨大、需要GPU访问等特点，面临独特的安全挑战。构建安全的AI容器环境需要多层次防护。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 容器安全威胁模型</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">镜像层威胁</h3>
+              <ul class="feature-list">
+                <li>基础镜像漏洞</li>
+                <li>恶意依赖包</li>
+                <li>机密信息泄露</li>
+                <li>供应链攻击</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">运行时威胁</h3>
+              <ul class="feature-list">
+                <li>容器逃逸</li>
+                <li>权限提升</li>
+                <li>DOS攻击</li>
+                <li>数据窃取</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">AI特有威胁</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 训练数据投毒</li>
+                <li>• 模型后门</li>
+                <li>• 模型窃取</li>
+                <li>• 对抗样本攻击</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 镜像安全扫描</h2>
+
+          <h3>使用Trivy扫描</h3>
+          <div class="code-block">
+# 安装Trivy
+brew install trivy  # macOS
+apt-get install trivy  # Ubuntu
+
+# 扫描镜像漏洞
+trivy image myapp:latest
+
+# 输出示例：
+# 2023-04-15T10:00:00.000Z [INFO] Number of language-specific files: 1
+# 2023-04-15T10:00:00.000Z [INFO] Detected OS: ubuntu
+# myapp:latest (ubuntu 22.04)
+# Total: 157 (HIGH: 12, CRITICAL: 3)
+
+# 扫描时设置严重级别阈值
+trivy image --exit-code 1 --severity HIGH,CRITICAL myapp:latest
+
+# 仅扫描操作系统包
+trivy image --scanners os myapp:latest
+
+# 仅扫描语言依赖
+trivy image --scanners vuln myapp:latest
+          </code-block>
+
+          <h3>使用Docker Scout</h3>
+          <div class="code-block">
+# 扫描镜像
+docker scout cves myapp:latest
+
+# 查看漏洞详情
+docker scout cves --format json myapp:latest
+
+# 与基准镜像对比
+docker scout compare myapp:v1 myapp:v2
+          </div>
+
+          <h3>CI/CD集成</h3>
+          <div class="code-block">
+# GitHub Actions示例
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build image
+      run: docker build -t myapp:latest .
+
+    - name: Run Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: myapp:latest
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'HIGH,CRITICAL'
+
+    - name: Upload results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 最小权限原则</h2>
+
+          <h3>用户权限配置</h3>
+          <div class="code-block">
+# ❌ 不好的做法：以root运行
+FROM python:3.10
+USER root
+CMD ["python", "app.py"]
+
+# ✅ 好的做法：创建非root用户
+FROM python:3.10
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# 切换到非root用户
+USER appuser
+CMD ["python", "app.py"]
+          </code-block>
+
+          <h3>能力限制</h3>
+          <div class="code-block">
+# Docker运行时限制能力
+docker run --cap-drop ALL --cap-add NET_BIND_SERVICE myapp
+
+# Kubernetes配置
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    securityContext:
+      drop:
+      - ALL
+      add:
+      - NET_BIND_SERVICE  # 只允许绑定端口
+      allowPrivilegeEscalation: false
+          </code-block>
+
+          <h3>只读文件系统</h3>
+          <div class="code-block">
+# Docker运行时只读
+docker run --read-only --tmpfs /tmp myapp
+
+# Kubernetes配置
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /tmp
+      name: tmp-volume
+  volumes:
+  - name: tmp-volume
+    emptyDir: {}
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 镜像签名与验证</h2>
+
+          <h3>使用Notary签名</h3>
+          <div class="code-block">
+# 安装Notary
+brew install notary  # macOS
+
+# 初始化仓库
+notary init docker.io/myorg/myapp
+
+# 添加签名密钥
+notary key rotate docker.io/myorg/myapp snapshot
+
+# 签名镜像
+docker trust sign myapp:latest
+
+# 验证镜像
+docker trust verify myapp:latest
+          </code-block>
+
+          <h3>使用Cosign</h3>
+          <div class="code-block">
+# 安装Cosign
+go install github.com/sigstore/cosign/cmd/cosign@latest
+
+# 生成密钥对
+cosign generate-key-pair
+
+# 签名镜像
+cosign sign --key cosign.key myapp:latest
+
+# 验证镜像
+cosign verify --key cosign.pub myapp:latest
+
+# 附加签名（OCI artifact）
+cosign attach signature myapp:latest \
+  --signature <(echo -n "signature" | base64)
+          </code-code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏛️</span> 运行时安全</h2>
+
+          <h3>使用安全沙箱</h3>
+          <div class="code-block">
+# 使用gVisor
+docker run --runtime=runsc myapp
+
+# 使用Kata Containers
+docker run --runtime=kata-runtime myapp
+
+# 使用Firecracker
+firecracker-containerd --config vm.json
+          </code-block>
+
+          <h3>网络隔离</h3>
+          <div class="code-block">
+# 使用网络命名空间
+docker run --network=none myapp  # 无网络
+docker run --network=bridge myapp  # 隔离网络
+
+# Kubernetes NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+          </code-block>
+
+          <h3>资源限制</h3>
+          <div class="code-block">
+# 限制CPU和内存
+docker run --cpus="2" --memory="4g" myapp
+
+# Kubernetes资源限制
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+          </code-code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> AI应用安全</h2>
+
+          <h3>模型安全</h3>
+          <div class="code-block">
+# 模型加密存储
+from cryptography.fernet import Fernet
+
+# 加密模型
+key = Fernet.generate_key()
+cipher_suite = Fernet(key)
+encrypted_model = cipher_suite.encrypt(model_bytes)
+
+# 运行时解密
+decrypted_model = cipher_suite.decrypt(encrypted_model)
+model = torch.load(io.BytesIO(decrypted_model))
+
+# 模型完整性校验
+import hashlib
+model_hash = hashlib.sha256(model_bytes).hexdigest()
+          </code-block>
+
+          <h3>数据安全</h2>
+          <div class="code-block">
+# 训练数据加密
+from cryptography.fernet import Fernet
+
+# 加密数据文件
+with open('data.pt', 'rb') as f:
+    data = f.read()
+    encrypted = cipher_suite.encrypt(data)
+
+with open('data.pt.enc', 'wb') as f:
+    f.write(encrypted)
+
+# 运行时使用secret挂载解密密钥
+# Kubernetes Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: model-key
+type: Opaque
+data:
+  key: <base64-encoded-key>
+          </code-block>
+
+          <h3>防止模型窃取</h3>
+          <div class="code-block">
+# 限制模型查询频率
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+class RateLimiter:
+    def __init__(self, max_requests, window):
+        self.max_requests = max_requests
+        self.window = window
+        self.requests = defaultdict(list)
+
+    def is_allowed(self, client_id):
+        now = datetime.now()
+        # 清理过期记录
+        self.requests[client_id] = [
+            t for t in self.requests[client_id]
+            if now - t < timedelta(seconds=self.window)
+        ]
+        # 检查是否超限
+        if len(self.requests[client_id]) >= self.max_requests:
+            return False
+        self.requests[client_id].append(now)
+        return True
+
+# 使用
+limiter = RateLimiter(max_requests=100, window=60)
+if not limiter.is_allowed(client_id):
+    raise Exception("Rate limit exceeded")
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 安全监控与审计</h2>
+
+          <h3>使用Falco运行时监控</h3>
+          <div class="code-block">
+# 安装Falco
+curl -s https://falco.org/repo/falcosecurity-packages.asc | \
+    apt-key add -
+echo "deb https://download.falco.org/packages/deb stable main" | \
+    tee -a /etc/apt/sources.list.d/falco.list
+apt-get update && apt-get install -y falco
+
+# 启用K8s审计
+kubectl apply -f https://raw.githubusercontent.com/falcosecurity/falco/master/deploy/k8s/falco.yaml
+
+# 查看事件
+kubectl logs -l app=falco -n falco
+          </code-block>
+
+          <h3>审计日志</h3>
+          <div class="code-block">
+# Kubernetes审计日志
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+- level: Metadata
+  resources:
+  - group: ""
+    resources: ["pods", "secrets"]
+
+- level: RequestResponse
+  resources:
+  - group: ""
+    resources: ["configmaps"]
+    namespaces: ["sensitive"]
+          </code-block>
+
+          <h3>告警配置</h3>
+          <div class="code-block">
+# Falco告警规则
+- rule: Detect container escape
+  desc: Detect attempt to escape container
+  condition: >
+    spawned_process and
+    proc.name in (nsenter, chroot, unshare) and
+    container
+  output: Container escape detected (user=%user.name command=%proc.cmdline)
+  priority: CRITICAL
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 安全检查清单</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>检查项</th>
+                <th>说明</th>
+                <th>优先级</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>基础镜像安全</td>
+                <td>使用官方镜像，定期更新</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>漏洞扫描</td>
+                <td>CI/CD中集成安全扫描</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>非root用户</td>
+                <td>不以root用户运行容器</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>最小化依赖</td>
+                <td>只安装必要的包</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>镜像签名</td>
+                <td>验证镜像完整性和来源</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>运行时监控</td>
+                <td>监控异常行为</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>模型加密</td>
+                <td>保护模型知识产权</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>网络隔离</td>
+                <td>限制网络访问</td>
+                <td>中</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践总结</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 在CI/CD中集成安全扫描</li>
+              <li>• 遵循最小权限原则</li>
+              <li>• 使用非root用户运行</li>
+              <li>• 定期更新基础镜像和依赖</li>
+              <li>• 启用运行时监控和告警</li>
+              <li>• 保护模型和数据安全</li>
+              <li>• 实施镜像签名和验证</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 容器安全需要全生命周期防护</li>
+                <li>• 镜像扫描是第一道防线</li>
+                <li>• 最小权限原则是核心策略</li>
+                <li>• AI应用需额外关注模型安全</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="28-2-镜像优化策略.html">← 上一节</a>
+          <a href="28-4-私有镜像仓库.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

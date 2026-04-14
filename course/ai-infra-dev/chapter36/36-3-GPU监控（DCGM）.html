@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.3 GPU监控（DCGM） - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>36.3 GPU监控（DCGM）</h1>
+          <p class="subtitle">使用DCGM和DCGM Exporter实现GPU深度监控</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解DCGM的工作原理</li>
+            <li>掌握DCGM Exporter的部署配置</li>
+            <li>学习GPU监控关键指标</li>
+            <li>实践GPU性能分析</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800" alt="NVIDIA GPU" class="card-image">
+          <h3 class="card-title">NVIDIA DCGM</h3>
+          <p class="card-text">
+            <strong>DCGM (Data Center GPU Manager)</strong>是NVIDIA提供的一套GPU监控和管理工具套件，提供深入的GPU性能洞察。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> DCGM架构</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">DCGM核心组件</h3>
+              <ul class="feature-list">
+                <li><strong>DCGM Daemon</strong> - 后台守护进程</li>
+                <li><strong>DCGM Libraries</strong> - C/Python API</li>
+                <li><strong>DCGM Exporter</strong> - Prometheus指标暴露</li>
+                <li><strong>dcgmi CLI</strong> - 命令行工具</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">监控能力</h3>
+              <ul class="feature-list">
+                <li>计算单元利用率</li>
+                <li>内存使用情况</li>
+                <li>温度与功耗</li>
+                <li>PCIe带宽</li>
+                <li>NVLink带宽</li>
+                <li>XID错误</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPU监控关键指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标类别</th>
+                <th>Prometheus指标</th>
+                <th>含义</th>
+                <th>告警阈值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td rowspan="3">计算利用率</td>
+                <td>DCGM_FI_DEV_SM_CLOCK</td>
+                <td>SM时钟频率</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_DEV_GPU_UTIL</td>
+                <td>GPU利用率</td>
+                <td><90%</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_DEV_ENC_UTIL</td>
+                <td>编码器利用率</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td rowspan="3">内存</td>
+                <td>DCGM_FI_DEV_FB_USED</td>
+                <td>显存使用量</td>
+                <td><95%</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_DEV_MEM_COPY_UTIL</td>
+                <td>内存复制利用率</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_PROF_GR_ECC_SBE_AGG_TOTAL</td>
+                <td>单比特错误计数</td>
+                <td>>0</td>
+              </tr>
+              <tr>
+                <td rowspan="2">温度功耗</td>
+                <td>DCGM_FI_DEV_GPU_TEMP</td>
+                <td>GPU温度</td>
+                <td><85°C</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_DEV_POWER_USAGE</td>
+                <td>功耗</td>
+                <td>接近TDP</td>
+              </tr>
+              <tr>
+                <td rowspan="2">PCIe</td>
+                <td>DCGM_FI_DEV_PCIE_REPLAY_COUNTER</td>
+                <td>PCIe重传计数</td>
+                <td>持续增长</td>
+              </tr>
+              <tr>
+                <td>DCGM_FI_DEV_PCIE_RX_THROUGHPUT</td>
+                <td>PCIe接收吞吐</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>NVLink</td>
+                <td>DCGM_FI_DEV_NVLINK_THROUGHPUT</td>
+                <td>NVLink吞吐量</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>错误</td>
+                <td>DCGM_FI_DEV_XID_ERRORS</td>
+                <td>XID错误代码</td>
+                <td>非0值</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> 部署DCGM Exporter</h2>
+          <div class="code-block">
+# Docker部署
+docker run -d \
+  --name dcgm-exporter \
+  --gpus all \
+  --network host \
+  -p 9400:9400 \
+  nvidia/dcgm-exporter:latest
+
+# Docker Compose部署
+version: '3'
+services:
+  dcgm-exporter:
+    image: nvidia/dcgm-exporter:latest
+    container_name: dcgm-exporter
+    ports:
+      - "9400:9400"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+# Kubernetes部署
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dcgm-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: dcgm-exporter
+    spec:
+      containers:
+      - name: dcgm-exporter
+        image: nvidia/dcgm-exporter:3.1.8-3.2.0-ubuntu22.04
+        ports:
+        - containerPort: 9400
+          name: metrics
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 自定义DCGM采集</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">采集级别</div>
+              <p>DCGM Exporter提供不同的采集级别：</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>级别</th>
+                <th>指标数量</th>
+                <th>使用场景</th>
+                <th>性能开销</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>~50</td>
+                <td>基础监控</td>
+                <td>极低</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>~150</td>
+                <td>常规监控</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>~500</td>
+                <td>深度分析</td>
+                <td>中等</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="code-block">
+# 使用采集级别
+docker run -d \
+  nvidia/dcgm-exporter:latest \
+  -f /etc/dcgm-exporter/dcp-metrics-included.csv \
+  -c 2000ms
+
+# 或使用自定义指标列表
+# dcp-metrics-included.csv
+DCGM_FI_DEV_GPU_UTIL
+DCGM_FI_DEV_FB_USED
+DCGM_FI_DEV_FB_FREE
+DCGM_FI_DEV_FB_TOTAL
+DCGM_FI_DEV_GPU_TEMP
+DCGM_FI_DEV_POWER_USAGE
+DCGM_FI_DEV_PCIE_REPLAY_COUNTER
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> GPU监控查询示例</h2>
+          <div class="code-block">
+# GPU利用率
+DCGM_FI_DEV_GPU_UTIL{gpu="0"}
+
+# 集群平均GPU利用率
+avg(DCGM_FI_DEV_GPU_UTIL)
+
+# 按节点聚合GPU利用率
+avg by (hostname) (DCGM_FI_DEV_GPU_UTIL)
+
+# GPU显存使用率
+DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_TOTAL * 100
+
+# 查找空闲GPU
+DCGM_FI_DEV_GPU_UTIL < 10
+
+# GPU温度异常
+DCGM_FI_DEV_GPU_TEMP > 85
+
+# PCIe错误检测
+rate(DCGM_FI_DEV_PCIE_REPLAY_COUNTER[5m]) > 100
+
+# 计算集群GPU总数
+count(DCGM_FI_DEV_GPU_UTIL)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> GPU告警规则</h2>
+          <div class="code-block">
+# gpu_alerts.yml
+groups:
+  - name: dcgm_alerts
+    interval: 30s
+    rules:
+      # GPU利用率告警
+      - alert: HighGPUUtilization
+        expr: DCGM_FI_DEV_GPU_UTIL > 95
+        for: 10m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} 在节点 {{ $labels.hostname }} 利用率持续过高"
+
+      # GPU温度告警
+      - alert: HighGPUTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 85
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU温度过高: {{ $value }}°C"
+
+      # 显存使用告警
+      - alert: HighGPUMemoryUsage
+        expr: DCGM_FI_DEV_FB_USED /
+              DCGM_FI_DEV_FB_TOTAL * 100 > 95
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU显存使用率过高"
+
+      # ECC错误告警
+      - alert: ECCErrorsDetected
+        expr: DCGM_FI_PROF_GR_ECC_SBE_AGG_TOTAL > 0
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "检测到ECC单比特错误"
+
+      # PCIe错误告警
+      - alert: PCIeErrorsDetected
+        expr: rate(DCGM_FI_DEV_PCIE_REPLAY_COUNTER[5m]) > 100
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "PCIe重传率异常"
+
+      # XID错误告警
+      - alert: XIDErrorDetected
+        expr: DCGM_FI_DEV_XID_ERRORS > 0
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU检测到XID错误: {{ $value }}"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> GPU性能分析</h2>
+          <div class="card">
+            <h3 class="card-title">GPU利用率低的原因</h3>
+            <ul class="feature-list">
+              <li><strong>CPU瓶颈</strong> - 数据预处理或通信占用CPU</li>
+              <li><strong>I/O瓶颈</strong> - 数据加载速度跟不上训练速度</li>
+              <li><strong>内存瓶颈</strong> - 显存不足导致频繁交换</li>
+              <li><strong>通信瓶颈</strong> - 分布式训练通信延迟</li>
+              <li><strong>Batch Size</strong> - 批大小设置不合理</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800" alt="数据中心GPU集群">
+          <div class="caption">图：AI训练集群中的GPU设备</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">DCGM使用注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 确保NVIDIA驱动版本与DCGM版本兼容</li>
+              <li>• 高频采集会影响GPU性能，生产环境建议2秒以上</li>
+              <li>• 注意XID错误的含义，不同错误代码需要不同处理</li>
+              <li>• 结合Nsight进行更深入的性能分析</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• DCGM提供全面的GPU监控能力</li>
+                <li>• 通过DCGM Exporter集成Prometheus监控体系</li>
+                <li>• 关注GPU利用率、温度、显存等关键指标</li>
+                <li>• 结合告警规则实现GPU异常及时发现</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="36-2-Prometheus监控.html">← 上一节</a>
+          <a href="36-4-日志收集（ELK/Loki）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

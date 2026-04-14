@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.5 验收测试 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.5 验收测试</h1>
+          <p class="subtitle">验证训练集群的功能与性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握验收测试的方法和流程</li>
+            <li>学会编写测试用例</li>
+            <li>了解性能基准测试</li>
+            <li>掌握故障排查技巧</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 验收测试框架</h2>
+          <p>验收测试是确保训练集群满足需求和性能标准的关键环节。测试覆盖硬件、网络、软件、性能等多个方面。</p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">硬件测试</h3>
+              <ul class="feature-list">
+                <li>GPU功能测试</li>
+                <li>CPU性能测试</li>
+                <li>存储I/O测试</li>
+                <li>网络连通性</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">软件测试</h3>
+              <ul class="feature-list">
+                <li>驱动版本</li>
+                <li>CUDA功能</li>
+                <li>框架安装</li>
+                <li>容器运行</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">性能测试</h3>
+              <ul class="feature-list">
+                <li>单卡性能</li>
+                <li>多卡扩展</li>
+                <td>网络性能</td>
+                <li>整体吞吐</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 硬件验收测试</h2>
+          <div class="code-block">
+<pre><code># GPU功能测试脚本
+#!/bin/bash
+
+echo "=== GPU验收测试 ==="
+
+# 1. 检查GPU状态
+echo "1. GPU状态检查"
+nvidia-smi
+
+# 2. GPU信息
+echo "2. GPU详细信息"
+nvidia-smi -q
+
+# 3. 显存测试
+echo "3. 显存测试"
+python3 << EOF
+import torch
+device = torch.cuda.current_device()
+total_memory = torch.cuda.get_device_properties(device).total_memory
+print(f"总显存: {total_memory / 1024**3:.2f} GB")
+
+# 分配显存测试
+test_tensor = torch.randn(1024, 1024, 1024, dtype=torch.float32, device='cuda')
+print("显存分配测试通过")
+
+# 计算测试
+result = torch.matmul(test_tensor, test_tensor.transpose(0, 1))
+print("GPU计算测试通过")
+EOF
+
+# 4. 压力测试
+echo "4. GPU压力测试"
+python3 << EOF
+import torch
+import time
+
+print("开始GPU压力测试（30秒）...")
+start_time = time.time()
+while time.time() - start_time < 30:
+    a = torch.randn(4096, 4096, device='cuda')
+    b = torch.matmul(a, a.t())
+print("压力测试完成")
+EOF
+
+echo "GPU验收测试完成"</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 网络验收测试</h2>
+          <div class="code-block">
+<pre><code># 网络性能测试脚本
+#!/bin/bash
+
+echo "=== 网络验收测试 ==="
+
+# 1. 基本连通性
+echo "1. 网络连通性测试"
+for node in gpu-01 gpu-02; do
+    echo -n "Ping $node: "
+    ping -c 5 $node | grep "avg"
+done
+
+# 2. 带宽测试
+echo "2. 带宽测试（iperf3）"
+iperf3 -s &  # 服务端
+sleep 2
+iperf3 -c gpu-01 -t 30 -P 4
+
+# 3. RDMA测试
+echo "3. RDMA性能测试"
+rping -s -a 192.168.0.101 -v &
+sleep 2
+rping -c 192.168.0.101 -v -a 192.168.0.102
+
+# 4. NCCL性能测试
+echo "4. NCCL性能测试"
+cd nccl-tests
+make
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8
+
+echo "网络验收测试完成"</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能基准测试</h2>
+          <div class="card">
+            <h3 class="card-title">PyTorch基准测试</h3>
+            <div class="code-block">
+<pre><code># PyTorch性能测试
+import torch
+import torch.nn as nn
+import time
+
+# 配置
+device = 'cuda'
+batch_size = 64
+hidden_size = 4096
+seq_len = 512
+num_layers = 24
+
+# Transformer模型
+class TransformerLayer(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.attention = nn.MultiheadAttention(hidden_size, 32)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(hidden_size, 4 * hidden_size),
+            nn.GELU(),
+            nn.Linear(4 * hidden_size, hidden_size)
+        )
+
+    def forward(self, x):
+        attn_out, _ = self.attention(x, x, x)
+        x = x + attn_out
+        x = x + self.feed_forward(x)
+        return x
+
+# 创建模型
+model = nn.Sequential(*[TransformerLayer(hidden_size) for _ in range(num_layers)])
+model = model.to(device)
+model.eval()
+
+# 预热
+with torch.no_grad():
+    for _ in range(10):
+        x = torch.randn(seq_len, batch_size, hidden_size).to(device)
+        _ = model(x)
+
+# 性能测试
+with torch.no_grad():
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(100):
+        x = torch.randn(seq_len, batch_size, hidden_size).to(device)
+        _ = model(x)
+    torch.cuda.synchronize()
+    end = time.time()
+
+throughput = (batch_size * 100) / (end - start)
+print(f"吞吐量: {throughput:.2f} samples/s")
+print(f"延迟: {(end - start) / 100 * 1000:.2f} ms")</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 端到端训练测试</h2>
+          <div class="code-block">
+<pre><code># 端到端训练测试
+import torch
+import torch.nn as nn
+import torch.distributed as dist
+
+# 初始化分布式环境
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'gpu-01'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
+
+# 简单模型
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(784, 512)
+        self.fc2 = nn.Linear(512, 10)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        return self.fc2(x)
+
+# DDP训练
+def train(rank, world_size):
+    setup(rank, world_size)
+
+    model = SimpleModel().to(rank)
+    model = nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.CrossEntropyLoss()
+
+    # 训练循环
+    for epoch in range(5):
+        # 模拟数据
+        data = torch.randn(64, 784).to(rank)
+        target = torch.randint(0, 10, (64,)).to(rank)
+
+        optimizer.zero_grad()
+        output = model(data)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+
+        if rank == 0:
+            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+
+    dist.destroy_process_group()
+
+# 启动多进程训练
+world_size = torch.cuda.device_count()
+mp.spawn(train, args=(world_size,), nprocs=world_size, join=True)</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✅</span> 验收标准</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>测试项</th>
+                <th>通过标准</th>
+                <th>实际结果</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPU数量</td>
+                <td>32张</td>
+                <td>32张</td>
+                <td>✅ 通过</td>
+              </tr>
+              <tr>
+                <td>GPU利用率</td>
+                <td>>90%</td>
+                <td>95%</td>
+                <td>✅ 通过</td>
+              </tr>
+              <tr>
+                <td>单卡性能</td>
+                <td>>300 TFLOPS</td>
+                <td>320 TFLOPS</td>
+                <td>✅ 通过</td>
+              </tr>
+              <tr>
+                <td>线性扩展率</td>
+                <td>>80%</td>
+                <td>85%</td>
+                <td>✅ 通过</td>
+              </tr>
+              <tr>
+                <td>网络带宽</td>
+                <td>200Gbps</td>
+                <td>180Gbps</td>
+                <td>⚠️ 警告</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">常见问题处理</div>
+            <p><strong>性能不达标</strong>：检查CUDA版本、驱动配置、网络设置。<strong>网络丢包</strong>：检查光纤连接、交换机配置、流控设置。<strong>训练不稳定</strong>：检查内存设置、NCCL配置、电源稳定性。<strong>兼容性问题</strong>：验证所有组件版本兼容性。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 验收测试涵盖硬件、网络、软件、性能四个方面</li>
+                <li>• 需要编写完整的测试脚本和测试用例</li>
+                <li>• 性能基准测试是验证集群能力的关键</li>
+                <li>• 端到端训练测试验证集群的实际可用性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-4-网络配置.html">← 上一节</a>
+          <a href="../chapter48/48-1-平台架构设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

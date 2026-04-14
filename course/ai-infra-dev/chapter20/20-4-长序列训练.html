@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.4 长序列训练 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.4 长序列训练</h1>
+          <p class="subtitle">突破序列长度限制的技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解长序列训练的挑战</li>
+            <li>掌握序列并行技术</li>
+            <li>了解稀疏注意力方法</li>
+            <li>学会长序列训练优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="长序列训练" class="card-image">
+          <h3 class="card-title">长序列训练概述</h3>
+          <p class="card-text">
+            长序列训练在长文本生成、长文档理解、视频分析等任务中非常重要。
+            但标准Self Attention的显存占用随序列长度的平方增长，限制了可训练的序列长度。
+            本节将介绍突破序列长度限制的各种技术。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 长序列的挑战</h2>
+          <div class="card">
+            <h3 class="card-title">显存和计算复杂度</h3>
+            <div class="code-block">
+标准Self Attention的复杂度：
+
+对于序列长度S和隐藏维度H：
+
+1. 计算复杂度
+   • Q, K, V投影: O(S × H²)
+   • Attention Matrix: Q × K^T: O(S² × H)
+   • Attention Output: Attention × V: O(S² × H)
+   • 总计: O(S² × H)
+
+2. 显存占用
+   • Q, K, V: 3 × B × S × H × sizeof(T)
+   • Attention Matrix: B × S² × sizeof(T)
+   • Output: B × S × H × sizeof(T)
+   • 总计: O(S²)
+
+复杂度分析：
+
+| 序列长度 | 计算复杂度 | 显存占用 |
+|---------|----------|---------|
+| 512     | O(1)    | O(1)   |
+| 1024    | O(4)    | O(4)   |
+| 2048    | O(16)   | O(16)  |
+| 4096    | O(64)   | O(64)  |
+| 8192    | O(256)  | O(256) |
+| 16384   | O(1024) | O(1024)|
+
+实际例子（B=4, H=4096, FP16）：
+
+S=1024:
+• Attention Matrix: 4 × 1024² × 2 = 8.4 MB
+• 可行: ✓
+
+S=4096:
+• Attention Matrix: 4 × 4096² × 2 = 134 MB
+• 可行: ✓
+
+S=8192:
+• Attention Matrix: 4 × 8192² × 2 = 537 MB
+• 可行: ✓
+
+S=16384:
+• Attention Matrix: 4 × 16384² × 2 = 2.1 GB
+• 可行: ✓
+
+S=32768:
+• Attention Matrix: 4 × 32768² × 2 = 8.6 GB
+• 难以实现: ✗
+
+S=65536:
+• Attention Matrix: 4 × 65536² × 2 = 34.4 GB
+• 无法实现: ✗
+
+挑战：
+• 显存占用随S²增长
+• 计算量也随S²增长
+• 超长序列训练困难
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📏</span> 序列并行</h2>
+          <div class="card">
+            <h3 class="card-title">Ring Self Attention</h3>
+            <div class="code-block">
+序列并行原理（Megatron-LM）：
+
+核心思想：
+• 将序列维度切分到多个GPU
+• 每个GPU只处理部分序列
+• 通过环形通信计算全局注意力
+
+显存优化：
+
+假设序列长度S=16384, SP=4:
+
+不使用SP:
+• Attention Matrix: B × S² × sizeof(T)
+• 显存: O(S²)
+
+使用SP:
+• Attention Matrix: B × (S/4)² × sizeof(T)
+• 显存: O(S²/16) = O(S²) / 16
+
+效果：
+• 显存减少: 16倍
+• 最大序列长度: 4倍
+
+通信模式：
+
+┌─────────────────────────────────────┐
+│ GPU0: seq[0:4096]                │
+│ GPU1: seq[4096:8192]             │
+│ GPU2: seq[8192:12288]            │
+│ GPU3: seq[12288:16384]           │
+└─────────────────────────────────────┘
+
+Ring Attention步骤:
+
+Step 1:
+• 每个GPU计算本地attention
+• GPU0: seq[0:4096] × seq[0:4096]^T
+
+Step 2:
+• GPU0 → GPU1: 发送K₀, V₀
+• GPU1 → GPU2: 发送K₁, V₁
+• GPU2 → GPU3: 发送K₂, V₂
+• GPU3 → GPU0: 发送K₃, V₃
+• 每个GPU计算与其他GPU的attention
+
+Step 3:
+• 环形传递...
+• 直到每个GPU计算完所有attention
+
+通信开销：
+• SP步的点对点通信
+• 每步通信量: O(S/SP × H)
+• 总通信量: O(S × H)
+
+优势：
+• 显存减少: 1/SP
+• 序列长度: SP倍
+• 适合NVLink高速通信
+
+限制：
+• 需要高速网络
+• SP通常≤8
+• 调试复杂
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌲</span> 稀疏注意力</h2>
+          <div class="card">
+            <h3 class="card-title">降低计算复杂度</h3>
+            <div class="code-block">
+1. Local Attention
+
+原理：
+• 只计算token周围窗口的attention
+• 减少计算量
+
+窗口大小W的复杂度：
+• 计算: O(S × W × H)
+• 显存: O(S × W)
+
+实现：
+
+def local_attention(Q, K, V, window_size=128):
+    """局部注意力"""
+    B, S, H = Q.shape
+
+    # 创建注意力掩码
+    mask = torch.ones(S, S, device=Q.device)
+    for i in range(S):
+        start = max(0, i - window_size // 2)
+        end = min(S, i + window_size // 2 + 1)
+        mask[i, :start] = 0
+        mask[i, end:] = 0
+
+    # 计算attention
+    scores = torch.matmul(Q, K.transpose(-2, -1))
+    scores = scores.masked_fill(mask == 0, float('-inf'))
+    attention_weights = torch.softmax(scores, dim=-1)
+    output = torch.matmul(attention_weights, V)
+
+    return output
+
+2. Strided Attention
+
+原理：
+• 间隔计算attention
+• 进一步减少计算量
+
+stride=4的复杂度：
+• 计算: O(S × W × H / 4)
+• 显存: O(S × W / 4)
+
+3. Sparse Transformer (BigBird）
+
+原理：
+• 结合local和global attention
+• 随机采样部分全局attention
+
+复杂度：
+• 计算: O(S × √S × H)
+• 显存: O(S × √S)
+
+4. Flash Attention
+
+原理：
+• 不显式存储attention matrix
+• 分块计算，及时释放
+• 减少显存和计算
+
+优势：
+• 计算速度: 快2-4倍
+• 显存: 减少为O(S)
+• 准确性: 与标准attention相同
+
+实现：
+from flash_attn import flash_attn_func
+
+output = flash_attn_func(Q, K, V)
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="长序列训练">
+          <div class="caption">图：长序列训练需要创新的注意力机制</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 递归注意力</h2>
+          <div class="card">
+            <h3 class="card-title">Transformer-XL</h3>
+            <div class="code-block">
+Transformer-XL原理：
+
+核心思想：
+• 使用缓存的历史attention
+• 避免重复计算
+• 支持更长的上下文
+
+Segment处理：
+
+将长序列分成多个segment：
+
+Sequence: [t₀, t₁, ..., tₙ]
+Segment 1: [t₀, t₁, ..., tₖ]
+Segment 2: [tₖ, tₖ₊₁, ..., t₂ₖ]
+...
+
+处理Segment 1:
+• 标准self-attention
+• 缓存hidden states
+
+处理Segment 2:
+• 使用Segment 1的缓存
+• extended attention: [cached + segment]
+• 避免重复计算
+
+优势：
+• 显存: O(S)（而非O(S²））
+• 计算: 每个segment只需计算一次
+• 可以处理超长序列
+
+实现：
+
+class TransformerXL(torch.nn.Module):
+    def __init__(self, hidden_size, mem_len):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.mem_len = mem_len
+        self.layers = torch.nn.ModuleList([
+            TransformerXLBlock(hidden_size)
+            for _ in range(num_layers)
+        ])
+
+    def forward(self, x, mems=None):
+        """前向传播"""
+        # 计算attention（包含历史）
+        new_mems = []
+
+        for i, layer in enumerate(self.layers):
+            # 传递历史memory
+            x, new_mem = layer(
+                x,
+                mem=mems[i] if mems is not None else None
+            )
+            new_mems.append(new_mem)
+
+        return x, new_mems
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 技术对比</h2>
+          <div class="card">
+            <h3 class="card-title">长序列技术对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>技术</th>
+                  <th>计算复杂度</th>
+                  <th>显存</th>
+                  <th>最大序列</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>标准Attention</strong></td>
+                  <td>O(S² × H)</td>
+                  <td>O(S²)</td>
+                  <td>~2K-4K</td>
+                </tr>
+                <tr>
+                  <td><strong>序列并行</strong></td>
+                  <td>O(S² × H)</td>
+                  <td>O(S²/SP)</td>
+                  <td>~8K-16K</td>
+                </tr>
+                <tr>
+                  <td><strong>Local Attention</strong></td>
+                  <td>O(S × W × H)</td>
+                  <td>O(S × W)</td>
+                  <td>~16K</td>
+                </tr>
+                <tr>
+                  <td><strong>Sparse Attention</strong></td>
+                  <td>O(S × √S × H)</td>
+                  <td>O(S × √S)</td>
+                  <td>~32K</td>
+                </tr>
+                <tr>
+                  <td><strong>Flash Attention</strong></td>
+                  <td>O(S² × H)</td>
+                  <td>O(S)</td>
+                  <td>~8K-16K</td>
+                </tr>
+                <tr>
+                  <td><strong>Transformer-XL</strong></td>
+                  <td>O(S² × H)</td>
+                  <td>O(S)</td>
+                  <td>~无限</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">长序列训练建议</h3>
+            <div class="code-block">
+场景1：中等长度（4K-8K）
+
+推荐：Flash Attention
+• 计算快：2-4倍加速
+• 显存低：O(S)复杂度
+• 准确高：与标准相同
+
+场景2：较长序列（8K-16K）
+
+推荐：序列并行 + Flash Attention
+• SP=4: 显存减少4倍
+• Flash: 进一步优化
+• 需要: NVLink高速网络
+
+场景3：超长序列（16K-32K）
+
+推荐：Sparse Attention
+• BigBird等稀疏注意力
+• 计算: O(S × √S)
+• 显存: O(S × √S)
+
+场景4：超长序列（>32K）
+
+推荐：Transformer-XL
+• 递归使用历史
+• 显存: O(S)
+• 可以处理无限长度
+
+组合策略：
+
+1. Flash Attention + 序列并行
+   • 最大化计算效率
+   • 最小化显存占用
+   • 适合: 单机多卡
+
+2. Sparse Attention + 序列并行
+   • 降低计算复杂度
+   • 支持更长序列
+   • 适合: 长序列任务
+
+3. Transformer-XL + 梯度累积
+   • 处理超长序列
+   • 模拟大batch
+   • 适合: 长文档理解
+
+注意事项：
+• SP需要高速网络
+• 稀疏注意力可能影响性能
+• Transformer-XL需要正确处理memory
+• 不同技术的组合需要仔细调优
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>性能权衡：</strong>稀疏注意力可能降低性能</li>
+              <li><strong>实现复杂：</strong>序列并行调试复杂</li>
+              <li><strong>兼容性：</strong>某些技术可能与特定框架不兼容</li>
+              <li><strong>调优需求：</strong>需要仔细调优参数</li>
+              <li><strong>监控重要：</strong>监控显存和计算性能</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 长序列训练面临显存和计算双重挑战</li>
+                <li>• 序列并行可以线性减少显存占用</li>
+                <li>• 稀疏注意力降低计算复杂度</li>
+                <li>• Flash Attention兼顾速度和显存</li>
+                <li>• 需要根据场景选择合适的技术组合</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="20-3-训练稳定性优化.html">← 上一节</a>
+          <a href="20-5-多模态模型训练.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

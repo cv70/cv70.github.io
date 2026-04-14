@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.2 集合通信原语 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>14.2 集合通信原语</h1>
+          <p class="subtitle">分布式训练的核心通信操作</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解集合通信的基本概念</li>
+            <li>掌握常见的通信原语</li>
+            <li>了解通信算法与优化</li>
+            <li>认识NCCL通信库</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="集合通信" class="card-image">
+          <h3 class="card-title">集合通信概述</h3>
+          <p class="card-text">
+            集合通信（Collective Communication）是多个进程参与的通信操作，
+            是分布式训练的基础。常见的集合通信原语包括Broadcast、All-Reduce、All-Gather等，
+            它们实现了进程间的数据共享和同步。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📡</span> 基本通信原语</h2>
+
+          <h3>Point-to-Point通信</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>原语</th>
+                <th>说明</th>
+                <th>发送方</th>
+                <th>接收方</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Send</td>
+                <td>发送消息</td>
+                <td>1个</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>Recv</td>
+                <td>接收消息</td>
+                <td>-</td>
+                <td>1个</td>
+              </tr>
+              <tr>
+                <td>Sendrecv</td>
+                <td>同时发送接收</td>
+                <td>1个</td>
+                <td>1个</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Collective通信</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>原语</th>
+                <th>说明</th>
+                <th>参与方</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Broadcast</td>
+                <td>广播数据</td>
+                <td>Root发送，所有接收</td>
+                <td>初始化参数</td>
+              </tr>
+              <tr>
+                <td>Reduce</td>
+                <td>归约数据</td>
+                <td>所有发送，Root接收</td>
+                <td>梯度汇总</td>
+              </tr>
+              <tr>
+                <td>All-Reduce</td>
+                <td>全局归约</td>
+                <td>所有参与，所有接收</td>
+                <td>梯度同步</td>
+              </tr>
+              <tr>
+                <td>Scatter</td>
+                <td>分发数据</td>
+                <td>Root分发，所有接收部分</td>
+                <td>数据分片</td>
+              </tr>
+              <tr>
+                <td>Gather</td>
+                <td>收集数据</td>
+                <td>所有发送部分，Root收集</td>
+                <td>数据汇总</td>
+              </tr>
+              <tr>
+                <td>All-Gather</td>
+                <td>全局收集</td>
+                <td>所有发送部分，所有接收全部</td>
+                <td>模型分片同步</td>
+              </tr>
+              <tr>
+                <td>All-to-All</td>
+                <td>全对全</td>
+                <td>所有发送，所有接收</td>
+                <td>张量并行</td>
+              </tr>
+              <tr>
+                <td>Barrier</td>
+                <td>同步点</td>
+                <td>所有等待</td>
+                <td>训练同步</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 通信算法</h2>
+
+          <h3>All-Reduce算法</h3>
+
+          <h4>Ring All-Reduce</h4>
+          <div class="code-block"""
+Ring All-Reduce算法:
+
+过程:
+1. Reduce-Scatter阶段
+   - 每个节点发送数据给下一个节点
+   - 接收上一个节点的数据
+   - 累加接收的数据
+   - 继续转发，直到每个节点持有部分结果
+
+2. All-Gather阶段
+   - 类似第一个阶段
+   - 但这次不做累加
+   - 只转发数据
+   - 最终每个节点获得完整结果
+
+优势:
+- 带宽利用率高
+- 适合大规模集群
+- 实现简单
+
+劣势:
+- 延迟较高（需要2N-1步）
+
+复杂度:
+- 时间: O(N)
+- 带宽: O(2N * M / N) = O(2M)
+- 其中N是节点数，M是数据大小
+          </div>
+
+          <h4>Tree All-Reduce</h4>
+          <div class="code-block"""
+Tree All-Reduce算法:
+
+过程:
+1. Reduce阶段
+   - 叶节点向父节点发送数据
+   - 父节点累加子节点数据
+   - 根节点得到总和
+
+2. Broadcast阶段
+   - 根节点广播结果
+   - 每个节点转发给子节点
+   - 叶节点接收结果
+
+优势:
+- 延迟低（O(log N)）
+- 适合小规模
+
+劣势:
+- 带宽利用率低
+- 根节点易成为瓶颈
+
+复杂度:
+- 时间: O(log N)
+- 带宽: O(2 * log N * M)
+          </div>
+
+          <h4>NCCL CollNet</h4>
+          <div class="code-block"""
+NCCL CollNet算法:
+
+特点:
+- 混合Ring和Tree
+- 自动选择最优算法
+- 适应网络拓扑
+- 负载均衡
+
+选择策略:
+- 小规模: Tree
+- 中等规模: Ring
+- 大规模: 混合
+
+优化:
+- 感知NVLink拓扑
+- 利用多路径
+- 动态调整算法
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> NCCL通信库</h2>
+
+          <h3>NCCL架构</h3>
+          <div class="code-block"""
+NCCL (NVIDIA Collective Communications Library) 架构:
+
+层次结构:
+┌─────────────────────────────────────┐
+│         应用层                      │
+│    PyTorch, TensorFlow, MPI       │
+└──────────────┬──────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│         NCCL API                   │
+│    集合通信接口                    │
+└──────────────┬──────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│         NCCL Core                  │
+│    通信算法实现                    │
+│    - Ring, Tree, CollNet          │
+│    - 协议管理                      │
+│    - 错误处理                      │
+└──────────────┬──────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│         Transport Layer            │
+│    - NVLink                      │
+│    - IB/RoCE                     │
+│    - PCIe                        │
+│    - Network                     │
+└─────────────────────────────────────┘
+          </div>
+
+          <h3>NCCL优化</h3>
+          <div class="code-block"""
+NCCL性能优化:
+
+环境变量:
+# 基础配置
+export NCCL_DEBUG=INFO                  # 调试信息
+export NCCL_DEBUG_SUBSYS=NET,COLL      # 调试子系统
+
+# 网络配置
+export NCCL_IB_DISABLE=0                # 启用IB/RoCE
+export NCCL_IB_GID_INDEX=3             # RoCE v2
+export NCCL_IB_HCA=mlx5_0:1            # HCA选择
+export NCCL_IB_TC=3                    # 优先级
+
+# NVLink优化
+export NCCL_NVLS_ENABLE=1              # NVLink共享内存
+export NCCL_SHM_DISABLE=0              # 启用共享内存
+
+# 算法选择
+export NCCL_ALGO=Tree                  # Tree/Ring/CollNet
+export NCCL_PROTO=Simple                # LL/Simple
+
+# 内存优化
+export NCCL_BUFFSIZE=8388608           # Buffer大小
+export NCCL_BLOCKSIZE=1048576           # Block大小
+
+# 超时配置
+export NCCL_TIMEOUT=3600                # 超时时间
+export NCCL_IB_TIMEOUT=18              # IB超时
+export NCCL_IB_RETRY_CNT=7             # 重试次数
+
+验证:
+mpirun -np 8 \
+    -x NCCL_DEBUG=INFO \
+    ./all_reduce_perf -b 1G -e 8G -f 2
+          </div>
+
+          <h3>NCCL性能测试</h3>
+          <div class="code-block#!/bin/bash
+# NCCL性能测试脚本
+
+# 1. 测试不同算法
+for algo in Ring Tree CollNet; do
+    echo "Testing $algo algorithm..."
+    mpirun -np 8 \
+        -x NCCL_ALGO=$algo \
+        -x NCCL_DEBUG=INFO \
+        ./all_reduce_perf \
+        -b 1M -e 8M -f 2 -g 1
+done
+
+# 2. 测试不同消息大小
+for size in 1K 64K 1M 8M 32M 128M; do
+    echo "Testing message size: $size"
+    mpirun -np 8 \
+        -x NCCL_DEBUG=INFO \
+        ./all_reduce_perf \
+        -b $size -e $size -f 2
+done
+
+# 3. 测试不同节点数
+for np in 2 4 8 16 32; do
+    echo "Testing $np processes..."
+    mpirun -np $np \
+        -x NCCL_DEBUG=INFO \
+        ./all_reduce_perf \
+        -b 1G -e 8G -f 2
+done
+
+# 4. 长时间稳定性测试
+mpirun -np 8 \
+    -x NCCL_DEBUG=INFO \
+    ./all_reduce_perf \
+    -b 1G -e 8G -f 2 -d 3600
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能分析</h2>
+
+          <h3>性能指标</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标值</th>
+                <th>测量方法</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>带宽</td>
+                <td>数据传输速率</td>
+                <td>> 80%线速</td>
+                <td>NCCL测试</td>
+              </tr>
+              <tr>
+                <td>延迟</td>
+                <td>通信启动时间</td>
+                <td>< 10μs</td>
+                <td>延迟测试</td>
+              </tr>
+              <tr>
+                <td>吞吐量</td>
+                <td>每秒消息数</td>
+                <td>尽可能高</td>
+                <td>吞吐测试</td>
+              </tr>
+              <tr>
+                <td>扩展性</td>
+                <td>性能随规模变化</td>
+                <td>接近线性</td>
+                <td>多节点测试</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>性能瓶颈分析</h3>
+          <div class="code-block"""
+常见性能瓶颈:
+
+1. 网络带宽不足
+   - 症状: 带宽利用率低
+   - 原因: 拥塞、配置错误
+   - 解决: 优化网络配置
+
+2. NVLink未使用
+   - 症状: PCIe通信为主
+   - 原因: 配置错误
+   - 解决: 检查NVLink状态
+
+3. 算法选择不当
+   - 症状: 性能低于预期
+   - 原因: 算法不匹配
+   - 解决: 手动指定算法
+
+4. 内存带宽限制
+   - 症状: 带宽达到瓶颈
+   - 原因: 内存访问模式差
+   - 解决: 优化内存访问
+
+5. CPU瓶颈
+   - 症状: CPU利用率高
+   - 原因: 计算密集型操作
+   - 解决: 使用GPU加速
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <p>1）选择合适的通信算法；2）优化网络配置；3）监控通信性能；4）定期进行性能测试；5）根据实际情况调优参数。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式训练">
+          <div class="caption">图：高效的集合通信是分布式训练的关键</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 集合通信是分布式训练的基础</li>
+                <li>• All-Reduce是最重要的通信原语</li>
+                <li>• 不同的算法适用于不同场景</li>
+                <li>• NCCL提供了优化的集合通信实现</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="14-1-网络拓扑类型.html">← 上一节</a>
+          <a href="14-3-网络带宽规划.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

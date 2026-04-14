@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>37.3 告警分级与路由 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>37.3 告警分级与路由</h1>
+          <p class="subtitle">构建智能的告警分发体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解告警分级的意义</li>
+            <li>掌握告警路由策略</li>
+            <li>学习告警聚合与分组</li>
+            <li>实践智能告警分发</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="告警路由" class="card-image">
+          <h3 class="card-title">告警路由架构</h3>
+          <p class="card-text">
+            <strong>告警路由</strong>确保每个告警都能及时发送给合适的人员，实现高效的故障响应。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 告警分级体系</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>级别</th>
+                <th>响应时间</th>
+                <th>通知方式</th>
+                <th>通知对象</th>
+                <th>升级策略</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>P0</td>
+                <td>5分钟内</td>
+                <td>电话 + 短信 + IM</td>
+                <td>OnCall值班人员</td>
+                <td>10分钟 → 技术负责人</td>
+              </tr>
+              <tr>
+                <td>P1</td>
+                <td>15分钟内</td>
+                <td>短信 + IM</td>
+                <td>团队负责人</td>
+                <td>30分钟 → 技术总监</td>
+              </tr>
+              <tr>
+                <td>P2</td>
+                <td>1小时内</td>
+                <td>IM + 邮件</td>
+                <td>相关团队</td>
+                <td>4小时 → 部门经理</td>
+              </tr>
+              <tr>
+                <td>P3</td>
+                <td>工作时间内</td>
+                <td>邮件</td>
+                <td>开发人员</td>
+                <td>第二天 → 团队负责人</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 路由策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">按级别路由</h3>
+              <ul class="feature-list">
+                <li>P0告警：OnCall人员</li>
+                <li>P1告警：团队值班</li>
+                <li>P2告警：技术支持</li>
+                <li>P3告警：开发团队</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">按组件路由</h3>
+              <ul class="feature-list">
+                <li>GPU告警：基础设施团队</li>
+                <li>训练告警：ML平台团队</li>
+                <li>推理告警：推理服务团队</li>
+                <li>数据告警：数据工程团队</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">按服务路由</h3>
+              <ul class="feature-list">
+                <li>用户服务：产品团队</li>
+                <li>内部服务：技术团队</li>
+                <li>测试环境：开发团队</li>
+                <li>生产环境：运维团队</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">按时间路由</h3>
+              <ul class="feature-list">
+                <li>工作时间：技术团队</li>
+                <li>非工作时间：OnCall人员</li>
+                <li>周末：值班经理</li>
+                <li>节假日：应急团队</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 路由配置示例</h2>
+          <div class="code-block">
+# alertmanager.yml
+route:
+  # 默认接收器
+  receiver: 'default'
+
+  # 分组配置
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+
+  # 路由树
+  routes:
+    # P0告警路由
+    - match:
+        severity: P0
+      receiver: 'oncall-primary'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 5m
+      routes:
+        # 按服务分配OnCall
+        - match:
+            service: 'training'
+          receiver: 'oncall-training'
+        - match:
+            service: 'inference'
+          receiver: 'oncall-inference'
+        - match:
+            service: 'storage'
+          receiver: 'oncall-storage'
+
+    # P1告警路由
+    - match:
+        severity: P1
+      receiver: 'team-lead'
+      routes:
+        # 按团队路由
+        - match:
+            team: 'infra'
+          receiver: 'infra-lead'
+        - match:
+            team: 'ml-platform'
+          receiver: 'ml-platform-lead'
+        - match:
+            team: 'inference'
+          receiver: 'inference-lead'
+
+    # P2告警路由
+    - match:
+        severity: P2
+      receiver: 'team-notification'
+      routes:
+        # 工作时间路由
+        - match:
+            time: 'work-hours'
+          receiver: 'team-work-hours'
+        # 非工作时间路由
+        - match:
+            time: 'after-hours'
+          receiver: 'oncall-secondary'
+
+    # GPU告警专用路由
+    - match:
+        component: 'gpu'
+      receiver: 'gpu-team'
+      group_by: ['alertname', 'hostname']
+
+    # 训练任务告警
+    - match:
+        component: 'training'
+      receiver: 'ml-platform-team'
+      routes:
+        # 训练失败告警
+        - match:
+            alertname: 'TrainingJobFailed'
+          receiver: 'ml-platform-lead'
+        # 训练性能告警
+        - match:
+            alertname: 'TrainingSpeedLow'
+          receiver: 'ml-platform-team'
+
+    # 推理服务告警
+    - match:
+        component: 'inference'
+      receiver: 'inference-team'
+      routes:
+        # 推理延迟告警
+        - match:
+            alertname: 'HighInferenceLatency'
+          receiver: 'inference-lead'
+        # 推理错误告警
+        - match:
+            alertname: 'InferenceErrorSpike'
+          receiver: 'inference-lead'
+
+# 接收器配置
+receivers:
+  # 默认接收器
+  - name: 'default'
+    email_configs:
+      - to: 'default@example.com'
+
+  # OnCall主要接收器
+  - name: 'oncall-primary'
+    webhook_configs:
+      - url: 'http://oncall.example.com/api/alert'
+        send_resolved: true
+
+  # 训练OnCall
+  - name: 'oncall-training'
+    webhook_configs:
+      - url: 'http://oncall.example.com/api/alert?team=training'
+
+  # 推理OnCall
+  - name: 'oncall-inference'
+    webhook_configs:
+      - url: 'http://oncall.example.com/api/alert?team=inference'
+
+  # 团队负责人
+  - name: 'team-lead'
+    slack_configs:
+      - channel: '#team-leads'
+        send_resolved: true
+
+  # GPU团队
+  - name: 'gpu-team'
+    email_configs:
+      - to: 'gpu-team@example.com'
+    slack_configs:
+      - channel: '#gpu-alerts'
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 告警分组策略</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">分组的目的</div>
+              <p>合理的分组能减少通知数量，提高处理效率：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# 按告警名称分组
+group_by: ['alertname']
+
+# 按告警名称和集群分组
+group_by: ['alertname', 'cluster']
+
+# 按告警名称、集群和服务分组
+group_by: ['alertname', 'cluster', 'service']
+
+# 按告警类型和主机分组
+group_by: ['alertname', 'instance']
+
+# 按团队分组
+group_by: ['team']
+
+# 不分组（每条告警单独通知）
+group_by: []
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔇</span> 告警抑制策略</h2>
+          <div class="code-block">
+# 抑制规则
+inhibit_rules:
+  # 严重告警抑制警告告警
+  - source_match:
+      severity: 'P0'
+    target_match:
+      severity: 'P1'
+    equal: ['alertname', 'instance']
+
+  # 宕机抑制相关告警
+  - source_match:
+      alertname: 'InstanceDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
+
+  # 服务宕机抑制组件告警
+  - source_match:
+      alertname: 'ServiceDown'
+    target_match_re:
+      alertname: 'ComponentDown'
+    equal: ['service']
+
+  # 集群宕机抑制节点告警
+  - source_match:
+      alertname: 'ClusterDown'
+    target_match_re:
+      alertname: 'NodeDown'
+    equal: ['cluster']
+
+  # GPU XID错误抑制GPU温度告警
+  - source_match:
+      alertname: 'GPUXIDError'
+    target_match:
+      alertname: 'HighGPUTemperature'
+    equal: ['instance', 'gpu']
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 智能路由</h2>
+          <div class="card">
+            <h3 class="card-title">基于AI的智能告警路由</h3>
+            <ul class="feature-list">
+              <li><strong>历史数据分析</strong> - 学习告警处理模式</li>
+              <li><strong>相似告警聚合</strong> - 自动识别相关告警</li>
+              <li><strong>优先级调整</strong> - 动态调整告警优先级</li>
+              <li><strong>责任人推荐</strong> - 基于处理历史推荐处理人</li>
+              <li><strong>自动分流</strong> - 根据内容自动分配</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 路由性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>路由准确率</td>
+                <td>告警发送给正确人员的比例</td>
+                <td>>95%</td>
+              </tr>
+              <tr>
+                <td>路由延迟</td>
+                <td>从告警触发到接收到通知的时间</td>
+                <td><1分钟</td>
+              </tr>
+              <tr>
+                <td>告警分组率</td>
+                <td>成功分组的告警比例</td>
+                <td>>80%</td>
+              </tr>
+              <tr>
+                <td>抑制效果</td>
+                <td>成功抑制的重复告警比例</td>
+                <td>>60%</td>
+              </tr>
+              <tr>
+                <td>误报率</td>
+                <td>错误路由的告警比例</td>
+                <td><5%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔔</span> 多渠道通知策略</h2>
+          <div class="code-block">
+# 不同级别使用不同通知渠道
+receivers:
+  # P0 - 多渠道同时通知
+  - name: 'critical-alerts'
+    phone_call_configs:
+      - phone_numbers: ['+8613800000000']
+    sms_configs:
+      - to: '+8613800000000'
+    slack_configs:
+      - channel: '#critical-alerts'
+    webhook_configs:
+      - url: 'http://oncall.example.com/notify'
+
+  # P1 - 短信+IM
+  - name: 'major-alerts'
+    sms_configs:
+      - to: '+8613800000000'
+    slack_configs:
+      - channel: '#major-alerts'
+
+  # P2 - IM+邮件
+  - name: 'minor-alerts'
+    slack_configs:
+      - channel: '#minor-alerts'
+    email_configs:
+      - to: 'team@example.com'
+
+  # P3 - 邮件
+  - name: 'info-alerts'
+    email_configs:
+      - to: 'team@example.com'
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="告警仪表盘">
+          <div class="caption">图：告警监控仪表盘</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">路由配置注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 确保每个告警都有对应的路由规则</li>
+              <li>• 定期测试路由配置的有效性</li>
+              <li>• 考虑团队组织架构调整路由策略</li>
+              <li>• 监控路由性能指标</li>
+              <li>• 建立路由配置的变更管理流程</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 告警分级确保优先级处理</li>
+                <li>• 路由策略按级别、组件、时间等维度分发</li>
+                <li>• 分组和抑制减少告警噪声</li>
+                <li>• 多渠道通知提高触达率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="37-2-Alertmanager配置.html">← 上一节</a>
+          <a href="37-4-事件响应流程.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

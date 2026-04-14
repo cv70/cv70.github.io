@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23.4 vLLM - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>23.4 vLLM</h1>
+          <p class="subtitle">高性能的大语言模型推理引擎</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解vLLM的核心特性</li>
+            <li>掌握PagedAttention原理</li>
+            <li>学习vLLM的使用方法</li>
+            <li>了解连续批处理技术</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="vLLM" class="card-image">
+          <h3 class="card-title">什么是vLLM</h3>
+          <p class="card-text">
+            <strong>vLLM</strong>是一个高性能的大语言模型推理引擎，专为LLM推理优化设计。
+            它引入了PagedAttention技术，解决了KV Cache管理的内存碎片问题，
+            并实现了高效的连续批处理，在提升吞吐量的同时保持低延迟。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 核心创新</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">PagedAttention</h3>
+              <ul class="feature-list">
+                <li><strong>原理</strong>：将KV Cache分页存储</li>
+                <li><strong>优势</strong>：避免内存碎片</li>
+                <li><strong>效果</strong>：提高显存利用率</li>
+                <li><strong>类比</strong>：类似操作系统的虚拟内存</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">连续批处理</h3>
+              <ul class="feature-list">
+                <li><strong>原理</strong>：不等批次填满即处理</li>
+                <li><strong>优势</strong>：降低首token延迟</li>
+                <li><strong>效果</strong>：提升并发处理能力</li>
+                <li><strong>适用</strong>：高并发LLM服务</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> PagedAttention原理</h2>
+          <div class="card">
+            <h3 class="card-title">传统问题 vs PagedAttention</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 20px;">
+              <div style="padding: 20px; background: #FFEBEE; border-radius: 8px;">
+                <div style="font-weight: bold; color: #D32F2F; margin-bottom: 10px;">传统KV Cache</div>
+                <ul style="color: #D32F2F;">
+                  <li>连续内存分配</li>
+                  <li>固定最大序列长度</li>
+                  <li>大量内存浪费</li>
+                  <li>内存碎片严重</li>
+                  <li>难以动态调整</li>
+                </ul>
+              </div>
+              <div style="padding: 20px; background: #E8F5E9; border-radius: 8px;">
+                <div style="font-weight: bold; color: #388E3C; margin-bottom: 10px;">PagedAttention</div>
+                <ul style="color: #388E3C;">
+                  <li>分页内存管理</li>
+                  <li>按需动态分配</li>
+                  <li>内存高效利用</li>
+                  <li>无内存碎片</li>
+                  <li>支持共享计算</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分页内存管理">
+          <div class="caption">图：PagedAttention的分页内存管理示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔥</span> 连续批处理</h2>
+          <div class="card">
+            <h3 class="card-title">Inflight Batching</h3>
+            <p>vLLM实现了真正的连续批处理，可以在不等待整个批次完成的情况下，将新生成的请求加入正在处理的批次。</p>
+            <div style="margin-top: 15px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+              <div style="font-weight: bold; margin-bottom: 10px;">工作流程</div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">请求A生成中</div>
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">请求B生成中</div>
+                <div style="padding: 10px 15px; background: #C8E6C9; border-radius: 6px;">请求C加入</div>
+                <div style="padding: 10px 15px; background: #C8E6C9; border-radius: 6px;">请求D加入</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 使用示例</h2>
+          <div class="code-block">
+<pre><code>from vllm import LLM, SamplingParams
+from transformers import AutoTokenizer
+
+# 基本使用
+def basic_usage():
+    """
+    基本的vLLM推理
+    """
+    # 初始化LLM
+    llm = LLM(
+        model="meta-llama/Llama-2-7b-hf",
+        tensor_parallel_size=1,  # 张量并行大小
+        gpu_memory_utilization=0.9,  # GPU显存利用率
+        max_model_len=4096,  # 最大序列长度
+        trust_remote_code=True
+    )
+
+    # 采样参数
+    sampling_params = SamplingParams(
+        temperature=0.8,
+        top_p=0.95,
+        max_tokens=100
+    )
+
+    # 生成文本
+    prompts = [
+        "写一个Python函数计算斐波那契数列",
+        "解释什么是机器学习",
+        "用中文写一首诗"
+    ]
+
+    outputs = llm.generate(prompts, sampling_params)
+
+    # 打印结果
+    for output in outputs:
+        prompt = output.prompt
+        generated_text = output.outputs[0].text
+        print(f"Prompt: {prompt}")
+        print(f"Generated: {generated_text}\n")
+
+# OpenAI兼容API
+def openai_compatible_api():
+    """
+    使用OpenAI兼容API
+    """
+    from openai import OpenAI
+
+    # 创建客户端
+    client = OpenAI(
+        base_url="http://localhost:8000/v1",
+        api_key="not-needed"
+    )
+
+    # 调用API
+    completion = client.chat.completions.create(
+        model="meta-llama/Llama-2-7b-hf",
+        messages=[
+            {"role": "system", "content": "你是一个AI助手"},
+            {"role": "user", "content": "写一个Python函数"}
+        ],
+        temperature=0.7,
+        max_tokens=200
+    )
+
+    print(completion.choices[0].message.content)
+
+# 批处理推理
+def batch_inference():
+    """
+    批处理推理
+    """
+    llm = LLM(model="meta-llama/Llama-2-7b-hf")
+
+    # 大批量请求
+    prompts = [f"写一个关于{i}的故事" for i in range(100)]
+
+    # 不同的采样参数
+    sampling_params = [
+        SamplingParams(temperature=0.1, max_tokens=50),
+        SamplingParams(temperature=0.8, max_tokens=100),
+        SamplingParams(temperature=1.0, max_tokens=150),
+    ]
+
+    # 生成
+    outputs = llm.generate(
+        prompts * 3,
+        sampling_params
+    )
+
+    return outputs
+
+# 流式生成
+def stream_generation():
+    """
+    流式生成
+    """
+    from vllm import SamplingParams
+
+    llm = LLM(model="meta-llama/Llama-2-7b-hf")
+
+    sampling_params = SamplingParams(
+        temperature=0.8,
+        max_tokens=100,
+        stream=True  # 启用流式输出
+    )
+
+    prompts = ["解释什么是深度学习"]
+
+    # 流式生成
+    for request_id, output in llm.generate(prompts, sampling_params):
+        print(f"Request {request_id}:")
+        for text in output:
+            print(text, end="", flush=True)
+        print("\n")
+
+# 完整服务部署
+def deploy_vllm_server():
+    """
+    部署vLLM服务
+    """
+    # 命令行启动服务
+    """
+    python -m vllm.entrypoints.api_server \\
+        --model meta-llama/Llama-2-7b-hf \\
+        --tensor-parallel-size 2 \\
+        --gpu-memory-utilization 0.95 \\
+        --max-model-len 4096 \\
+        --dtype auto \\
+        --port 8000 \\
+        --host 0.0.0.0
+    """
+    pass
+
+# 量化模型推理
+def quantized_inference():
+    """
+    使用量化模型
+    """
+    llm = LLM(
+        model="TheBloke/Llama-2-7B-AWQ",
+        quantization="awq",  # AWQ量化
+        tensor_parallel_size=1
+    )
+
+    sampling_params = SamplingParams(max_tokens=100)
+    outputs = llm.generate(["你好"], sampling_params)
+
+    return outputs
+
+if __name__ == "__main__":
+    # 运行示例
+    basic_usage()
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 配置参数</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>参数</th>
+                <th>说明</th>
+                <th>推荐值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>tensor_parallel_size</strong></td>
+                <td>张量并行大小</td>
+                <td>= GPU数量</td>
+              </tr>
+              <tr>
+                <td><strong>gpu_memory_utilization</strong></td>
+                <td>GPU显存利用率</td>
+                <td>0.9-0.95</td>
+              </tr>
+              <tr>
+                <td><strong>max_model_len</strong></td>
+                <td>最大序列长度</td>
+                <td>根据需求</td>
+              </tr>
+              <tr>
+                <td><strong>block_size</strong></td>
+                <td>块大小（页大小）</td>
+                <td>16</td>
+              </tr>
+              <tr>
+                <td><strong>swap_space</strong></td>
+                <td>CPU交换空间(GB)</td>
+                <td>4-16</td>
+              </tr>
+              <tr>
+                <td><strong>enforce_eager</strong></td>
+                <td>强制eager模式</td>
+                <td>False</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 性能优势</h2>
+          <div class="card">
+            <h3 class="card-title">vLLM vs 其他框架</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">吞吐量</div>
+                <div style="font-size: 1.2em; color: #4CAF50;">24倍</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">vs HuggingFace</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">显存利用</div>
+                <div style="font-size: 1.2em; color: #2196F3;">4倍</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">PagedAttention</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">延迟</div>
+                <div style="font-size: 1.2em; color: #FF9800;">更低</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">连续批处理</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">并发</div>
+                <div style="font-size: 1.2em; color: #9C27B0;">更高</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">动态调度</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">vLLM使用建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>使用PagedAttention可以大幅提升显存利用率</li>
+              <li>连续批处理适合高并发场景</li>
+              <li>支持AWQ/GPTQ等量化格式</li>
+              <li>张量并行可以提升大模型推理性能</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• vLLM是专为LLM推理设计的高性能引擎</li>
+                <li>• PagedAttention解决了KV Cache内存碎片问题</li>
+                <li>• 连续批处理提升了并发处理能力</li>
+                <li>• 提供OpenAI兼容API，易于集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="23-3-OpenVINO.html">← 上一节</a>
+          <a href="23-5-国产推理框架.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

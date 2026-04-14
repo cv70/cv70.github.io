@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.3 对象存储 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>9.3 对象存储</h1>
+          <p class="subtitle">构建可扩展的AI数据湖</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解对象存储的原理</li>
+            <li>掌握MinIO的部署配置</li>
+            <li>学会对象存储的优化方法</li>
+            <li>了解对象存储在AI场景的应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="对象存储" class="card-image">
+          <h3 class="card-title">对象存储简介</h3>
+          <p class="card-text">
+            <strong>对象存储</strong>以对象为单位存储数据，支持海量非结构化数据，
+            具有无限的扩展能力和高可用性，适合AI数据湖和归档场景。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 对象存储架构</h2>
+          <div class="card">
+            <h3 class="card-title">MinIO架构</h3>
+            <div class="code-block">
+<pre><strong>MinIO分布式架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      客户端层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • S3 SDK • MinIO Client • REST API                         │
+│  • Python SDK • Java SDK • Go SDK                           │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      MinIO网关层                             │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Load Balancer / Gateway                             │   │
+│  • 请求路由                                              │   │
+│  • 负载均衡                                              │   │
+│  • SSL终止                                                │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      MinIO服务器层                           │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │Server-1  │  │Server-2  │  │Server-3  │  │Server-4  │  │
+│  │  Node    │  │  Node    │  │  Node    │  │  Node    │  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+│                                                             │
+│  • 纠删码存储                                               │
+│  • 数据分布                                                 │
+│  • 自动恢复                                                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      存储层                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • NVMe SSD • SAS HDD • 对象存储网关                       │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> MinIO部署</h2>
+          <div class="card">
+            <h3 class="card-title">分布式部署配置</h3>
+            <div class="code-block">
+<pre><strong>MinIO集群部署：</strong>
+
+# Docker部署
+docker run -d \
+  --name minio-node1 \
+  --net=host \
+  -v /data/minio:/data \
+  minio/minio server \
+    http://10.0.1.1/data \
+    http://10.0.1.2/data \
+    http://10.0.1.3/data \
+    http://10.0.1.4/data
+
+# Kubernetes部署
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+spec:
+  serviceName: minio
+  replicas: 4
+  template:
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio:latest
+        command:
+        - /bin/bash
+        - -c
+        args:
+        - minio server http://minio-{0...3}.minio.default.svc.cluster.local/data
+        env:
+        - name: MINIO_ROOT_USER
+          value: minioadmin
+        - name: MINIO_ROOT_PASSWORD
+          value: minioadmin
+        ports:
+        - containerPort: 9000
+          name: api
+        - containerPort: 9001
+          name: console
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Ti</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">对象存储优化</div>
+            <p><strong>纠删码：</strong>使用EC 4:2平衡性能与可靠性</p>
+            <p><strong>缓存层：</strong>使用Alluxio加速热数据</p>
+            <p><strong>多区域：</strong>跨区域复制提高可用性</p>
+            <p><strong>生命周期：</strong>自动归档冷数据</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AI场景应用</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>应用</th>
+                <th>存储类型</th>
+                <th>访问模式</th>
+                <th>性能要求</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>数据集</td>
+                <td>对象存储</td>
+                <td>顺序读取</td>
+                <td>中高</td>
+              </tr>
+              <tr>
+                <td>模型</td>
+                <td>对象存储</td>
+                <td>随机读取</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>Checkpoint</td>
+                <td>对象存储+文件系统</td>
+                <td>顺序写</td>
+                <td>极高</td>
+              </tr>
+              <tr>
+                <td>归档</td>
+                <td>对象存储+冷存储</td>
+                <td>极少访问</td>
+                <td>低</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 对象存储适合海量非结构化数据</li>
+                <li>• MinIO提供S3兼容的对象存储</li>
+                <li>• 分布式MinIO使用纠删码提高可靠性</li>
+                <li>• AI场景用于数据集、模型和归档存储</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="9-2-分布式文件系统.html">← 上一节</a>
+          <a href="9-4-高性能缓存层设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

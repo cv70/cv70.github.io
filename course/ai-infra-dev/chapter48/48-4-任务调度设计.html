@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>48.4 任务调度设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>48.4 任务调度设计</h1>
+          <p class="subtitle">构建高效的任务调度系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解任务调度的核心原理</li>
+            <li>掌握主流调度器方案</li>
+            <li>学会任务调度策略</li>
+            <li>了解任务队列管理</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 任务调度架构</h2>
+          <div class="card">
+            <h3 class="card-title">调度系统组成</h3>
+            <div class="grid grid-4">
+              <div class="layer-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h4 style="color: white; margin-bottom: 0.5rem;">任务提交</h4>
+                <ul style="color: rgba(255,255,255,0.9); font-size: 0.85rem; padding-left: 1rem;">
+                  <li>任务队列</li>
+                  <li>优先级管理</li>
+                  <li>任务预处理</li>
+                  <li>依赖解析</li>
+                </ul>
+              </div>
+              <div class="layer-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                <h4 style="color: white; margin-bottom: 0.5rem;">调度决策</h4>
+                <ul style="color: rgba(255,255,255,0.9); font-size: 0.85rem; padding-left: 1rem;">
+                  <li>资源评估</li>
+                  <li>节点选择</li>
+                  <li>调度策略</li>
+                  <li>负载均衡</li>
+                </ul>
+              </div>
+              <div class="layer-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+                <h4 style="color: white; margin-bottom: 0.5rem;">任务执行</h4>
+                <ul style="color: rgba(255,255,255,0.9); font-size: 0.85rem; padding-left: 1rem;">
+                  <li>任务启动</li>
+                  <li>状态监控</li>
+                  <li>错误处理</li>
+                  <li>日志收集</li>
+                </ul>
+              </div>
+              <div class="layer-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
+                <h4 style="color: white; margin-bottom: 0.5rem;">结果处理</h4>
+                <ul style="color: rgba(255,255,255,0.9); font-size: 0.85rem; padding-left: 1rem;">
+                  <li>结果通知</li>
+                  <li>清理工作</li>
+                  <li>资源释放</li>
+                  <li>审计记录</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 主流调度器对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>调度器</th>
+                <th>类型</th>
+                <th>特点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Slurm</td>
+                <td>批处理</td>
+                <td>成熟稳定，适合HPC</td>
+                <td>传统HPC集群</td>
+              </tr>
+              <tr>
+                <td>Kubernetes Scheduler</td>
+                <td>容器调度</td>
+                <td>云原生，可扩展</td>
+                <td>容器化AI平台</td>
+              </tr>
+              <tr>
+                <td>Volcano</td>
+                <td>批处理+容器</td>
+                <td>支持AI工作负载</td>
+                <td>K8s上的AI平台</td>
+              </tr>
+              <tr>
+                <td>KubeRay</td>
+                <td>分布式任务</td>
+                <td>Ray任务编排</td>
+                <td>Ray应用</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Volcano调度配置</h2>
+          <div class="code-block">
+<pre><code># Volcano PodGroup配置
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata:
+  name: training-podgroup
+spec:
+  minMember: 8  # 最少需要的Pod数
+  minResources:  # 最少需要的资源
+    nvidia.com/gpu: 8
+    cpu: "64"
+    memory: 256Gi
+  queue: default-queue
+  priorityClassName: high-priority
+  schedulerName: volcano
+
+---
+
+# Volcano任务配置
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: distributed-training
+spec:
+  parallelism: 8
+  completions: 8
+  template:
+    metadata:
+      labels:
+        app: training
+        volcano.sh/job-name: distributed-training
+    spec:
+      schedulerName: volcano
+      containers:
+      - name: trainer
+        image: pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+        command:
+        - python
+        - train.py
+        env:
+        - name: MASTER_ADDR
+          value: $(hostname)
+        - name: WORLD_SIZE
+          value: "8"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "8"
+            memory: 32Gi
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "8"
+            memory: 32Gi
+      restartPolicy: OnFailure</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 调度策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">公平调度</h3>
+              <ul class="feature-list">
+                <li>按用户组公平分配</li>
+                <li>保证资源份额</li>
+                <li>防止资源独占</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">亲和性调度</h3>
+              <ul class="feature-list">
+                <li>节点亲和性</li>
+                <li>Pod亲和性</li>
+                <li>拓扑感知调度</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">组调度</h3>
+              <ul class="feature-list">
+                <li>原子性启动</li>
+                <li>全有或全无</li>
+                <li>适合分布式训练</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Gang调度</h3>
+              <ul class="feature-list">
+                <li>同步启动</li>
+                <li>保证完整性</li>
+                <li>减少等待时间</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 任务队列实现</h2>
+          <div class="code-block">
+<pre><code># 任务队列管理（Python）
+import redis
+import json
+from datetime import datetime
+
+class TaskQueue:
+    def __init__(self, redis_host='localhost', redis_port=6379):
+        self.redis = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        self.queue_key = 'ai:tasks:queue'
+        self.pending_key = 'ai:tasks:pending'
+        self.running_key = 'ai:tasks:running'
+
+    def submit_task(self, task_config, priority=0):
+        """提交任务"""
+        task = {
+            'id': f"task_{datetime.now().timestamp()}",
+            'config': task_config,
+            'priority': priority,
+            'status': 'pending',
+            'submit_time': datetime.now().isoformat()
+        }
+        self.redis.zadd(self.queue_key, {json.dumps(task): -priority})
+        return task['id']
+
+    def get_next_task(self):
+        """获取下一个任务"""
+        task_data = self.redis.zpopmax(self.queue_key)
+        if not task_data:
+            return None
+        task = json.loads(task_data[0][0])
+        task['status'] = 'running'
+        task['start_time'] = datetime.now().isoformat()
+        self.redis.hset(self.running_key, task['id'], json.dumps(task))
+        return task
+
+    def complete_task(self, task_id, result=None):
+        """完成任务"""
+        task_json = self.redis.hget(self.running_key, task_id)
+        if task_json:
+            task = json.loads(task_json)
+            task['status'] = 'completed'
+            task['end_time'] = datetime.now().isoformat()
+            task['result'] = result
+            self.redis.hdel(self.running_key, task_id)
+            # 存储到历史记录
+            self.redis.hset('ai:tasks:history', task_id, json.dumps(task))
+
+    def fail_task(self, task_id, error):
+        """任务失败"""
+        task_json = self.redis.hget(self.running_key, task_id)
+        if task_json:
+            task = json.loads(task_json)
+            task['status'] = 'failed'
+            task['end_time'] = datetime.now().isoformat()
+            task['error'] = error
+            self.redis.hdel(self.running_key, task_id)
+            self.redis.hset('ai:tasks:history', task_id, json.dumps(task))</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">调度优化技巧</div>
+            <p><strong>资源预估</strong>：根据历史数据预估任务资源需求。<strong>热点检测</strong>：识别热门任务，提前准备资源。<strong>预热节点</strong>：在任务到达前预热节点，减少启动延迟。<strong>智能调度</strong>：使用机器学习优化调度决策。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 任务调度包括提交、决策、执行、处理四个阶段</li>
+                <li>• Volcano是K8s上AI工作负载的优选调度器</li>
+                <li>• 组调度和Gang调度适合分布式训练</li>
+                <li>• 任务队列管理支持优先级和依赖关系</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="48-3-资源管理设计.html">← 上一节</a>
+          <a href="48-5-运维体系设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.2 NVIDIA vGPU技术 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>8.2 NVIDIA vGPU技术</h1>
+          <p class="subtitle">企业级GPU虚拟化解决方案</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解vGPU的工作原理</li>
+            <li>掌握vGPU的配置方法</li>
+            <li>学会vGPU的管理与优化</li>
+            <li>了解vGPU的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800" alt="vGPU架构" class="card-image">
+          <h3 class="card-title">NVIDIA vGPU简介</h3>
+          <p class="card-text">
+            <strong>NVIDIA vGPU</strong>是NVIDIA提供的GPU虚拟化解决方案，通过在Hypervisor层实现GPU资源切分，
+            为每个虚拟机提供专用的GPU资源，在性能、隔离性和成本之间达到最佳平衡。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> vGPU架构</h2>
+          <div class="card">
+            <h3 class="card-title">vGPU工作原理</h3>
+            <div class="code-block">
+<pre><strong>vGPU架构组件：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      虚拟机层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  VM1                    VM2                    VM3         │
+│  ┌────────────────┐    ┌────────────────┐    ┌────────┐  │
+│  │ vGPU Driver    │    │ vGPU Driver    │    │vGPU Dr │  │
+│  │ (Guest)       │    │ (Guest)       │    │(Guest) │  │
+│  └────────────────┘    └────────────────┘    └────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                  Hypervisor层                               │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ vGPU Manager (在Hypervisor中运行)                   │   │
+│  │ • vGPU调度器                                        │   │
+│  │ • 资源分配                                         │   │
+│  │ • 显存管理                                         │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                  物理GPU层                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  Physical GPU (e.g., A100 80GB)                             │
+│  • 物理GPU驱动                                            │
+│  • 硬件资源管理                                            │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> vGPU配置文件</h2>
+          <div class="card">
+            <h3 class="card-title">vGPU Profile配置</h3>
+            <div class="code-block">
+<pre><strong>vGPU Profile定义：</strong>
+
+A100配置:
+• A100-80GB: 80GB HBM2e, 1.55 TB/s
+• A100-40GB: 40GB HBM2e, 1.55 TB/s
+
+vGPU切分选项 (A100 80GB):
+• MIG 1g.5gb: 1/16 GPU, 5GB显存
+• MIG 2g.10gb: 1/8 GPU, 10GB显存
+• MIG 3g.20gb: 1/4 GPU, 20GB显存
+• MIG 4g.20gb: 1/4 GPU, 20GB显存
+• MIG 7g.40gb: 1/2 GPU, 40GB显存
+
+vGPU类型:
+• C系列: Compute优化 (训练)
+• Q系列: Quadro优化 (图形)
+• B系列: Business优化 (推理)
+
+示例:
+• A100D-80C: 80GB, Compute, 全GPU
+• A100-8C: 1/10 GPU, 8GB显存</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> vGPU部署</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">宿主机配置</h3>
+              <div class="code-block">
+<pre><strong>VMware ESXi配置：</strong>
+
+# 1. 安装vGPU驱动
+sudo rpm -ivh NVIDIA-vGPU-guest-vmware-driver.x86_64.rpm
+
+# 2. 启用vGPU
+vim /etc/vmware/config
+NVIDIA.vgpu.enabled = "TRUE"
+
+# 3. 重启ESXi
+reboot
+
+# 4. 验证vGPU状态
+nvidia-smi vgpu
+
+# 查看vGPU信息
+nvidia-smi -L
+GPU 0: A100-SXM4-80GB (UUID: GPU-xxx)
+GPU 1: A100-SXM4-80GB (UUID: GPU-yyy)</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">虚拟机配置</h3>
+              <div class="code-block">
+<pre><strong>VM配置：</strong>
+
+# 1. 分配vGPU
+VM Settings > Add Hardware > PCI Device
+选择: NVIDIA A100 vGPU Profile: A100-4C
+
+# 2. 配置虚拟机
+CPU: 16 vCPU
+Memory: 64GB
+GPU: vGPU A100-4C (8GB)
+
+# 3. 启动虚拟机并安装驱动
+wget https://developer.nvidia.com/
+    compute/virtualization/
+    linux/repo/ubuntu2004/x86_64/
+    NVIDIA-vGPU-guest-ubuntu20.04.deb
+
+sudo dpkg -i NVIDIA-vGPU-guest-*.deb
+
+# 4. 验证
+nvidia-smi</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">vGPU最佳实践</div>
+            <p><strong>Profile选择：</strong>根据工作负载选择合适的vGPU Profile</p>
+            <p><strong>资源规划：</strong>确保vGPU总资源不超过物理GPU</p>
+            <p><strong>驱动匹配：</strong>宿主机和虚拟机vGPU驱动版本一致</p>
+            <p><strong>性能监控：</strong>使用nvidia-smi监控vGPU使用情况</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> vGPU性能优化</h2>
+          <div class="card">
+            <h3 class="card-title">性能调优建议</h3>
+            <div class="code-block">
+<pre><strong>vGPU性能优化：</strong>
+
+1. 调整vGPU配置
+   • 增加显存: 减少OOM
+   • 增加vCPU: 提升CPU性能
+   • 调整Profile: 匹配工作负载
+
+2. 优化虚拟机配置
+   • CPU亲和性: 固定vCPU
+   • 内存预留: 防止swap
+   • NUMA优化: 本地内存访问
+
+3. 网络优化
+   • SR-IOV: 网络直通
+   • DPDK: 绕过内核
+   • RDMA: 低延迟
+
+4. 存储优化
+   • 使用SSD: 减少IO延迟
+   • 直通存储: 绕过虚拟化
+   • 数据本地化: 减少网络传输</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> vGPU监控</h2>
+          <div class="card">
+            <h3 class="card-title">监控指标</h3>
+            <div class="code-block">
+<pre><strong>关键监控指标：</strong>
+
+# 使用率监控
+nvidia-smi --query-gpu=timestamp,name,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv
+
+# vGPU详情
+nvidia-smi vgpu -q
+
+# 实时监控
+watch -n 1 nvidia-smi
+
+# Prometheus Exporter
+nvidia_gpu_exporter --web.listen-address=:9445
+
+# Grafana Dashboard
+• vGPU利用率
+• 显存使用量
+• 温度监控
+• 错误计数</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• NVIDIA vGPU是成熟的GPU虚拟化解决方案</li>
+                <li>• vGPU通过Hypervisor层的vGPU Manager实现资源切分</li>
+                <li>• vGPU Profile定义了虚拟GPU的配置选项</li>
+                <li>• 部署需要在宿主机安装vGPU驱动，虚拟机安装vGPU Guest驱动</li>
+                <li>• 性能优化涉及vGPU配置、虚拟机配置、网络和存储</li>
+                <li>• 使用nvidia-smi和监控工具持续跟踪vGPU状态</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="8-1-GPU虚拟化技术概述.html">← 上一节</a>
+          <a href="8-3-GPU池化原理与实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

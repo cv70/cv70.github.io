@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.5 混合精度通信 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.5 混合精度通信</h1>
+          <p class="subtitle">FP16/BF16在分布式通信中的应用</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解混合精度通信的原理</li>
+            <li>掌握FP16/BF16通信的特点</li>
+            <li>学习混合精度优化策略</li>
+            <li>了解框架中的实现</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="精度优化" class="card-image">
+          <h3 class="card-title">混合精度通信概述</h3>
+          <p class="card-text">
+            混合精度通信在分布式训练中使用FP16或BF16进行梯度同步，
+            相比FP32通信可以减少一半的数据传输量，显著降低通信延迟
+            和带宽需求，同时保持训练精度。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 精度格式对比</h2>
+
+          <h3>浮点格式</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>格式</th>
+                <th>位数</th>
+                <th>指数位</th>
+                <th>尾数位</th>
+                <th>精度</th>
+                <th>范围</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>FP32</td>
+                <td>32</td>
+                <td>8</td>
+                <td>23</td>
+                <td>~7位十进制</td>
+                <td>±3.4×10³⁸</td>
+              </tr>
+              <tr>
+                <td>FP16</td>
+                <td>16</td>
+                <td>5</td>
+                <td>10</td>
+                <td>~3位十进制</td>
+                <td>±6.5×10⁴</td>
+              </tr>
+              <tr>
+                <td>BF16</td>
+                <td>16</td>
+                <td>8</td>
+                <td>7</td>
+                <td>~2位十进制</td>
+                <td>±3.4×10³⁸</td>
+              </tr>
+              <tr>
+                <td>TF32</td>
+                <td>19</td>
+                <td>8</td>
+                <td>10</td>
+                <td>~2位十进制</td>
+                <td>±3.4×10³⁸</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>FP16 vs BF16</h3>
+
+          <div class="code-block"""
+FP16 vs BF16 对比:
+
+FP16 (Half Precision):
+- 指数位: 5位
+- 尾数位: 10位
+- 精度: 较高（~3位十进制）
+- 范围: 较小（±6.5×10⁴）
+- 适用: 计算精度要求高的场景
+- 问题: 容易上溢出/下溢出
+
+BF16 (Brain Floating Point):
+- 指数位: 8位
+- 尾数位: 7位
+- 精度: 较低（~2位十进制）
+- 范围: 与FP32相同
+- 适用: 深度学习训练
+- 优势: 范围与FP32相同，不易溢出
+
+选择建议:
+- 小模型: FP16
+- 大模型: BF16
+- Transformer: BF16
+- CNN: FP16
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 混合精度通信</h2>
+
+          <h3>原理</h3>
+
+          <div class="code-block"""
+混合精度通信原理:
+
+计算阶段:
+- 使用FP16/BF16进行前向和反向
+- 速度更快，显存占用更少
+- 梯度为FP16/BF16
+
+通信阶段:
+- 直接传输FP16/BF16梯度
+- 通信量减少一半
+- 通信速度提升约1.5-2x
+
+更新阶段:
+- 可选：使用FP32进行参数更新
+- 保持主权重为FP32
+- 防止精度损失
+
+实现流程:
+1. 前向（FP16）
+2. 反向（FP16）
+3. All-Reduce（FP16）  ← 通信阶段
+4. 参数更新（FP32可选）
+
+优势:
+- 通信量减半
+- 通信速度提升
+- 显存占用减少
+- 训练速度加快
+          </div>
+
+          <h3>PyTorch实现</h3>
+
+          <div class="code-block"""
+PyTorch混合精度通信:
+
+import torch
+import torch.distributed as dist
+
+# 1. 启用自动混合精度
+scaler = torch.cuda.amp.GradScaler()
+
+# 2. 定义模型（FP32）
+model = MyModel().cuda()
+
+# 3. 包装为DDP
+model = torch.nn.parallel.DistributedDataParallel(model)
+
+# 4. 训练循环
+for data, target in dataloader:
+    optimizer.zero_grad()
+
+    # 使用自动混合精度
+    with torch.cuda.amp.autocast():
+        # 前向计算（自动使用FP16）
+        output = model(data)
+        loss = criterion(output, target)
+
+    # 反向计算
+    scaler.scale(loss).backward()
+
+    # 梯度已经是FP16
+    # DDP会自动使用FP16通信
+
+    # 优化器步骤（自动处理精度）
+    scaler.step(optimizer)
+
+    # 更新scaler
+    scaler.update()
+
+# 5. 自定义混合精度
+class CustomMixedPrecision:
+    def __init__(self, model):
+        self.model = model
+        self.fp32_params = [p.clone().float() for p in model.parameters()]
+
+    def sync_gradients(self):
+        """同步梯度（FP16）"""
+        for p, fp32_p in zip(self.model.parameters(), self.fp32_params):
+            # 将FP32梯度转换为FP16
+            if p.grad is not None:
+                p.grad = p.grad.half()
+
+            # 通信（FP16）
+            dist.all_reduce(p.grad, op=dist.ReduceOp.SUM)
+
+            # 转换回FP32
+            fp32_p.grad = p.grad.float()
+
+# 使用
+amp = CustomMixedPrecision(model)
+for data, target in dataloader:
+    # 前向（FP16）
+    with torch.cuda.amp.autocast():
+        output = model(data.half())
+        loss = criterion(output, target)
+
+    # 反向
+    loss.backward()
+
+    # 同步梯度（FP16通信）
+    amp.sync_gradients()
+
+    # 更新参数（FP32）
+    optimizer.step()
+          </div>
+
+          <h3>NCCL配置</h3>
+
+          <div class="code-block"""
+NCCL混合精度配置:
+
+环境变量:
+export NCCL_ALGO=Ring                  # 算法选择
+export NCCL_PROTO=Simple                # 协议选择
+export NCCL_FP16_MATH=TRUE             # FP16数学运算
+export NCCL_IB_HCA=mlx5_0:1            # HCA配置
+export NCCL_IB_TC=3                    # 优先级
+
+# PyTorch配置
+import torch
+torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
+torch.backends.cudnn.allow_tf32 = True
+
+# DeepSpeed配置
+ds_config = {
+    "fp16": {
+        "enabled": True,
+        "loss_scale": 0,
+        "loss_scale_window": 500,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+    "bf16": {
+        "enabled": False  # 使用FP16还是BF16
+    }
+}
+
+# 启动
+deepspeed train.py \
+    --deepspeed ds_config.json \
+    --fp16
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 优化策略</h2>
+
+          <h3>1. Loss Scaling</h3>
+
+          <div class="code-block"""
+Loss Scaling优化:
+
+问题:
+- FP16小梯度可能下溢出
+- 导致梯度消失
+
+解决方案:
+- 在反向前缩放损失
+- 计算梯度后缩放回
+
+动态Loss Scaling:
+1. 初始scale: 2¹⁶
+2. 监控NaN/Inf
+3. 如果出现NaN/Inf:
+   - 减少scale
+4. 如果连续N步没有NaN/Inf:
+   - 增加scale
+
+实现:
+scaler = torch.cuda.amp.GradScaler(
+    init_scale=2.**16,
+    growth_factor=2.0,
+    backoff_factor=0.5,
+    growth_interval=2000
+)
+
+with torch.cuda.amp.autocast():
+    output = model(input)
+    loss = criterion(output, target)
+
+scaler.scale(loss).backward()
+scaler.step(optimizer)
+scaler.update()
+          </div>
+
+          <h3>2. 梯度Clip</h3>
+
+          <div class="code-block"""
+梯度裁剪:
+
+目的:
+- 防止FP16梯度爆炸
+- 稳定训练
+
+实现:
+1. 全局梯度裁剪
+   torch.nn.utils.clip_grad_norm_(
+       model.parameters(),
+       max_norm=1.0
+   )
+
+2. 单层梯度裁剪
+   for param in model.parameters():
+       if param.grad is not None:
+           torch.clamp_(
+               param.grad,
+               min=-1.0,
+               max=1.0
+           )
+
+3. 自适应裁剪
+   # 根据梯度分布调整阈值
+   grad_norm = torch.nn.utils.clip_grad_norm_(
+       model.parameters(),
+       max_norm=dynamic_threshold
+   )
+          </div>
+
+          <h3>3. 精度转换优化</h3>
+
+          <div class="code-block"""
+精度转换优化:
+
+1. 减少转换次数
+   # 保持中间结果在FP16
+   # 只在必要时转换
+
+2. 批量转换
+   # 一次转换多个张量
+   tensors = [tensor1, tensor2, tensor3]
+   fp16_tensors = [t.half() for t in tensors]
+
+3. 零拷贝转换
+   # 使用视图而非拷贝
+   fp16_view = fp32_tensor.view(torch.float16)
+
+4. 原地操作
+   # 尽可能使用原地操作
+   tensor.mul_(0.5)  # 而非 tensor = tensor * 0.5
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能影响</h2>
+
+          <h3>性能对比</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>FP32</th>
+                <th>FP16</th>
+                <th>BF16</th>
+                <th>提升</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>通信带宽</td>
+                <td>基准</td>
+                <td>2x</td>
+                <td>2x</td>
+                <td>200%</td>
+              </tr>
+              <tr>
+                <td>通信延迟</td>
+                <td>基准</td>
+                <td>0.7x</td>
+                <td>0.7x</td>
+                <td>43%</td>
+              </tr>
+              <tr>
+                <td>显存占用</td>
+                <td>基准</td>
+                <td>0.6x</td>
+                <td>0.6x</td>
+                <td>40%</td>
+              </tr>
+              <tr>
+                <td>计算速度</td>
+                <td>基准</td>
+                <td>1.5x</td>
+                <td>1.5x</td>
+                <td>50%</td>
+              </tr>
+              <tr>
+                <td>训练精度</td>
+                <td>基准</td>
+                <td>-0.1%</td>
+                <td>-0.2%</td>
+                <td>几乎无</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>适用场景</h3>
+
+          <div class="code-block"""
+FP16适用场景:
+- 小到中等模型
+- CNN/视觉模型
+- 对精度要求高的任务
+- 充足的显存
+
+BF16适用场景:
+- 大语言模型
+- Transformer模型
+- 训练不稳定的任务
+- 显存受限的场景
+
+混合策略:
+- 计算使用FP16/BF16
+- 通信使用FP16/BF16
+- 参数保持FP32
+- 关键层使用FP32
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 故障排查</h2>
+
+          <h3>常见问题</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>问题</th>
+                <th>症状</th>
+                <th>原因</th>
+                <th>解决方案</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>梯度消失</td>
+                <td>梯度变为0</td>
+                <td>FP16下溢</td>
+                <td>增加loss scale</td>
+              </tr>
+              <tr>
+                <td>梯度爆炸</td>
+                <td>梯度变为NaN/Inf</td>
+                <td>FP16上溢</td>
+                <td>梯度裁剪</td>
+              </tr>
+              <tr>
+                <td>精度下降</td>
+                <td>准确率下降</td>
+                <td>FP16精度不足</td>
+                <td>使用BF16或FP32</td>
+              </tr>
+              <tr>
+                <td>训练不稳定</td>
+                <td>损失震荡</td>
+                <td>混合精度配置</td>
+                <td>调整超参数</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>诊断方法</h3>
+
+          <div class="code-block"""
+诊断方法:
+
+1. 检查梯度分布
+   # 计算梯度统计
+   for param in model.parameters():
+       if param.grad is not None:
+           print(f"Mean: {param.grad.mean()}")
+           print(f"Std: {param.grad.std()}")
+           print(f"Max: {param.grad.max()}")
+           print(f"Min: {param.grad.min()}")
+           print(f"NaN: {torch.isnan(param.grad).any()}")
+           print(f"Inf: {torch.isinf(param.grad).any()}")
+
+2. 监控loss scale
+   # 检查scaler状态
+   print(f"Current scale: {scaler.get_scale()}")
+   print(f"Scale growth: {scaler.get_growth_factor()}")
+   print(f"Scale backoff: {scaler.get_backoff_factor()}")
+
+3. 对比不同精度
+   # 分别测试FP32、FP16、BF16
+   for dtype in [torch.float32, torch.float16, torch.bfloat16]:
+       model = model.to(dtype)
+       test_model(model, dtype)
+
+4. 使用梯度检查
+   # 检查梯度数值稳定性
+   torch.autograd.detect_anomaly()
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">使用建议</div>
+            <p>1）大模型优先选择BF16；2）使用自动loss scaling；3）监控梯度数值稳定性；4）适当梯度裁剪；5）必要时回退到FP32。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="混合精度">
+          <div class="caption">图：混合精度通信提升训练效率</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 混合精度通信减少通信量</li>
+                <li>• FP16适合精度要求高的场景</li>
+                <li>• BF16适合大模型训练</li>
+                <li>• 合理的配置平衡性能和精度</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="15-4-流水线通信优化.html">← 上一节</a>
+          <a href="#">完成</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

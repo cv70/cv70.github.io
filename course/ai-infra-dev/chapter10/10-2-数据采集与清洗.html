@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.2 数据采集与清洗 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>10.2 数据采集与清洗</h1>
+          <p class="subtitle">构建高质量的数据源</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握数据采集的方法</li>
+            <li>学会数据清洗的技巧</li>
+            <li>了解数据质量评估</li>
+            <li>认识自动化数据处理</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据处理" class="card-image">
+          <h3 class="card-title">数据采集与清洗的重要性</h3>
+          <p class="card-text">
+            <strong>数据质量</strong>直接决定模型性能，高质量的数据采集和清洗
+            是AI项目成功的基础。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📥</span> 数据采集</h2>
+          <div class="card">
+            <h3 class="card-title">采集方法</h3>
+            <div class="code-block">
+<pre><strong>数据采集策略：</strong>
+
+1. 数据库采集
+   # 使用SQLAlchemy
+   from sqlalchemy import create_engine
+
+   engine = create_engine('postgresql://user:pass@localhost/db')
+   df = pd.read_sql("SELECT * FROM training_data", engine)
+
+2. 文件系统采集
+   # 监控文件变化
+   import watchdog
+
+   class FileHandler(watchdog.events.PatternMatchingEventHandler):
+       def on_created(self, event):
+           process_file(event.src_path)
+
+   observer = watchdog.observers.Observer()
+   observer.schedule(FileHandler(), path='/data', recursive=True)
+   observer.start()
+
+3. API采集
+   # 定期拉取数据
+   import requests
+
+   def fetch_data(url):
+       response = requests.get(url)
+       return response.json()
+
+   # 增量采集
+   last_timestamp = get_last_timestamp()
+   data = fetch_data(f"{url}?since={last_timestamp}")
+
+4. 流数据采集
+   # 使用Kafka
+   from kafka import KafkaConsumer
+
+   consumer = KafkaConsumer('ai-data-topic',
+                          bootstrap_servers='localhost:9092')
+
+   for message in consumer:
+       process_message(message)</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧹</span> 数据清洗</h2>
+          <div class="card">
+            <h3 class="card-title">清洗策略</h3>
+            <div class="code-block">
+<pre><strong>数据清洗流程：</strong>
+
+import pandas as pd
+import numpy as np
+
+# 1. 处理缺失值
+def handle_missing_data(df):
+    # 数值型：填充均值或中位数
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].fillna(
+        df[numeric_cols].median())
+
+    # 类别型：填充众数或特定值
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    df[categorical_cols] = df[categorical_cols].fillna('Unknown')
+
+    return df
+
+# 2. 处理异常值
+def handle_outliers(df, column, method='iqr'):
+    if method == 'iqr':
+        Q1 = df[column].quantile(0.25)
+        Q3 = df[column].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        df[column] = df[column].clip(lower_bound, upper_bound)
+    elif method == 'zscore':
+        z_scores = np.abs((df[column] - df[column].mean()) /
+                        df[column].std())
+        df[column] = df[column][z_scores < 3]
+
+    return df
+
+# 3. 数据去重
+def remove_duplicates(df, subset=None):
+    return df.drop_duplicates(subset=subset, keep='first')
+
+# 4. 数据类型转换
+def convert_types(df):
+    # 日期转换
+    date_cols = ['created_at', 'updated_at']
+    for col in date_cols:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+
+    # 分类转换
+    category_cols = ['category', 'status']
+    for col in category_cols:
+        if col in df.columns:
+            df[col] = df[col].astype('category')
+
+    return df
+
+# 5. 数据验证
+def validate_data(df, rules):
+    for column, rule in rules.items():
+        if 'range' in rule:
+            df = df[(df[column] >= rule['range'][0]) &
+                   (df[column] <= rule['range'][1])]
+        if 'not_null' in rule and rule['not_null']:
+            df = df[df[column].notna()]
+    return df</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">数据清洗最佳实践</div>
+            <p><strong>自动化：</strong>建立自动化清洗流程，减少人工干预</p>
+            <p><strong>可追溯：</strong>记录清洗过程，便于审计和调试</p>
+            <p><strong>增量处理：</strong>支持增量清洗，提高效率</p>
+            <p><strong>质量监控：</strong>持续监控数据质量指标</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 数据质量评估</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>计算方法</th>
+                <th>目标值</th>
+                <th>改进措施</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>完整性</td>
+                <td>非空字段占比</td>
+                <td>> 95%</td>
+                <td>填充缺失值</td>
+              </tr>
+              <tr>
+                <td>准确性</td>
+                <td>数据验证通过率</td>
+                <td>> 99%</td>
+                <td>加强验证</td>
+              </tr>
+              <tr>
+                <td>一致性</td>
+                <td>格式统一度</td>
+                <td>> 98%</td>
+                <td>标准化格式</td>
+              </tr>
+              <tr>
+                <td>唯一性</td>
+                <td>无重复记录比例</td>
+                <td>100%</td>
+                <td>去重处理</td>
+              </tr>
+              <tr>
+                <td>及时性</td>
+                <td>数据时效性</td>
+                <td>符合业务</td>
+                <td>优化采集</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 数据采集需要支持多种数据源和采集方式</li>
+                <li>• 数据清洗包括缺失值处理、异常值处理、去重等</li>
+                <li>• 数据质量评估确保清洗效果</li>
+                <li>• 自动化清洗流程提高效率和一致性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="10-1-数据流水线概述.html">← 上一节</a>
+          <a href="10-3-数据格式与序列化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

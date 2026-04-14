@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.2 GPU性能分析 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>38.2 GPU性能分析</h1>
+          <p class="subtitle">使用Nsight工具深入分析GPU性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU性能分析的基本概念</li>
+            <li>掌握Nsight工具的使用</li>
+            <li>学习GPU性能瓶颈识别</li>
+            <li>实践GPU性能优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800" alt="GPU性能分析" class="card-image">
+          <h3 class="card-title">NVIDIA Nsight工具</h3>
+          <p class="card-text">
+            <strong>Nsight工具集</strong>是NVIDIA提供的GPU性能分析工具，包括Nsight Systems和Nsight Compute。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> Nsight工具对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>工具</th>
+                <th>用途</th>
+                <th>分析粒度</th>
+                <th>开销</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Nsight Systems</td>
+                <td>系统级分析</td>
+                <td>函数/API级别</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>Nsight Compute</td>
+                <td>Kernel级分析</td>
+                <td>指令级别</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>Nsight Graphics</td>
+                <td>图形应用分析</td>
+                <td>Draw call级别</td>
+                <td>中等</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Nsight Systems使用</h2>
+          <div class="code-block">
+# Nsight Systems安装
+# 下载地址: https://developer.nvidia.com/nsight-systems
+
+# 基本使用命令
+nsys profile --output=profile.nsys-rep python train.py
+
+# 常用选项
+nsys profile \
+  --output=profile.nsys-rep \           # 输出文件
+  --trace=cuda,nvtx \                 # 追踪CUDA和NVTX
+  --force-overwrite=true \             # 覆盖已存在文件
+  --cuda-memory-usage=true \           # 追踪CUDA内存使用
+  --sample=cpu \                      # CPU采样
+  --python-backtrace=none \            # Python backtrace
+  --cudabacktrace=true \              # CUDA backtrace
+  python train.py
+
+# 指定GPU
+nsys profile --output=profile.nsys-rep \
+  --gpu=0,1 \
+  python train.py
+
+# 设置采样间隔
+nsys profile --output=profile.nsys-rep \
+  --sample=cpu:1000000 \               # CPU采样1ms
+  --sampling-frequency=1000000 \       # 1kHz
+  python train.py
+
+# 长时间训练分析
+nsys profile --output=profile.nsys-rep \
+  --duration=10 \                      # 采集10秒
+  --capture-range=nvtx \               # 按NVTX标记采集
+  python train.py
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> Nsight Compute使用</h2>
+          <div class="code-block">
+# Nsight Compute安装
+# 下载地址: https://developer.nvidia.com/nsight-compute
+
+# 基本使用命令
+ncu --set=full python train.py
+
+# 常用选项
+ncu \
+  --export=report.ncu-rep \           # 导出报告
+  --set=detailed \                    # 详细模式
+  --metrics all \                      # 收集所有指标
+  --demangles \                       # 符号解码
+  --launch-count=10 \                  # 启动10次kernel
+  --pagebuffer=1 \                   # 页面缓冲
+  python train.py
+
+# 指定kernel分析
+ncu --kernel-name "attention_forward" python train.py
+
+# 指定GPU
+ncu --gpu=0,1 python train.py
+
+# 只分析指定kernel
+ncu --kernel-id=1 python train.py
+
+# 生成HTML报告
+ncu --export=report.ncu-rep \
+  --target-processes all \
+  python train.py
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> GPU性能指标解读</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">计算性能指标</h3>
+              <ul class="feature-list">
+                <li><strong>SM占用率</strong> - Streaming Multiprocessor利用率</li>
+                <li><strong>FP32吞吐</strong> - 单精度浮点性能</li>
+                <li><strong>FP16吞吐</strong> - 半精度浮点性能</li>
+                <li><strong>INT8吞吐</strong> - 整数运算性能</li>
+                <li><strong>Tensor Core利用率</strong> - 矩阵运算效率</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">内存性能指标</h3>
+              <ul class="feature-list">
+                <li><strong>显存带宽</strong> - Memory bandwidth usage</li>
+                <li><strong>L1缓存命中</strong> - L1 cache hit rate</li>
+                <li><strong>L2缓存命中</strong> - L2 cache hit rate</li>
+                <li><strong>共享内存使用</strong> - Shared memory usage</li>
+                <li><strong>寄存器使用</strong> - Register usage</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> GPU瓶颈识别</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">常见GPU瓶颈</div>
+              <p>通过Nsight工具可以识别以下类型的GPU瓶颈：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# GPU瓶颈识别指南
+
+## 1. 内存受限（Memory Bound）
+特征:
+- Memory bandwidth > 80%
+- Compute throughput < 50%
+- High L1/L2 cache miss rate
+
+解决方案:
+- 优化内存访问模式
+- 增加缓存利用率
+- 使用共享内存
+- 合并内存访问
+
+## 2. 计算受限（Compute Bound）
+特征:
+- Memory bandwidth < 50%
+- Compute throughput > 80%
+- High instruction issue rate
+
+解决方案:
+- 优化指令选择
+- 使用Tensor Core
+- 增加计算强度
+- 利用向量化指令
+
+## 3. 延迟受限（Latency Bound）
+特征:
+- Low occupancy
+- High synchronization
+- Frequent memory access
+
+解决方案:
+- 增加block数量
+- 优化线程块配置
+- 减少同步
+- 使用异步操作
+
+## 4. 通信受限（Communication Bound）
+特征:
+- High PCIe/NVLink usage
+- Frequent host-device transfer
+- Long kernel launch time
+
+解决方案:
+- 减少数据传输
+- 使用CUDA streams
+- Pinned memory
+- Batch transfers
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> GPU性能优化技巧</h2>
+          <div class="code-block">
+# GPU性能优化示例
+
+## 1. 优化内存访问
+# 不好的做法：非合并访问
+for i in range(n):
+    data[i] = array[i * stride]
+
+# 好的做法：合并访问
+for i in range(n):
+    data[i] = array[i]
+
+## 2. 使用共享内存
+# CUDA kernel优化
+__global__ void optimized_kernel(float* input, float* output) {
+    __shared__ float s_data[BLOCK_SIZE];
+
+    int tid = threadIdx.x;
+    int bid = blockIdx.x;
+
+    // 加载到共享内存
+    s_data[tid] = input[bid * BLOCK_SIZE + tid];
+    __syncthreads();
+
+    // 使用共享内存计算
+    output[bid * BLOCK_SIZE + tid] = process(s_data[tid]);
+}
+
+## 3. 使用Tensor Core
+# PyTorch中启用自动混合精度
+from torch.cuda.amp import autocast, GradScaler
+
+model = MyModel().cuda()
+optimizer = torch.optim.Adam(model.parameters())
+scaler = GradScaler()
+
+for batch in dataloader:
+    optimizer.zero_grad()
+
+    with autocast():
+        output = model(batch)
+        loss = criterion(output, target)
+
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+
+## 4. 优化批处理
+# 动态批大小
+dynamic_batch_size = min(max_batch_size,
+                        available_memory // memory_per_sample)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> PyTorch集成性能分析</h2>
+          <div class="code-block">
+import torch
+import torch.profiler as profiler
+
+# 使用PyTorch Profiler
+model = MyModel().cuda()
+optimizer = torch.optim.Adam(model.parameters())
+
+with profiler.profile(
+    activities=[
+        profiler.ProfilerActivity.CPU,
+        profiler.ProfilerActivity.CUDA,
+    ],
+    schedule=profiler.profiler_schedule(
+        wait=1,
+        warmup=1,
+        active=3,
+        repeat=2
+    ),
+    on_trace_ready=profiler.tensorboard_trace_handler('./log'),
+    record_shapes=True,
+    profile_memory=True,
+    with_stack=True
+) as prof:
+    for step, batch in enumerate(dataloader):
+        if step >= (1 + 1 + 3) * 2:
+            break
+        loss = model(batch)
+        loss.backward()
+        optimizer.step()
+
+# 查看关键kernel
+print(prof.key_averages().table(sort_by="cuda_time_total"))
+
+# 查看内存使用
+print(prof.key_averages().table(sort_by="self_cuda_memory_usage"))
+
+# 导出Chrome Trace
+prof.export_chrome_trace("trace.json")
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 性能分析工作流</h2>
+          <div class="code-block">
+# 完整的GPU性能分析流程
+
+## 第一步：基准测试
+python train.py --mode baseline
+
+## 第二步：Nsight Systems分析
+nsys profile --output=baseline.nsys-rep \
+  --trace=cuda,nvtx \
+  --force-overwrite=true \
+  python train.py
+
+## 第三步：识别热点
+# 查看生成的report，识别耗时最长的kernel
+
+## 第四步：Nsight Compute深入分析
+ncu --set=detailed \
+    --kernel-name="attention_forward" \
+    --export=attention.ncu-rep \
+    python train.py
+
+## 第五步：优化实现
+# 根据分析结果优化代码
+
+## 第六步：验证效果
+nsys profile --output=optimized.nsys-rep \
+  --trace=cuda,nvtx \
+  --force-overwrite=true \
+  python train.py
+
+## 第七步：对比分析
+# 使用Nsys Viewer对比baseline和optimized
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800" alt="GPU性能分析">
+          <div class="caption">图：Nsight Compute分析界面</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">GPU性能分析注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 性能分析本身会引入开销</li>
+              <li>• 使用适当的分析粒度</li>
+              <li>• 关注相对改进而非绝对值</li>
+              <li>• 在接近生产的负载下测试</li>
+              <li>• 结合代码逻辑分析性能数据</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Nsight Systems提供系统级性能分析</li>
+                <li>• Nsight Compute深入分析kernel性能</li>
+                <li>• GPU瓶颈主要分为内存、计算、延迟、通信</li>
+                <li>• 结合分析结果有针对性地优化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="38-1-性能分析方法论.html">← 上一节</a>
+          <a href="38-3-内存泄漏排查.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

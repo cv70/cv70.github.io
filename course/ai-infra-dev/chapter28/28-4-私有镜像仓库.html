@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.4 私有镜像仓库 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>28.4 私有镜像仓库</h1>
+          <p class="subtitle">搭建与管理AI镜像仓库</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解私有镜像仓库的作用与价值</li>
+            <li>掌握Harbor镜像仓库的部署与配置</li>
+            <li>学会镜像仓库的安全管理</li>
+            <li>了解镜像仓库的高可用方案</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="镜像仓库" class="card-image">
+          <h3 class="card-title">私有镜像仓库概述</h3>
+          <p class="card-text">
+            私有镜像仓库用于存储和管理组织内部的容器镜像，提供安全、可控的镜像分发渠道。
+            对于AI应用，私有仓库可以保护模型知识产权、控制镜像访问、实施安全策略。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 镜像仓库架构</h2>
+
+          <div class="image-container">
+            <img src="https://goharbor.io/docs/2.6.0/img/architecture.png" alt="Harbor架构">
+            <div class="caption">图：Harbor镜像仓库架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">核心组件</h3>
+              <ul class="feature-list">
+                <li>Registry：存储镜像</li>
+                <li>UI：管理界面</li>
+                <li>API：编程接口</li>
+                <li>DB：元数据存储</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">安全组件</h3>
+              <ul class="feature-list">
+                <li>Notary：镜像签名</li>
+                <li>Trivy：漏洞扫描</li>
+                <li>Auth：认证授权</li>
+                <li>Policy：访问控制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">扩展功能</h3>
+              <ul class="feature-list">
+                <li>镜像同步</li>
+                <li>垃圾回收</li>
+                <li>日志审计</li>
+                <li>Webhook通知</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 部署Harbor</h2>
+
+          <h3>Docker Compose部署</h3>
+          <div class="code-block">
+# 下载Harbor安装包
+wget https://github.com/goharbor/harbor/releases/download/v2.8.0/harbor-offline-installer-v2.8.0.tgz
+tar xvf harbor-offline-installer-v2.8.0.tgz
+cd harbor
+
+# 配置Harbor
+cp harbor.yml.tmpl harbor.yml
+vi harbor.yml
+
+# 关键配置
+hostname: harbor.example.com
+http:
+  port: 80
+https:
+  port: 443
+  certificate: /data/cert/server.crt
+  private_key: /data/cert/server.key
+harbor_admin_password: "Harbor12345"
+data_volume: /data
+
+# 安装Harbor
+./install.sh
+
+# 查看状态
+docker-compose ps
+          </div>
+
+          <h3>Kubernetes部署（Helm）</h3>
+          <div class="code-block">
+# 添加Harbor Helm仓库
+helm repo add harbor https://helm.goharbor.io
+helm repo update
+
+# 创建命名空间
+kubectl create namespace harbor
+
+# 安装Harbor
+helm install harbor harbor/harbor \
+  --namespace harbor \
+  --set expose.ingress.hosts.core=harbor.example.com \
+  --set expose.ingress.enabled=true \
+  --set expose.tls.enabled=true \
+  --set expose.tls.certSource=auto \
+  --set persistence.persistentVolumeClaim.registry.storageClass=nfs-client \
+  --set persistence.persistentVolumeClaim.registry.size=100Gi \
+  --set persistence.enabled=true \
+  --set harborAdminPassword="Harbor12345"
+
+# 验证安装
+kubectl get pods -n harbor
+kubectl get svc -n harbor
+          </code-block>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">存储配置</div>
+              <p>AI镜像通常较大（GB级别），建议使用高性能存储（如SSD、NFS）作为后端存储。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Harbor配置管理</h2>
+
+          <h3>创建项目</h3>
+          <div class="code-block">
+# 通过UI创建项目
+# 1. 登录Harbor UI (https://harbor.example.com)
+# 2. 点击"新建项目"
+# 3. 设置项目名称和可见性
+# 4. 配置访问级别（公开/私有）
+
+# 通过API创建项目
+curl -X POST "https://harbor.example.com/api/v2.0/projects" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "ai-models",
+    "public": false,
+    "metadata": {
+      "public": "false"
+    }
+  }'
+          </code-block>
+
+          <h3>用户与权限</h3>
+          <div class="code-block">
+# 创建用户
+curl -X POST "https://harbor.example.com/api/v2.0/users" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "ai-developer",
+    "email": "dev@example.com",
+    "password": "SecurePass123",
+    "realname": "AI Developer"
+  }'
+
+# 添加成员到项目
+curl -X POST "https://harbor.example.com/api/v2.0/projects/1/members" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "member_user": {
+      "username": "ai-developer"
+    },
+    "role_id": 2
+  }'
+
+# 角色说明
+# 1: 项目管理员
+# 2: 开发者
+# 3: 访客
+# 4: 维护人员
+          </code-block>
+
+          <h3>机器人账户</h3>
+          <div class="code-block">
+# 创建机器人账户
+curl -X POST "https://harbor.example.com/api/v2.0/projects/1/robots" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ci-cd-bot",
+    "description": "CI/CD automation",
+    "duration": 30,
+    "level": "project",
+    "permissions": [
+      {
+        "kind": "project",
+        "namespace": "ai-models",
+        "access": [
+          {
+            "resource": "repository",
+            "action": "push"
+          },
+          {
+            "resource": "repository",
+            "action": "pull"
+          }
+        ]
+      }
+    ]
+  }'
+          </code-block>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 安全配置</h2>
+
+          <h3>漏洞扫描</h3>
+          <div class="code-block">
+# 启用自动扫描
+# 在项目设置中启用"自动扫描"
+
+# 手动触发扫描
+curl -X POST "https://harbor.example.com/api/v2.0/projects/1/repositories/myrepo/artifacts/latest/scan" \
+  -H "Authorization: Basic <base64-auth>"
+
+# 配置扫描策略
+# 通过UI：项目 -> 配置 -> 漏洞扫描
+# 扫描策略：
+# - 每次推送到仓库时扫描
+# - 按计划扫描（每日/每周）
+# - 手动触发扫描
+          </code-block>
+
+          <h3>镜像签名</h3>
+          <div class="code-block">
+# 推送时签名
+docker login harbor.example.com
+docker tag myapp:latest harbor.example.com/ai-models/myapp:latest
+docker push harbor.example.com/ai-models/myapp:latest
+
+# 使用cosign签名
+cosign sign --key cosign.key harbor.example.com/ai-models/myapp:latest
+
+# 验证签名
+cosign verify --key cosign.pub harbor.example.com/ai-models/myapp:latest
+
+# Harbor UI查看签名状态
+# 项目 -> 仓库 -> myapp -> latest -> 签名
+          </code-block>
+
+          <h3>内容信任</h3>
+          <div class="code-block">
+# 启用内容信任
+docker login harbor.example.com
+export DOCKER_CONTENT_TRUST=1
+export DOCKER_CONTENT_TRUST_SERVER=https://notary.harbor.example.com
+
+# 推送时自动签名
+docker push harbor.example.com/ai-models/myapp:latest
+
+# 拉取时自动验证
+docker pull harbor.example.com/ai-models/myapp:latest
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 镜像同步</h2>
+
+          <h3>配置镜像仓库</h2>
+          <div class="code-block">
+# 添加远程仓库
+# 管理 -> 仓库 -> 新建目标仓库
+
+# 示例：同步Docker Hub
+{
+  "name": "docker-hub",
+  "endpoint": "https://index.docker.io",
+  "type": "docker-hub",
+  "username": "dockerhub-user",
+  "password": "dockerhub-password",
+  "insecure": false
+}
+
+# 示例：同步另一个Harbor
+{
+  "name": "backup-harbor",
+  "endpoint": "https://backup-harbor.example.com",
+  "type": "harbor",
+  "username": "admin",
+  "password": "password"
+}
+          </code>
+
+          <h3>创建同步规则</h2>
+          <div class="code-block">
+# 同步规则配置
+{
+  "name": "sync-docker-hub",
+  "description": "Sync from Docker Hub",
+  "src_registry_id": 1,
+  "dest_namespace": "docker-hub-mirror",
+  "enabled": true,
+  "override": true,
+  "schedule": {
+    "type": "Manual"
+  },
+  "trigger": {
+    "kind": "Manual"
+  },
+  "filters": [
+    {
+      "type": "name",
+      "value": "pytorch/*"
+    }
+  ]
+}
+
+# 通过API创建同步规则
+curl -X POST "https://harbor.example.com/api/v2.0/replication/policies" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d @sync-policy.json
+
+# 手动触发同步
+curl -X POST "https://harbor.example.com/api/v2.0/replication/execution" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "policy_id": 1
+  }'
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗑️</span> 存储管理</h2>
+
+          <h3>垃圾回收</h2>
+          <div class="code-block">
+# 通过UI执行垃圾回收
+# 管理 -> 垃圾回收 -> 扫描 -> 清理
+
+# 通过API触发垃圾回收
+curl -X POST "https://harbor.example.com/api/v2.0/system/gc/schedule" \
+  -H "Authorization: Basic <base64-auth>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schedule": {
+      "type": "Daily",
+      "cron": "0 0 * * *"
+    }
+  }'
+
+# 手动执行垃圾回收
+curl -X POST "https://harbor.example.com/api/v2.0/system/gc" \
+  -H "Authorization: Basic <base64-auth>"
+          </code>
+
+          <h3>保留策略</h2>
+          <div class="code-block">
+# 配置保留策略
+# 项目 -> 配置 -> 保留策略
+
+{
+  "scope": {
+    "level": "project",
+    "ref": "ai-models"
+  },
+  "schedule": {
+    "type": "Daily",
+    "cron": "0 2 * * *"
+  },
+  "keep_recently_n": 10,
+  "keep_days": 30
+}
+
+# 保留最近10个镜像
+# 保留30天内的镜像
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">存储优化建议</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• AI镜像较大，定期执行垃圾回收</li>
+                <li>• 配置合理的保留策略</li>
+                <li>• 使用分层存储，热数据用SSD</li>
+                <li>• 监控存储使用率，及时扩容</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与审计</h2>
+
+          <h3>查看使用统计</h2>
+          <div class="code-block">
+# 项目统计
+curl -X GET "https://harbor.example.com/api/v2.0/statistics" \
+  -H "Authorization: Basic <base64-auth>"
+
+# 返回示例
+{
+  "total_project_count": 10,
+  "public_project_count": 3,
+  "private_project_count": 7,
+  "total_repo_count": 156,
+  "public_repo_count": 45,
+  "private_repo_count": 111
+}
+          </code>
+
+          <h3>审计日志</h2>
+          <div class="code-block">
+# 查询审计日志
+curl -X GET "https://harbor.example.com/api/v2.0/audit-logs" \
+  -H "Authorization: Basic <base64-auth>" \
+  -G \
+  --data-urlencode "page=1" \
+  --data-urlencode "page_size=20" \
+  --data-urlencode "operation=push"
+
+# 审计日志包含：
+# - 用户操作
+# - 镜像推送/拉取
+# - 权限变更
+# - 安全扫描结果
+          </code>
+
+          <h3>Prometheus集成</h2>
+          <div class="code-block">
+# Harbor默认提供Prometheus metrics
+# 端点：https://harbor.example.com/metrics
+
+# Prometheus配置
+scrape_configs:
+  - job_name: 'harbor'
+    static_configs:
+      - targets: ['harbor.example.com']
+    metrics_path: '/metrics'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+# 关键指标
+# harbor_project_repo_count: 项目仓库数量
+# harbor_project_blob_count: 项目blob数量
+# harbor_project_artifact_count: 项目artifacts数量
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Kubernetes集成</h2>
+
+          <h3>配置ImagePullSecrets</h2>
+          <div class="code-block">
+# 创建Secret
+kubectl create secret docker-registry harbor-secret \
+  --docker-server=harbor.example.com \
+  --docker-username=robot$ci-cd-bot \
+  --docker-password=<robot-secret> \
+  --docker-email=bot@example.com \
+  -n default
+
+# 在Pod中使用
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ai-pod
+spec:
+  containers:
+  - name: app
+    image: harbor.example.com/ai-models/myapp:latest
+  imagePullSecrets:
+  - name: harbor-secret
+          </code>
+
+          <h3>配置全局ImagePullSecret</h2>
+          <div class="code-block">
+# 为命名空间添加默认ImagePullSecret
+kubectl patch serviceaccount default \
+  -p '{"imagePullSecrets": [{"name": "harbor-secret"}]}' \
+  -n default
+
+# 验证
+kubectl get sa default -n default -o yaml
+          </code>
+
+          <h3>镜像拉取策略</h2>
+          <div class="code-block">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: harbor.example.com/ai-models/myapp:latest
+        imagePullPolicy: Always  # Always | IfNotPresent | Never
+          </code>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践总结</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 使用Helm在Kubernetes上部署Harbor</li>
+              <li>• 配置基于角色的访问控制</li>
+              <li>• 启用漏洞扫描和镜像签名</li>
+              <li>• 设置镜像保留和垃圾回收策略</li>
+              <li>• 监控存储使用和性能指标</li>
+              <li>• 使用机器人账户集成CI/CD</li>
+              <li>• 配置镜像同步提高可用性</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 私有镜像仓库提供安全可控的镜像分发</li>
+                <li>• Harbor提供完整的镜像管理功能</li>
+                <li>• 漏洞扫描和签名是关键安全功能</li>
+                <li>• 合理的存储管理降低成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="28-3-容器安全.html">← 上一节</a>
+          <a href="28-5-镜像分发加速.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

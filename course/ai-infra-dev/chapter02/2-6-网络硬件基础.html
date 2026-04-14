@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.6 网络硬件基础（InfiniBand/RoCE/以太网） - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>2.6 网络硬件基础（InfiniBand/RoCE/以太网）</h1>
+          <p class="subtitle">构建高速AI集群互联网络</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解AI集群对网络的高要求</li>
+            <li>掌握InfiniBand技术原理</li>
+            <li>了解RoCE协议特点</li>
+            <li>认识网络拓扑设计原则</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络设备" class="card-image">
+          <h3 class="card-title">AI网络概述</h3>
+          <p class="card-text">
+            在大规模分布式AI训练中，网络性能直接影响训练效率。高效的GPU集群需要高速、低延迟的网络互连，以支持梯度同步、参数交换等高频通信需求。网络带宽往往成为AI训练性能的瓶颈。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 网络在AI训练中的作用</h2>
+          <div class="card">
+            <h3 class="card-title">关键通信场景</h3>
+            <div class="grid grid-2">
+              <div>
+                <h4>数据并行训练</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>梯度同步（All-Reduce）</li>
+                  <li>梯度累积</li>
+                  <li>参数广播</li>
+                  <li>平均操作</li>
+                </ul>
+              </div>
+              <div>
+                <h4>模型并行训练</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>激活传递（P2P）</li>
+                  <li>梯度反向传播</li>
+                  <li>管道同步</li>
+                  <li>检查点同步</li>
+                </ul>
+              </div>
+            </div>
+            <div class="tip-box warning">
+              <span class="icon">⚠️</span>
+              <div class="content">
+                <div class="title">性能影响</div>
+                <p>在大规模分布式训练中，通信时间可能占据总训练时间的<strong>30-50%</strong>。优化网络性能可显著提升整体训练效率。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> InfiniBand技术</h2>
+          <div class="card">
+            <h3 class="card-title">高性能互连协议</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              InfiniBand（IB）是专为高性能计算设计的网络技术，提供极低的延迟和极高的带宽：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>版本</th>
+                  <th>带宽</th>
+                  <th>延迟</th>
+                  <th>发布时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>EDR</strong></td>
+                  <td>100Gbps</td>
+                  <td>~600ns</td>
+                  <td>2014</td>
+                </tr>
+                <tr>
+                  <td><strong>HDR</strong></td>
+                  <td>200Gbps</td>
+                  <td>~500ns</td>
+                  <td>2017</td>
+                </tr>
+                <tr>
+                  <td><strong>NDR</strong></td>
+                  <td>400Gbps</td>
+                  <td>~400ns</td>
+                  <td>2021</td>
+                </tr>
+                <tr>
+                  <td><strong>XDR</strong></td>
+                  <td>800Gbps</td>
+                  <td>~350ns</td>
+                  <td>2024 (规划)</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block" style="margin-top: 1rem;">
+InfiniBand特性：
+
+1. RDMA (远程直接内存访问)
+   • 绕过CPU，直接传输数据
+   • 零拷贝传输
+   • 极低延迟
+
+2. 可靠传输
+   • 硬件级别的可靠性
+   • 无丢包设计
+
+3. 拥塞控制
+   • 自适应路由
+   • QoS保障
+
+4. 高可用性
+   • 多路径支持
+   • 快速故障切换
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> RoCE协议</h2>
+          <div class="card">
+            <h3 class="card-title">RDMA over Converged Ethernet</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              RoCE将RDMA技术带到以太网，是更经济的高性能网络解决方案：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>RoCE v1</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>基于以太网链路层</li>
+                  <li>需要无损网络</li>
+                  <li>无法跨网段</li>
+                  <li>适合数据中心内部</li>
+                </ul>
+              </div>
+              <div>
+                <h4>RoCE v2</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>基于UDP/IP</li>
+                  <li>可跨网段</li>
+                  <li>需要DCN（数据中心网络）</li>
+                  <li>更广泛的部署</li>
+                </ul>
+              </div>
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">InfiniBand vs RoCE</div>
+                <p>InfiniBand性能更优但成本更高；RoCE基于以太网，部署成本更低，适合预算敏感场景。大规模AI集群通常首选InfiniBand。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 网络设备</h2>
+          <div class="card">
+            <h3 class="card-title">核心组件</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>设备类型</th>
+                  <th>功能</th>
+                  <th>代表产品</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>NIC/HCA</strong></td>
+                  <td>主机通道适配器</td>
+                  <td>NVIDIA ConnectX-7</td>
+                </tr>
+                <tr>
+                  <td><strong>交换机</strong></td>
+                  <td>网络交换设备</td>
+                  <td>NVIDIA Quantum-2</td>
+                </tr>
+                <tr>
+                  <td><strong>光模块</strong></td>
+                  <td>光电转换</td>
+                  <td>QSFP-DD 800G</td>
+                </tr>
+                <tr>
+                  <td><strong>光纤</strong></td>
+                  <td>传输介质</td>
+                  <td>OM4/OM5多模</td>
+                </tr>
+                <tr>
+                  <td><strong>线缆</strong></td>
+                  <td>短距连接</td>
+                  <td>CX4 DAC线</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌳</span> 网络拓扑设计</h2>
+          <div class="card">
+            <h3 class="card-title">主流拓扑结构</h3>
+            <div class="grid grid-2">
+              <div>
+                <h4>Fat-Tree</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>无阻塞网络</li>
+                  <li>多路径冗余</li>
+                  <li>易于扩展</li>
+                  <li>成本较高</li>
+                </ul>
+              </div>
+              <div>
+                <h4>Leaf-Spine</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>两层结构</li>
+                  <li>低成本</li>
+                  <li>高可扩展性</li>
+                  <li>可能阻塞</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+Fat-Tree拓扑设计示例：
+
+k-ary Fat-Tree（k=4）：
+
+        Spine层 (4台)
+         /   |   \
+      /---+---+---\
+    Leaf层 (16台)
+    |  |  |  |  |
+  GPU节点 (64台)
+
+设计要点：
+• 保证任意两点间带宽相等
+• 提供多条路径
+• 避免拥塞
+• 支持线性扩展
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 网络性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>带宽</strong></td>
+                <td>数据传输速率</td>
+                <td>≥ 200Gbps/端口</td>
+              </tr>
+              <tr>
+                <td><strong>延迟</strong></td>
+                <td>传输往返时间</td>
+                <td>< 10μs (内网)</td>
+              </tr>
+              <tr>
+                <td><strong>丢包率</strong></td>
+                <td>数据丢失比例</td>
+                <td>0%</td>
+              </tr>
+              <tr>
+                <td><strong>吞吐量</strong></td>
+                <td>并发处理能力</td>
+                <td>满足训练需求</td>
+              </tr>
+              <tr>
+                <td><strong>收敛时间</strong></td>
+                <td>路由更新时间</td>
+                <td>< 50ms</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 网络优化策略</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化建议</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>使用RDMA加速通信</li>
+                  <li>优化网络拓扑减少跳数</li>
+                  <li>配置流量工程避免拥塞</li>
+                  <li>使用亲和性优化任务调度</li>
+                  <li>监控网络性能及时调整</li>
+                  <li>采用GPUDirect RDMA绕过CPU</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block">
+NCCL优化配置示例：
+
+# NCCL调试选项
+export NCCL_DEBUG=INFO
+export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1
+export NCCL_IB_GID_INDEX=3
+export NCCL_SOCKET_IFNAME=ib0
+export NCCL_IB_DISABLE=0
+
+# 网络优化
+export NCCL_NET_GDR_LEVEL=5  # GPU Direct RDMA
+export NCCL_ALGO=Ring        # 通信算法
+export NCCL_PROTO=LL         # 协议优化
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 高速网络是大规模AI训练的基础</li>
+                <li>• InfiniBand提供最高性能但成本较高</li>
+                <li>• RoCE是基于以太网的低成本方案</li>
+                <li>• 网络拓扑设计需考虑无阻塞和可扩展性</li>
+                <li>• RDMA技术可大幅降低通信延迟</li>
+                <li>• 优化网络性能可显著提升训练效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="2-5-内存与存储层次结构.html">← 上一节</a>
+          <a href="../chapter03/3-1-AI软件栈层次结构.html">下一节：第3章 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

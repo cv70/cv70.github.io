@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.5 多模态模型训练 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.5 多模态模型训练</h1>
+          <p class="subtitle">训练视觉、语言、音频等多模态模型</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解多模态模型的特点</li>
+            <li>掌握多模态训练的挑战</li>
+            <li>了解多模态并行策略</li>
+            <li>学会多模态数据加载优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="多模态模型训练" class="card-image">
+          <h3 class="card-title">多模态模型概述</h3>
+          <p class="card-text">
+            多模态模型能够同时处理多种模态的数据，如文本、图像、音频、视频等。
+            相比单模态模型，多模态模型面临数据异构、计算不均衡、对齐困难等挑战。
+            本节将介绍多模态模型训练的专门技术和最佳实践。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 多模态模型类型</h2>
+          <div class="card">
+            <h3 class="card-title">常见多模态架构</h3>
+            <div class="code-block">
+1. 视觉-语言模型（VL）
+
+CLIP架构：
+• Vision Encoder: ViT/ResNet
+• Text Encoder: Transformer
+• Contrastive Learning: 对比学习
+
+应用：
+• 图文检索
+• 零样本分类
+• 视觉问答
+
+2. 图文生成模型
+
+DALL-E 2架构：
+• Text Encoder: CLIP text encoder
+• Image Generator: Diffusion model
+• Prior model: 映射文本到图像latent
+
+Stable Diffusion:
+• Text Encoder: CLIP
+• Image Generator: U-Net
+• Diffusion process: 逐步去噪
+
+3. 音频-文本模型
+
+Whisper架构：
+• Audio Encoder: CNN + Transformer
+• Text Decoder: Transformer
+• End-to-end ASR
+
+4. 视频-文本模型
+
+VideoMAE架构：
+• Video Encoder: 3D ViT
+• Masked Autoencoder
+• 预训练+微调
+
+5. 统一多模态模型
+
+GPT-4V架构：
+• Vision Encoder: ViT
+• Language Model: Transformer
+• Multimodal fusion: attention mechanism
+
+应用：
+• 视觉问答
+• 图像描述
+• 图文对话
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 多模态训练挑战</h2>
+          <div class="card">
+            <h3 class="card-title">核心挑战分析</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>挑战</th>
+                  <th>说明</th>
+                  <th>影响</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>数据异构</strong></td>
+                  <td>不同模态数据格式、大小不同</td>
+                  <td>数据加载复杂</td>
+                </tr>
+                <tr>
+                  <td><strong>计算不均衡</strong></td>
+                  <td>不同模态计算量差异大</td>
+                  <td>GPU利用率低</td>
+                </tr>
+                <tr>
+                  <td><strong>显存不均衡</strong></td>
+                  <td>不同模态显存占用不同</td>
+                  <td>显存浪费</td>
+                </tr>
+                <tr>
+                  <td><strong>对齐困难</strong></td>
+                  <td>模态间语义对齐</td>
+                  <td>训练收敛难</td>
+                </tr>
+                <tr>
+                  <td><strong>数据量不平衡</strong></td>
+                  <td>不同模态数据量差异</td>
+                  <td>偏差</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 多模态数据加载</h2>
+          <div class="card">
+            <h3 class="card-title">高效数据加载策略</h3>
+            <div class="code-block">
+多模态数据集：
+
+class MultimodalDataset(Dataset):
+    def __init__(self, image_dir, text_file, audio_dir):
+        self.image_dir = image_dir
+        self.text_file = text_file
+        self.audio_dir = audio_dir
+
+        # 加载文本
+        with open(text_file, 'r') as f:
+            self.texts = json.load(f)
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        # 加载图像
+        image_path = os.path.join(
+            self.image_dir,
+            self.texts[idx]['image']
+        )
+        image = Image.open(image_path).convert('RGB')
+        image = self.image_transform(image)
+
+        # 加载文本
+        text = self.texts[idx]['caption']
+        text_tokens = self.tokenizer(
+            text,
+            padding='max_length',
+            max_length=77,
+            truncation=True,
+            return_tensors='pt'
+        )
+
+        # 加载音频（可选）
+        if 'audio' in self.texts[idx]:
+            audio_path = os.path.join(
+                self.audio_dir,
+                self.texts[idx]['audio']
+            )
+            audio = self.load_audio(audio_path)
+
+        return {
+            'image': image,
+            'text': text_tokens,
+            'audio': audio
+        }
+
+优化策略：
+
+1. 预处理缓存
+   • 提前预处理并保存
+   • 加载时直接读取
+   • 节省预处理时间
+
+2. 并行加载
+   • 多worker并行加载
+   • 避免I/O瓶颈
+   • num_workers=8-16
+
+3. 内存映射
+   • 使用mmap加载大文件
+   • 减少内存占用
+   • dataset-impl='mmap'
+
+4. 分层存储
+   • 热数据: 内存/SSD
+   • 冷数据: HDD
+   • 降低存储成本
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 多模态并行策略</h2>
+          <div class="card">
+            <h3 class="card-title">适应多模态的并行</h3>
+            <div class="code-block">
+模型并行（模态级）：
+
+架构：
+┌─────────────────────────────────────────┐
+│         GPU Group 1 (Vision)         │
+│  • Vision Encoder                    │
+│  • Pre-trained ViT                   │
+├─────────────────────────────────────────┤
+│         GPU Group 2 (Text)           │
+│  • Text Encoder                      │
+│  • Pre-trained Transformer           │
+├─────────────────────────────────────────┤
+│         GPU Group 3 (Fusion)         │
+│  • Multimodal Fusion                │
+│  • Cross-attention                  │
+└─────────────────────────────────────────┘
+
+优势：
+• 不同模态独立并行
+• 充分利用硬件
+• 易于扩展
+
+流水线并行：
+
+阶段1: Vision Encoding
+  GPU0: Image 0-3
+  GPU1: Image 4-7
+
+阶段2: Text Encoding
+  GPU0: Text 0-3
+  GPU1: Text 4-7
+
+阶段3: Fusion
+  GPU0: Fusion (Vision 0-3 + Text 0-3)
+  GPU1: Fusion (Vision 4-7 + Text 4-7)
+
+优势：
+• 不同阶段可以重叠
+• 提高GPU利用率
+• 减少等待时间
+
+动态调度：
+
+• 根据模态计算量动态调度
+• 重负载模态: 更多GPU
+• 轻负载模态: 更少GPU
+• 实现负载均衡
+
+实现：
+def schedule_multimodal(model, inputs):
+    """多模态动态调度"""
+    # 分析输入计算需求
+    vision_compute = estimate_vision_compute(inputs['image'])
+    text_compute = estimate_text_compute(inputs['text'])
+
+    # 分配GPU资源
+    if vision_compute > text_compute:
+        # 视觉计算重，分配更多GPU
+        vision_gpus = 6
+        text_gpus = 2
+    else:
+        # 文本计算重，分配更多GPU
+        vision_gpus = 2
+        text_gpus = 6
+
+    # 并行处理
+    vision_output = parallel_vision_encoder(
+        inputs['image'],
+        num_gpus=vision_gpus
+    )
+    text_output = parallel_text_encoder(
+        inputs['text'],
+        num_gpus=text_gpus
+    )
+
+    # 融合
+    output = fusion_layer(
+        vision_output,
+        text_output
+    )
+
+    return output
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="多模态训练">
+          <div class="caption">图：多模态训练需要考虑不同模态的特性</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 训练优化技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">数据优化</h3>
+              <ul class="feature-list">
+                <li><strong>数据对齐：</strong>确保模态间对齐</li>
+                <li><strong>增强：</strong>数据增强保持一致性</li>
+                <li><strong>平衡：</strong>平衡各模态数据量</li>
+                <li><strong>缓存：</strong>预处理结果缓存</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title>模型优化</h3>
+              <ul class="feature-list">
+                <li><strong>预训练：</strong>使用预训练encoder</li>
+                <li><strong>微调：</strong>分层微调不同模块</li>
+                <li><strong>梯度累积：</strong>平衡模态梯度</li>
+                <li><strong>学习率：</strong>不同模块不同lr</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 实用配置</h2>
+          <div class="card">
+            <h3 class="card-title">多模态训练配置</h3>
+            <div class="code-block">
+CLIP风格训练配置：
+
+{
+    "vision": {
+        "encoder": "ViT-B/16",
+        "image_size": 224,
+        "patch_size": 16,
+        "hidden_size": 768,
+        "num_layers": 12,
+        "num_heads": 12
+    },
+    "text": {
+        "encoder": "Transformer",
+        "vocab_size": 49408,
+        "hidden_size": 512,
+        "num_layers": 12,
+        "num_heads": 8,
+        "max_length": 77
+    },
+    "training": {
+        "batch_size": 256,
+        "learning_rate": 5e-4,
+        "warmup_steps": 2000,
+        "weight_decay": 0.2,
+        "gradient_clip": 1.0,
+        "temperature": 0.07
+    },
+    "optimization": {
+        "fp16": true,
+        "gradient_accumulation": 1,
+        "zero_stage": 2
+    },
+    "parallel": {
+        "tensor_parallel_size": 1,
+        "pipeline_parallel_size": 1,
+        "data_parallel_size": 8
+    }
+}
+
+Diffusion模型训练配置：
+
+{
+    "model": {
+        "text_encoder": "CLIP-ViT-L/14",
+        "image_encoder": "ViT-L/14",
+        "unet_config": {
+            "in_channels": 4,
+            "model_channels": 320,
+            "num_res_blocks": 2,
+            "attention_resolutions": [4, 2, 1],
+            "num_heads": 8,
+            "transformer_depth": 1
+        }
+    },
+    "training": {
+        "batch_size": 32,
+        "image_size": 512,
+        "num_steps": 1000,
+        "learning_rate": 1e-4
+    },
+    "diffusion": {
+        "schedule": "linear",
+        "timesteps": 1000,
+        "beta_start": 0.00085,
+        "beta_end": 0.012
+    },
+    "optimization": {
+        "fp16": true,
+        "ema_decay": 0.9999
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">多模态训练建议</h3>
+            <div class="code-block">
+1. 数据准备
+   ✓ 确保模态间对齐
+   ✓ 数据增强保持一致性
+   ✓ 平衡各模态数据量
+   ✓ 高效的数据加载
+
+2. 模型设计
+   ✓ 使用预训练encoder
+   ✓ 合理的融合机制
+   ✓ 考虑计算不均衡
+   ✓ 优化显存占用
+
+3. 训练策略
+   ✓ 分阶段训练
+   ✓ 不同模块不同学习率
+   ✓ 梯度平衡各模态
+   ✓ 监控各模态loss
+
+4. 优化技巧
+   ✓ 模态级并行
+   ✓ 流水线并行
+   ✓ 动态资源调度
+   ✓ 混合并行策略
+
+5. 监控与调试
+   ✓ 监控各模态loss
+   ✓ 检查模态对齐
+   ✓ 可视化注意力
+   ✓ 分析样本分布
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>数据质量：</strong>确保各模态数据质量和对齐</li>
+              <li><strong>计算不均衡：</strong>需要平衡不同模态的计算量</li>
+              <li><strong>调试复杂：</strong>多模态问题定位更困难</li>
+              <li><strong>训练时间长：</strong>多模态模型通常训练时间更长</li>
+              <li><strong>评估困难：</strong>需要全面的评估指标</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 多模态模型能处理多种模态数据</li>
+                <li>• 面临数据异构、计算不均衡等挑战</li>
+                <li>• 需要专门的数据加载和并行策略</li>
+                <li>• 模态级并行和流水线并行提高效率</li>
+                <li>• 仔细设计训练策略和监控机制</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="20-4-长序列训练.html">← 上一节</a>
+          <a href="#">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

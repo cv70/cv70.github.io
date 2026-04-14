@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.3 性能优化实践 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>50.3 性能优化实践</h1>
+          <p class="subtitle">AI基础设施性能优化实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握性能优化方法论</li>
+            <li>学会性能分析工具</li>
+            <li>了解系统级优化</li>
+            <li>掌握应用级优化</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 性能优化流程</h2>
+          <div class="card">
+            <h3 class="card-title">五步优化法</h3>
+            <div class="grid grid-5">
+              <div class="step-card">
+                <div class="step-number">1</div>
+                <div class="step-title">建立基准</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">2</div>
+                <div class="step-title">性能分析</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">3</div>
+                <div class="step-title">瓶颈定位</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">4</div>
+                <div class="step-title">优化实施</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">5</div>
+                <div class="step-title">效果验证</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 系统级优化</h2>
+          <div class="code-block">
+<pre><code># 系统内核优化
+
+# 1. 内核参数调优
+cat > /etc/sysctl.d/99-ai-optimize.conf << EOF
+# 网络优化
+net.core.rmem_max = 134217728
+net.core.wmem_max = 134217728
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 65536 33554432
+
+# 文件系统优化
+fs.file-max = 2097152
+fs.aio-max-nr = 1048576
+
+# 内存优化
+vm.swappiness = 1
+vm.dirty_ratio = 10
+vm.dirty_background_ratio = 5
+EOF
+
+sysctl -p /etc/sysctl.d/99-ai-optimize.conf
+
+# 2. CPU亲和性设置
+taskset -c 0-7 python train.py
+
+# 3. NUMA优化
+numactl --cpunodebind=0 --membind=0 python train.py
+
+# 4. 文件系统挂载优化
+mount -o noatime,nodiratime,data=writeback /dev/sdX1 /data</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 存储优化</h2>
+          <div class="code-block">
+<pre><code># 存储优化配置
+
+# 1. NVMe SSD优化
+# 挂载参数
+mount -o discard,defaults,noatime,nodiratime /dev/nvme0n1p1 /data
+
+# 2. 文件系统选择
+# XFS（大文件）
+mkfs.xfs -f /dev/nvme0n1p1
+
+# ext4（通用）
+mkfs.ext4 -O extent,uninit_bg,dir_index /dev/nvme0n1p1
+
+# 3. RAID配置
+# RAID 0（性能）
+mdadm --create /dev/md0 --level=0 --raid-devices=4 /dev/nvme0n1p1 /dev/nvme0n2p1 /dev/nvme0n3p1 /dev/nvme0n4p1
+
+# 4. 缓存配置
+# 使用tmpfs缓存
+mount -t tmpfs -o size=32G tmpfs /tmp/cache
+
+# 5. I/O调度器
+echo mq-deadline > /sys/block/nvme0n1/queue/scheduler</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 网络优化</h2>
+          <div class="code-block">
+<pre><code># 网络优化配置
+
+# 1. MTU设置（Jumbo Frames）
+ip link set dev eth0 mtu 9000
+
+# 2. 网卡中断绑定
+# 设置RSS
+ethtool -L eth0 combined 16
+
+# 设置XPS
+echo 0-7 > /sys/class/net/eth0/queues/tx-0/xps_cpus
+
+# 3. TCP调优
+sysctl -w net.ipv4.tcp_sack=1
+sysctl -w net.ipv4.tcp_timestamps=1
+sysctl -w net.ipv4.tcp_window_scaling=1
+
+# 4. RPS/RFS配置
+echo ffff > /sys/class/net/eth0/queues/rx-0/rps_cpus
+echo 256 > /sys/class/net/eth0/queues/rx-0/rps_flow_cnt</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> 容器优化</h2>
+          <div class="code-block">
+<pre><code># Docker优化配置
+
+# 1. 容器镜像优化
+# 多阶段构建
+FROM python:3.10-slim as builder
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.10-slim
+COPY --from=builder /root/.local /root/.local
+COPY . .
+ENV PATH=/root/.local/bin:$PATH
+
+# 2. 资源限制配置
+docker run --gpus all \
+  --cpus="8.0" \
+  --memory="64g" \
+  --shm-size="32g" \
+  --ulimit memlock=-1:-1 \
+  ai-training:latest
+
+# 3. 存储优化
+docker run -v /data:/data:cached \
+  --storage-opt size=100G \
+  ai-training:latest
+
+# 4. 网络优化
+docker run --network=host \
+  --ulimit nofile=65536:65536 \
+  ai-training:latest</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能基准测试</h2>
+          <div class="code-block">
+<pre><code># 性能基准测试脚本
+import torch
+import time
+import numpy as np
+
+def benchmark_gpu_operations():
+    """GPU操作基准测试"""
+    # 测试1: 矩阵乘法
+    size = 8192
+    a = torch.randn(size, size, device='cuda')
+    b = torch.randn(size, size, device='cuda')
+
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(100):
+        c = torch.mm(a, b)
+    torch.cuda.synchronize()
+    duration = time.time() - start
+
+    gflops = (2 * size ** 3 * 100) / (duration * 1e9)
+    print(f"Matrix multiplication: {gflops:.2f} GFLOPS")
+
+    # 测试2: 内存带宽
+    data = torch.randn(1000, 1024, 1024, device='cuda')
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(100):
+        _ = data + 1
+    torch.cuda.synchronize()
+    duration = time.time() - start
+
+    bandwidth = (1000 * 1024 * 1024 * 4 * 100) / (duration * 1e9)
+    print(f"Memory bandwidth: {bandwidth:.2f} GB/s")
+
+if __name__ == "__main__":
+    benchmark_gpu_operations()</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">优化建议</div>
+            <p><strong>基准先行</strong>：建立性能基准，对比优化效果。<strong>逐层优化</strong>：从系统到应用逐层优化。<strong>持续监控</strong>：优化后持续监控性能变化。<strong>文档记录</strong>：详细记录优化过程和结果。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 性能优化需要建立基准和分析瓶颈</li>
+                <li>• 系统级优化包括内核、CPU、存储、网络</li>
+                <li>• 容器优化提升资源利用效率</li>
+                <li>• 基准测试验证优化效果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="50-2-高可用设计实践.html">← 上一节</a>
+          <a href="50-4-成本优化实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

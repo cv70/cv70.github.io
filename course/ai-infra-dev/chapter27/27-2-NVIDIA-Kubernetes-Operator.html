@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.2 NVIDIA Kubernetes Operator - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.2 NVIDIA Kubernetes Operator</h1>
+          <p class="subtitle">完整的GPU集群管理方案</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU Operator的架构与功能</li>
+            <li>掌握GPU Operator的安装与配置</li>
+            <li>学会使用DCGM监控GPU</li>
+            <li>了解GPU Operator的高级特性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800" alt="GPU集群" class="card-image">
+          <h3 class="card-title">GPU Operator概述</h3>
+          <p class="card-text">
+            <strong>NVIDIA GPU Operator</strong>是Kubernetes上完整的GPU管理解决方案，自动安装和管理NVIDIA驱动、
+            容器运行时、设备插件、监控组件等。通过声明式API简化GPU集群的部署和运维。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 架构设计</h2>
+          <div class="image-container">
+            <img src="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/images/gpu-operator-architecture.png" alt="GPU Operator架构">
+            <div class="caption">图：GPU Operator架构组件</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">核心组件</h3>
+              <ul class="feature-list">
+                <li>NVIDIA驱动</li>
+                <li>容器运行时</li>
+                <li>设备插件</li>
+                <li>Kubelet设备监控</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">监控组件</h3>
+              <ul class="feature-list">
+                <li>DCGM</li>
+                <li>DCGM Exporter</li>
+                <li>Grafana仪表板</li>
+                <li>Prometheus规则</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">特性</h3>
+              <ul class="feature-list">
+                <li>自动驱动管理</li>
+                <li>MIG支持</li>
+                <li>节点标签管理</li>
+                <li>多驱动版本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装GPU Operator</h2>
+
+          <h3>前提条件</h3>
+          <div class="code-block">
+# 系统要求
+- Kubernetes 1.23+
+- Ubuntu 20.04+ / RHEL 8+
+- NVIDIA GPU硬件
+- 节点内核头文件
+- 容器运行时（containerd推荐）
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">重要提示</div>
+              <p>确保节点已卸载预装的NVIDIA驱动，GPU Operator会自动管理驱动版本。</p>
+            </div>
+          </div>
+
+          <h3>Helm安装</h3>
+          <div class="code-block">
+# 添加NVIDIA Helm仓库
+helm repo add nvidia https://nvidia.github.io/gpu-operator
+helm repo update
+
+# 创建命名空间
+kubectl create namespace gpu-operator
+
+# 安装GPU Operator
+helm install --wait --generate-name \
+  nvidia/gpu-operator \
+  --namespace gpu-operator \
+  --set driver.enabled=true \
+  --set toolkit.enabled=true
+
+# 查看安装状态
+kubectl get pods -n gpu-operator
+kubectl get crd | grep nvidia
+          </div>
+
+          <h3>自定义配置</h3>
+          <div class="code-block">
+# 使用values文件定制安装
+cat > gpu-operator-values.yaml << 'EOF'
+driver:
+  enabled: true
+  repoConfig:
+    destinations:
+      - type: "base"
+        destination: "/etc/apt/sources.list.d/nvidia.list"
+        overwrite: true
+      - type: "cuda"
+        destination: "/etc/apt/sources.list.d/cuda.list"
+        overwrite: true
+  version: "535.129.03"
+
+toolkit:
+  enabled: true
+  version: "1.14.3"
+
+devicePlugin:
+  enabled: true
+  version: "v0.14.0"
+
+dcgmExporter:
+  enabled: true
+
+migManager:
+  enabled: true
+  migStrategy: single
+
+gfd:
+  enabled: true
+
+node-feature-discovery:
+  enabled: true
+EOF
+
+helm install gpu-operator nvidia/gpu-operator \
+  --namespace gpu-operator \
+  --values gpu-operator-values.yaml
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 驱动管理</h2>
+
+          <h3>多驱动支持</h3>
+          <div class="code-block">
+# 支持多版本驱动共存
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  driver:
+    enabled: true
+    # 使用Repository配置驱动源
+    repositoryConfig:
+      name: "nvidia-drivers"
+    # 多驱动版本
+    version: "535.129.03"
+    # 自动升级策略
+    upgradePolicy:
+      autoUpgrade: true
+      drain:
+        enabled: true
+        timeoutSeconds: 300
+          </div>
+
+          <h3>节点标签管理</h3>
+          <div class="code-block">
+# 查看自动生成的节点标签
+kubectl get nodes --show-labels | grep nvidia
+
+# 标签示例：
+# nvidia.com/gpu.count=8
+# nvidia.com/gpu.product=A100-SXM4-80GB
+# nvidia.com/gpu.memory=80
+# nvidia.com/gpu.computeCapability=8.0
+
+# 使用标签选择GPU节点
+kubectl label nodes <node-name> gpu-type=high-performance
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DCGM监控</h2>
+
+          <div class="card">
+            <h3 class="card-title">DCGM简介</h3>
+            <p class="card-text">
+              <strong>DCGM（Data Center GPU Manager）</strong>是NVIDIA提供的企业级GPU监控和管理套件，
+              提供GPU性能指标收集、健康检查、配置管理等功能。
+            </p>
+          </div>
+
+          <h3>启用DCGM Exporter</h3>
+          <div class="code-block">
+# GPU Operator默认启用DCGM Exporter
+# 查看DCGM Exporter Pod
+kubectl get pods -n gpu-operator -l app=nvidia-dcgm-exporter
+
+# 端口转发查看指标
+kubectl port-forward -n gpu-operator <dcgm-exporter-pod> 9400:9400
+
+# 访问指标
+curl http://localhost:9400/metrics
+          </div>
+
+          <h3>关键指标</h3>
+          <div class="code-block">
+# GPU利用率
+DCGM_FI_DEV_GPU_UTIL
+
+# 显存使用
+DCGM_FI_DEV_FB_USED
+DCGM_FI_DEV_FB_TOTAL
+
+# 温度
+DCGM_FI_DEV_GPU_TEMP
+
+# 功耗
+DCGM_FI_DEV_POWER_USAGE
+
+# PCIe带宽
+DCGM_FI_DEV_PCIE_RX_BYTES
+DCGM_FI_DEV_PCIE_TX_BYTES
+
+# ECC错误
+DCGM_FI_DEV_ECC_SBE_VOL_TOTAL
+DCGM_FI_DEV_ECC_DBE_VOL_TOTAL
+          </div>
+
+          <h3>Prometheus集成</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm-exporter
+spec:
+  ports:
+  - name: metrics
+    port: 9400
+    protocol: TCP
+    targetPort: 9400
+  selector:
+    app: nvidia-dcgm-exporter
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm-exporter
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  endpoints:
+  - port: metrics
+    interval: 15s
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">Grafana仪表板</div>
+              <p>GPU Operator提供预置的Grafana仪表板，可直接导入使用。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎛️</span> MIG管理</h2>
+
+          <div class="card">
+            <h3 class="card-title">MIG（Multi-Instance GPU）</h3>
+            <p class="card-text">
+              MIG将单个GPU分割成多个隔离的实例，每个实例拥有独立的GPU资源。
+              适用于多个小规模工作负载共享GPU的场景。
+            </p>
+          </div>
+
+          <h3>MIG配置</h3>
+          <div class="code-block">
+# 配置MIG策略
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  migManager:
+    enabled: true
+    # single: 所有GPU使用相同MIG配置
+    # mixed: 部分GPU使用MIG，部分完整
+    # none: 禁用MIG
+    migStrategy: single
+            </div>
+
+          <h3>MIG设备配置</h3>
+          <div class="code-block">
+# 创建MIG配置
+apiVersion: nvidia.com/v1
+kind: MigDevice
+metadata:
+  name: a100-1g-5gb
+spec:
+  migProfile: "1g.5gb"  # 1个实例，5GB显存
+  parentGPU: "0"
+            </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">MIG优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 提高GPU资源利用率</li>
+                <li>• 硬件级隔离，安全可靠</li>
+                <li>• 支持多个工作负载并行</li>
+                <li>• 降低推理成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 升级与维护</h2>
+
+          <h3>驱动升级</h3>
+          <div class="code-block">
+# 升级GPU Operator
+helm upgrade gpu-operator nvidia/gpu-operator \
+  --namespace gpu-operator \
+  --values gpu-operator-values.yaml \
+  --reuse-values
+
+# 滚动升级（需要驱逐节点）
+kubectl annotate node <node-name> \
+  nvidia.com/driver.upgrade=auto
+          </div>
+
+          <h3>故障恢复</h3>
+          <div class="code-block">
+# 重启GPU组件
+kubectl delete pod -n gpu-operator -l app=nvidia-driver-daemonset
+kubectl delete pod -n gpu-operator -l app=nvidia-device-plugin-ds
+
+# 查看组件日志
+kubectl logs -n gpu-operator -l app=nvidia-driver-daemonset --tail=100
+kubectl logs -n gpu-operator -l app=nvidia-device-plugin-ds --tail=100
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能优化</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">GPU性能调优</h4>
+              <ul class="feature-list">
+                <li>设置最大功率限制</li>
+                <li>配置时钟频率</li>
+                <li>优化内存带宽</li>
+                <li>禁用ECC（非关键场景）</li>
+              </ul>
+              <div class="code-block">
+# 设置功率限制
+nvidia-smi -pm 1
+nvidia-smi -pl 300  # 设置为300W
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">调度优化</h4>
+              <ul class="feature-list">
+                <li>使用节点亲和性</li>
+                <li>配置Pod优先级</li>
+                <li>设置资源配额</li>
+                <li>优化拓扑感知</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 使用Helm管理GPU Operator安装和升级</li>
+              <li>• 启用DCGM Exporter进行GPU监控</li>
+              <li>• 小模型推理考虑使用MIG</li>
+              <li>• 定期检查驱动版本和GPU健康状态</li>
+              <li>• 配置合适的告警规则</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• GPU Operator提供完整的GPU集群管理</li>
+                <li>• 自动管理驱动、容器运行时和设备插件</li>
+                <li>• 集成DCGM提供企业级监控</li>
+                <li>• 支持MIG实现GPU实例化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-1-GPU设备插件.html">← 上一节</a>
+          <a href="27-3-KubeRay实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>37.2 Alertmanager配置 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>37.2 Alertmanager配置</h1>
+          <p class="subtitle">配置Prometheus Alertmanager实现告警通知</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Alertmanager的架构原理</li>
+            <li>掌握告警路由配置</li>
+            <li>学习多种通知渠道配置</li>
+            <li>实践告警聚合与抑制</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Alertmanager" class="card-image">
+          <h3 class="card-title">Alertmanager架构</h3>
+          <p class="card-text">
+            <strong>Alertmanager</strong>是Prometheus的告警管理组件，负责告警去重、分组、路由和通知。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Alertmanager核心功能</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔀</div>
+              <h3 class="card-title">去重</h3>
+              <p class="card-text">合并相同的告警</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📦</div>
+              <h3 class="card-title">分组</h3>
+              <p class="card-text">按规则聚合告警</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔀</div>
+              <h3 class="card-title">路由</h3>
+              <p class="card-text">分发到不同接收器</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔇</div>
+              <h3 class="card-title">抑制</h3>
+              <p class="card-text">控制告警传播</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔔</div>
+              <h3 class="card-title">静默</h3>
+              <p class="card-text">暂时屏蔽告警</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📧</div>
+              <h3 class="card-title">通知</h3>
+              <p class="card-text">发送到多种渠道</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> 基础部署配置</h2>
+          <div class="code-block">
+# docker-compose.yml
+version: '3'
+
+services:
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts:/etc/prometheus/rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--alertmanager.url=http://alertmanager:9093'
+
+volumes:
+  alertmanager_data:
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Alertmanager配置文件</h2>
+          <div class="code-block">
+# alertmanager.yml
+global:
+  # 全局解析超时
+  resolve_timeout: 5m
+
+  # SMTP邮件配置
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alerts@example.com'
+  smtp_auth_username: 'alerts@example.com'
+  smtp_auth_password: 'password'
+
+  # 默认通知模板
+  templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+
+# 路由配置
+route:
+  # 默认接收器
+  receiver: 'default'
+
+  # 分组等待时间
+  group_wait: 10s
+
+  # 分组间隔
+  group_interval: 10s
+
+  # 重复通知间隔
+  repeat_interval: 12h
+
+  # 子路由
+  routes:
+    # P0级别告警 - 电话告警
+    - match:
+        severity: P0
+      receiver: 'oncall'
+      group_wait: 0s
+
+    # P1级别告警 - 短信告警
+    - match:
+        severity: P1
+      receiver: 'sms-team'
+
+    # GPU告警 - 基础设施团队
+    - match:
+        component: gpu
+      receiver: 'infra-team'
+      group_by: ['alertname', 'hostname']
+
+    # 训练告警 - ML平台团队
+    - match:
+        component: training
+      receiver: 'ml-platform-team'
+
+    # 推理告警 - 推理团队
+    - match:
+        component: inference
+      receiver: 'inference-team'
+
+# 接收器配置
+receivers:
+  # 默认接收器
+  - name: 'default'
+    email_configs:
+      - to: 'default@example.com'
+        headers:
+          Subject: '{{ .GroupLabels.alertname }}'
+
+  # 值班告警
+  - name: 'oncall'
+    webhook_configs:
+      - url: 'http://oncall.example.com/api/alert'
+        send_resolved: true
+
+  # 短信告警
+  - name: 'sms-team'
+    webhook_configs:
+      - url: 'http://sms.example.com/send'
+        send_resolved: true
+
+  # 邮件告警 - 基础设施团队
+  - name: 'infra-team'
+    email_configs:
+      - to: 'infra@example.com'
+        headers:
+          Subject: '[告警] {{ .GroupLabels.alertname }}'
+
+  # 邮件告警 - ML平台团队
+  - name: 'ml-platform-team'
+    email_configs:
+      - to: 'ml-platform@example.com'
+        headers:
+          Subject: '[告警] {{ .GroupLabels.alertname }}'
+
+  # 邮件告警 - 推理团队
+  - name: 'inference-team'
+    email_configs:
+      - to: 'inference@example.com'
+        headers:
+          Subject: '[告警] {{ .GroupLabels.alertname }}'
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📧</span> 邮件通知配置</h2>
+          <div class="code-block">
+receivers:
+  - name: 'email-notification'
+    email_configs:
+      - to: 'team@example.com'
+        from: 'alertmanager@example.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: 'alertmanager@example.com'
+        auth_password: 'password'
+        auth_identity: 'alertmanager@example.com'
+        auth_secret: 'secret'
+
+        # 自定义模板
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+          From: 'Alertmanager <alertmanager@example.com>'
+
+        # 仅发送未解决告警
+        send_resolved: false
+
+        # HTML模板
+        html: |
+          {{ range .Alerts }}
+          <h2>{{ .Labels.alertname }}</h2>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Started:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05" }}</p>
+          {{ if .EndsAt }}<p><strong>Ended:</strong> {{ .EndsAt.Format "2006-01-02 15:04:05" }}</p>{{ end }}
+          <hr>
+          {{ end }}
+
+        # 纯文本模板
+        text: |
+          {{ range .Alerts }}
+          Alert: {{ .Labels.alertname }}
+          Severity: {{ .Labels.severity }}
+          Description: {{ .Annotations.description }}
+          {{ end }}
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> Slack通知配置</h2>
+          <div class="code-block">
+receivers:
+  - name: 'slack-notification'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+        channel: '#alerts'
+
+        # 用户名和图标
+        username: 'Alertmanager'
+        icon_emoji: ':warning:'
+
+        # 颜色配置
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+        # 标题和链接
+        title: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        title_link: 'http://alertmanager.example.com/#/alerts'
+
+        # 消息内容
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+        # 字段信息
+        fields:
+          - title: Status
+            value: '{{ .Status }}'
+            short: true
+          - title: Severity
+            value: '{{ .GroupLabels.severity }}'
+            short: true
+
+        # 动作按钮
+        actions:
+          - type: button
+            text: '查看详情'
+            url: '{{ (index .Alerts 0).GeneratorURL }}'
+
+        # 发送恢复通知
+        send_resolved: true
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📞</span> Webhook通知配置</h2>
+          <div class="code-block">
+receivers:
+  # 钉钉通知
+  - name: 'dingtalk'
+    webhook_configs:
+      - url: 'https://oapi.dingtalk.com/robot/send?access_token=TOKEN'
+        send_resolved: true
+
+  # 企业微信通知
+  - name: 'wechat'
+    webhook_configs:
+      - url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=KEY'
+        send_resolved: true
+
+  # 自定义Webhook
+  - name: 'custom-webhook'
+    webhook_configs:
+      - url: 'http://internal-service/api/alerts'
+        send_resolved: true
+
+        # HTTP方法（默认POST）
+        http_config:
+          basic_auth:
+            username: 'alertmanager'
+            password: 'password'
+
+        # 发送超时
+        timeout: 30s
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔇</span> 抑制规则配置</h2>
+          <div class="code-block">
+# 抑制相同告警的重复通知
+inhibit_rules:
+  # 如果存在严重告警，抑制同一资源的警告告警
+  - source_match:
+      severity: 'P0'
+    target_match:
+      severity: 'P1'
+    equal: ['alertname', 'instance']
+
+  # 如果节点宕机，抑制该节点上所有服务的告警
+  - source_match:
+      alertname: 'InstanceDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
+
+  # 如果服务告警，抑制该服务的子组件告警
+  - source_match:
+      alertname: 'ServiceDown'
+    target_match_re:
+      alertname: 'ServiceComponentDown'
+    equal: ['service']
+
+  # 如果集群告警，抑制集群内节点的告警
+  - source_match:
+      alertname: 'ClusterDown'
+    target_match_re:
+      alertname: 'NodeDown'
+    equal: ['cluster']
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔇</span> 静默配置</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">静默使用场景</div>
+              <p>静默可以暂时屏蔽特定的告警，常用于：</p>
+            </div>
+          </div>
+          <ul class="feature-list">
+            <li><strong>维护窗口</strong> - 计划维护期间</li>
+            <li><strong>已知问题</strong> - 暂时无法修复的问题</li>
+            <li><strong>误报处理</strong> - 待修复的误报</li>
+            <li><strong>测试环境</strong> - 测试期间的告警</li>
+          </ul>
+          <div class="code-block">
+# 通过API创建静默
+curl -X POST \
+  http://alertmanager:9093/api/v2/silences \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "matchers": [
+      {
+        "name": "job",
+        "value": "training",
+        "isRegex": false
+      }
+    ],
+    "startsAt": "2024-01-15T00:00:00Z",
+    "endsAt": "2024-01-15T06:00:00Z",
+    "createdBy": "admin",
+    "comment": "训练服务维护"
+  }'
+
+# 或通过Web UI创建
+# 访问 http://alertmanager:9093/#/silences
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 通知模板</h2>
+          <div class="code-block">
+# templates/default.tmpl
+{{ define "slack.default.title" }}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]
+{{ .GroupLabels.alertname }}
+{{ end }}
+
+{{ define "slack.default.text" }}
+{{ range .Alerts }}
+*Alert:* {{ .Labels.alertname }}
+*Severity:* {{ .Labels.severity }}
+*Description:* {{ .Annotations.description }}
+
+*Details:*
+{{ range .Labels.SortedPairs }} • *{{ .Name }}:* {{ .Value }}
+{{ end }}
+
+{{ if .Annotations.action }}
+*Action:* {{ .Annotations.action }}
+{{ end }}
+
+{{ if .Annotations.runbook_url }}
+*Runbook:* {{ .Annotations.runbook_url }}
+{{ end }}
+---
+{{ end }}
+{{ end }}
+
+{{ define "email.default.subject" }}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - {{ .GroupLabels.cluster }}
+{{ end }}
+
+{{ define "email.default.html" }}
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .alert { border: 1px solid #ddd; padding: 10px; margin: 10px 0; }
+        .alert.firing { border-color: #f56565; background: #fff5f5; }
+        .alert.resolved { border-color: #48bb78; background: #f0fff4; }
+        .label { color: #718096; }
+    </style>
+</head>
+<body>
+    <h1>{{ .GroupLabels.alertname }}</h1>
+    <p>Status: {{ .Status | toUpper }}</p>
+    {{ range .Alerts }}
+    <div class="alert {{ .Status }}">
+        <h2>{{ .Annotations.summary }}</h2>
+        <p>{{ .Annotations.description }}</p>
+        <h3>Labels:</h3>
+        <ul>
+        {{ range .Labels.SortedPairs }}
+            <li><span class="label">{{ .Name }}:</span> {{ .Value }}</li>
+        {{ end }}
+        </ul>
+    </div>
+    {{ end }}
+</body>
+</html>
+{{ end }}
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">Alertmanager配置最佳实践</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 合理设置group_wait避免告警风暴</li>
+              <li>• 使用抑制规则减少重复通知</li>
+              <li>• 按团队和职责进行路由</li>
+              <li>• 自定义模板提升通知可读性</li>
+              <li>• 定期review和优化告警规则</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Alertmanager提供告警去重、分组、路由功能</li>
+                <li>• 支持多种通知渠道：邮件、Slack、Webhook等</li>
+                <li>• 抑制和静默规则减少告警噪声</li>
+                <li>• 自定义模板优化通知体验</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="37-1-告警规则设计.html">← 上一节</a>
+          <a href="37-3-告警分级与路由.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.5 特征存储 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>29.5 特征存储</h1>
+          <p class="subtitle">Feast特征平台实战</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解特征存储的核心概念</li>
+            <li>掌握Feast的安装与配置</li>
+            <li>学会定义和使用特征视图</h3>
+            <li>了解特征工程的最佳实践</h4>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="特征存储" class="card-image">
+          <h3 class="card-title">特征存储概述</h3>
+          <p class="card-text">
+            <strong>特征存储（Feature Store）</strong>是集中存储、管理和提供机器学习特征的系统。
+            它解决了特征复用、数据漂移、训练-服务一致性等挑战，是MLOps的关键组件。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 特征存储架构</h2>
+
+          <div class="image-container">
+            <img src="https://docs.feast.dev/_images/feast_architecture.png" alt="Feast架构">
+            <div class="caption">图：Feast特征存储架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">离线存储</h3>
+              <p class="card-text">存储历史特征数据。</p>
+              <ul class="feature-list">
+                <li>大数据量</li>
+                <li>时间旅行</li>
+                <li>批量查询</li>
+                <li>训练数据生成</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">在线存储</h3>
+              <p class="card-text">提供实时特征服务。</p>
+              <ul class="feature-list">
+                <li>低延迟</li>
+                <li>高可用</li>
+                <li>实时更新</li>
+                <li>推理服务</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">特征服务</h3>
+              <p class="card-text">统一特征访问接口。</p>
+              <ul class="feature-list">
+                <li>API服务</li>
+                <li>缓存机制</li>
+                <li>多数据源</li>
+                <li>版本管理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装Feast</h2>
+
+          <h3>安装与初始化</h3>
+          <div class="code-block">
+# 安装Feast
+pip install feast
+
+# 创建项目目录
+mkdir my_feature_store
+cd my_feature_store
+
+# 初始化Feast项目
+feast init
+
+# 目录结构
+# my_feature_store/
+# ├── data/                 # 数据源
+# ├── feature_store.py      # 特征定义
+# ├── feature_store.yaml    # 配置文件
+# ├── tests/                # 测试
+# └── __init__.py
+          </code>
+
+          <h3>配置文件</h3>
+          <div class="code-block">
+# feature_store.yaml
+project: my_feature_store
+registry: data/registry.db
+provider: local
+
+# 使用Redis作为在线存储
+online_store:
+  type: redis
+  connection_string: "localhost:6379"
+
+# 使用PostgreSQL作为离线存储
+offline_store:
+  type: postgres
+  host: localhost
+  port: 5432
+  database: feast
+  user: feast
+  password: feast_password
+          </code>
+
+          <h3>本地开发配置</h3>
+          <div class="code-block">
+# 使用本地存储（开发环境）
+project: my_feature_store
+registry: data/registry.db
+provider: local
+
+online_store:
+  type: sqlite
+
+offline_store:
+  type: file
+  path: data/offline_store.db
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">存储选择</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 开发环境：SQLite、文件系统</li>
+                <li>• 测试环境：PostgreSQL、Redis</li>
+                <li>• 生产环境：Snowflake、BigQuery、DynamoDB</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 定义特征</h2>
+
+          <h3>数据源定义</h3>
+          <div class="code-block">
+from datetime import timedelta
+from feast import (
+    FeatureStore,
+    FeatureView,
+    Field,
+    DataSource
+)
+from feast.types import Float32, Int64, String
+from feast.data_source import FileSource
+
+# 定义数据源
+user_source = FileSource(
+    path="data/user_features.parquet",
+    event_timestamp_column="created_at",
+    created_timestamp_column="created_at",
+    description="User features data"
+)
+          </code>
+
+          <h3>特征视图定义</h3>
+          <div class="code-block">
+# 定义用户特征视图
+user_features = FeatureView(
+    name="user_features",
+    sources=[user_source],
+    schema=[
+        Field(name="user_id", dtype=Int64),
+        Field(name="age", dtype=Int64),
+        Field(name="gender", dtype=String),
+        Field(name="income", dtype=Float32),
+        Field(name="purchase_count", dtype=Int64),
+        Field(name="avg_purchase_amount", dtype=Float32),
+    ],
+    ttl=timedelta(days=30),  # 特征有效期
+    description="User demographic and purchase features"
+)
+
+# 定义交易特征视图
+transaction_source = FileSource(
+    path="data/transactions.parquet",
+    event_timestamp_column="event_time",
+    created_timestamp_column="event_time"
+)
+
+transaction_features = FeatureView(
+    name="transaction_features",
+    sources=[transaction_source],
+    schema=[
+        Field(name="transaction_id", dtype=String),
+        Field(name="user_id", dtype=Int64),
+        Field(name="amount", dtype=Float32),
+        Field(name="category", dtype=String),
+    ],
+    ttl=timedelta(days=7),
+    description="Transaction features"
+)
+          </code>
+
+          <h3>特征注册</h3>
+          <div class="code-block">
+from feast import FeatureStore
+
+# 创建特征存储
+store = FeatureStore(repo_path=".")
+
+# 注册特征视图
+store.apply([
+    user_features,
+    transaction_features
+])
+
+# 验证注册
+registered_views = store.list_feature_views()
+print("Registered feature views:")
+for view in registered_views:
+    print(f"  - {view.name}")
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 离线特征获取</h2>
+
+          <h3>生成训练数据</h3>
+          <div class="code-block">
+import pandas as pd
+from datetime import datetime, timedelta
+
+# 定义实体DataFrame
+entity_df = pd.DataFrame({
+    "user_id": [1, 2, 3, 4, 5],
+    "event_timestamp": [
+        datetime.now(),
+        datetime.now() - timedelta(days=1),
+        datetime.now() - timedelta(days=2),
+        datetime.now() - timedelta(days=3),
+        datetime.now() - timedelta(days=4),
+    ]
+})
+
+# 获取离线特征
+training_data = store.get_historical_features(
+    entity_df=entity_df,
+    features=[
+        "user_features:age",
+        "user_features:gender",
+        "user_features:income",
+        "user_features:purchase_count",
+        "user_features:avg_purchase_amount",
+    ]
+).to_df()
+
+print(training_data.head())
+          </code>
+
+          <h3>时间旅行</h3>
+          <div class="code-block">
+# 获取历史某个时间点的特征
+historical_data = store.get_historical_features(
+    entity_df=entity_df,
+    features=[
+        "user_features:age",
+        "user_features:purchase_count",
+    ],
+    full_dataset=True  # 获取完整历史
+)
+
+# 时间旅行到特定日期
+past_date = datetime(2024, 1, 1)
+historical_features = store.get_historical_features(
+    entity_df=entity_df,
+    features=["user_features:*"],
+    full_dataset=False,
+    force_update_cache=True
+)
+          </code>
+
+          <h3>批量特征计算</h3>
+          <div class="code-block">
+# 定义特征变换
+from feast import on_demand_feature_view
+
+@on_demand_feature_view(
+    sources=[user_features],
+    schema=[
+        Field(name="user_score", dtype=Float32),
+    ]
+)
+def user_score_transform(user_features):
+    """
+    计算用户评分
+    """
+    # 基于多个特征计算新特征
+    score = (
+        user_features["purchase_count"] * 0.3 +
+        user_features["avg_purchase_amount"] * 0.5 +
+        (user_features["age"] / 100) * 0.2
+    )
+    return pd.DataFrame({"user_score": score})
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 在线特征服务</h2>
+
+          <h3>加载在线特征</h3>
+          <div class="code-block">
+# 将特征加载到在线存储
+store.materialize_incremental(
+    end_date=datetime.now()
+)
+
+# 或加载特定时间范围
+store.materialize(
+    start_date=datetime.now() - timedelta(days=7),
+    end_date=datetime.now()
+)
+          </code>
+
+          <h3>获取在线特征</h3>
+          <div class="code-block">
+# 单个实体获取
+online_features = store.get_online_features(
+    features=[
+        "user_features:age",
+        "user_features:gender",
+        "user_features:income",
+    ],
+    entity_rows=[
+        {"user_id": 1}
+    ]
+)
+
+print(online_features.to_dict())
+
+# 批量获取
+batch_features = store.get_online_features(
+    features=[
+        "user_features:age",
+        "user_features:purchase_count",
+    ],
+    entity_rows=[
+        {"user_id": 1},
+        {"user_id": 2},
+        {"user_id": 3},
+    ]
+)
+
+print(batch_features.to_df())
+          </code>
+
+          <h3>实时特征更新</h3>
+          <div class="code-block">
+from feast import PushSource
+
+# 定义流式数据源
+transaction_push_source = PushSource(
+    name="transaction_push_source",
+    batch_source=transaction_source
+)
+
+# 实时推送特征
+store.push(
+    source_name="transaction_push_source",
+    df=pd.DataFrame({
+        "transaction_id": ["tx123"],
+        "user_id": [1],
+        "amount": [100.0],
+        "category": ["electronics"],
+        "event_time": [datetime.now()]
+    })
+)
+
+# 特征立即在线可用
+online_features = store.get_online_features(
+    features=["transaction_features:amount"],
+    entity_rows=[{"user_id": 1}]
+)
+          </code>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">在线服务优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 低延迟访问（毫秒级）</li>
+                <li>• 高并发支持</li>
+                <li>• 实时特征更新</li>
+                <li>• 训练-服务一致性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 特征服务部署</h2>
+
+          <h3>启动Feast服务</h3>
+          <div class="code-block">
+# 启动Feast gRPC服务
+feast serve --port 6566
+
+# 启动特征UI（开发环境）
+feast ui
+
+# 访问UI
+# http://localhost:8888
+          </code>
+
+          <h3>客户端调用</h3>
+          <div class="code-block">
+import feast
+
+# 连接到远程Feast服务
+store = feast.FeatureStore(
+    repo_path=".",
+    feature_server_url="localhost:6566"
+)
+
+# 获取特征
+features = store.get_online_features(
+    features=["user_features:age"],
+    entity_rows=[{"user_id": 1}]
+)
+          </code>
+
+          <h3>Kubernetes部署</h3>
+          <div class="code-block">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feast-serving
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: feast-serving
+  template:
+    metadata:
+      labels:
+        app: feast-serving
+    spec:
+      containers:
+      - name: feast
+        image: feastdev/feast-serving:latest
+        ports:
+        - containerPort: 6566
+        env:
+        - name: FEAST_TELEMETRY
+          value: "false"
+        volumeMounts:
+        - name: config
+          mountPath: /opt/feast/feature_store
+      volumes:
+      - name: config
+        configMap:
+          name: feast-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feast-serving
+spec:
+  selector:
+    app: feast-serving
+  ports:
+  - port: 6566
+    targetPort: 6566
+  type: LoadBalancer
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">特征设计</h4>
+              <ul class="feature-list">
+                <li>特征命名规范</li>
+                <li>合理的TTL设置</li>
+                <li>特征复用优先</li>
+                <li>避免特征冗余</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">数据质量</h4>
+              <ul class="feature-list">
+                <li>设置数据验证规则</li>
+                <li>监控特征质量</li>
+                <li>处理缺失值</li>
+                <li>检测数据漂移</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">性能优化</h4>
+              <ul class="feature-list">
+                <li>合理选择存储</li>
+                <li>优化特征大小</li>
+                <li>使用缓存</li>
+                <li>批量操作优先</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">团队协作</h4>
+              <ul class="feature-list">
+                <li>特征文档化</li>
+                <li>版本控制特征定义</li>
+                <li>建立特征审核流程</li>
+                <li>特征使用追踪</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">成功要素</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 统一的特征定义和管理</li>
+                <li>• 训练和推理使用相同特征</li>
+                <li>• 完善的特征监控和告警</li>
+                <li>• 高效的在线服务性能</li>
+                <li>• 良好的文档和协作</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 特征存储解决特征复用和一致性问题</li>
+                <li>• Feast提供离线和在线统一的特征管理</li>
+                <li>• 特征视图是特征管理的核心概念</li>
+                <li>• 良好的特征存储提升模型质量</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="29-4-模型版本管理.html">← 上一节</a>
+          <a href="../chapter30/30-1-流水线概述.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

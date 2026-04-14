@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.2 Slurm调度系统 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>7.2 Slurm调度系统</h1>
+          <p class="subtitle">掌握Slurm在AI集群中的应用</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Slurm的架构和工作原理</li>
+            <li>掌握Slurm的核心组件和配置</li>
+            <li>学会使用Slurm提交和管理AI训练任务</li>
+            <li>了解Slurm的高级调度特性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="集群管理" class="card-image">
+          <h3 class="card-title">Slurm简介</h3>
+          <p class="card-text">
+            <strong>Slurm (Simple Linux Utility for Resource Management)</strong>是广泛用于HPC和AI集群的开源资源管理系统。
+            它提供了高效的作业调度、资源分配和监控功能，能够管理数千个节点和数万个作业。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Slurm架构</h2>
+          <div class="card">
+            <h3 class="card-title">Slurm核心组件</h3>
+            <div class="code-block">
+<pre><strong>Slurm架构组件：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│  用户交互层                                                   │
+│  ─────────────────────────────────────────────────────────   │
+│  • srun: 直接运行交互式作业                                   │
+│  • sbatch: 提交批处理作业                                     │
+│  • scancel: 取消作业                                         │
+│  • squeue: 查看作业队列                                      │
+│  • sinfo: 查看节点信息                                       │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│  Slurmctld (控制节点)                                         │
+│  ─────────────────────────────────────────────────────────   │
+│  • 作业调度器                                                 │
+│  • 资源管理器                                                 │
+│  • 状态维护                                                   │
+│  • 优先级计算                                                 │
+│  • HA: 支持主备模式                                           │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│  Slurmdbd (数据库守护进程)                                    │
+│  ─────────────────────────────────────────────────────────   │
+│  • 作业历史记录                                               │
+│  • 资源使用统计                                               │
+│  • 账户管理                                                   │
+│  • QOS管理                                                    │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│  Slurmd (计算节点守护进程)                                    │
+│  ─────────────────────────────────────────────────────────   │
+│  • 任务执行                                                   │
+│  • 资源监控                                                   │
+│  • 状态上报                                                   │
+│  • cgroups管理                                                │
+│  • 每个计算节点运行一个                                       │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Slurm配置</h2>
+          <div class="card">
+            <h3 class="card-title">关键配置文件</h3>
+            <div class="code-block">
+<pre><strong>/etc/slurm/slurm.conf 主配置文件：</strong>
+
+# 集群信息
+ClusterName=ai-cluster
+SlurmctldHost=controller01
+
+# 调度参数
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+
+# 时间限制
+MaxJobCount=10000
+MaxArraySize=5000
+
+# GPU资源配置
+GresTypes=gpu
+Gres=gpu:8:node01-64
+
+# 日志配置
+SlurmctldLogFile=/var/log/slurm/slurmctld.log
+SlurmdLogFile=/var/log/slurm/slurmd.log
+
+# 调度策略
+DefMemPerCPU=4096
+MaxMemPerCPU=32768
+
+# 账户与QOS
+AccountingStorageType=accounting_storage/slurmdbd
+JobAcctGatherType=jobacct_gather/linux</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 节点配置</h2>
+          <div class="card">
+            <h3 class="card-title">计算节点配置示例</h3>
+            <div class="code-block">
+<pre><strong>/etc/slurm/slurm.conf 节点配置：</strong>
+
+# 节点定义
+NodeName=node01 NodeAddr=10.0.1.1 CPUs=64 Boards=1 SocketsPerBoard=2 CoresPerSocket=32 ThreadsPerCore=1 RealMemory=524288 Gres=gpu:8 State=UNKNOWN
+NodeName=node02 NodeAddr=10.0.1.2 CPUs=64 Boards=1 SocketsPerBoard=2 CoresPerSocket=32 ThreadsPerCore=1 RealMemory=524288 Gres=gpu:8 State=UNKNOWN
+NodeName=node03 NodeAddr=10.0.1.3 CPUs=64 Boards=1 SocketsPerBoard=2 CoresPerSocket=32 ThreadsPerCore=1 RealMemory=524288 Gres=gpu:8 State=UNKNOWN
+# ... 更多节点
+
+# 分区配置
+PartitionName=gpu Nodes=node[01-64] Default=YES MaxTime=7-00:00:00 State=UP
+PartitionName=debug Nodes=node[01-04] MaxTime=2:00:00 State=UP Priority=20
+PartitionName=training Nodes=node[01-32] MaxTime=30-00:00:00 State=UP Priority=10
+
+# 资源池定义
+PartitionName=high-priority Nodes=node[01-08] Priority=100 Default=NO
+
+# 节点组
+NodeSet=compute Nodes=node[01-64]
+NodeSet=gpu-nodes Nodes=node[01-48]</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">GPU配置要点</div>
+            <p><strong>Gres (Generic Resource Scheduling)：</strong>Slurm通过Gres机制管理GPU</p>
+            <p><strong>GPU绑定：</strong>使用Gres=gpu:N指定每节点的GPU数量</p>
+            <p><strong>GPU类型：</strong>支持不同型号GPU（Gres=gpu:A100:8）</p>
+            <p><strong>亲和性：</strong>可配置GPU与CPU核心的绑定关系</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 作业提交</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">批处理作业 (sbatch)</h3>
+              <div class="code-block">
+<pre><strong>训练任务提交脚本：</strong>
+
+#!/bin/bash
+#SBATCH --job-name=gpt-train
+#SBATCH --partition=gpu
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:8
+#SBATCH --mem=0
+#SBATCH --time=7-00:00:00
+#SBATCH --output=logs/%j.out
+#SBATCH --error=logs/%j.err
+
+# 加载环境
+module load cuda/11.8
+module load python/3.10
+
+# 分布式训练
+python train.py \
+    --nodes 4 \
+    --gpus 8 \
+    --batch-size 256 \
+    --epochs 100</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">交互式作业 (srun)</h3>
+              <div class="code-block">
+<pre><strong>交互式调试：</strong>
+
+# 申请2节点交互式会话
+srun --partition=gpu \
+     --nodes=2 \
+     --gres=gpu:4 \
+     --pty bash
+
+# 直接运行命令
+srun --partition=gpu \
+     --gres=gpu:1 \
+     python test.py
+
+# 调试环境
+srun --partition=debug \
+     --gres=gpu:1 \
+     --time=1:00:00 \
+     --pty bash
+
+# 申请整个节点
+srun --exclusive \
+     --gres=gpu:8 \
+     --pty bash</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 作业管理</h2>
+          <div class="card">
+            <h3 class="card-title">常用管理命令</h3>
+            <div class="code-block">
+<pre><strong>作业查询与管理：</strong>
+
+# 查看作业队列
+squeue -o "%.18i %.9P %.30j %.8u %.8T %.10M %.6D %R"
+squeue -u username  # 查看特定用户
+squeue -p gpu      # 查看特定分区
+
+# 查看作业详情
+scontrol show job JOBID
+
+# 取消作业
+scancel JOBID
+scancel -u username  # 取消用户所有作业
+
+# 查看节点状态
+sinfo -N -l
+sinfo -o "%.10n %.10c %.10m %.10e %.14G %.10D %P"
+
+# 查看节点详情
+scontrol show node node01
+
+# 查看分区信息
+sinfo -s
+
+# 作业统计
+sacct -j JOBID --format=JobID,JobName,State,Elapsed,MaxRSS
+
+# 更新作业
+scontrol update jobid=JOBID time=2-00:00:00
+scontrol update jobid=JOBID priority=1000</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 高级调度特性</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">作业数组</h3>
+              <div class="code-block">
+<pre><strong>批量参数扫描：</strong>
+
+#SBATCH --array=1-100
+#SBATCH --job-name=param-sweep
+
+# 获取数组索引
+TASK_ID=$SLURM_ARRAY_TASK_ID
+
+# 根据索引设置参数
+python train.py \
+    --lr 0.0$TASK_ID \
+    --batch-size $(($TASK_ID * 16))
+
+# 提交作业数组
+sbatch --array=1-100 script.sh
+
+# 查看数组作业
+squeue -u username</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">依赖调度</h3>
+              <div class="code-block">
+<pre><strong>作业依赖：</strong>
+
+# 先提交数据准备作业
+JOB1=$(sbatch --parsable data_prep.sh)
+
+# 再提交训练作业，依赖数据准备
+sbatch --dependency=afterok:$JOB1 train.sh
+
+# 多重依赖
+sbatch --dependency=afterok:$JOB1:$JOB2:$JOB3 eval.sh
+
+# 单任务完成后
+sbatch --dependency=afterany:$JOB1 clean.sh
+
+# 失败时运行
+sbatch --dependency=afternotok:$JOB1 notify.sh</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚨</span> 优先级与抢占</h2>
+          <div class="card">
+            <h3 class="card-title">优先级调度配置</h3>
+            <div class="code-block">
+<pre><strong>优先级配置：</strong>
+
+# slurm.conf 配置
+PriorityType=priority/multifactor
+PriorityWeightAge=1000
+PriorityWeightFairshare=10000
+PriorityWeightJobSize=1000
+PriorityWeightPartition=1000
+PriorityWeightQOS=0
+
+# 用户使用份额
+sacctmgr add user username cluster=ai-cluster fairshare=100
+
+# QOS配置
+sacctmgr add qos high-priority priority=1000 maxjobs=50
+sacctmgr add qos normal priority=100 maxjobs=200
+
+# 抢占配置
+PreemptType=preempt/qos
+PreemptMode=REQUEUE
+PreemptExemptTime=0
+
+# 账户配额
+sacctmgr add account team1 cluster=ai-cluster \
+    Fairshare=100 GrpJobs=100 GrpNodes=50</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 监控与统计</h2>
+          <div class="card">
+            <h3 class="card-title">资源使用统计</h3>
+            <div class="code-block">
+<pre><strong>作业统计报告：</strong>
+
+# 按用户统计
+sreport cluster utilization start=2024-01-01 end=2024-01-31
+sreport user top start=2024-01-01 end=2024-01-31
+
+# 按账户统计
+sreport cluster AccountUtilizationByUser
+
+# 作业效率分析
+sacct -j JOBID \
+    --format=JobID,JobName,State,ExitCode,MaxRSS,MaxVMSize,AveRSS,AveVMSize,NTasks,Elapsed,TotalCPU
+
+# GPU利用率
+sacct -j JOBID --format=JobID,AllocGRES,ReqGRES
+
+# 实时监控
+sview  # 图形界面
+squeue -o "%.18i %.9P %.30j %.8u %.8T %.10M %.6D %R"</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">Slurm最佳实践</div>
+            <p><strong>合理分区：</strong>按作业类型和优先级创建分区</p>
+            <p><strong>资源预估：</strong>准确预估CPU和内存需求，避免浪费</p>
+            <p><strong>Checkpoint：</strong>长时间作业定期保存Checkpoint</p>
+            <p><strong>日志管理：</strong>规范输出日志路径，便于调试</p>
+            <p><strong>性能监控：</strong>定期分析作业统计，优化调度策略</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Slurm是成熟的HPC/AI集群调度系统，支持大规模作业调度</li>
+                <li>• 核心组件包括slurmctld（控制）、slurmd（计算节点）和slurmdbd（数据库）</li>
+                <li>• 通过Gres机制管理GPU资源，支持灵活的GPU分配</li>
+                <li>• 提供批处理（sbatch）和交互式（srun）两种作业提交方式</li>
+                <li>• 支持作业数组、依赖调度等高级特性</li>
+                <li>• 通过多因子优先级机制实现公平调度</li>
+                <li>• 提供丰富的监控和统计功能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="7-1-资源调度概述.html">← 上一节</a>
+          <a href="7-3-Kubernetes调度原理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11.4 Checkpoint管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>11.4 Checkpoint管理</h1>
+          <p class="subtitle">高效的训练中断恢复与断点续训机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Checkpoint的作用与价值</li>
+            <li>掌握Checkpoint保存策略</li>
+            <li>学习断点续训的实现方法</li>
+            <li>了解Checkpoint的性能优化技术</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800" alt="训练过程可视化" class="card-image">
+          <h3 class="card-title">Checkpoint的重要性</h3>
+          <p class="card-text">
+            Checkpoint是训练过程中模型状态的快照，它记录了模型参数、优化器状态、
+            学习率调度器状态等关键信息。完善的Checkpoint管理是大规模训练的基础，
+            能够有效应对硬件故障、系统崩溃等意外情况，避免训练成果丢失。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> Checkpoint基本概念</h2>
+
+          <h3>Checkpoint包含的内容</h3>
+          <div class="code-block">
+checkpoint = {
+    # 模型状态
+    'model_state_dict': model.state_dict(),
+
+    # 优化器状态
+    'optimizer_state_dict': optimizer.state_dict(),
+
+    # 学习率调度器状态
+    'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+
+    # 训练进度
+    'epoch': epoch,
+    'global_step': global_step,
+    'best_metric': best_accuracy,
+
+    # 随机数种子（确保可复现）
+    'random_states': {
+        'random': random.getstate(),
+        'numpy': np.random.get_state(),
+        'torch': torch.random.get_rng_state(),
+        'cuda': torch.cuda.get_rng_state_all()
+    },
+
+    # 训练配置
+    'config': {
+        'learning_rate': learning_rate,
+        'batch_size': batch_size,
+        'architecture': config_dict
+    },
+
+    # 元数据
+    'timestamp': time.time(),
+    'hostname': socket.gethostname()
+}
+          </div>
+
+          <h3>Checkpoint的类型</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">定期Checkpoint</h4>
+              <p class="card-text">按照固定间隔保存，如每个epoch或固定步数，用于常规进度保存</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">最佳Checkpoint</h4>
+              <p class="card-text">在指标达到最优时保存，用于保留最佳模型</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">紧急Checkpoint</h4>
+              <p class="card-text">在检测到异常或收到中断信号时保存</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">增量Checkpoint</h4>
+              <p class="card-text">只保存增量变化，减少存储空间</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Checkpoint保存策略</h2>
+
+          <h3>定期保存</h3>
+          <div class="code-block">
+class CheckpointSaver:
+    def __init__(self, save_dir, save_every_n_epochs=1,
+                 save_every_n_steps=None, keep_n_best=3):
+        self.save_dir = save_dir
+        self.save_every_n_epochs = save_every_n_epochs
+        self.save_every_n_steps = save_every_n_steps
+        self.keep_n_best = keep_n_best
+        self.best_checkpoints = []
+
+    def maybe_save(self, model, optimizer, lr_scheduler,
+                   epoch, step, metrics):
+        """条件保存Checkpoint"""
+        should_save = False
+
+        # 按epoch保存
+        if self.save_every_n_epochs and epoch % self.save_every_n_epochs == 0:
+            should_save = True
+
+        # 按步数保存
+        if self.save_every_n_steps and step % self.save_every_n_steps == 0:
+            should_save = True
+
+        if should_save:
+            self.save_checkpoint(
+                model, optimizer, lr_scheduler,
+                epoch, step, metrics
+            )
+
+    def save_checkpoint(self, model, optimizer, lr_scheduler,
+                        epoch, step, metrics):
+        """保存Checkpoint"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"checkpoint_epoch{epoch}_step{step}_{timestamp}.pt"
+        filepath = os.path.join(self.save_dir, filename)
+
+        checkpoint = {
+            'epoch': epoch,
+            'global_step': step,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+            'metrics': metrics,
+            'timestamp': time.time()
+        }
+
+        torch.save(checkpoint, filepath)
+        self._cleanup_old_checkpoints()
+
+    def _cleanup_old_checkpoints(self):
+        """清理旧的Checkpoint"""
+        checkpoints = glob.glob(os.path.join(self.save_dir, "checkpoint_*.pt"))
+        checkpoints.sort(key=os.path.getmtime, reverse=True)
+
+        for old_checkpoint in checkpoints[self.keep_n_best:]:
+            os.remove(old_checkpoint)
+          </div>
+
+          <h3>最佳模型保存</h3>
+          <div class="code-block">
+class BestModelSaver:
+    def __init__(self, save_dir, metric_name='accuracy', mode='max'):
+        self.save_dir = save_dir
+        self.metric_name = metric_name
+        self.mode = mode
+        self.best_metric = float('-inf') if mode == 'max' else float('inf')
+        self.best_filepath = None
+
+    def update(self, model, optimizer, lr_scheduler,
+               epoch, step, metrics):
+        """更新最佳模型"""
+        current_metric = metrics.get(self.metric_name)
+
+        if current_metric is None:
+            return
+
+        # 检查是否是最佳指标
+        is_best = False
+        if self.mode == 'max':
+            is_best = current_metric > self.best_metric
+        else:
+            is_best = current_metric < self.best_metric
+
+        if is_best:
+            # 保存新最佳模型
+            filepath = os.path.join(self.save_dir, "best_model.pt")
+            self._save(model, optimizer, lr_scheduler,
+                      epoch, step, metrics, filepath)
+
+            # 删除旧的最佳模型
+            if self.best_filepath and self.best_filepath != filepath:
+                os.remove(self.best_filepath)
+
+            self.best_metric = current_metric
+            self.best_filepath = filepath
+
+            print(f"New best {self.metric_name}: {current_metric:.4f}")
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 断点续训</h2>
+
+          <h3>加载Checkpoint</h2>
+          <div class="code-block">
+def load_checkpoint(checkpoint_path, model, optimizer=None, lr_scheduler=None):
+    """加载Checkpoint继续训练"""
+    if not os.path.exists(checkpoint_path):
+        print(f"Checkpoint not found: {checkpoint_path}")
+        return None
+
+    # 加载Checkpoint文件
+    checkpoint = torch.load(checkpoint_path)
+
+    # 加载模型状态
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    # 加载优化器状态
+    if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    # 加载学习率调度器状态
+    if lr_scheduler is not None and 'lr_scheduler_state_dict' in checkpoint:
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
+
+    # 恢复训练状态
+    start_epoch = checkpoint.get('epoch', 0)
+    start_step = checkpoint.get('global_step', 0)
+    best_metric = checkpoint.get('best_metric', None)
+
+    print(f"Loaded checkpoint from epoch {start_epoch}, step {start_step}")
+
+    return {
+        'epoch': start_epoch,
+        'step': start_step,
+        'best_metric': best_metric,
+        'metrics': checkpoint.get('metrics', {})
+    }
+          </div>
+
+          <h3>完整训练循环</h3>
+          <div class="code-block">
+class ResumeTrainer:
+    def __init__(self, model, train_loader, config):
+        self.model = model
+        self.train_loader = train_loader
+        self.config = config
+        self.checkpoint_dir = config.checkpoint_dir
+
+        # 初始化组件
+        self.optimizer = self._create_optimizer()
+        self.lr_scheduler = self._create_scheduler()
+        self.checkpoint_saver = CheckpointSaver(self.checkpoint_dir)
+        self.best_saver = BestModelSaver(self.checkpoint_dir)
+
+    def train(self):
+        """训练循环"""
+        # 尝试加载Checkpoint
+        resume_state = load_checkpoint(
+            self.config.resume_path,
+            self.model,
+            self.optimizer,
+            self.lr_scheduler
+        )
+
+        start_epoch = resume_state['epoch'] + 1 if resume_state else 0
+        global_step = resume_state['step'] if resume_state else 0
+
+        for epoch in range(start_epoch, self.config.num_epochs):
+            self.model.train()
+
+            for batch_idx, (data, target) in enumerate(self.train_loader):
+                # 训练步骤
+                loss = self._train_step(data, target)
+                global_step += 1
+
+                # 记录指标
+                metrics = self._compute_metrics()
+                self._log_metrics(metrics, global_step)
+
+                # 定期保存Checkpoint
+                self.checkpoint_saver.maybe_save(
+                    self.model, self.optimizer, self.lr_scheduler,
+                    epoch, global_step, metrics
+                )
+
+            # 验证
+            val_metrics = self._validate()
+            self.best_saver.update(
+                self.model, self.optimizer, self.lr_scheduler,
+                epoch, global_step, val_metrics
+            )
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> Checkpoint性能优化</h2>
+
+          <h3>异步保存</h2>
+          <div class="code-block">
+import threading
+import queue
+
+class AsyncCheckpointSaver:
+    def __init__(self, save_dir, max_queue_size=5):
+        self.save_dir = save_dir
+        self.save_queue = queue.Queue(maxsize=max_queue_size)
+        self.save_thread = threading.Thread(target=self._save_worker)
+        self.save_thread.daemon = True
+        self.save_thread.start()
+
+    def _save_worker(self):
+        """后台保存线程"""
+        while True:
+            checkpoint_info = self.save_queue.get()
+            self._save_checkpoint(*checkpoint_info)
+            self.save_queue.task_done()
+
+    def save_async(self, model, optimizer, lr_scheduler,
+                   epoch, step, metrics):
+        """异步保存Checkpoint"""
+        # 创建状态字典的副本
+        checkpoint = {
+            'epoch': epoch,
+            'global_step': step,
+            'model_state_dict': {k: v.clone().cpu() for k, v in model.state_dict().items()},
+            'optimizer_state_dict': optimizer.state_dict(),
+            'metrics': metrics
+        }
+
+        # 放入队列异步保存
+        try:
+            self.save_queue.put_nowait((
+                checkpoint, f"checkpoint_epoch{epoch}_step{step}.pt"
+            ))
+        except queue.Full:
+            print("Checkpoint save queue full, skipping...")
+
+    def wait_for_completion(self):
+        """等待所有保存完成"""
+        self.save_queue.join()
+          </div>
+
+          <h3>内存优化</h3>
+          <div class="code-block">
+def save_checkpoint_optimized(model, optimizer, lr_scheduler,
+                               epoch, step, metrics, filepath):
+    """优化的Checkpoint保存"""
+
+    # 1. 清理GPU缓存
+    torch.cuda.empty_cache()
+
+    # 2. 移动到CPU并创建副本
+    state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
+    # 3. 使用新ZIP格式（更快的保存速度）
+    torch.save({
+        'epoch': epoch,
+        'global_step': step,
+        'model_state_dict': state_dict,
+        'optimizer_state_dict': optimizer.state_dict(),
+        'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+        'metrics': metrics
+    }, filepath, _use_new_zipfile_serialization=True)
+
+    # 4. 可选：压缩
+    # compress_checkpoint(filepath)
+          </div>
+
+          <h3>分布式训练Checkpoint</h3>
+          <div class="code-block">
+import torch.distributed as dist
+
+def save_distributed_checkpoint(model, optimizer, lr_scheduler,
+                                  epoch, step, metrics, filepath):
+    """分布式训练Checkpoint保存"""
+    if dist.get_rank() == 0:
+        # 只在主进程保存
+        checkpoint = {
+            'epoch': epoch,
+            'global_step': step,
+            'model_state_dict': model.module.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'lr_scheduler_state_dict': lr_scheduler.state_dict(),
+            'metrics': metrics
+        }
+        torch.save(checkpoint, filepath)
+
+    # 确保所有进程同步
+    dist.barrier()
+
+def load_distributed_checkpoint(model, optimizer, lr_scheduler,
+                                 filepath):
+    """分布式训练Checkpoint加载"""
+    map_location = {'cuda:%d' % i: 'cuda:%d' % dist.get_rank()
+                    for i in range(torch.cuda.device_count())}
+
+    checkpoint = torch.load(filepath, map_location=map_location)
+
+    model.module.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
+
+    return checkpoint['epoch'], checkpoint['global_step']
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 容错机制</h2>
+
+          <h3>异常处理</h3>
+          <div class="code-block">
+import signal
+import sys
+
+class GracefulCheckpointHandler:
+    def __init__(self, trainer):
+        self.trainer = trainer
+        self.register_handlers()
+
+    def register_handlers(self):
+        """注册信号处理器"""
+        signal.signal(signal.SIGINT, self._handle_signal)
+        signal.signal(signal.SIGTERM, self._handle_signal)
+
+    def _handle_signal(self, signum, frame):
+        """处理中断信号"""
+        print(f"\nReceived signal {signum}, saving emergency checkpoint...")
+
+        try:
+            # 保存紧急Checkpoint
+            self.trainer.save_checkpoint(emergency=True)
+            print("Emergency checkpoint saved successfully")
+        except Exception as e:
+            print(f"Failed to save emergency checkpoint: {e}")
+
+        sys.exit(0)
+
+# 使用示例
+trainer = Trainer(...)
+handler = GracefulCheckpointHandler(trainer)
+trainer.train()  # 训练过程中可以安全地Ctrl+C
+          </div>
+
+          <h3>自动恢复</h3>
+          <div class="code-block">
+def auto_resume_training(checkpoint_dir):
+    """自动恢复训练"""
+    # 查找最新的Checkpoint
+    checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pt"))
+
+    if not checkpoints:
+        print("No checkpoint found, starting from scratch")
+        return None
+
+    # 按修改时间排序
+    latest_checkpoint = max(checkpoints, key=os.path.getmtime)
+
+    print(f"Auto-resuming from: {latest_checkpoint}")
+    return latest_checkpoint
+
+# 使用
+trainer = Trainer(...)
+
+# 自动查找并加载最新的Checkpoint
+resume_path = auto_resume_training(config.checkpoint_dir)
+if resume_path:
+    trainer.resume_from(resume_path)
+
+trainer.train()
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Checkpoint管理最佳实践</h2>
+
+          <h3>命名规范</h3>
+          <div class="code-block">
+# 推荐的Checkpoint命名格式
+CHECKPOINT_NAMING_PATTERNS = {
+    # 定期保存
+    "periodic": "checkpoint_epoch{epoch:04d}_step{step:08d}.pt",
+
+    # 最佳模型
+    "best": "best_model_{metric_name}_{metric_value:.4f}.pt",
+
+    # 紧急保存
+    "emergency": "emergency_checkpoint_{timestamp}.pt",
+
+    # 中间保存
+    "intermediate": "epoch{epoch:04d}_step{step:08d}.pt",
+
+    # 版本化
+    "versioned": "model_v{major}_{minor}_{patch}.pt"
+}
+
+# 示例文件名
+# checkpoint_epoch0001_step00100000.pt
+# best_model_accuracy_0.9523.pt
+# emergency_checkpoint_20240115_143052.pt
+          </div>
+
+          <h3>目录组织</h3>
+          <div class="code-block">
+experiments/
+└── experiment_001/
+    ├── checkpoints/              # 所有Checkpoint
+    │   ├── best/                 # 最佳模型
+    │   ├── regular/              # 定期保存
+    │   └── emergency/            # 紧急保存
+    ├── logs/                    # 训练日志
+    ├── tensorboard/             # TensorBoard日志
+    └── config/                  # 配置文件备份
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">最佳实践建议</div>
+              <p>1）设置合理的保存间隔，平衡训练进度和存储空间；2）使用异步保存减少训练中断；3）实施清理策略避免存储耗尽；4）为关键Checkpoint添加备份；5）定期测试Checkpoint的可恢复性。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800" alt="服务器集群">
+          <div class="caption">图：完善的Checkpoint管理是大规模训练的基础</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Checkpoint是训练中断恢复的关键保障</li>
+                <li>• 合理的保存策略平衡性能与可靠性</li>
+                <li>• 异步保存和内存优化提升训练效率</li>
+                <li>• 容错机制确保训练过程稳定可靠</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="11-3-模型仓库设计.html">← 上一节</a>
+          <a href="11-5-模型压缩与存储优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

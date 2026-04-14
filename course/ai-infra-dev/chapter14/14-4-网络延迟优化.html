@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.4 网络延迟优化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>14.4 网络延迟优化</h1>
+          <p class="subtitle">降低AI集群网络延迟的方法与实践</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解网络延迟的组成</li>
+            <li>掌握延迟分析方法</li>
+            <li>学习延迟优化技术</li>
+            <li>了解延迟监控工具</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="延迟优化" class="card-image">
+          <h3 class="card-title">网络延迟的重要性</h3>
+          <p class="card-text">
+            网络延迟直接影响AI训练的迭代速度，特别是对于小batch size和
+            需要频繁同步的模型并行场景。本节将深入分析网络延迟的来源，
+            并提供系统性的优化方法。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏱️</span> 延迟分析</h2>
+
+          <h3>延迟组成</h3>
+
+          <div class="code-block"""
+网络延迟组成:
+
+总延迟 = 传输延迟 + 传播延迟 + 处理延迟 + 排队延迟
+
+1. 传输延迟 (Transmission Delay)
+   定义: 数据包发送到链路所需时间
+   公式: L / R
+   - L: 数据包大小
+   - R: 链路带宽
+   优化: 提高带宽
+
+2. 传播延迟 (Propagation Delay)
+   定义: 信号在介质中传播时间
+   公式: D / V
+   - D: 距离
+   - V: 传播速度
+   优化: 缩短距离
+
+3. 处理延迟 (Processing Delay)
+   定义: 处理数据包所需时间
+   包括: 查路由表、解析协议
+   优化: 硬件加速
+
+4. 排队延迟 (Queuing Delay)
+   定义: 数据包在队列中等待时间
+   包括: 输入队列、输出队列
+   优化: 增大队列、流控
+          </div>
+
+          <h3>典型延迟值</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>延迟类型</th>
+                <th>NVLink</th>
+                <th>IB HDR</th>
+                <th>RoCE v2</th>
+                <th>Ethernet</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>传输延迟 (1KB)</td>
+                <td>~0.1μs</td>
+                <td>~0.2μs</td>
+                <td>~0.3μs</td>
+                <td>~0.8μs</td>
+              </tr>
+              <tr>
+                <td>传播延迟 (100m)</td>
+                <td>~0.5μs</td>
+                <td>~0.5μs</td>
+                <td>~0.5μs</td>
+                <td>~0.5μs</td>
+              </tr>
+              <tr>
+                <td>处理延迟</td>
+                <td>~0.1μs</td>
+                <td>~0.2μs</td>
+                <td>~0.3μs</td>
+                <td>~0.5μs</td>
+              </tr>
+              <tr>
+                <td>排队延迟</td>
+                <td><0.1μs</td>
+                <td><0.5μs</td>
+                <td><1μs</td>
+                <td><5μs</td>
+              </tr>
+              <tr>
+                <td>单跳总延迟</td>
+                <td>~0.7μs</td>
+                <td>~1.4μs</td>
+                <td>~2.1μs</td>
+                <td>~6.8μs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 延迟测量</h2>
+
+          <h3>测量方法</h3>
+
+          <div class="code-block"""
+延迟测量方法:
+
+1. ping测量
+   # 基础ping
+   ping -c 100 <target>
+
+   # 详细测量
+   ping -i 0.001 -s 64 -c 10000 <target>
+
+2. iperf测量
+   # UDP延迟测量
+   iperf3 -c <server> -u -b 100M -l 1472 -t 60
+
+3. ib_read_lat (IB专用)
+   # 读取延迟
+   ib_read_lat -d <device> -i 1 -s 1024 -n 10000
+
+4. NCCL延迟测试
+   # 运行延迟测试
+   mpirun -np 8 ./all_reduce_perf -b 1K -e 1K -f 2
+
+5. 自定义测试
+   # 使用RDMA直接测量
+   rdma_lat -s 64 -n 10000
+          </div>
+
+          <h3>延迟分析工具</h3>
+
+          <div class="code-block"""
+延迟分析工具:
+
+1. traceroute
+   # 路由追踪
+   traceroute <target>
+
+   # 跳数延迟
+   traceroute -n -q 1 <target>
+
+2. mtr
+   # 持续监控
+   mtr -n -r -c 100 <target>
+
+3. tcpdump
+   # 抓包分析
+   tcpdump -i <interface> -w capture.pcap
+
+4. wireshark
+   # 详细分析
+   # 分析pcap文件，查看延迟分布
+
+5. dstat
+   # 实时统计
+   dstat --tcp --net
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 延迟优化技术</h2>
+
+          <h3>硬件优化</h3>
+
+          <div class="code-block"""
+硬件层优化:
+
+1. 使用NVLink/芯片互联
+   - 节点内通信延迟: <1μs
+   - 配置: 全互联或NVSwitch
+   - 效果: 延迟降低5-10x
+
+2. 选择低延迟网卡
+   - IB: 延迟最低
+   - RoCEv2: 次优
+   - Ethernet: 延迟较高
+
+3. 高速互联
+   - HDR: 50Gb/s, 低延迟
+   - NDR: 100Gb/s, 更低延迟
+   - 升级线缆和光模块
+
+4. 近距离部署
+   - 缩短物理距离
+   - 减少跳数
+   - Leaf-Spine拓扑
+          </div>
+
+          <h3>软件优化</h3>
+
+          <div class="code-block"""
+软件层优化:
+
+1. 启用大MTU
+   # 设置Jumbo Frame
+   ifconfig <interface> mtu 9000
+
+2. CPU亲和性
+   # 绑定中断到特定CPU
+   irqbalance --oneshot
+   set_irq_affinity <irq> <cpu>
+
+3. 中断聚合
+   # 增加中断聚合
+   ethtool -C <interface> rx-usecs 100
+
+4. 减少系统调用
+   # 使用RDMA零拷贝
+   # 绕过内核协议栈
+
+5. 优化协议栈
+   # 调整TCP参数
+   sysctl -w net.ipv4.tcp_low_latency=1
+   sysctl -w net.core.netdev_max_backlog=5000
+          </div>
+
+          <h3>网络优化</h3>
+
+          <div class="code-block"""
+网络层优化:
+
+1. 减少跳数
+   - 优化网络拓扑
+   - 使用Leaf-Spine
+   - 避免多余路由
+
+2. 启用流控
+   # 配置PFC
+   ethtool -A <interface> tx off
+   ethtool -C <interface> rx on
+
+3. 优先级队列
+   # 为AI流量设置高优先级
+   tc qdisc add dev <interface> root handle 1: prio
+
+4. 多路径负载均衡
+   # ECMP配置
+   ip route add default \
+       nexthop via <gw1> weight 1 \
+       nexthop via <gw2> weight 1
+
+5. 快速故障切换
+   # BFD配置
+   bfd session peer <neighbor>
+          </div>
+
+          <h3>应用层优化</h3>
+
+          <div class="code-block"""
+应用层优化:
+
+1. 批处理通信
+   # 减少通信次数
+   # 增大批次大小
+
+2. 异步通信
+   # 重叠通信和计算
+   # 使用NCCL非阻塞API
+
+3. 通信拓扑优化
+   # 感知物理拓扑
+   # 优化通信路径
+   # 避免热路径
+
+4. 梯度累积
+   # 减少同步频率
+   # 多步累积
+
+5. 算法选择
+   # 小规模: Tree
+   # 大规模: Ring
+   # 自动: CollNet
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 延迟监控</h2>
+
+          <h3>监控指标</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>目标值</th>
+                <th>测量方法</th>
+                <th>告警阈值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>单向延迟</td>
+                <td>< 5μs</td>
+                <td>ib_read_lat</td>
+                <td>> 10μs</td>
+              </tr>
+              <tr>
+                <td>往返延迟</td>
+                <td>< 10μs</td>
+                <td>ping</td>
+                <td>> 20μs</td>
+              </tr>
+              <tr>
+                <td>延迟抖动</td>
+                <td>< 1μs</td>
+                <td>持续ping</td>
+                <td>> 5μs</td>
+              </tr>
+              <tr>
+                <td>All-Reduce时间</td>
+                <td>< 100ms</td>
+                <td>NCCL测试</td>
+                <td>> 200ms</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>监控配置</h3>
+
+          <div class="code-block"""
+延迟监控配置:
+
+1. Prometheus监控
+   # 添加延迟指标
+   - network_latency_seconds
+   - nccl_allreduce_duration_seconds
+   - ib_read_latency_microseconds
+
+2. Grafana仪表板
+   # 实时监控
+   - 延迟趋势图
+   - 延迟分布图
+   - 延迟热力图
+
+3. 告警配置
+   # Prometheus告警
+   - alert: HighLatency
+     expr: network_latency_seconds > 0.00001
+     for: 5m
+
+4. 日志记录
+   # 记录延迟异常
+   - 延迟峰值
+   - 延迟抖动
+   - 通信失败
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 优化实践案例</h2>
+
+          <h3>案例1: 降低All-Reduce延迟</h3>
+
+          <div class="code-block"""
+问题: All-Reduce延迟过高 (200ms)
+
+分析:
+- 网络延迟: 10μs (正常)
+- 跳数: 6 (合理)
+- 算法: Ring (正确)
+- 瓶颈: CPU处理
+
+优化方案:
+1. 启用NVLink共享内存
+   export NCCL_NVLS_ENABLE=1
+
+2. 使用GPU Direct
+   export NCCL_NET_GDR_LEVEL=5
+
+3. 调整批处理大小
+   增大到16M
+
+效果:
+- 延迟降低: 200ms → 80ms (60%改善)
+- 吞吐提升: 50%
+          </div>
+
+          <h3>案例2: 降低跨节点延迟</h3>
+
+          <div class="code-block"""
+问题: 跨节点通信延迟过高 (50μs)
+
+分析:
+- 节点内延迟: 1μs (正常)
+- 跨节点延迟: 50μs (异常)
+- 跳数: 8 (偏多)
+- 路由: 非最优路径
+
+优化方案:
+1. 优化网络拓扑
+   - 减少Spine数量
+   - 优化路由策略
+
+2. 启用ECMP
+   - 配置16条路径
+   - 优化哈希算法
+
+3. 调整MTU
+   - 统一设置为9000
+
+效果:
+- 延迟降低: 50μs → 8μs (84%改善)
+- 跳数减少: 8 → 4
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">优化建议</div>
+            <p>1）优先使用NVLink等低延迟互联；2）优化网络拓扑减少跳数；3）启用流控避免拥塞；4）持续监控延迟指标；5）分层优化硬件、网络和应用。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="延迟分析">
+          <div class="caption">图：延迟优化是提升AI训练效率的关键</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 网络延迟影响AI训练效率</li>
+                <li>• 延迟由多个因素共同决定</li>
+                <li>• 需要从硬件、软件、网络多层面优化</li>
+                <li>• 持续监控和调优保持低延迟</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="14-3-网络带宽规划.html">← 上一节</a>
+          <a href="14-5-网络故障诊断.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

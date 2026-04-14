@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.5 CI/CD for ML - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>30.5 CI/CD for ML</h1>
+          <p class="subtitle">机器学习持续集成与部署</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解CI/CD在ML中的应用</li>
+            <li>掌握ML CI流水线的构建</li>
+            <li>学会自动模型部署流程</li>
+            <li>了解ML Ops的最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="CI/CD" class="card-image">
+          <h3 class="card-title">CI/CD for ML概述</h3>
+          <p class="card-text">
+            <strong>CI/CD for ML（持续集成/持续部署）</strong>是自动化的机器学习开发、
+            测试和部署流程。它将传统的DevOps实践扩展到ML领域，实现模型的快速迭代和可靠部署。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> ML CI/CD流程</h2>
+
+          <div class="image-container">
+            <img src="https://www.databricks.com/wp-content/uploads/2022/01/mlops-cicd-pipeline.png" alt="ML CI/CD流程">
+            <div class="caption">图：ML CI/CD完整流程</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">持续集成（CI）</h3>
+              <ul class="feature-list">
+                <li>代码提交触发</li>
+                <li>自动测试</li>
+                <li>数据验证</li>
+                <li>模型训练</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">持续交付（CD）</h3>
+              <ul class="feature-list">
+                <li>模型评估</li>
+                <li>模型注册</li>
+                <li>自动化部署</li>
+                <li>灰度发布</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">持续监控</h3>
+              <ul class="feature-list">
+                <li>性能监控</li>
+                <li>数据漂移检测</li>
+                <li>告警通知</li>
+                <li>自动重训</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> GitHub Actions for ML</h2>
+
+          <h3>CI流水线</h3>
+          <div class="code-block">
+name: ML CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest black mypy
+
+    - name: Code quality checks
+      run: |
+        black --check .
+        mypy .
+
+    - name: Unit tests
+      run: |
+        pytest tests/ -v
+
+    - name: Data validation
+      run: |
+        python scripts/validate_data.py
+
+  train:
+    needs: test
+    runs-on: gpu-node
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Train model
+      run: |
+        python train.py \
+          --data-path ./data \
+          --output-dir ./model
+
+    - name: Evaluate model
+      run: |
+        python evaluate.py \
+          --model-path ./model \
+          --test-data ./data/test
+
+    - name: Save metrics
+      run: |
+        echo "accuracy=0.95" >> $GITHUB_OUTPUT
+
+    - name: Upload model
+      uses: actions/upload-artifact@v3
+      with:
+        name: model-artifact
+        path: ./model
+          </code>
+
+          <h3>CD流水线</h3>
+          <div class="code-block">
+name: ML CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["ML CI Pipeline"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  register-model:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download model artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: model-artifact
+        path: ./model
+
+    - name: Register model
+      run: |
+        python register_model.py \
+          --model-path ./model \
+          --model-name my-model
+
+    - name: Update model version
+      run: |
+        # 更新模型版本标签
+        git tag -a v$(date +%Y%m%d-%H%M%S) -m "Model deployment"
+        git push origin v$(date +%Y%m%d-%H%M%S)
+
+  deploy-staging:
+    needs: register-model
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to staging
+      run: |
+        kubectl apply -f k8s/staging/
+
+    - name: Wait for deployment
+      run: |
+        kubectl rollout status deployment/my-model -n staging
+
+    - name: Run smoke tests
+      run: |
+        python tests/smoke.py --env staging
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://model.example.com
+    steps:
+    - name: Deploy to production
+      run: |
+        kubectl apply -f k8s/production/
+
+    - name: Wait for deployment
+      run: |
+        kubectl rollout status deployment/my-model -n production
+
+    - name: Monitor deployment
+      run: |
+        python scripts/monitor_deployment.py --env production
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> GitLab CI/CD for ML</h2>
+
+          <h3>GitLab CI配置</h3>
+          <div class="code-block">
+# .gitlab-ci.yml
+stages:
+  - test
+  - train
+  - register
+  - deploy-staging
+  - deploy-production
+
+variables:
+  PYTHON_VERSION: "3.9"
+  DOCKER_IMAGE: "registry.example.com/ml-pipeline:latest"
+
+# 代码测试
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  script:
+    - pip install -r requirements.txt
+    - pip install pytest black mypy
+    - black --check .
+    - mypy .
+    - pytest tests/ -v
+  only:
+    - branches
+
+# 模型训练
+train:
+  stage: train
+  image: ${DOCKER_IMAGE}
+  script:
+    - python train.py --data-path ./data --output-dir ./model
+    - python evaluate.py --model-path ./model --test-data ./data/test
+  artifacts:
+    paths:
+      - model/
+    expire_in: 1 week
+  dependencies:
+    - test
+  only:
+    - main
+
+# 模型注册
+register:
+  stage: register
+  image: ${DOCKER_IMAGE}
+  script:
+    - python register_model.py --model-path ./model --model-name my-model
+  dependencies:
+    - train
+  only:
+    - main
+
+# 部署到Staging
+deploy-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl apply -f k8s/staging/
+    - kubectl rollout status deployment/my-model -n staging
+    - python tests/smoke.py --env staging
+  environment:
+    name: staging
+    url: https://staging.model.example.com
+  dependencies:
+    - register
+  only:
+    - main
+  when: manual
+
+# 部署到Production
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl apply -f k8s/production/
+    - kubectl rollout status deployment/my-model -n production
+  environment:
+    name: production
+    url: https://model.example.com
+  dependencies:
+    - deploy-staging
+  only:
+    - main
+  when: manual
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 自动化部署</h2>
+
+          <h3>Kubernetes部署</h3>
+          <div class="code-block">
+# k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-model
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-model
+  template:
+    metadata:
+      labels:
+        app: my-model
+    spec:
+      containers:
+      - name: model
+        image: registry.example.com/my-model:${CI_COMMIT_SHORT_SHA}
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-model
+  namespace: production
+spec:
+  selector:
+    app: my-model
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: LoadBalancer
+          </code>
+
+          <h3>蓝绿部署</h3>
+          <div class="code-block">
+# blue-green-deploy.sh
+#!/bin/bash
+
+NEW_VERSION=$1
+DEPLOYMENT="my-model"
+NAMESPACE="production"
+
+# 部署Green版本
+kubectl set image deployment/${DEPLOYMENT} \
+  model=registry.example.com/my-model:${NEW_VERSION} \
+  -n ${NAMESPACE}
+
+# 等待Green版本就绪
+kubectl rollout status deployment/${DEPLOYMENT} -n ${NAMESPACE}
+
+# 运行集成测试
+python tests/integration.py --env production
+
+# 验证通过后切换流量
+echo "Deployment successful, switching traffic..."
+
+# 7天后删除旧版本
+kubectl delete deployment/${DEPLOYMENT}-blue \
+  --ignore-not-found \
+  -n ${NAMESPACE}
+          </code>
+
+          <h3>金丝雀发布</h3>
+          <div class="code-block">
+# 使用Istio流量分割
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: my-model
+  namespace: production
+spec:
+  hosts:
+  - my-model
+  http:
+  - match:
+    - headers:
+        x-canary:
+          exact: "true"
+    route:
+    - destination:
+        host: my-model
+        subset: v2
+  - route:
+    - destination:
+        host: my-model
+        subset: v1
+      weight: 90
+    - destination:
+        host: my-model
+        subset: v2
+      weight: 10
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 质量控制</h2>
+
+          <h3>数据质量检查</h3>
+          <div class="code-block">
+# scripts/validate_data.py
+import pandas as pd
+import great_expectations as ge
+
+# 加载数据
+df = pd.read_csv("data/train.csv")
+
+# 使用Great Expectations验证
+context = ge.DataContext()
+batch = context.get_batch(data=df)
+
+# 定义期望
+expectation_suite = context.get_expectation_suite("data_expectations")
+
+# 运行验证
+validation_result = context.run_validation(
+    batch=batch,
+    expectation_suite=expectation_suite
+)
+
+# 检查验证结果
+if not validation_result.success:
+    print("Data validation failed!")
+    print(validation_result.statistics)
+    exit(1)
+
+print("Data validation passed!")
+          </code>
+
+          <h3>模型性能检查</h3>
+          <div class="code-block">
+# scripts/check_model.py
+import mlflow
+import yaml
+
+# 加载配置
+with open("config/thresholds.yaml") as f:
+    thresholds = yaml.safe_load(f)
+
+# 从MLflow获取模型指标
+model_uri = "models:/my-model/Production"
+model = mlflow.pyfunc.load_model(model_uri)
+
+# 评估模型
+metrics = evaluate_model(model)
+
+# 检查阈值
+if metrics["accuracy"] < thresholds["accuracy"]:
+    print(f"Accuracy {metrics['accuracy']} below threshold {thresholds['accuracy']}")
+    exit(1)
+
+if metrics["f1_score"] < thresholds["f1_score"]:
+    print(f"F1 score {metrics['f1_score']} below threshold {thresholds['f1_score']}")
+    exit(1)
+
+print("Model performance check passed!")
+          </code>
+
+          <h3>Smoke测试</h3>
+          <div class="code-block">
+# tests/smoke.py
+import requests
+import json
+
+def smoke_test():
+    """运行Smoke测试"""
+    base_url = "https://model.example.com"
+
+    # 健康检查
+    health_response = requests.get(f"{base_url}/health")
+    assert health_response.status_code == 200, "Health check failed"
+
+    # 预测测试
+    test_data = {
+        "features": [1, 2, 3, 4, 5]
+    }
+    predict_response = requests.post(
+        f"{base_url}/predict",
+        json=test_data
+    )
+    assert predict_response.status_code == 200, "Prediction failed"
+
+    # 验证响应格式
+    result = predict_response.json()
+    assert "prediction" in result, "Invalid response format"
+
+    print("Smoke tests passed!")
+
+if __name__ == "__main__":
+    smoke_test()
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 持续监控与重训</h2>
+
+          <h3>监控流水线</h3>
+          <div class="code-block">
+# 定期监控任务
+name: Model Monitoring
+
+on:
+  schedule:
+    # 每天凌晨2点运行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Check data drift
+      run: |
+        python scripts/check_drift.py
+
+    - name: Check model performance
+      run: |
+        python scripts/check_performance.py
+
+    - name: Trigger retrain if needed
+      if: steps.check-model-performance.outputs.needs-retrain == 'true'
+      run: |
+        curl -X POST \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/actions/workflows/train.yml/dispatches \
+          -d '{"ref":"main"}'
+          </code>
+
+          <h3>自动重训触发</h3>
+          <div class="code-block">
+# scripts/check_drift.py
+import numpy as np
+from alibi_detect import DriftDetector
+
+# 加载当前模型和参考数据
+reference_data = load_reference_data()
+current_model = load_model()
+
+# 获取新数据
+new_data = fetch_new_data()
+
+# 检测数据漂移
+drift_detector = DriftDetector()
+drift_result = drift_detector.predict(
+    X_ref=reference_data,
+    X=new_data
+)
+
+if drift_result["data"]["is_drift"]:
+    print("Data drift detected!")
+    print(f"Drift magnitude: {drift_result['data']['distance']}")
+
+    # 触发重训
+    trigger_retrain()
+else:
+    print("No data drift detected")
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">CI/CD设计</h4>
+              <ul class="feature-list">
+                <li>自动化所有可自动化的步骤</li>
+                <li>快速反馈循环</li>
+                <li>渐进式发布</li>
+                <li>完善的质量检查</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">质量控制</h4>
+              <ul class="feature-list">
+                <li>代码质量检查</li>
+                <li>数据质量验证</li>
+                <li>模型性能阈值</li>
+                <li>烟雾测试集成</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">部署策略</h4>
+              <ul class="feature-list">
+                <li>蓝绿部署</li>
+                <li>金丝雀发布</li>
+                <li>A/B测试</li>
+                <li>快速回滚机制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">监控运维</h4>
+              <ul class="feature-list">
+                <li>性能监控</li>
+                <li>数据漂移检测</li>
+                <li>自动重训触发</li>
+                <li>成本监控</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">成功要素</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 完全自动化的CI/CD流程</li>
+                <li>• 严格的质量控制</li>
+                <li>• 渐进式部署策略</li>
+                <li>• 持续的监控和优化</li>
+                <li>• 快速的回滚能力</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• CI/CD for ML实现自动化ML生命周期</li>
+                <li>• GitHub Actions和GitLab CI是常用平台</li>
+                <li>• 蓝绿部署和金丝雀发布降低风险</li>
+                <li>• 持续监控确保模型性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="30-4-流水线编排设计.html">← 上一节</a>
+          <a href="#">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

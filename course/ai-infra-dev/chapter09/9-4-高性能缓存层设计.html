@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.4 高性能缓存层设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>9.4 高性能缓存层设计</h1>
+          <p class="subtitle">加速AI数据访问</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解缓存层的作用</li>
+            <li>掌握Alluxio的部署配置</li>
+            <li>学会缓存策略优化</li>
+            <li>了解缓存性能调优方法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="缓存层" class="card-image">
+          <h3 class="card-title">缓存层简介</h3>
+          <p class="card-text">
+            <strong>缓存层</strong>在计算集群和持久化存储之间建立高速缓冲区，
+            显著提升训练数据访问速度，降低存储网络压力，是AI性能优化的关键。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Alluxio架构</h2>
+          <div class="card">
+            <h3 class="card-title">Alluxio分布式缓存</h3>
+            <div class="code-block">
+<pre><strong>Alluxio架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      应用层                                 │
+│  ─────────────────────────────────────────────────────────   │
+│  • PyTorch • TensorFlow • Hadoop • Spark                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      Alluxio层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Alluxio Master                                        │   │
+│  • 元数据管理                                            │   │
+│  • 缓存调度                                              │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐        │
+│  │Worker1 │  │Worker2 │  │Worker3 │  │Worker4 │        │
+│  │内存缓存│  │SSD缓存 │  │混合缓存│  │混合缓存│        │
+│  └────────┘  └────────┘  └────────┘  └────────┘        │
+│                                                             │
+│  • 分层缓存                                                │
+│  • 数据预取                                                │
+│  • 智能淘汰                                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      底层存储                               │
+│  ─────────────────────────────────────────────────────────   │
+│  • S3 • HDFS • NFS • 本地存储                              │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Alluxio配置</h2>
+          <div class="card">
+            <h3 class="card-title">Alluxio部署配置</h3>
+            <div class="code-block">
+<pre><strong>Alluxio配置：</strong>
+
+# 安装Alluxio
+wget https://downloads.alluxio.io/downloads/files/2.9.0/alluxio-2.9.0-bin.tar.gz
+tar -xzf alluxio-2.9.0-bin.tar.gz
+cd alluxio-2.9.0
+
+# 配置Master
+cat > conf/alluxio-site.properties << EOF
+alluxio.master.hostname=alluxio-master
+alluxio.master.mount.table.root.ufs.options=aws.accessKeyId=xxx,aws.secretKey=yyy
+alluxio.master.security.impersonation.root.groups=*
+EOF
+
+# 配置Worker
+cat > conf/alluxio-site.properties << EOF
+alluxio.worker.hostname=alluxio-worker
+alluxio.worker.tieredstore.levels=1
+alluxio.worker.tieredstore.level0.alias=MEM
+alluxio.worker.tieredstore.level0.mediumtype=MEM
+alluxio.worker.tieredstore.level0.paths=/dev/shm/alluxio
+alluxio.worker.tieredstore.level0.size=100GB
+EOF
+
+# 启动集群
+./bin/alluxio format
+./bin/alluxio-start.sh all
+
+# 挂载底层存储
+./bin/alluxio fs mount \
+    --option aws.accessKeyId=xxx \
+    --option aws.secretKey=yyy \
+    /s3 s3://bucket-name/
+
+# 数据预热
+./bin/alluxio fs load /s3/dataset
+
+# 查看缓存状态
+./bin/alluxio fs report /s3/dataset</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">缓存优化策略</div>
+            <p><strong>分层缓存：</strong>内存>SSD>HDD，优化成本</p>
+            <p><strong>数据预取：</strong>提前加载热点数据</p>
+            <p><strong>智能淘汰：</strong>LRU/LFU策略</p>
+            <p><strong>局部性优化：</strong>数据亲和性调度</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化</h2>
+          <div class="card">
+            <h3 class="card-title">缓存性能调优</h3>
+            <div class="code-block">
+<pre><strong>性能优化策略：</strong>
+
+1. 分层缓存配置
+   # 内存层
+   alluxio.worker.tieredstore.level0.mediumtype=MEM
+   alluxio.worker.tieredstore.level0.size=64GB
+
+   # SSD层
+   alluxio.worker.tieredstore.level1.mediumtype=SSD
+   alluxio.worker.tieredstore.level1.size=500GB
+
+   # HDD层
+   alluxio.worker.tieredstore.level2.mediumtype=HDD
+   alluxio.worker.tieredstore.level2.size=2TB
+
+2. 缓存策略
+   # LRU策略
+   alluxio.user.block.size.bytes.default=256MB
+   alluxio.user.block.worker.client.pool.size=256
+
+   # 预取策略
+   alluxio.user.streaming.reader.chunk.size.bytes=32MB
+   alluxio.user.streaming.reader prefetch.enabled=true
+
+3. 网络优化
+   alluxio.worker.network.reader.buffer.size=8MB
+   alluxio.worker.network.writer.buffer.size=8MB
+
+4. 并发配置
+   alluxio.user.block.worker.client.pool.min=128
+   alluxio.user.block.worker.client.pool.max=512</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 缓存层显著提升AI数据访问速度</li>
+                <li>• Alluxio提供分布式缓存和数据编排</li>
+                <li>• 分层缓存优化成本与性能</li>
+                <li>• 数据预取和智能淘汰是关键优化策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="9-3-对象存储.html">← 上一节</a>
+          <a href="9-5-存储分层策略.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

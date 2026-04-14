@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.1 InfiniBand技术原理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>13.1 InfiniBand技术原理</h1>
+          <p class="subtitle">高性能计算网络的核心技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解InfiniBand的基本概念</li>
+            <li>掌握InfiniBand的网络架构</li>
+            <li>了解RDMA技术原理</li>
+            <li>认识InfiniBand在AI训练中的应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络拓扑图" class="card-image">
+          <h3 class="card-title">什么是InfiniBand</h3>
+          <p class="card-text">
+            InfiniBand（IB）是一种高性能计算网络架构，专为低延迟、高吞吐量的
+            集群通信而设计。它支持RDMA（远程直接内存访问）技术，能够实现
+            CPU绕过的零拷贝数据传输，是大规模AI训练集群的首选互联技术。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> InfiniBand架构</h2>
+
+          <h3>核心组件</h3>
+          <div class="code-block"""
+InfiniBand网络组成:
+
+┌─────────────────────────────────────────┐
+│           HCA (Host Channel Adapter)     │
+│     主机通道适配器，类似网卡             │
+│  - 实现RDMA功能                        │
+│  - 支持多个QP (Queue Pair)             │
+│  - 硬件级别的CRC校验                   │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│           Switch (交换机)               │
+│     实现数据包的转发和路由             │
+│  - 支持多级拓扑                       │
+│  - 实现子网管理                       │
+│  - 硬件路由和QoS                     │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│           TCA (Target Channel Adapter)   │
+│     目标通道适配器（可选）             │
+│  - 用于存储设备等                     │
+│  - 类似HCA功能                        │
+└─────────────────────────────────────────┘
+          </div>
+
+          <h3>分层协议栈</h3>
+          <div class="code-block"""
+InfiniBand协议栈:
+
+┌─────────────────────────────────────────┐
+│   应用层 (Application Layer)          │
+│   - MPI, NCCL, GPUDirect               │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   传输层 (Transport Layer)           │
+│   - RC (Reliable Connected)            │
+│   - UC (Unreliable Connected)          │
+│   - UD (Unreliable Datagram)           │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   网络层 (Network Layer)             │
+│   - 分组转发                           │
+│   - 子网管理                           │
+│   - 路由计算                          │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   链路层 (Link Layer)                │
+│   - 帧构建                             │
+│   - 流量控制                           │
+│   - 错误检测和恢复                     │
+└─────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│   物理层 (Physical Layer)             │
+│   - 信号传输                           │
+│   - 编码/解码                          │
+│   - 自动协商                           │
+└─────────────────────────────────────────┘
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> RDMA技术</h2>
+
+          <h3>什么是RDMA</h3>
+          <p><strong>RDMA (Remote Direct Memory Access)</strong>是一种直接远程内存访问技术，
+            允许一个计算机直接访问另一个计算机的内存，无需操作系统干预。</p>
+
+          <div class="code-block"""
+传统TCP通信 vs RDMA:
+
+传统TCP通信:
+Application 1           Application 2
+     ↓                       ↓
+  Buffer 1                Buffer 2
+     ↓                       ↓
+  Kernel 1  ────TCP──→  Kernel 2
+     ↓                       ↓
+  NIC 1                  NIC 2
+
+问题:
+- 多次内存拷贝
+- CPU开销高
+- 延迟高
+
+RDMA通信:
+Application 1           Application 2
+     ↓                       ↓
+  Buffer 1  ────RDMA──→  Buffer 2
+     ↓                       ↓
+  NIC 1                  NIC 2
+
+优势:
+- 零拷贝传输
+- CPU绕过
+- 超低延迟
+- 高吞吐量
+          </div>
+
+          <h3>RDMA操作类型</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>操作类型</th>
+                <th>说明</th>
+                <th>特点</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SEND/RECV</td>
+                <td>发送和接收消息</td>
+                <td>类似TCP，但零拷贝</td>
+                <td>控制消息、小数据传输</td>
+              </tr>
+              <tr>
+                <td>WRITE</td>
+                <td>直接写入远端内存</td>
+                <td>单向，无需接收方</td>
+                <td>大规模数据传输</td>
+              </tr>
+              <tr>
+                <td>READ</td>
+                <td>直接读取远端内存</td>
+                <td>主动拉取数据</td>
+                <td>缓存一致性、数据同步</td>
+              </tr>
+              <tr>
+                <td>ATOMIC</td>
+                <td>原子操作</td>
+                <td>硬件保证原子性</td>
+                <td>锁管理、同步原语</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>QP (Queue Pair)</h3>
+          <div class="code-block"""
+QP (Queue Pair) 是RDMA的基本通信端点:
+
+QP组成:
+- Send Queue (SQ): 发送队列
+- Receive Queue (RQ): 接收队列
+- Queue Pair Number (QPN): QP标识符
+
+QP状态机:
+RESET → INIT → RTR (Ready to Receive) → RTS (Ready to Send) →
+SQD (Send Queue Drain) → SQE (Send Queue Error) → ...
+
+QP类型:
+1. RC (Reliable Connected)
+   - 可靠连接
+   - 有序交付
+   - 流量控制
+   - 最常用
+
+2. UC (Unreliable Connected)
+   - 不可靠连接
+   - 有序交付
+   - 更低延迟
+
+3. UD (Unreliable Datagram)
+   - 不可靠数据报
+   - 无序交付
+   - 最低延迟
+
+典型QP配置:
+- 最大WQE (Work Queue Elements): 4096
+- 最大消息大小: 256MB
+- 传输类型: RC
+- 服务级别 (SL): 0
+- P_Key: 0xFFFF
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> InfiniBand版本演进</h2>
+
+          <h3>版本对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>版本</th>
+                <th>发布年份</th>
+                <th>带宽</th>
+                <th>速率</th>
+                <th>编码</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SDR (Single Data Rate)</td>
+                <td>2002</td>
+                <td>2.5 Gbps</td>
+                <td>2.5 GT/s</td>
+                <td>8b/10b</td>
+                <td>早期HPC</td>
+              </tr>
+              <tr>
+                <td>DDR (Double Data Rate)</td>
+                <td>2005</td>
+                <td>5 Gbps</td>
+                <td>5 GT/s</td>
+                <td>8b/10b</td>
+                <td>中档HPC</td>
+              </tr>
+              <tr>
+                <td>QDR (Quad Data Rate)</td>
+                <td>2007</td>
+                <td>10 Gbps</td>
+                <td>10 GT/s</td>
+                <td>8b/10b</td>
+                <td>高性能HPC</td>
+              </tr>
+              <tr>
+                <td>FDR (Fourteen Data Rate)</td>
+                <td>2011</td>
+                <td>14.0625 Gbps</td>
+                <td>14.0625 GT/s</td>
+                <td>64b/66b</td>
+                <td>现代HPC</td>
+              </tr>
+              <tr>
+                <td>EDR (Enhanced Data Rate)</td>
+                <td>2014</td>
+                <td>25.78 Gbps</td>
+                <td>25.78 GT/s</td>
+                <td>64b/66b</td>
+                <td>当前主流</td>
+              </tr>
+              <tr>
+                <td>HDR (High Data Rate)</td>
+                <td>2017</td>
+                <td>50 Gbps</td>
+                <td>53.125 GT/s</td>
+                <td>64b/66b</td>
+                <td>高端AI集群</td>
+              </tr>
+              <tr>
+                <td>NDR (Next Data Rate)</td>
+                <td>2021</td>
+                <td>100 Gbps</td>
+                <td>106.25 GT/s</td>
+                <td>64b/66b</td>
+                <td>未来AI集群</td>
+              </tr>
+              <tr>
+                <td>XDR (X-Data Rate)</td>
+                <td>规划中</td>
+                <td>400 Gbps</td>
+                <td>425 GT/s</td>
+                <td>64b/66b</td>
+                <td>下一代</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>线缆连接</h3>
+          <div class="code-block"""
+InfiniBand连接类型:
+
+1. 单通道
+   - 1 lane
+   - SDR/DDR/QDR常用
+
+2. 四通道 (QDR/EDR)
+   - 4 lanes
+   - 4倍带宽
+
+3. 八通道 (HDR)
+   - 8 lanes
+   - 8倍带宽
+
+实际带宽计算:
+- EDR (25.78 Gbps) × 4 lanes = 103.12 Gbps ≈ 100 GbE
+- HDR (50 Gbps) × 8 lanes = 400 Gbps
+
+常用连接器:
+- QSFP (Quad Small Form-factor Pluggable)
+- QSFP28
+- QSFP56
+- OSFP (Octal Small Form-factor Pluggable)
+
+线缆类型:
+- DAC (Direct Attach Cable): 铜缆，短距离（<7米）
+- AOC (Active Optical Cable): 光纤，中距离（<100米）
+- 光模块+光纤: 长距离（<10公里）
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> InfiniBand配置与管理</h2>
+
+          <h3>Subnet Manager (子网管理器)</h3>
+          <div class="code-block"""
+Subnet Manager (SM) 职责:
+
+1. 子网管理
+   - 分配LID (Local Identifier)
+   - 管理P_Key (Partition Key)
+   - 配置SL (Service Level)
+
+2. 路由计算
+   - 构建路由表
+   - 实现多路径
+   - 负载均衡
+
+3. 网络监控
+   - 监控链路状态
+   - 检测故障
+   - 性能统计
+
+SM部署:
+- 单SM: 简单但无冗余
+- 双SM: 热备，高可用
+- 多SM: 复杂配置，最高可用
+
+查看SM状态:
+ibstat
+iblinkinfo
+ibdiagnet
+          </div>
+
+          <h3>性能调优</h3>
+          <div class="code-block">
+#!/bin/bash
+# InfiniBand性能优化脚本
+
+# 1. 设置MTU（最大传输单元）
+echo "Setting MTU to 65520..."
+for dev in /sys/class/infiniband/*/device/net/*/mtu; do
+    echo 65520 > $dev
+done
+
+# 2. 调整TCP参数
+echo "Tuning TCP for IB..."
+sysctl -w net.ipv4.tcp_rmem="4096 65536 16777216"
+sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216"
+sysctl -w net.core.rmem_max=16777216
+sysctl -w net.core.wmem_max=16777216
+
+# 3. 禁用CPU频率调节
+echo "Setting CPU governor to performance..."
+for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    echo performance > $cpu
+done
+
+# 4. 设置NUMA亲和性
+echo "Setting NUMA affinity..."
+# 需要根据具体硬件配置
+
+# 5. 调整HCA参数
+echo "Tuning HCA parameters..."
+# 使用mlxconfig工具修改HCA配置
+
+# 6. 验证配置
+echo "Verifying configuration..."
+ibstat
+iblinkinfo
+iperf3 -c <remote_ip> -t 60
+          </div>
+
+          <h3>故障排查</h3>
+          <div class="code-block"""
+常用诊断命令:
+
+1. 基本状态检查
+   ibstat              # 查看HCA状态
+   ibhosts             # 查看主机列表
+   ibswitches          # 查看交换机列表
+   iblinkinfo          # 查看链路信息
+
+2. 性能测试
+   ib_write_bw         # 写带宽测试
+   ib_read_bw          # 读带宽测试
+   ib_send_bw          # 发送带宽测试
+   ib_read_lat         # 读延迟测试
+   ib_write_lat        # 写延迟测试
+
+3. 网络诊断
+   ibdiagnet           # 全面诊断
+   ibtracerroute       # 路由追踪
+   ibqueryerrors       # 错误查询
+
+4. 性能监控
+   ibqueryerrors.pl    # 错误监控
+   mlnx_perftune       # 性能调优
+   opasetup.sh         # OFED配置
+
+常见问题:
+- 链路down: 检查线缆、端口配置
+- 性能低: 检查MTU、NUMA、SM配置
+- 丢包: 检查流控、拥塞控制
+- 延迟高: 检查路由、负载均衡
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> InfiniBand在AI训练中的应用</h2>
+
+          <h3>NCCL over IB</h3>
+          <div class="code-block"""
+NCCL (NVIDIA Collective Communications Library) 配置:
+
+环境变量:
+# 基础配置
+export NCCL_IB_DISABLE=0              # 启用IB
+export NCCL_SOCKET_IFNAME=ib0          # 使用IB接口
+export NCCL_DEBUG=INFO                  # 调试级别
+
+# 性能调优
+export NCCL_IB_GID_INDEX=3             # RoCE v2
+export NCCL_IB_TIMEOUT=22              # 超时设置
+export NCCL_IB_RETRY_CNT=7             # 重试次数
+
+# 算法选择
+export NCCL_ALGO=Tree                  # 集合通信算法
+export NCCL_PROTO=Simple                # 通信协议
+
+# 内存优化
+export NCCL_IB_HCA=mlx5_0:1           # 指定HCA
+export NCCL_IB_TIMEOUT=18               # 超时时间
+
+# GPUDirect
+export NCCL_NET_GDR_LEVEL=5            # GPUDirect级别
+export NCCL_NET_GDR_READ=1             # 启用GPUDirect RDMA
+
+验证:
+# 运行NCCL测试
+mpirun -np 8 \
+    -H node1:4,node2:4 \
+    -bind-to none \
+    -map-by slot \
+    -x NCCL_DEBUG=INFO \
+    -x LD_LIBRARY_PATH \
+    ./all_reduce_perf -b 8M -e 128M -f 2 -g 1
+          </div>
+
+          <h3>集合通信优化</h3>
+          <div class="code-block"""
+集合通信优化策略:
+
+1. AllReduce优化
+   - 使用Tree或Ring算法
+   - 优化数据分片
+   - 启用流水线
+
+2. AllGather优化
+   - 使用Ring算法
+   - 优化消息大小
+   - 利用多路径
+
+3. AlltoAll优化
+   - 使用Direct算法
+   - 优化通信拓扑
+   - 负载均衡
+
+4. Broadcast优化
+   - 使用Tree算法
+   - 优化根节点选择
+   - 利用硬件加速
+
+最佳实践:
+- 保持批次大小稳定
+- 减少小消息传输
+- 合理使用梯度累积
+- 启用混合精度通信
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">部署注意事项</div>
+            <p>1）确保子网管理器（SM）正常运行；2）正确配置MTU大小；3）监控网络性能指标；4）定期检查链路状态；5）使用诊断工具主动发现问题。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据中心网络">
+          <div class="caption">图：InfiniBand是高性能AI集群的关键互联技术</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• InfiniBand是专为HPC设计的高性能网络</li>
+                <li>• RDMA实现零拷贝、低延迟的远程内存访问</li>
+                <li>• 不同版本的InfiniBand提供不同的带宽能力</li>
+                <li>• NCCL over IB是AI训练的标准配置</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter12/12-5-混合检索架构.html">← 上一节</a>
+          <a href="13-2-RoCE协议详解.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

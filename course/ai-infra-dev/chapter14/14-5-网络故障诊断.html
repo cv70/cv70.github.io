@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.5 网络故障诊断 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>14.5 网络故障诊断</h1>
+          <p class="subtitle">AI集群网络问题排查与解决</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解常见网络故障类型</li>
+            <li>掌握故障诊断方法</li>
+            <li>学习故障排查工具</li>
+            <li>了解故障预防措施</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="故障诊断" class="card-image">
+          <h3 class="card-title">网络故障诊断的重要性</h3>
+          <p class="card-text">
+            AI集群规模庞大，网络故障时有发生。快速准确地诊断网络问题，
+            对于保障训练任务的连续性至关重要。本节将介绍常见网络故障的
+            诊断方法和排查流程。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 常见故障类型</h2>
+
+          <h3>物理层故障</h3>
+
+          <div class="code-block"""
+物理层故障:
+
+1. 线缆故障
+   症状:
+   - 链路down
+   - 大量CRC错误
+   - 间歇性断连
+
+   诊断:
+   ethtool <interface>
+   # 检查link_detected
+
+   解决:
+   - 更换线缆
+   - 检查连接器
+   - 重新插拔
+
+2. 光模块故障
+   症状:
+   - 光功率异常
+   - 误码率高
+   - 链路不稳定
+
+   诊断:
+   ethtool -m <interface>
+   # 查看光模块信息
+
+   解决:
+   - 更换光模块
+   - 检查光纤
+   - 清洁接口
+
+3. 端口故障
+   症状:
+   - 单端口down
+   - 无法获取IP
+   - 驱动报错
+
+   诊断:
+   dmesg | grep <interface>
+   # 查看驱动日志
+
+   解决:
+   - 更换端口
+   - 重置设备
+   - 更新驱动
+          </div>
+
+          <h3>链路层故障</h3>
+
+          <div class="code-block"""
+链路层故障:
+
+1. MTU不匹配
+   症状:
+   - 大包传输失败
+   - 间歇性超时
+   - 性能不稳定
+
+   诊断:
+   ip link show <interface>
+   # 检查MTU设置
+
+   解决:
+   ifconfig <interface> mtu 9000
+   # 统一配置MTU
+
+2. MAC地址冲突
+   症状:
+   - 网络混乱
+   - 流量异常
+   - 连接失败
+
+   诊断:
+   arp -an | grep <mac>
+   # 查找冲突MAC
+
+   解决:
+   - 更改MAC地址
+   - 检查DHCP配置
+   - 隔离冲突设备
+
+3. VLAN配置错误
+   症状:
+   - 无法通信
+   - 广播风暴
+   - 流量丢失
+
+   诊断:
+   cat /proc/net/vlan/config
+
+   解决:
+   - 修正VLAN配置
+   - 检查Trunk/Access模式
+   - 验证VLAN ID
+          </div>
+
+          <h3>网络层故障</h3>
+
+          <div class="code-block"""
+网络层故障:
+
+1. IP地址冲突
+   症状:
+   - IP不可达
+   - ARP冲突告警
+   - 网络不稳定
+
+   诊断:
+   arping -D -I <interface> <ip>
+   # 检测IP冲突
+
+   解决:
+   - 更改IP地址
+   - 检查DHCP配置
+   - 使用静态分配
+
+2. 路由错误
+   症状:
+   - 部分主机不可达
+   - 路径非最优
+   - 流量绕行
+
+   诊断:
+   ip route get <destination>
+   # 查看路由选择
+
+   解决:
+   - 修正路由表
+   - 优化路由策略
+   - 检查OSPF配置
+
+3. MTU路径问题
+   症状:
+   - 小包正常大包失败
+   - Ping -f 正常
+   - MTU探测失败
+
+   诊断:
+   tracepath <destination>
+
+   解决:
+   - 统一MTU配置
+   - 调整PMTU发现
+   - 避免MTU降级
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> 诊断工具</h2>
+
+          <h3>基础工具</h3>
+
+          <div class="code-block"""
+基础诊断工具:
+
+1. ping
+   # 连通性测试
+   ping -c 100 -i 0.001 <target>
+
+2. traceroute
+   # 路由追踪
+   traceroute -n <target>
+
+3. mtr
+   # 持续监控
+   mtr -n -r -c 100 <target>
+
+4. tcpdump
+   # 抓包分析
+   tcpdump -i <interface> -nn -v
+
+5. netstat
+   # 连接状态
+   netstat -an | grep <port>
+
+6. ss
+   # socket统计
+   ss -s
+   ss -t -a
+          </div>
+
+          <h3>IB/RoCE专用工具</h3>
+
+          <div class="code-block"""
+IB/RoCE诊断工具:
+
+1. ibstat
+   # 查看HCA状态
+   ibstat
+
+2. iblinkinfo
+   # 查看链路信息
+   iblinkinfo
+
+3. ibqueryerrors
+   # 查询IB错误
+   ibqueryerrors.pl
+
+4. ibdiagnet
+   # 全面诊断
+   ibdiagnet --load
+
+5. rping
+   # RDMA ping测试
+   rping -s <server> -v
+   rping -c <server> -v
+
+6. ib_read_lat
+   # 读取延迟测试
+   ib_read_lat -d <device>
+
+7. ib_write_bw
+   # 写入带宽测试
+   ib_write_bw -d <device>
+          </div>
+
+          <h3>性能分析工具</h3>
+
+          <div class="code-block"""
+性能分析工具:
+
+1. perf
+   # 性能分析
+   perf top
+   perf record -g
+
+2. sar
+   # 系统活动报告
+   sar -n DEV 1 100
+
+3. nload
+   # 实时流量监控
+   nload <interface>
+
+4. iftop
+   # 带宽使用
+   iftop -i <interface>
+
+5. dstat
+   # 综合统计
+   dstat --net -cdngy
+
+6. htop
+   # CPU/内存监控
+   htop
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 诊断流程</h2>
+
+          <h3>系统化排查</h3>
+
+          <div class="code-block"""
+网络故障诊断流程:
+
+1. 信息收集
+   - 确认故障现象
+   - 收集相关日志
+   - 记录影响范围
+
+2. 层次化诊断
+   物理层:
+   - 检查线缆连接
+   - 检查端口状态
+   - 检查指示灯
+
+   链路层:
+   - 检查MAC地址
+   - 检查VLAN配置
+   - 检查链路状态
+
+   网络层:
+   - 检查IP配置
+   - 检查路由表
+   - 检查ARP表
+
+   传输层:
+   - 检查端口监听
+   - 检查防火墙
+   - 检查连接状态
+
+3. 逐层验证
+   - 从下到上验证
+   - 隔离故障点
+   - 定位根本原因
+
+4. 解决验证
+   - 实施修复
+   - 验证效果
+   - 监控观察
+          </div>
+
+          <h3>故障树分析</h3>
+
+          <div class="code-block"""
+故障树分析:
+
+无法通信
+├─ 物理层问题
+│  ├─ 线缆损坏
+│  ├─ 端口down
+│  └─ 光模块故障
+│
+├─ 链路层问题
+│  ├─ MTU不匹配
+│  ├─ MAC冲突
+│  └─ VLAN错误
+│
+├─ 网络层问题
+│  ├─ IP冲突
+│  ├─ 路由错误
+│  └─ 防火墙阻断
+│
+└─ 应用层问题
+   ├─ 服务未启动
+   ├─ 端口错误
+   └─ 配置错误
+
+使用故障树可以系统地排查问题
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 常见故障案例</h2>
+
+          <h3>案例1: 集合通信超时</h3>
+
+          <div class="code-block"""
+问题: All-Reduce超时失败
+
+症状:
+- NCCL通信超时
+- 训练任务中断
+- 部分节点正常
+
+诊断:
+1. 检查网络连通性
+   ping -c 100 <failed_node>
+   # 正常
+
+2. 检查IB状态
+   iblinkinfo
+   # 发现链路down
+
+3. 检查端口状态
+   ethtool <interface>
+   # 发现大量CRC错误
+
+根本原因:
+- 光模块性能下降
+- 导致高误码率
+- RDMA传输超时
+
+解决方案:
+1. 更换光模块
+2. 重新建立链路
+3. 验证修复效果
+
+预防措施:
+- 定期检查链路状态
+- 监控误码率
+- 备用光模块
+          </div>
+
+          <h3>案例2: 性能突然下降</h3>
+
+          <div class="code-block"""
+问题: 网络性能突然下降50%
+
+症状:
+- 带宽利用率低
+- 延迟增加
+- 吞吐下降
+
+诊断:
+1. 检查交换机状态
+   # 发现端口errors增加
+
+2. 检查网络拓扑
+   traceroute
+   # 发现路由变化
+
+3. 检查流量分布
+   iftop
+   # 发现负载不均衡
+
+根本原因:
+- 交换机链路聚合失败
+- 导致ECMP失效
+- 流量集中到单链路
+
+解决方案:
+1. 重新配置链路聚合
+2. 恢复ECMP配置
+3. 验证负载均衡
+
+预防措施:
+- 监控ECMP状态
+- 配置链路聚合告警
+- 定期验证路由
+          </div>
+
+          <h3>案例3: 间歇性网络中断</h3>
+
+          <div class="code-block"""
+问题: 网络间歇性中断，几秒后恢复
+
+症状:
+- ping丢包
+- 链路flapping
+- 告警频繁
+
+诊断:
+1. 检查交换机日志
+   # 发现端口反复down/up
+
+2. 检查线缆
+   # 发现线缆松动
+
+3. 检查光模块
+   # 发现光功率偏低
+
+根本原因:
+- 线缆连接不紧
+- 导致接触不良
+- 链路不稳定
+
+解决方案:
+1. 重新插拔线缆
+2. 清洁光纤接口
+3. 固定线缆位置
+
+预防措施:
+- 检查线缆固定
+- 定期维护检查
+- 配置端口稳定性告警
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 故障预防</h2>
+
+          <h3>预防措施</h3>
+
+          <div class="code-block"""
+故障预防措施:
+
+1. 监控告警
+   - 链路状态监控
+   - 性能指标监控
+   - 错误率监控
+   - 及时发现异常
+
+2. 定期维护
+   - 线缆检查
+   - 端口清洁
+   - 设备更新
+   - 配置审计
+
+3. 冗余设计
+   - 链路冗余
+   - 设备冗余
+   - 路由冗余
+   - 避免单点故障
+
+4. 测试验证
+   - 定期测试
+   - 压力测试
+   - 故障演练
+   - 验证高可用
+
+5. 文档记录
+   - 配置文档
+   - 变更记录
+   - 故障案例
+   - 经验总结
+          </div>
+
+          <h3>自动化诊断</h3>
+
+          <div class="code-block#!/bin/bash
+# 自动化网络诊断脚本
+
+check_network_health() {
+    echo "=== Network Health Check ==="
+    date
+
+    # 1. 检查接口状态
+    echo -e "\n=== Interface Status ==="
+    ip link show | grep -E "^[0-9]+:"
+
+    # 2. 检查IB状态
+    echo -e "\n=== InfiniBand Status ==="
+    if command -v ibstat &> /dev/null; then
+        ibstat
+    fi
+
+    # 3. 检查连通性
+    echo -e "\n=== Connectivity Test ==="
+    for host in $TARGET_HOSTS; do
+        ping -c 5 -W 2 $host > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "✓ $host is reachable"
+        else
+            echo "✗ $host is NOT reachable"
+        fi
+    done
+
+    # 4. 检查错误率
+    echo -e "\n=== Error Rate ==="
+    for interface in $(ip -o link show | awk -F': ' '{print $2}'); do
+        errors=$(ethtool -S $interface 2>/dev/null | grep "rx_" | awk '{sum+=$2} END {print sum}')
+        echo "$interface: $errors errors"
+    done
+
+    # 5. 检查交换机状态
+    echo -e "\n=== Switch Status ==="
+    # 需要交换机API支持
+
+    # 6. 生成报告
+    echo -e "\n=== Summary ==="
+    echo "Health check completed"
+    echo "Please review the results above"
+}
+
+# 执行检查
+check_network_health
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">诊断注意事项</div>
+            <p>1）记录故障现象和日志；2）遵循系统化排查流程；3）避免同时修改多个配置；4）验证修复效果；5）总结经验教训。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络诊断">
+          <div class="caption">图：系统化的故障诊断确保快速解决问题</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 网络故障类型多样，需要系统化诊断</li>
+                <li>• 正确的工具是快速诊断的关键</li>
+                <li>• 遵循层次化排查流程</li>
+                <li>• 预防措施比故障处理更重要</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="14-4-网络延迟优化.html">← 上一节</a>
+          <a href="../chapter15/15-1-NCCL通信库.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

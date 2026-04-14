@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.5 多租户与资源隔离 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>7.5 多租户与资源隔离</h1>
+          <p class="subtitle">构建安全的资源共享平台</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解多租户架构的设计原则</li>
+            <li>掌握资源隔离的实现方法</li>
+            <li>学会配额管理和限制</li>
+            <li>了解网络和存储的隔离策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800" alt="多租户架构" class="card-image">
+          <h3 class="card-title">多租户需求</h3>
+          <p class="card-text">
+            <strong>多租户AI平台</strong>需要为不同团队、项目或用户提供隔离的计算资源，
+            确保资源公平分配、防止资源争抢、保障数据安全和性能稳定。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 多租户架构</h2>
+          <div class="card">
+            <h3 class="card-title">多租户模型</h3>
+            <div class="code-block">
+<pre><strong>多租户架构层次：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                        应用层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • 数据科学团队                                             │
+│  • 算法工程师                                               │
+│  • 研究人员                                                 │
+│  • 外部合作伙伴                                             │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                        租户层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  Team A (研发组): 256 GPU                                    │
+│  Team B (训练组): 512 GPU                                    │
+│  Team C (推理组): 128 GPU                                    │
+│  Team D (外部): 64 GPU                                       │
+│                                                             │
+│  每个租户:                                                   │
+│  • 独立资源配额                                             │
+│  • 独立命名空间                                             │
+│  • 独立网络空间                                             │
+│  • 独立存储空间                                             │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                        资源层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  GPU: 1000张                                                 │
+│  CPU: 64000核                                                │
+│  内存: 200TB                                                 │
+│  存储: 5PB                                                   │
+│  网络: 100Gbps                                               │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Kubernetes资源隔离</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">命名空间隔离</h3>
+              <div class="code-block">
+<pre><strong>Namespace配置：</strong>
+
+# 创建租户命名空间
+kubectl create namespace team-a
+kubectl create namespace team-b
+kubectl create namespace team-c
+
+# 设置资源配额
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-a-quota
+  namespace: team-a
+spec:
+  hard:
+    requests.cpu: "4000"
+    requests.memory: 16Gi
+    limits.cpu: "8000"
+    limits.memory: 32Gi
+    nvidia.com/gpu: "256"
+    persistentvolumeclaims: "50"</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">LimitRange限制</h3>
+              <div class="code-block">
+<pre><strong>资源限制范围：</strong>
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: team-a-limits
+  namespace: team-a
+spec:
+  limits:
+  - default:  # 默认limit
+      cpu: "8"
+      memory: 16Gi
+      nvidia.com/gpu: "1"
+    defaultRequest:  # 默认request
+      cpu: "4"
+      memory: 8Gi
+      nvidia.com/gpu: "1"
+    type: Container
+  - max:
+      cpu: "32"
+      memory: 64Gi
+      nvidia.com/gpu: "8"
+    type: Container</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> Slurm多租户</h2>
+          <div class="card">
+            <h3 class="card-title">账户与配额管理</h3>
+            <div class="code-block">
+<pre><strong>Slurm账户配置：</strong>
+
+# 创建账户
+sacctmgr add account team-a Description="研发团队"
+sacctmgr add account team-b Description="训练团队"
+sacctmgr add account team-c Description="推理团队"
+
+# 设置用户与账户关联
+sacctmgr add user alice cluster=ai-cluster account=team-a DefaultAccount=team-a
+sacctmgr add user bob cluster=ai-cluster account=team-b DefaultAccount=team-b
+
+# 设置配额
+sacctmgr modify account team-a \
+    set GrpJobs=100 GrpNodes=50 GrpCPUS=8000 GrpGPUS=256
+
+sacctmgr modify account team-b \
+    set GrpJobs=200 GrpNodes=100 GrpCPUS=16000 GrpGPUS=512
+
+# 设置QOS
+sacctmgr add qos high-priority Priority=1000 MaxJobs=50
+sacctmgr add qos normal Priority=100 MaxJobs=200
+sacctmgr add qos low-priority Priority=10 MaxJobs=500
+
+# 账户QOS关联
+sacctmgr modify account team-a set qos=normal,high-priority</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">资源隔离策略</div>
+            <p><strong>硬隔离：</strong>通过配额和限制，严格隔离各租户资源</p>
+            <p><strong>软隔离：</strong>通过优先级和调度策略，实现相对公平</p>
+            <p><strong>弹性隔离：</strong>允许资源借用，但需要归还</p>
+            <p><strong>混合模式：</strong>结合硬隔离和弹性机制</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 网络隔离</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">NetworkPolicy隔离</h3>
+              <div class="code-block">
+<pre><strong>网络策略配置：</strong>
+
+# 默认拒绝所有流量
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: team-a
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+# 允许命名空间内通信
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-namespace
+  namespace: team-a
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">多网络平面</h3>
+              <div class="code-block">
+<pre><strong>多网络配置：</strong>
+
+# CNI配置
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: team-a-network
+  namespace: team-a
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+    "type": "macvlan",
+    "master": "eth1",
+    "mode": "bridge",
+    "ipam": {
+      "type": "host-local",
+      "subnet": "192.168.100.0/24",
+      "rangeStart": "192.168.100.10",
+      "rangeEnd": "192.168.100.250"
+    }
+  }'
+
+# Pod使用多网络
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-net-pod
+  annotations:
+    k8s.v1.cni.cncf.io/networks: team-a-network</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 存储隔离</h2>
+          <div class="card">
+            <h3 class="card-title">存储配额与隔离</h3>
+            <div class="code-block">
+<pre><strong>存储隔离策略：</strong>
+
+# PV配额
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: team-a-pvc
+  namespace: team-a
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: team-a-storage
+
+# StorageClass隔离
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: team-a-storage
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+  kmsKeyId: arn:aws:kms:us-east-1:123456789012:key/...
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+# NFS共享存储
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: team-a-nfs-pv
+spec:
+  capacity:
+    storage: 2Ti
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: 10.0.10.100
+    path: /exports/team-a</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔑</span> 认证与授权</h2>
+          <div class="card">
+            <h3 class="card-title">RBAC配置</h3>
+            <div class="code-block">
+<pre><strong>基于角色的访问控制：</strong>
+
+# 创建用户ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: team-a-user
+  namespace: team-a
+
+# 创建角色
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: team-a-developer
+  namespace: team-a
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "delete"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
+- apiGroups: ["nvidia.com"]
+  resources: ["migdevices"]
+  verbs: ["get", "list"]
+
+# 角色绑定
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: team-a-developer-binding
+  namespace: team-a
+subjects:
+- kind: ServiceAccount
+  name: team-a-user
+  namespace: team-a
+roleRef:
+  kind: Role
+  name: team-a-developer
+  apiGroup: rbac.authorization.k8s.io</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 资源监控与计费</h2>
+          <div class="card">
+            <h3 class="card-title">监控指标</h3>
+            <div class="code-block">
+<pre><strong>租户资源监控：</strong>
+
+# Prometheus规则
+groups:
+- name: tenant_resources
+  rules:
+  # 租户GPU使用量
+  - record: tenant_gpu_usage
+    expr: sum(kube_pod_container_resource_requests{resource="nvidia.com/gpu", namespace=~"team-.*"}) by (namespace)
+
+  # 租户CPU使用率
+  - record: tenant_cpu_usage
+    expr: sum(rate(container_cpu_usage_seconds_total{namespace=~"team-.*"}[5m])) by (namespace)
+
+  # 租户内存使用量
+  - record: tenant_memory_usage
+    expr: sum(container_memory_working_set_bytes{namespace=~"team-.*"}) by (namespace)
+
+  # 租户作业数量
+  - record: tenant_job_count
+    expr: count(kube_job_info{namespace=~"team-.*"}) by (namespace)
+
+# 告警规则
+- alert: TenantOverQuota
+  expr: tenant_gpu_usage{namespace="team-a"} > 256
+  for: 5m
+  annotations:
+    summary: "租户{{ $labels.namespace }}超过GPU配额"</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">多租户注意事项</div>
+            <p><strong>安全隔离：</strong>确保租户间数据和计算完全隔离</p>
+            <p><strong>公平调度：</strong>防止某个租户独占资源</p>
+            <p><strong>弹性配额：</strong>允许临时借用，提高资源利用率</p>
+            <p><strong>审计日志：</strong>记录所有资源使用和操作</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 多租户架构需要从应用层、租户层和资源层进行设计</li>
+                <li>• Kubernetes通过命名空间、ResourceQuota和LimitRange实现资源隔离</li>
+                <li>• Slurm通过账户、配额和QOS实现多租户管理</li>
+                <li>• 网络隔离通过NetworkPolicy和多网络平面实现</li>
+                <li>• 存储隔离通过独立的PV/PVC和StorageClass实现</li>
+                <li>• RBAC机制实现细粒度的权限控制</li>
+                <li>• 完善的监控和计费系统保障多租户运营</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="7-4-自定义调度器开发.html">← 上一节</a>
+          <a href="7-6-优先级与抢占机制.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.3 主流向量数据库 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>12.3 主流向量数据库</h1>
+          <p class="subtitle">Milvus、Pinecone、Weaviate等向量数据库详解</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>了解主流向量数据库的特点</li>
+            <li>掌握Milvus的部署与使用</li>
+            <li>学习Pinecone的云端应用</li>
+            <li>掌握Weaviate的语义搜索能力</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据库生态" class="card-image">
+          <h3 class="card-title">向量数据库生态</h3>
+          <p class="card-text">
+            随着AI应用的普及，向量数据库生态日益丰富。从开源的Milvus到托管的Pinecone，
+            从云原生的Weaviate到轻量级的Qdrant，不同的向量数据库各有特色，
+            选择合适的工具对于构建高效的AI应用至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 向量数据库对比</h2>
+
+          <h3>主流产品对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>数据库</th>
+                <th>类型</th>
+                <th>索引算法</th>
+                <th>扩展性</th>
+                <th>元数据过滤</th>
+                <th>优势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Milvus</td>
+                <td>开源</td>
+                <td>HNSW/IVF/PQ</td>
+                <td>分布式</td>
+                <td>强</td>
+                <td>性能高、功能全</td>
+                <td>企业级大规模</td>
+              </tr>
+              <tr>
+                <td>Pinecone</td>
+                <td>托管</td>
+                <td>HNSW/PQ</td>
+                <td>云端扩展</td>
+                <td>中</td>
+                <td>简单易用</td>
+                <td>快速原型</td>
+              </tr>
+              <tr>
+                <td>Weaviate</td>
+                <td>开源/托管</td>
+                <td>HNSW</td>
+                <td>单机/集群</td>
+                <td>强</td>
+                <td>语义搜索、GraphQL</td>
+                <td>RAG、知识图谱</td>
+              </tr>
+              <tr>
+                <td>Qdrant</td>
+                <td>开源/托管</td>
+                <td>HNSW</td>
+                <td>分布式</td>
+                <td>强</td>
+                <td>Rust高性能</td>
+                <td>实时应用</td>
+              </tr>
+              <tr>
+                <td>Chroma</td>
+                <td>开源</td>
+                <td>HNSW</td>
+                <td>单机</td>
+                <td>中</td>
+                <td>简单易用</td>
+                <td>原型开发</td>
+              </tr>
+              <tr>
+                <td>Pgvector</td>
+                <td>扩展</td>
+                <td>IVF/HNSW</td>
+                <td>PostgreSQL</td>
+                <td>强</td>
+                <td>集成PostgreSQL</td>
+                <td>已有PostgreSQL</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐬</span> Milvus详解</h2>
+
+          <h3>架构特点</h3>
+          <div class="code-block"""
+Milvus架构:
+
+┌─────────────────────────────────────┐
+│          SDK (Python/Go/Java)       │
+└─────────────┬───────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│          Proxy Layer               │
+│  连接管理、负载均衡、查询路由       │
+└─────────────┬───────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│         Query Coordination         │
+│  查询调度、结果合并、元数据管理     │
+└─────────────┬───────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│          Data Nodes               │
+│  数据加载、向量检索、缓存管理       │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│          Storage                  │
+│  MinIO (S3) | Kafka | Pulsar      │
+└─────────────────────────────────────┘
+
+核心特性:
+- 存算分离架构
+- 支持多种索引类型
+- 强大的元数据过滤
+- 分布式水平扩展
+- 多租户支持
+          </div>
+
+          <h3>部署Milvus</h3>
+          <div class="code-block">
+# 使用Docker Compose部署Milvus
+
+# docker-compose.yml
+version: '3.5'
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  standalone:
+    image: milvusdb/milvus:v2.3.0
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - /var/lib/milvus:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - "etcd"
+      - "minio"
+
+# 启动
+docker-compose up -d
+
+# 检查状态
+docker-compose ps
+          </div>
+
+          <h3>使用Milvus</h3>
+          <div class="code-block">
+from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType
+import numpy as np
+
+# 连接Milvus
+connections.connect(host='localhost', port='19530')
+
+# 定义Collection Schema
+fields = [
+    FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=768),
+    FieldSchema(name="category", dtype=DataType.VARCHAR, max_length=100),
+    FieldSchema(name="timestamp", dtype=DataType.INT64)
+]
+
+schema = CollectionSchema(
+    fields=fields,
+    description="Document embeddings"
+)
+
+# 创建Collection
+collection = Collection(name="documents", schema=schema)
+
+# 插入数据
+data = [
+    np.random.random((1000, 768)).astype('float32'),  # embeddings
+    ["category_" + str(i % 10) for i in range(1000)],  # categories
+    [int(time.time()) for _ in range(1000)]  # timestamps
+]
+
+collection.insert(data)
+collection.flush()
+
+# 创建索引
+index_params = {
+    "metric_type": "IP",
+    "index_type": "HNSW",
+    "params": {
+        "M": 16,
+        "efConstruction": 200
+    }
+}
+
+collection.create_index(field_name="embedding", index_params=index_params)
+
+# 加载Collection到内存
+collection.load()
+
+# 搜索
+search_params = {
+    "metric_type": "IP",
+    "params": {"ef": 64}
+}
+
+query_vector = np.random.random((1, 768)).astype('float32')
+results = collection.search(
+    data=query_vector,
+    anns_field="embedding",
+    param=search_params,
+    limit=10,
+    expr="category == 'category_1'",  # 元数据过滤
+    output_fields=["category", "timestamp"]
+)
+
+# 处理结果
+for result in results[0]:
+    print(f"ID: {result.id}, Distance: {result.distance}")
+    print(f"Category: {result.entity.get('category')}")
+          </div>
+
+          <h3>Milvus高级特性</h3>
+          <div class="code-block">
+# 1. 分区
+collection.create_partition(name="partition_a")
+
+# 向特定分区插入数据
+partition = Partition(collection, name="partition_a")
+partition.insert(data)
+
+# 只在特定分区搜索
+results = collection.search(
+    data=query_vector,
+    anns_field="embedding",
+    param=search_params,
+    limit=10,
+    expr="category == 'category_1'",
+    partition_names=["partition_a"]
+)
+
+# 2. 删除向量
+collection.delete(expr="id in [1, 2, 3]")
+
+# 3. 导入/导出数据
+from pymilvus import utility
+
+# 导出为JSON
+utility.export_data('documents', 'export_data.json')
+
+# 从JSON导入
+utility.import_data('documents', 'import_data.json')
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌲</span> Pinecone详解</h2>
+
+          <h3>产品特点</h3>
+          <div class="card">
+            <h4 class="card-title">为什么选择Pinecone</h4>
+            <div class="grid grid-2">
+              <div class="card">
+                <h5 class="card-title">完全托管</h5>
+                <ul class="feature-list">
+                  <li>无需管理基础设施</li>
+                  <li>自动扩展和备份</li>
+                  <li>99.99% SLA</li>
+                </ul>
+              </div>
+              <div class="card">
+                <h5 class="card-title">高性能</h5>
+                <ul class="feature-list">
+                  <li>毫秒级查询延迟</li>
+                  <li>高吞吐量</li>
+                  <li>自动优化</li>
+                </ul>
+              </div>
+              <div class="card">
+                <h5 class="card-title">简单易用</h5>
+                <ul class="feature-list">
+                  <li>简单的API</li>
+                  <li>快速集成</li>
+                  <li>丰富的SDK</li>
+                </ul>
+              </div>
+              <div class="card">
+                <h5 class="card-title">企业功能</h5>
+                <ul class="feature-list">
+                  <li>元数据过滤</li>
+                  <li>混合搜索</li>
+                  <li>命名空间</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <h3>使用Pinecone</h3>
+          <div class="code-block">
+import pinecone
+import numpy as np
+
+# 初始化Pinecone
+pinecone.init(
+    api_key="your-api-key",
+    environment="us-east-1-aws"
+)
+
+# 创建Index
+index_name = "document-search"
+
+# 如果不存在则创建
+if index_name not in pinecone.list_indexes():
+    pinecone.create_index(
+        name=index_name,
+        dimension=768,
+        metric="cosine",
+        pods=1,
+        pod_type="p1.x1"
+    )
+
+# 连接到Index
+index = pinecone.Index(index_name)
+
+# 插入向量
+vectors = [
+    (str(i), np.random.random(768).tolist(), {
+        "category": f"cat_{i % 5}",
+        "timestamp": int(time.time())
+    })
+    for i in range(1000)
+]
+
+index.upsert(vectors=vectors)
+
+# 搜索
+query_vector = np.random.random(768).tolist()
+
+results = index.query(
+    vector=query_vector,
+    top_k=10,
+    filter={"category": {"$eq": "cat_1"}},  # 元数据过滤
+    include_metadata=True
+)
+
+# 处理结果
+for match in results['matches']:
+    print(f"ID: {match['id']}, Score: {match['score']}")
+    print(f"Metadata: {match['metadata']}")
+
+# 删除向量
+index.delete(ids=["1", "2", "3"])
+
+# 批量操作
+index.delete(filter={"category": {"$eq": "cat_1"}})
+          </div>
+
+          <h3>Pinecone高级功能</h3>
+          <div class="code-block"""
+1. 命名空间 (Namespaces)
+   - 逻辑隔离不同数据集
+   - 独立的向量集合
+   - 相同的索引配置
+
+index.upsert(vectors=vectors, namespace="ns1")
+results = index.query(vector=query, namespace="ns1")
+
+2. 元数据过滤
+   - 结构化过滤
+   - 支持比较操作
+   - 组合查询
+
+filter = {
+    "and": [
+        {"category": {"$eq": "cat_1"}},
+        {"timestamp": {"$gte": 1234567890}},
+        {"score": {"$gt": 0.8}}
+    ]
+}
+
+3. 混合搜索
+   - 向量搜索 + 关键词搜索
+   - 结果融合
+   - 相关性排序
+
+4. 自动扩展
+   - 基于流量自动调整
+   - 无需手动配置
+   - 按需付费
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔮</span> Weaviate详解</h2>
+
+          <h3>核心特性</h3>
+          <div class="card">
+            <h4 class="card-title">Weaviate的独特之处</h4>
+            <ul class="feature-list">
+              <li><strong>语义搜索</strong>: 内置向量模型，自动向量化</li>
+              <li><strong>GraphQL API</strong>: 灵活的查询语言</li>
+              <li><strong>模块化</strong>: 可扩展的向量模块</li>
+              <li><strong>知识图谱</strong>: 支持关系型数据</li>
+              <li><strong>多模态</strong>: 支持文本、图像、音频</li>
+              <li><strong>实时更新</strong>: 无需重建索引</li>
+            </ul>
+          </div>
+
+          <h3>部署Weaviate</h3>
+          <div class="code-block">
+# docker-compose.yml
+version: '3.4'
+
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.19.0
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-transformers'
+      ENABLE_MODULES: 'text2vec-transformers,qna-transformers'
+      TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+
+  t2v-transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-multi-qa-MiniLM-L6-cos-v1
+    environment:
+      ENABLE_CUDA: '0'
+
+volumes:
+  weaviate-data:
+
+# 启动
+docker-compose up -d
+          </div>
+
+          <h3>使用Weaviate</h3>
+          <div class="code-block">
+import weaviate
+import json
+
+# 连接Weaviate
+client = weaviate.Client("http://localhost:8080")
+
+# 创建Schema
+schema = {
+    "classes": [
+        {
+            "class": "Document",
+            "description": "A document with text content",
+            "vectorizer": "text2vec-transformers",  # 自动向量化
+            "moduleConfig": {
+                "text2vec-transformers": {
+                    "vectorizeClassName": True
+                }
+            },
+            "properties": [
+                {
+                    "name": "title",
+                    "dataType": ["text"],
+                    "description": "The title of the document"
+                },
+                {
+                    "name": "content",
+                    "dataType": ["text"],
+                    "description": "The content of the document"
+                },
+                {
+                    "name": "category",
+                    "dataType": ["string"],
+                    "description": "The category of the document"
+                }
+            ]
+        }
+    ]
+}
+
+client.schema.create(schema)
+
+# 添加数据
+with client.batch as batch:
+    for i in range(100):
+        properties = {
+            "title": f"Document {i}",
+            "content": f"This is the content of document {i}",
+            "category": f"category_{i % 5}"
+        }
+        client.batch.add_data_object(
+            properties,
+            "Document"
+        )
+
+# 语义搜索
+near_text = {
+    "concepts": ["machine learning"],
+    "distance": 0.7
+}
+
+response = (
+    client.query
+    .get("Document", ["title", "content", "category"])
+    .with_near_text(near_text)
+    .do()
+)
+
+# 处理结果
+for result in response["data"]["Get"]["Document"]:
+    print(f"Title: {result['title']}")
+    print(f"Category: {result['category']}")
+
+# 过滤 + 语义搜索
+response = (
+    client.query
+    .get("Document", ["title", "content", "category"])
+    .with_where({
+        "path": ["category"],
+        "operator": "Equal",
+        "valueString": "category_1"
+    })
+    .with_near_text(near_text)
+    .with_limit(5)
+    .do()
+)
+          </div>
+
+          <h3>Weaviate模块</h3>
+          <div class="code-block"""
+Weaviate模块系统:
+
+1. 向量化模块
+   - text2vec-transformers
+   - text2vec-openai
+   - text2vec-cohere
+   - text2vec-huggingface
+
+2. 问答模块
+   - qna-transformers
+   - qna-openai
+
+3. 多模态模块
+   - img2vec-neural
+   - img2vec-clip
+
+4. 上下文模块
+   - ref2vec-centroid
+   - ref2vec-wordnet
+
+配置示例:
+{
+    "moduleConfig": {
+        "text2vec-openai": {
+            "model": "ada",
+            "type": "text",
+            "documentId": "_id"
+        },
+        "qna-openai": {
+            "model": "text-davinci-003",
+            "maxTokens": 128,
+            "temperature": 0.0
+        }
+    }
+}
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 其他向量数据库</h2>
+
+          <h3>Qdrant</h3>
+          <div class="code-block">
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+
+# 连接Qdrant
+client = QdrantClient(host="localhost", port=6333)
+
+# 创建Collection
+client.recreate_collection(
+    collection_name="documents",
+    vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+)
+
+# 插入数据
+client.upsert(
+    collection_name="documents",
+    points=[
+        PointStruct(
+            id=i,
+            vector=np.random.random(768).tolist(),
+            payload={"category": f"cat_{i % 5}"}
+        )
+        for i in range(1000)
+    ]
+)
+
+# 搜索
+results = client.search(
+    collection_name="documents",
+    query_vector=np.random.random(768).tolist(),
+    query_filter={
+        "must": [
+            {
+                "key": "category",
+                "match": {"value": "cat_1"}
+            }
+        ]
+    },
+    limit=10
+)
+          </div>
+
+          <h3>Pgvector</h3>
+          <div class="code-block">
+-- 安装扩展
+CREATE EXTENSION vector;
+
+-- 创建表
+CREATE TABLE documents (
+    id SERIAL PRIMARY KEY,
+    content TEXT,
+    category VARCHAR(100),
+    embedding vector(768)
+);
+
+-- 创建索引
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops);
+
+-- 插入数据
+INSERT INTO documents (content, category, embedding)
+VALUES
+    ('Document 1', 'cat_1', '[0.1, 0.2, ...]'),
+    ('Document 2', 'cat_2', '[0.3, 0.4, ...]');
+
+-- 搜索
+SELECT id, content, category, 1 - (embedding <=> '[0.1, 0.2, ...]') as similarity
+FROM documents
+WHERE category = 'cat_1'
+ORDER BY embedding <=> '[0.1, 0.2, ...]'
+LIMIT 10;
+          </div>
+
+          <h3>Chroma</h3>
+          <div class="code-block">
+import chromadb
+from chromadb.config import Settings
+
+# 创建客户端
+client = chromadb.Client(Settings(chroma_db_impl="duckdb+parquet", persist_directory="./db"))
+
+# 创建Collection
+collection = client.create_collection(name="documents")
+
+# 添加数据
+collection.add(
+    documents=["Document 1", "Document 2"],
+    metadatas=[{"category": "cat_1"}, {"category": "cat_2"}],
+    ids=["doc1", "doc2"]
+)
+
+# 搜索
+results = collection.query(
+    query_texts=["machine learning"],
+    n_results=10,
+    where={"category": "cat_1"}
+)
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">选型建议</div>
+            <p>Milvus适合企业级大规模部署；Pinecone适合快速开发和云原生应用；Weaviate适合语义搜索和知识图谱应用；Qdrant适合需要高性能和简单部署的场景；Pgvector适合已有PostgreSQL基础架构。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据库架构">
+          <div class="caption">图：选择合适的向量数据库对AI应用的成功至关重要</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Milvus是功能最全面的开源向量数据库</li>
+                <li>• Pinecone提供简单易用的托管服务</li>
+                <li>• Weaviate在语义搜索方面有独特优势</li>
+                <li>• 选择合适的数据库需要综合考虑技术栈、规模和团队能力</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="12-2-向量索引算法.html">← 上一节</a>
+          <a href="12-4-向量数据库部署与优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

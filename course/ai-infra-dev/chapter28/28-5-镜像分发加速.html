@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>28.5 镜像分发加速 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>28.5 镜像分发加速</h1>
+          <p class="subtitle">优化AI镜像的传输效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解镜像分发的性能瓶颈</li>
+            <li>掌握镜像加速的各种技术</li>
+            <li>学会使用P2P镜像分发</li>
+            <li>了解边缘场景的镜像分发方案</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="镜像分发" class="card-image">
+          <h3 class="card-title">镜像分发加速概述</h3>
+          <p class="card-text">
+            AI镜像通常体积巨大（GB级别），在多节点或分布式训练场景下，
+            镜像分发成为部署速度的主要瓶颈。有效的加速技术可以将分发时间从几十分钟缩短到几秒钟。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 分发瓶颈分析</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">网络瓶颈</h3>
+              <ul class="feature-list">
+                <li>远程仓库带宽限制</li>
+                <li>跨地域延迟高</li>
+                <li>并发拉取拥塞</li>
+              </ul>
+              <div class="tip-box warning">
+                <span class="icon">⚠️</span>
+                <div class="content">
+                  <p>100个节点同时拉取5GB镜像需要500GB网络流量</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">存储瓶颈</h3>
+              <ul class="feature-list">
+                <li>磁盘I/O限制</li>
+                <li>镜像层解压耗时</li>
+                <li>存储空间不足</li>
+              </ul>
+              <div class="tip-box warning">
+                <span class="icon">⚠️</span>
+                <div class="content">
+                  <p>镜像解压和校验占用大量CPU和I/O资源</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>场景</th>
+                <th>镜像大小</th>
+                <th>节点数</th>
+                <th>传统分发时间</th>
+                <th>加速后时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>小规模训练</td>
+                <td>2GB</td>
+                <td>4</td>
+                <td>8分钟</td>
+                <td>1分钟</td>
+              </tr>
+              <tr>
+                <td>中等规模</td>
+                <td>5GB</td>
+                <td>20</td>
+                <td>40分钟</td>
+                <td>3分钟</td>
+              </tr>
+              <tr>
+                <td>大规模集群</td>
+                <td>10GB</td>
+                <td>100</td>
+                <td>200分钟</td>
+                <td>5分钟</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 镜像加速技术</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">本地缓存代理</h3>
+              <p class="card-text">在本地部署镜像缓存服务器。</p>
+              <ul class="feature-list">
+                <li>AWS ECR镜像缓存</li>
+                <li>Harbor Registry Cache</li>
+                <li>OCI镜像缓存</li>
+              </ul>
+              <div class="code-block">
+# 配置Docker使用缓存
+{
+  "registry-mirrors": [
+    "https://cache.example.com"
+  ]
+}
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">P2P分发</h3>
+              <p class="card-text">节点间直接传输镜像。</p>
+              <ul class="feature-list">
+                <li>Dragonfly</li>
+                <li>Dragonfly2</li>
+                <li>Kraken</li>
+              </ul>
+              <div class="code-block">
+# 节点间共享已下载的层
+# 避免重复下载相同数据
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">分层优化</h3>
+              <p class="card-text">优化镜像层结构。</p>
+              <ul class="feature-list">
+                <li>共享基础层</li>
+                <li>压缩优化</li>
+                <li>增量传输</li>
+              </ul>
+              <div class="code-block">
+# 只传输变化的层
+# 复用已有的公共层
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">预拉取</h3>
+              <p class="card-text">提前拉取镜像到节点。</p>
+              <ul class="feature-list">
+                <li>DaemonSet预拉取</li>
+                <li>Kubelet镜像预拉取</li>
+                <li>调度感知预拉取</li>
+              </ul>
+              <div class="code-block">
+# 任务开始前镜像已就绪
+# 零等待启动
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐉</span> Dragonfly P2P加速</h2>
+
+          <div class="card">
+            <h3 class="card-title">Dragonfly简介</h3>
+            <p class="card-text">
+              Dragonfly是阿里云开源的P2P镜像分发系统，通过节点间直接传输镜像，
+              大幅降低对中央仓库的压力，提高分发效率。
+            </p>
+          </div>
+
+          <h3>部署Dragonfly</h3>
+          <div class="code-block">
+# 添加Helm仓库
+helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/
+helm repo update
+
+# 安装Dragonfly
+helm install dragonfly dragonfly/dragonfly \
+  --namespace dragonfly-system \
+  --create-namespace \
+  --set dfdaemon.config.download.rateLimit.bytesPerSecond=100Mi
+
+# 查看状态
+kubectl get pods -n dragonfly-system
+          </code>
+
+          <h3>配置Containerd使用Dragonfly</h3>
+          <div class="code-block">
+# 编辑containerd配置
+vi /etc/containerd/config.toml
+
+# 添加Dragonfly镜像加速
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+
+# 创建Dragonfly配置
+mkdir -p /etc/containerd/certs.d/docker.io
+cat > /etc/containerd/certs.d/docker.io/hosts.toml << 'EOF'
+server = "https://dragonfly.example.com"
+[host."https://dragonfly.example.com"]
+  capabilities = ["pull", "resolve"]
+  skip_verify = true
+EOF
+
+# 重启containerd
+systemctl restart containerd
+          </code>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">Dragonfly优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 节点间P2P传输，节省带宽</li>
+                <li>• 支持HTTP、HTTPS、Registry协议</li>
+                <li>• 内置限速和调度功能</li>
+                <li>• 与Kubernetes深度集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐙</span> Kraken加速</h2>
+
+          <div class="card">
+            <h3 class="card-title">Kraken简介</h3>
+            <p class="card-text">
+              Kraken是Uber开源的P2P镜像分发系统，专门针对Kubernetes集群优化，
+              提供快速、可靠的镜像分发能力。
+            </p>
+          </div>
+
+          <h3>部署Kraken</h3>
+          <div class="code-block">
+# 克隆Kraken仓库
+git clone https://github.com/uber/kraken.git
+cd kraken
+
+# 部署Kraken到Kubernetes
+kubectl apply -f deployments/kraken.yaml
+
+# 或使用Helm
+helm install kraken kraken/kraken \
+  --namespace kraken \
+  --create-namespace
+
+# 验证部署
+kubectl get pods -n kraken
+kubectl get svc -n kraken
+          </code>
+
+          <h3>配置镜像代理</h3>
+          <div class="code-block">
+# 配置Docker使用Kraken代理
+{
+  "registry-mirrors": [
+    "http://kraken-proxy:8080"
+  ]
+}
+
+# 配置Containerd
+[plugins."io.containerd.grpc.v1.cri".registry]
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+      endpoint = ["http://kraken-proxy:8080"]
+          </code>
+
+          <h3>监控Kraken</h3>
+          <div class="code-block">
+# 查看Kraken日志
+kubectl logs -n kraken -l app=kraken-agent
+
+# 查看P2P传输统计
+kubectl exec -n kraken kraken-xxxxx -- kraken-agent stats
+
+# Prometheus集成
+# Kraken暴露metrics端点
+# 端口：9000
+# 路径：/metrics
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📥</span> 预拉取策略</h2>
+
+          <h3>DaemonSet预拉取</h3>
+          <div class="code-block">
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: image-preloader
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: image-preloader
+  template:
+    metadata:
+      labels:
+        app: image-preloader
+    spec:
+      hostNetwork: true
+      containers:
+      - name: preloader
+        image: alpine/k8s:1.27.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # 预拉取镜像列表
+          IMAGES=(
+            "pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime"
+            "nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04"
+            "tensorflow/tensorflow:2.12.0-gpu"
+          )
+
+          for img in "${IMAGES[@]}"; do
+            echo "Pre-pulling $img..."
+            crictl pull "$img" || docker pull "$img"
+          done
+          sleep 3600
+          </code>
+
+          <h3>Kubelet镜像预拉取</h3>
+          <div class="code-block">
+# 配置Kubelet镜像预拉取
+vi /var/lib/kubelet/config.yaml
+
+# 启用镜像预拉取
+imagePullPolicy: IfNotPresent
+
+# 设置镜像GC阈值
+imageGCHighThresholdPercent: 85
+imageGCLowThresholdPercent: 80
+
+# 设置序列化拉取
+serializeImagePulls: false
+          </code>
+
+          <h3>调度感知预拉取</h3>
+          <div class="code-block">
+# 使用调度器Webhook
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prefetch-job
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: gpu-type
+                operator: In
+                values:
+                - A100
+      containers:
+      - name: prefetch
+        image: busybox
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # 预拉取目标镜像
+          docker pull pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+          docker pull nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 边缘场景优化</h2>
+
+          <h3>边缘镜像缓存</h3>
+          <div class="code-block">
+# 在边缘节点部署镜像缓存
+# 方案1：Registry Mirror
+{
+  "registry-mirrors": [
+    "http://edge-cache:5000"
+  ]
+}
+
+# 方案2：本地Registry
+docker run -d \
+  --name edge-registry \
+  -p 5000:5000 \
+  -v /data/registry:/var/lib/registry \
+  registry:2
+          </code>
+
+          <h3>分层更新策略</h3>
+          <div class="code-block">
+# 使用Multi-stage构建减少更新体积
+# 只更新应用层，基础层保持不变
+
+# 镜像1: v1.0
+# Layer1: Base (2GB)
+# Layer2: PyTorch (1GB)
+# Layer3: App (100MB)
+
+# 镜像2: v1.1
+# Layer1: Base (2GB) [复用]
+# Layer2: PyTorch (1GB) [复用]
+# Layer3: App (100MB) [更新]
+
+# 只需传输100MB更新
+          </code>
+
+          <h3>压缩优化</h3>
+          <div class="code-block">
+# 使用zstd压缩
+# 编辑daemon.json
+{
+  "storage-driver": "overlay2",
+  "storage-opts": [
+    "overlay2.override_kernel_check=true"
+  ],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "experimental": true,
+  "image-nr-threads": 4,
+  "image-opt-compression-level": "zstd"
+}
+
+# 使用P2P加速时启用压缩
+# 虽然压缩增加CPU开销
+# 但能显著减少传输数据量
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能监控与优化</h2>
+
+          <h3>监控分发性能</h3>
+          <div class="code-block">
+# 使用Prometheus监控
+# 关键指标：
+# - image_pull_duration_seconds
+# - image_pull_success_rate
+# - p2p_transfer_bytes
+# - cache_hit_rate
+
+# Grafana仪表板
+{
+  "title": "Image Distribution Performance",
+  "panels": [
+    {
+      "title": "Pull Latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(image_pull_duration_seconds_bucket[5m]))"
+        }
+      ]
+    },
+    {
+      "title": "P2P Transfer Rate",
+      "targets": [
+        {
+          "expr": "rate(p2p_transfer_bytes[5m])"
+        }
+      ]
+    }
+  ]
+}
+          </code>
+
+          <h3>优化建议</h3>
+          <div class="code-block">
+# 1. 监控缓存命中率
+# 如果命中率低，增加缓存节点或调整策略
+
+# 2. 监控P2P传输效率
+# 如果P2P传输少，检查网络配置
+
+# 3. 监控镜像拉取失败率
+# 失败率高可能是网络或权限问题
+
+# 4. 定期清理未使用镜像
+# 避免存储空间不足
+          </code>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践总结</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 根据集群规模选择合适的加速方案</li>
+              <li>• 小集群（<10节点）：本地缓存代理</li>
+              <li>• 中等集群（10-100节点）：P2P加速</li>
+              <li>• 大型集群（>100节点）：P2P + 预拉取</li>
+              <li>• 监控分发性能，持续优化</li>
+              <li>• 边缘场景特别优化</li>
+              <li>• 优化镜像层结构减少传输量</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 镜像分发是AI部署的主要瓶颈</li>
+                <li>• P2P加速可大幅减少分发时间</li>
+                <li>• 预拉取策略实现零等待启动</li>
+                <li>• 边缘场景需要特殊优化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="28-4-私有镜像仓库.html">← 上一节</a>
+          <a href="../chapter29/29-1-MLOps概述.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

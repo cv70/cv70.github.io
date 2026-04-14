@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.3 资源配额管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>42.3 资源配额管理</h1>
+          <p class="subtitle">合理分配和管理AI基础设施资源</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解资源配额管理的重要性</li>
+            <li>掌握配额设计的原则</li>
+            <li>了解不同层次的配额机制</li>
+            <li>学会实施和监控资源配额</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="资源配额概念图" class="card-image">
+          <h3 class="card-title">资源配额管理概述</h3>
+          <p class="card-text">
+            <strong>资源配额管理</strong>是指为不同的用户、项目或组织分配和使用资源的限额制度。
+            它是防止资源滥用、保障公平使用、优化成本控制的重要手段。
+            在多租户的AI基础设施中，配额管理尤为重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 配额管理目标</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">⚖️</div>
+              <h3 class="card-title">公平性</h3>
+              <p class="card-text">确保所有用户公平使用资源</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">💰</div>
+              <h3 class="card-title">成本控制</h3>
+              <p class="card-text">限制资源消耗，控制成本</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🛡️</div>
+              <h3 class="card-title">稳定性</h3>
+              <p class="card-text">防止单个用户影响整体</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 资源类型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>资源类型</th>
+                <th>单位</th>
+                <th>配额维度</th>
+                <th>监控指标</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>计算资源</td>
+                <td>vCPU、GPU、内存</td>
+                <td>申请量、使用量、峰值</td>
+                <td>利用率、等待时间</td>
+              </tr>
+              <tr>
+                <td>存储资源</td>
+                <td>GB、TB</td>
+                <td>容量、IOPS、吞吐</td>
+                <td>使用率、响应时间</td>
+              </tr>
+              <tr>
+                <td>网络资源</td>
+                <td>Mbps、连接数</td>
+                <td>带宽、延迟、丢包</td>
+                <td>流量利用率</td>
+              </tr>
+              <tr>
+                <td>API资源</td>
+                <td>次/秒、QPS</td>
+                <td>调用频率、并发数</td>
+                <td>成功率、延迟</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 配额层次结构</h2>
+          <div class="code-block">
+<pre>全局配额（整个集群）
+  ↓
+组织配额（公司/部门）
+  ↓
+项目配额（团队/项目）
+  ↓
+用户配额（个人）
+  ↓
+任务配额（单个任务）</pre>
+          </div>
+          <p style="margin-top: 1rem;">配额可以层层继承，子配额不能超过父配额。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Kubernetes配额管理</h2>
+          <h3>ResourceQuota定义</h3>
+          <div class="code-block">
+<pre class="language-yaml">apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ai-team-quota
+  namespace: ai-team
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: 400Gi
+    limits.cpu: "200"
+    limits.memory: 800Gi
+    requests.nvidia.com/gpu: "16"
+    persistentvolumeclaims: "20"
+    services: "10"
+    secrets: "10"
+    configmaps: "10"</pre>
+          </div>
+
+          <h3 style="margin-top: 2rem;">LimitRange限制范围</h3>
+          <div class="code-block">
+<pre class="language-yaml">apiVersion: v1
+kind: LimitRange
+metadata:
+  name: gpu-limits
+  namespace: ai-team
+spec:
+  limits:
+  - type: Container
+    max:
+      nvidia.com/gpu: "8"
+    defaultRequest:
+      nvidia.com/gpu: "1"
+    default:
+      nvidia.com/gpu: "1"</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 配额设计原则</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">原则1: 需求驱动</h3>
+              <ul class="feature-list">
+                <li>基于实际需求分配</li>
+                <li>定期评估和调整</li>
+                <li>考虑增长预留</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">原则2: 优先级</h3>
+              <ul class="feature-list">
+                <li>区分关键和非关键任务</li>
+                <li>高优先级任务优先分配</li>
+                <li>支持抢占机制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">原则3: 灵活性</h3>
+              <ul class="feature-list">
+                <li>支持动态调整</li>
+                <li>允许短期超额</li>
+                <li>提供紧急通道</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">原则4: 透明性</h3>
+              <ul class="feature-list">
+                <li>配额规则公开</li>
+                <li>使用情况可见</li>
+                <li>变更通知机制</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 配额监控与告警</h2>
+          <div class="code-block">
+<pre class="language-python"># 配额使用监控
+class QuotaMonitor:
+    def __init__(self):
+        self.usage = {}
+        self.limits = {}
+        self.alerts = []
+
+    def check_quota(self, resource, user, amount):
+        """检查配额是否足够"""
+        key = f"{user}:{resource}"
+        current = self.usage.get(key, 0)
+        limit = self.limits.get(key, 0)
+
+        if current + amount > limit:
+            self.alerts.append({
+                'user': user,
+                'resource': resource,
+                'current': current,
+                'limit': limit,
+                'requested': amount,
+                'status': 'EXCEEDED'
+            })
+            return False
+        return True
+
+    def update_usage(self, resource, user, amount):
+        """更新资源使用"""
+        key = f"{user}:{resource}"
+        self.usage[key] = self.usage.get(key, 0) + amount</pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">配额告警策略</div>
+            <p>建议设置多级告警：使用率达到80%时发出警告，
+            达到90%时发出严重警告，达到100%时阻止新请求。</p>
+          </div>
+        </tip-box>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 动态配额调整</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">自动调整策略</h3>
+              <ul class="feature-list">
+                <li>基于时间模式调整</li>
+                <li>基于使用趋势调整</li>
+                <li>基于业务优先级调整</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">手动调整流程</h3>
+              <ul class="feature-list">
+                <li>提交配额变更申请</li>
+                <li>评估业务影响</li>
+                <li>审批和实施</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> 配额实施策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>特点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>固定配额</td>
+                <td>固定分配，不可超支</td>
+                <td>预算严格控制的场景</td>
+              </tr>
+              <tr>
+                <td>弹性配额</td>
+                <td>允许短期超额</td>
+                <td>有波动的业务需求</td>
+              </tr>
+              <tr>
+                <td>共享配额</td>
+                <td>组内成员共享</td>
+                <td>团队协作场景</td>
+              </tr>
+              <tr>
+                <td>竞价配额</td>
+                <td>资源竞价分配</td>
+                <td>资源紧张的场景</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 配额分析指标</h2>
+          <div class="card">
+            <ul class="feature-list">
+              <li><strong>配额利用率</strong>: 已使用配额/总配额</li>
+              <li><strong>配额浪费率</strong>: 未使用的预留配额/总配额</li>
+              <li><strong>配额等待时间</strong>: 请求配额的平均等待时间</li>
+              <li><strong>配额超限次数</strong>: 配额超限的次数和持续时间</li>
+              <li><strong>配额调整频率</strong>: 配额变更的频率</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">常见问题</div>
+            <ul>
+              <li><strong>配额过紧</strong>: 限制业务发展，影响创新</li>
+              <li><strong>配额过松</strong>: 资源浪费，成本失控</li>
+              <li><strong>配额僵化</strong>: 无法适应业务变化</li>
+              <li><strong>缺乏透明</strong>: 用户不清楚配额规则</li>
+            </ul>
+          </div>
+        </tip-box>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> 配额管理工具</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">Kubernetes</h3>
+              <ul class="feature-list">
+                <li>ResourceQuota</li>
+                <li>LimitRange</li>
+                <li>PriorityClass</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">云平台</h3>
+              <ul class="feature-list">
+                <li>AWS Service Quotas</li>
+                <li>Azure Quotas</li>
+                <li>GCP Quotas</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调度系统</h3>
+              <ul class="feature-list">
+                <li>Slurm QoS</li>
+                <li>PBS QoS</li>
+                <li>自定义配额</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="配额管理">
+          <div class="caption">图：多层次的资源配额管理体系</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 资源配额是保障公平和控制成本的重要手段</li>
+                <li>• 配额设计需要平衡需求和资源</li>
+                <li>• 动态调整比固定配额更灵活</li>
+                <li>• 透明度和监控是配额管理成功的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="42-2-GPU利用率优化.html">← 上一节</a>
+          <a href="42-4-成本分摊模型.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

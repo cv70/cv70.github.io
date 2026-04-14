@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.5 故障容错机制 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>31.5 故障容错机制</h1>
+          <p class="subtitle">构建高可靠性的LLM训练系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解LLM训练系统的故障模型</li>
+            <li>掌握故障检测与自动恢复机制</li>
+            <li>学习弹性训练策略</li>
+            <li>了解灾备与应急响应</li>
+            <li>认识容错系统的最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800" alt="系统容错架构" class="card-image">
+          <h3 class="card-title">故障容错概述</h3>
+          <p class="card-text">
+            千卡级集群上运行数周的训练任务，面临各种故障风险。完善的<strong>容错机制</strong>确保系统能够<strong>自动检测故障</strong>、<strong>快速恢复服务</strong>、<strong>最小化训练损失</strong>，保障大模型训练的可靠性和连续性。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 故障分类与特点</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">硬件故障</h3>
+              <ul class="feature-list">
+                <li>GPU XID错误、显存ECC错误</li>
+                <li>CPU单核故障、CPU过热</li>
+                <li>内存错误、DIMM故障</li>
+                <li>网络设备故障、光模块失效</li>
+                <li>电源故障、磁盘故障</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">软件故障</h3>
+              <ul class="feature-list">
+                <li>OOM（内存溢出）</li>
+                <li>NCCL通信超时、集合通信失败</li>
+                <li>进程崩溃、段错误</li>
+                <li>文件系统错误、I/O超时</li>
+                <li>调度失败、资源不足</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 故障检测机制</h2>
+          <div class="card">
+            <h3 class="card-title">多层检测架构</h3>
+            <div class="code-block">
+<pre>
+故障检测层次：
+Level 1: 应用层检测
+├── Loss监控：检测Loss异常
+├── 步数监控：检测训练停滞
+├── 心跳检测：进程存活检测
+└── 异常捕获：异常信号处理
+
+Level 2: 框架层检测
+├── PyTorch DistributedWatchdog
+├── NCCL健康检查
+├── DataLoader监控
+└── Checkpoint验证
+
+Level 3: 系统层检测
+├── DCGM GPU监控
+├── 系统健康检查
+├── 网络连通性检测
+└── 存储系统检测
+
+Level 4: 调度层检测
+├── 节点健康状态
+├── 资源可用性监控
+├── 作业状态监控
+└── 调度器状态检查</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> PyTorch Distributed容错</h2>
+          <div class="card">
+            <h3 class="card-title">弹性训练实现</h3>
+            <div class="code-block">
+<pre>
+import torch.distributed.elastic as elastic
+from torch.distributed.elastic.multiprocessing.errors import record
+
+@record
+def main():
+    # 初始化分布式环境
+    dist.init_process_group(
+        backend='nccl',
+        init_method='env://'
+    )
+
+    # 设置弹性配置
+    elastic.rendezvous.RendezvousHandler(
+        min_nodes=256,
+        max_nodes=256,
+        timeout=600
+    )
+
+    # 训练循环
+    while should_train:
+        try:
+            data = next(dataloader)
+            train_step(data)
+
+            # 定期checkpoint
+            if step % checkpoint_interval == 0:
+                save_checkpoint()
+
+        except RuntimeError as e:
+            # 处理分布式错误
+            if is_distributed_error(e):
+                log_error(e)
+                dist.barrier()
+                raise
+            else:
+                # 其他错误，尝试恢复
+                recover_and_retry()
+
+if __name__ == "__main__":
+    # 使用elastic launcher
+    elastic.launch(
+        main,
+        nnodes="256",
+        nproc_per_node=8,
+        max_restarts=3,
+    )</pre>
+            </div>
+            <p class="card-text">
+              PyTorch Distributed提供<strong>弹性训练</strong>能力，支持节点动态加入和退出，自动处理部分节点故障，确保训练任务的连续性。
+            </p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 自动恢复策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>故障类型</th>
+                <th>检测方式</th>
+                <th>恢复策略</th>
+                <th>恢复时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>单GPU故障</td>
+                <td>DCGM监控</td>
+                <td>重新分配rank，从checkpoint恢复</td>
+                <td>5-10分钟</td>
+              </tr>
+              <tr>
+                <td>单节点故障</td>
+                <td>心跳超时</td>
+                <td>重新分配节点，从checkpoint恢复</td>
+                <td>10-20分钟</td>
+              </tr>
+              <tr>
+                <td>网络故障</td>
+                <td>NCCL超时</td>
+                <td>重试或重新路由网络</td>
+                <td>1-5分钟</td>
+              </tr>
+              <tr>
+                <td>存储故障</td>
+                <td>I/O错误</td>
+                <td>切换到备用存储路径</td>
+                <td>5-10分钟</td>
+              </tr>
+              <tr>
+                <td>OOM错误</td>
+                <td>系统日志</td>
+                <td>调整内存配置，重新启动</td>
+                <td>10-15分钟</td>
+              </tr>
+              <tr>
+                <td>多节点故障</td>
+                <td>告警聚合</td>
+                <td>暂停训练，人工介入</td>
+                <td>手动处理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">恢复时间目标（RTO）</div>
+            <p>对于大模型训练，建议设定<strong>RTO < 15分钟</strong>。通过<strong>自动故障检测</strong>、<strong>快速资源分配</strong>、<strong>checkpoint预热</strong>等手段，将故障恢复时间控制在可接受范围内。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏥</span> 节点健康检查</h2>
+          <div class="card">
+            <h3 class="card-title">自动化健康检查脚本</h3>
+            <div class="code-block">
+<pre>
+#!/bin/bash
+# 节点健康检查脚本
+
+check_gpu() {
+    # 检查GPU状态
+    nvidia-smi --query-gpu=health,temperature.gpu,utilization.gpu \
+        --format=csv,noheader | while IFS=, read -r health temp util; do
+        if [ "$health" != "Ok" ]; then
+            echo "GPU unhealthy: $health"
+            return 1
+        fi
+        if [ "$temp" -gt 85 ]; then
+            echo "GPU temperature too high: $temp"
+            return 1
+        fi
+    done
+    return 0
+}
+
+check_network() {
+    # 检查网络连接
+    ibstat | grep -q "LinkUp" || return 1
+    ping -c 1 storage-node >/dev/null || return 1
+    return 0
+}
+
+check_storage() {
+    # 检查存储挂载
+    mount | grep -q "/data" || return 1
+    df /data | grep -q "/data" || return 1
+    return 0
+}
+
+# 主检查流程
+main() {
+    if check_gpu && check_network && check_storage; then
+        echo "Node healthy"
+        exit 0
+    else
+        echo "Node unhealthy"
+        exit 1
+    fi
+}
+
+main</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚑</span> 故障自动处理</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Slurm配置</h3>
+              <div class="code-block">
+<pre>
+# 节点故障自动处理
+SchedulerTimeSlice=30
+
+# 作业重新调度
+JobRequeue=1
+
+# 节点状态管理
+SlurmdTimeout=300
+UnkillableStepTimeout=60
+KillWait=30
+
+# 节点健康检查
+HealthCheckInterval=300
+HealthCheckProgram=/usr/local/bin/health_check.sh
+
+# 故障节点自动下线
+ResumeTimeout=60
+SuspendTime=300</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Kubernetes配置</h3>
+              <div class="code-block">
+<pre>
+# Pod自动重启
+apiVersion: v1
+kind: Pod
+spec:
+  restartPolicy: OnFailure
+
+# 节点健康检查
+apiVersion: v1
+kind: Node
+metadata:
+  labels:
+    node-type: gpu
+spec:
+  unschedulable: false
+
+# Pod驱逐策略
+apiVersion: v1
+kind: Pod
+spec:
+  terminationGracePeriodSeconds: 600
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 300</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 故障统计与分析</h2>
+          <div class="card">
+            <h3 class="card-title">故障统计维度</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>统计维度</th>
+                  <th>指标</th>
+                  <th>分析方法</th>
+                  <th>优化目标</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>故障频率</td>
+                  <td>MTBF（平均无故障时间）</td>
+                  <td>时间序列分析</td>
+                  <td>>30天</td>
+                </tr>
+                <tr>
+                  <td>故障分布</td>
+                  <td>各类型故障占比</td>
+                  <td>帕累托分析</td>
+                  <td>识别主要故障源</td>
+                </tr>
+                <tr>
+                  <td>恢复效率</td>
+                  <td>MTTR（平均恢复时间）</td>
+                  <td>统计分析</td>
+                  <td><15分钟</td>
+                </tr>
+                <tr>
+                  <td>训练损失</td>
+                  <td>故障导致的训练回退</td>
+                  <td>损失计算</td>
+                  <td><1%总时间</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔬</span> DeepSpeed容错特性</h2>
+          <div class="card">
+            <h3 class="card-title">DeepSpeed自动容错</h3>
+            <div class="code-block">
+<pre>
+# DeepSpeed容错配置
+{
+    "training": {
+        "monitor_dist": 0.02,
+        "monitor_config": {
+            "enabled": true,
+            "tag": "dist_monitor"
+        }
+    },
+    "checkpoint": {
+        "use_node_local_storage": true,
+        "parallel_write": true,
+        "async_save": true
+    },
+    "elasticity": {
+        "enabled": true,
+        "max_tries": 3,
+        "pause_interval": 60,
+        "timeout": 900
+    }
+}
+
+# DeepSpeed自动恢复
+# 检测到故障时：
+# 1. 记录故障状态
+# 2. 保存当前checkpoint
+# 3. 尝试自动恢复
+# 4. 超过重试次数则退出</pre>
+            </div>
+            <p class="card-text">
+              DeepSpeed内置<strong>监控和容错</strong>功能，可以自动检测分布式训练中的异常，并尝试自动恢复，大大简化了容错实现。
+            </p>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">容错设计原则</div>
+            <p><strong>快速失败</strong>：故障快速暴露，避免雪崩效应。<strong>自动恢复</strong>：常见故障自动处理，减少人工介入。<strong>人工介入</strong>：复杂故障提供清晰的诊断信息和操作指引。<strong>持续改进</strong>：从故障中学习，不断优化容错机制。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚨</span> 应急响应流程</h2>
+          <div class="card">
+            <h3 class="card-title">故障响应SOP</h3>
+            <div class="code-block">
+<pre>
+严重故障响应流程：
+1. 告警触发
+   ├─ 接收告警通知
+   ├─ 确认告警级别
+   └─ 通知相关人员
+
+2. 故障诊断
+   ├─ 检查监控仪表盘
+   ├─ 查看系统日志
+   ├─ 确定故障范围
+   └─ 评估影响程度
+
+3. 应急处理
+   ├─ 立即止损（暂停训练）
+   ├─ 隔离故障节点
+   ├─ 评估恢复方案
+   └─ 执行恢复操作
+
+4. 恢复验证
+   ├─ 验证节点健康状态
+   ├─ 从checkpoint恢复训练
+   ├─ 监控恢复后运行状态
+   └─ 确认训练正常继续
+
+5. 复盘总结
+   ├─ 记录故障详情
+   ├─ 分析根本原因
+   ├─ 制定改进措施
+   └─ 更新容错策略</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 完善的故障容错机制是LLM训练的必备能力</li>
+                <li>• 多层次故障检测实现全面覆盖</li>
+                <li>• 弹性训练支持自动恢复</li>
+                <li>• 监控故障数据指导持续改进</li>
+                <li>• 明确的应急流程确保快速响应</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="31-4-训练监控与告警.html">← 上一节</a>
+          <a href="../chapter32/32-1-LLM推理服务架构.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

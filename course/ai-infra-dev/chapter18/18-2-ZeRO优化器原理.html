@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18.2 ZeRO优化器原理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>18.2 ZeRO优化器原理</h1>
+          <p class="subtitle">零冗余优化器，极致显存优化</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解ZeRO的核心思想和原理</li>
+            <li>掌握ZeRO-1/2/3的区别</li>
+            <li>了解ZeRO的显存优化机制</li>
+            <li>认识ZeRO的通信开销</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="ZeRO优化器" class="card-image">
+          <h3 class="card-title">什么是ZeRO？</h3>
+          <p class="card-text">
+            <strong>ZeRO（Zero Redundancy Optimizer）</strong>是DeepSpeed的核心优化技术，
+            旨在消除分布式训练中的冗余。传统数据并行中，每个GPU都存储完整的模型参数、
+            梯度和优化器状态，存在大量冗余。ZeRO通过将这些状态分片到不同GPU上，
+            极大地减少了显存占用，使训练超大模型成为可能。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 传统数据并行的冗余</h2>
+          <div class="card">
+            <h3 class="card-title">显存占用分析</h3>
+            <div class="code-block">
+传统数据并行（DDP）的显存占用：
+
+假设：
+• 模型参数：Φ = 1000亿（100B）
+• 参数精度：FP16（2 bytes）
+• 优化器：Adam（需要2倍FP32存储）
+
+显存计算：
+
+1. 模型参数（FP16）
+   Parameters = 100B × 2 bytes = 200 GB
+
+2. 梯度（FP16）
+   Gradients = 100B × 2 bytes = 200 GB
+
+3. 优化器状态（FP32）
+   Adam需要：momentum + variance
+   Optimizer State = 100B × 4 bytes × 2 = 800 GB
+
+4. 激活值
+   Activations = 约100-200 GB（取决于序列长度和batch size）
+
+每GPU总显存需求：
+= Parameters + Gradients + Optimizer State + Activations
+= 200 + 200 + 800 + 200
+= 1400 GB
+
+问题：
+• A100 80GB显存无法容纳
+• 需要很多GPU，成本高昂
+• 大部分显存是冗余的
+
+冗余分析：
+• 参数：每个GPU都有完整副本 → N倍冗余
+• 梯度：每个GPU都有完整副本 → N倍冗余
+• 优化器状态：每个GPU都有完整副本 → N倍冗余
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> ZeRO的核心思想</h2>
+          <div class="card">
+            <h3 class="card-title">分片消除冗余</h3>
+            <div class="code-block">
+ZeRO的三层优化：
+
+第一层：优化器状态分片（ZeRO-1）
+┌─────────────────────────────────────────────┐
+│ 传统方式：                                   │
+│ GPU0: [Optimizer State Full]                │
+│ GPU1: [Optimizer State Full]                │
+│ GPU2: [Optimizer State Full]                │
+│ GPU3: [Optimizer State Full]                │
+│                                             │
+│ ZeRO-1方式：                                 │
+│ GPU0: [Optimizer State Shard 0/4]           │
+│ GPU1: [Optimizer State Shard 1/4]           │
+│ GPU2: [Optimizer State Shard 2/4]           │
+│ GPU3: [Optimizer State Shard 3/4]           │
+└─────────────────────────────────────────────┘
+节省显存：约4倍（优化器状态占总显存的~57%）
+
+第二层：梯度分片（ZeRO-2）
+┌─────────────────────────────────────────────┐
+│ GPU0: [Optimizer State 0/4][Gradient 0/4] │
+│ GPU1: [Optimizer State 1/4][Gradient 1/4] │
+│ GPU2: [Optimizer State 2/4][Gradient 2/4] │
+│ GPU3: [Optimizer State 3/4][Gradient 3/4] │
+└─────────────────────────────────────────────┘
+节省显存：约8倍（梯度占总显存的~14%）
+
+第三层：参数分片（ZeRO-3）
+┌─────────────────────────────────────────────┐
+│ GPU0: [Opt State 0/4][Grad 0/4][Param 0/4]│
+│ GPU1: [Opt State 1/4][Grad 1/4][Param 1/4]│
+│ GPU2: [Opt State 2/4][Grad 2/4][Param 2/4]│
+│ GPU3: [Opt State 3/4][Grad 3/4][Param 3/4]│
+└─────────────────────────────────────────────┘
+节省显存：约10倍（参数占总显存的~14%）
+
+总计节省：从1400GB → 约140GB（10倍优化）
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> ZeRO-1详解</h2>
+          <div class="card">
+            <h3 class="card-title">优化器状态分片</h3>
+            <div class="code-block">
+ZeRO-1工作原理：
+
+1. 分片优化器状态
+   • 每个GPU只存储部分优化器状态
+   • Adam：momentum和variance分片存储
+
+2. 前向传播
+   • 所有GPU都有完整模型参数
+   • 独立计算前向传播
+   • 计算损失和梯度
+
+3. 反向传播
+   • 独立计算梯度
+   • 所有GPU都有完整梯度副本
+
+4. 参数更新
+   a. 通过AllReduce聚合梯度（与传统相同）
+   b. 每个GPU更新自己负责的参数分片
+      • GPU0更新参数0-N/4
+      • GPU1更新参数N/4-N/2
+      • GPU2更新参数N/2-3N/4
+      • GPU3更新参数3N/4-N
+   c. 通过AllBroadcat同步更新的参数
+      • 所有GPU获得完整更新后的参数
+
+显存节省：
+• 优化器状态：4倍
+• 总显存：约2倍
+
+通信开销：
+• 与传统DDP相同（AllReduce梯度）
+• 额外：AllBroadcast参数（更新后同步）
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> ZeRO-2详解</h2>
+          <div class="card">
+            <h3 class="card-title">梯度分片</h3>
+            <div class="code-block">
+ZeRO-2工作原理：
+
+1. 分片优化器状态和梯度
+   • 每个GPU只存储部分优化器状态和梯度
+   • 参数仍然是完整的
+
+2. 前向传播
+   • 所有GPU都有完整模型参数
+   • 独立计算前向传播
+
+3. 反向传播
+   a. 计算梯度
+   b. 通过ReduceScatter聚合并分片梯度
+      • GPU0获得梯度0-N/4
+      • GPU1获得梯度N/4-N/2
+      • GPU2获得梯度N/2-3N/4
+      • GPU3获得梯度3N/4-N
+   c. 每个GPU使用分片梯度更新参数
+
+4. 参数更新
+   a. 每个GPU更新自己负责的参数分片
+   b. 通过AllGather同步更新后的参数
+
+显存节省：
+• 优化器状态：4倍
+• 梯度：4倍
+• 总显存：约4倍
+
+通信开销：
+• 使用ReduceScatter替代AllReduce（更高效）
+• 使用AllGather同步参数
+• 通信总量与ZeRO-1相同，但更高效
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="ZeRO通信模式">
+          <div class="caption">图：ZeRO使用优化的通信模式减少显存占用</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> ZeRO-3详解</h2>
+          <div class="card">
+            <h3 class="card-title">参数分片</h3>
+            <div class="code-block">
+ZeRO-3工作原理：
+
+1. 分片优化器状态、梯度和参数
+   • 所有状态都分片存储
+   • 每个GPU只存储部分参数
+
+2. 前向传播（动态收集）
+   对于每一层：
+   a. AllGather：收集该层的完整参数
+   b. 计算该层输出
+   c. Free：释放不需要的参数
+
+3. 反向传播
+   对于每一层：
+   a. 计算梯度
+   b. ReduceScatter：聚合并分片梯度
+   c. Free：释放不需要的梯度
+
+4. 参数更新
+   a. 每个GPU更新自己的参数分片
+   b. 不需要同步（参数本来就是分片的）
+
+显存节省：
+• 优化器状态：4倍
+• 梯度：4倍
+• 参数：4倍
+• 总显存：约10倍（如果考虑激活值检查点）
+
+通信开销：
+• 前向传播：每层AllGather
+• 反向传播：每层ReduceScatter
+• 通信量显著增加
+• 可通过prefetch和bucketing优化
+
+关键优化：
+• Prefetch：提前收集下一层的参数
+• Bucketing：减少通信次数
+• Offload：将参数卸载到CPU
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> ZeRO三个阶段对比</h2>
+          <div class="card">
+            <h3 class="card-title">详细对比表</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>特性</th>
+                  <th>ZeRO-1</th>
+                  <th>ZeRO-2</th>
+                  <th>ZeRO-3</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>参数存储</strong></td>
+                  <td>完整副本</td>
+                  <td>完整副本</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>梯度存储</strong></td>
+                  <td>完整副本</td>
+                  <td>分片</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>优化器状态</strong></td>
+                  <td>分片</td>
+                  <td>分片</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>显存节省</strong></td>
+                  <td>约2倍</td>
+                  <td>约4倍</td>
+                  <td>约10倍</td>
+                </tr>
+                <tr>
+                  <td><strong>通信开销</strong></td>
+                  <td>低</td>
+                  <td>低</td>
+                  <td>高</td>
+                </tr>
+                <tr>
+                  <td><strong>实现难度</th></td>
+                  <td>简单</td>
+                  <td>中等</td>
+                  <td>复杂</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 实用建议</h2>
+          <div class="card">
+            <h3 class="card-title">选择合适的ZeRO阶段</h3>
+            <div class="code-block">
+选择指南：
+
+ZeRO-1 适用场景：
+• 显存略微不足
+• 模型不大（<10B参数）
+• GPU数量适中（≤16）
+• 通信网络一般
+
+ZeRO-2 适用场景：
+• 显存不足比较明显
+• 模型较大（10-100B参数）
+• GPU数量较多（16-64）
+• 需要更好的显存优化
+
+ZeRO-3 适用场景：
+• 显存严重不足
+• 超大模型（>100B参数）
+• GPU数量很多（≥64）
+• 有高速网络（InfiniBand）
+• 必须配合CPU Offload使用
+
+推荐配置：
+• 小规模（≤8卡）：ZeRO-2
+• 中规模（8-64卡）：ZeRO-2或ZeRO-3
+• 大规模（≥64卡）：ZeRO-3 + Offload
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>ZeRO-3通信开销：</strong>显著增加，需要高速网络</li>
+              <li><strong>模型保存：</strong>需要先gather参数再保存</li>
+              <li><strong>自定义层：</strong>需要正确注册可训练参数</li>
+              <li><strong>调试困难：</strong>分片后模型状态难以直接检查</li>
+              <li><strong>性能监控：</strong>密切监控通信时间占比</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• ZeRO通过分片消除分布式训练的冗余</li>
+                <li>• ZeRO-1/2/3逐步优化，显存节省更多</li>
+                <li>• ZeRO-1：优化器状态分片，约2倍节省</li>
+                <li>• ZeRO-2：+梯度分片，约4倍节省</li>
+                <li>• ZeRO-3：+参数分片，约10倍节省，但通信开销大</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="18-1-DeepSpeed概述.html">← 上一节</a>
+          <a href="18-3-ZeRO-Offload与ZeRO-Infinity.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

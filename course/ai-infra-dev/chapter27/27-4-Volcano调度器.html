@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.4 Volcano调度器 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.4 Volcano调度器</h1>
+          <p class="subtitle">批处理与AI任务调度</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Volcano调度器的核心特性</li>
+            <li>掌握Volcano的安装与配置</li>
+            <li>学会使用PodGroup管理批处理任务</li>
+            <li>了解Volcano在AI训练中的应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU集群" class="card-image">
+          <h3 class="card-title">Volcano简介</h3>
+          <p class="card-text">
+            <strong>Volcano</strong>是CNCF托管的Kubernetes批处理调度器，专为高性能计算、深度学习训练等场景设计。
+            相比原生Kube-scheduler，Volcano提供了更强的调度能力，支持作业级别的调度、公平调度、gang调度等特性。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 核心特性</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Gang调度</h3>
+              <p class="card-text">确保作业的所有Pod同时调度，避免部分Pod等待导致的资源浪费。</p>
+              <ul class="feature-list">
+                <li>全有或全无</li>
+                <li>适合分布式训练</li>
+                <li>避免死锁</li>
+                <li>减少等待时间</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">公平调度</h3>
+              <p class="card-text">在多个队列间公平分配资源，保证各租户的公平性。</p>
+              <ul class="feature-list">
+                <li>队列资源配额</li>
+                <li>权重分配</li>
+                <li>抢占机制</li>
+                <li>资源回收</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">任务调度</h3>
+              <p class="card-text">支持多种批处理任务类型，如Spark、TensorFlow、PyTorch等。</p>
+              <ul class="feature-list">
+                <li>Spark on K8s</li>
+                <li>PyTorch Operator</li>
+                <li>MPI作业</li>
+                <li>TensorFlow训练</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">高级调度</h3>
+              <p class="card-text">提供丰富的调度策略和插件机制。</p>
+              <ul class="feature-list">
+                <li>拓扑感知</li>
+                <li>GPU亲和性</li>
+                <li>NUMA亲和</li>
+                <li>自定义调度器</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装Volcano</h2>
+
+          <h3>使用kubectl安装</h3>
+          <div class="code-block">
+# 克隆Volcano仓库
+git clone https://github.com/volcano-sh/volcano.git
+cd volcano
+
+# 安装Volcano
+kubectl apply -f installer/volcano-development.yaml
+
+# 或直接使用官方发布版本
+kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.0/installer/volcano-development.yaml
+
+# 验证安装
+kubectl get pods -n volcano-system
+kubectl get crd | grep volcano
+
+# 查看Volcano组件
+kubectl get deploy -n volcano-system
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">Volcano组件</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>volcano-scheduler</strong>：调度器</li>
+                <li>• <strong>volcano-controllers</strong>：控制器</li>
+                <li>• <strong>volcano-admission</strong>：准入控制</li>
+                <li>• <strong>volcano-agent</strong>：节点代理</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>使用Helm安装</h3>
+          <div class="code-block">
+# 添加Volcano Helm仓库
+helm repo add volcano-sh https://volcano-sh.github.io/helm-charts
+helm repo update
+
+# 安装Volcano
+helm install volcano volcano-sh/volcano -n volcano-system --create-namespace
+
+# 查看Volcano状态
+helm status volcano -n volcano-system
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> PodGroup概念</h2>
+
+          <div class="card">
+            <h3 class="card-title">PodGroup</h3>
+            <p class="card-text">
+              <strong>PodGroup</strong>是Volcano的核心概念，用于将一组相关的Pod作为一个整体进行调度。
+              PodGroup定义了作业的调度策略、资源需求、优先级等。
+            </p>
+          </div>
+
+          <div class="image-container">
+            <img src="https://volcano.sh/en/docs/images/gang-scheduling.png" alt="Gang调度">
+            <div class="caption">图：Gang调度示意图</div>
+          </div>
+
+          <h3>创建PodGroup</h3>
+          <div class="code-block">
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata:
+  name: mpi-job
+  namespace: default
+spec:
+  # 作业最小运行Pod数（Gang调度）
+  minMember: 4
+
+  # 作业优先级，数值越大优先级越高
+  priorityClassName: high-priority
+
+  # 队列名称
+  queue: default
+
+  # 调度策略
+  minResources:
+    cpu: "4"
+    memory: "8Gi"
+    nvidia.com/gpu: "4"
+
+  # 超时时间
+  timeoutSeconds: 3600
+            </div>
+
+          <h3>使用PodGroup</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker-0
+  namespace: default
+  labels:
+    # 关联到PodGroup
+    volcano.sh/job-name: mpi-job
+    volcano.sh/job-role: worker
+spec:
+  schedulerName: volcano
+  containers:
+  - name: worker
+    image: mpi-job:latest
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+        nvidia.com/gpu: "1"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+        nvidia.com/gpu: "1"
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 分布式训练调度</h2>
+
+          <h3>PyTorch训练作业</h3>
+          <div class="code-block">
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: pytorch-dist-training
+  namespace: default
+spec:
+  elasticPolicy:
+    rdzvBackend: c10d
+    minReplicas: 2
+    maxReplicas: 4
+
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          annotations:
+            scheduling.volcano.sh/group-name: pytorch-training
+        spec:
+          schedulerName: volcano
+          containers:
+          - name: pytorch
+            image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+            command:
+            - python
+            - train.py
+            - --backend=nccl
+            - --world-size=4
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+
+    Worker:
+      replicas: 3
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          annotations:
+            scheduling.volcano.sh/group-name: pytorch-training
+        spec:
+          schedulerName: volcano
+          containers:
+          - name: pytorch
+            image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+            command:
+            - python
+            - train.py
+            - --backend=nccl
+            - --world-size=4
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+            </div>
+
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">Gang调度优势</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• 确保所有训练节点同时启动</li>
+                  <li>• 避免部分节点等待导致的资源浪费</li>
+                  <li>• 提高训练任务的整体吞吐量</li>
+                  <li>• 简化分布式训练的部署流程</li>
+                </ul>
+              </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 队列与公平调度</h2>
+
+          <h3>创建队列</h3>
+          <div class="code-block">
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: training-queue
+  namespace: default
+spec:
+  capability:
+    cpu: "100"
+    memory: "200Gi"
+    nvidia.com/gpu: "10"
+  reclaimable: true
+  weight: 10
+
+---
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: inference-queue
+  namespace: default
+spec:
+  capability:
+    cpu: "50"
+    memory: "100Gi"
+    nvidia.com/gpu: "5"
+  reclaimable: true
+  weight: 5
+            </div>
+
+            <h3>配置调度器</h3>
+            <div class="code-block">
+# 编辑调度器配置
+kubectl edit configmap volcano-scheduler-configmap -n volcano-system
+
+# 公平调度配置
+apiVersion: config.volcano.sh/v1alpha1
+kind: Configuration
+kind: Configuration
+schedulers:
+- name: volcano
+  actions: "enqueue, allocate, backfill"
+  tiers:
+  - plugins:
+    - name: priority
+    - name: gang
+    - name: conformance
+  - plugins:
+    - name: overcommit
+    - name: drf
+    - name: predicates
+    - name: nodeorder
+    - name: binpack
+
+# DRF（Dominant Resource Fairness）配置
+drf:
+  enable: true
+  # 支持公平分配资源
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 高级调度策略</h2>
+
+          <h3>NUMA亲和性</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: numa-aware-pod
+  annotations:
+    volcano.sh/numa-topology-policy: "best-effort"
+spec:
+  schedulerName: volcano
+  containers:
+  - name: app
+    image: pytorch/pytorch:latest
+    resources:
+      requests:
+        cpu: "4"
+        memory: "8Gi"
+        nvidia.com/gpu: "1"
+            </div>
+
+            <h3>GPU亲和性</h3>
+            <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-affinity-pod
+  annotations:
+    # Pod亲和性，调度到有相同标签的Pod所在的节点
+    volcano.sh/pod-group-affinity: "training-group"
+spec:
+  schedulerName: volcano
+  affinity:
+    # 节点亲和性
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: gpu-type
+            operator: In
+            values:
+            - A100
+            - V100
+  containers:
+  - name: training
+    image: pytorch/pytorch:latest
+    resources:
+      requests:
+        nvidia.com/gpu: "2"
+            </div>
+
+            <h3>抢占调度</h3>
+            <div class="code-block">
+# 配置抢占策略
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata:
+  name: high-priority-job
+spec:
+  minMember: 2
+  priorityClassName: high-priority  # 高优先级
+  queue: training-queue
+            </div>
+
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">抢占机制</div>
+                <p>高优先级的作业可以抢占低优先级作业的资源，被抢占的作业会重新调度到其他节点或进入等待队列。</p>
+              </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 监控与调试</h2>
+
+          <div class="code-block">
+# 查看PodGroup状态
+kubectl get podgroup
+
+# 查看PodGroup详情
+kubectl describe podgroup <podgroup-name>
+
+# 查看调度事件
+kubectl describe pod <pod-name> | grep -A 20 Events
+
+# 查看调度器日志
+kubectl logs -n volcano-system deployment/volcano-scheduler
+
+# 查看调度器指标
+kubectl get svc volcano-scheduler-metrics -n volcano-system
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• Pod处于Pending状态：检查资源是否足够</li>
+                <li>• Gang调度失败：检查minMember配置</li>
+                <li>• 队列资源不足：调整队列配额或权重</li>
+                <li>• 抢占频繁：优化优先级配置</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 分布式训练使用Gang调度</li>
+              <li>• 多租户环境配置队列和公平调度</li>
+              <li>• 为不同类型工作负载设置合适的优先级</li>
+              <li>• 使用NUMA亲和性优化性能</li>
+              <li>• 监控队列资源使用情况</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• Volcano专为批处理和AI场景设计</li>
+                <li>• Gang调度确保分布式任务的整体性</li>
+                <li>• PodGroup是调度的基本单位</li>
+                <li>• 队列和公平调度支持多租户</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-3-KubeRay实践.html">← 上一节</a>
+          <a href="27-5-多集群管理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

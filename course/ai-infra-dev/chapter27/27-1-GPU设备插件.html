@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.1 GPU设备插件 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.1 GPU设备插件</h1>
+          <p class="subtitle">Kubernetes GPU资源管理</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Kubernetes设备插件机制</li>
+            <li>掌握NVIDIA GPU设备插件的安装与配置</li>
+            <li>学会在Pod中请求和使用GPU</li>
+            <li>了解GPU共享与切分方案</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU设备" class="card-image">
+          <h3 class="card-title">GPU设备插件概述</h3>
+          <p class="card-text">
+            Kubernetes通过<strong>设备插件（Device Plugin）</strong>机制支持特殊硬件资源，如GPU、FPGA、高速网卡等。
+            NVIDIA GPU设备插件是Kubernetes中使用最广泛的设备插件，用于在Kubernetes中管理和调度GPU资源。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 设备插件架构</h2>
+          <div class="image-container">
+            <img src="https://kubernetes.io/images/docs/device-plugins.svg" alt="设备插件架构">
+            <div class="caption">图：Kubernetes设备插件架构</div>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title">工作原理</h3>
+            <ul class="feature-list">
+              <li>设备插件作为DaemonSet在每个节点运行</li>
+              <li>通过gRPC与Kubelet通信</li>
+              <li>发现并上报硬件资源</li>
+              <li>管理设备的分配与释放</li>
+              <li>提供设备健康检查</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装NVIDIA设备插件</h2>
+
+          <h3>前提条件</h3>
+          <div class="code-block">
+# 节点必须安装的组件
+- NVIDIA驱动
+- nvidia-container-toolkit (或 nvidia-docker2)
+- Docker/Containerd支持nvidia运行时
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">注意事项</div>
+              <p>确保NVIDIA驱动版本与GPU兼容，建议使用LTS版本。</p>
+            </div>
+          </div>
+
+          <h3>安装方式1：Helm Chart</h3>
+          <div class="code-block">
+# 添加NVIDIA Helm仓库
+helm repo add nvidia https://nvidia.github.io/k8s-device-plugin
+helm repo update
+
+# 安装设备插件
+helm install nvidia-device-plugin nvidia/k8s-device-plugin \
+  --namespace gpu-operator \
+  --create-namespace \
+  --set deviceListStrategy=volumeMounts
+
+# 验证安装
+kubectl get pods -n gpu-operator
+kubectl describe node <node-name> | grep nvidia.com/gpu
+          </div>
+
+          <h3>安装方式2：kubectl apply</h3>
+          <div class="code-block">
+# 从官方仓库部署
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.0/deployments/static/nvidia-device-plugin.yml
+
+# 或者使用DaemonSet部署
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.0/deployments/static/nvidia-device-plugin-daemonset.yaml
+          </div>
+
+          <h3>安装方式3：GPU Operator（推荐生产环境）</h3>
+          <div class="code-block">
+# 安装GPU Operator（包含设备插件、驱动、监控等）
+helm repo add nvidia https://nvidia.github.io/gpu-operator
+helm repo update
+
+helm install --wait --generate-name \
+  nvidia/gpu-operator \
+  --namespace gpu-operator \
+  --create-namespace \
+  --set driver.enabled=true
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 验证GPU资源</h2>
+          <div class="code-block">
+# 查看节点GPU资源
+kubectl describe nodes | grep -A 3 nvidia.com/gpu
+
+# 输出示例：
+# Capacity:
+#   nvidia.com/gpu:     4
+# Allocatable:
+#   nvidia.com/gpu:     4
+# Allocated resources:
+#   nvidia.com/gpu:     0
+
+# 查看设备插件Pod
+kubectl get pods -n gpu-operator -l name=nvidia-device-plugin-ds
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 在Pod中使用GPU</h2>
+
+          <h3>单GPU Pod</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-pod
+spec:
+  containers:
+  - name: cuda-container
+    image: nvidia/cuda:11.8.0-base-ubuntu22.04
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    command: ["nvidia-smi"]
+          </div>
+
+          <h3>多GPU Pod</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-gpu-pod
+spec:
+  containers:
+  - name: training
+    image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+    resources:
+      limits:
+        nvidia.com/gpu: 4  # 请求4个GPU
+    command: ["python", "train.py"]
+    args:
+    - "--gpus=all"
+          </div>
+
+          <h3>Deployment使用GPU</h3>
+          <div class="code-block">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-training
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: training
+  template:
+    metadata:
+      labels:
+        app: training
+    spec:
+      containers:
+      - name: training
+        image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
+        command: ["python", "train.py"]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 高级配置</h2>
+
+          <h3>MIG（Multi-Instance GPU）支持</h3>
+          <div class="code-block">
+# 配置MIG设备
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nvidia-device-plugin-config
+  namespace: gpu-operator
+data:
+  mig-strategy: single  # single | mixed | none
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">MIG策略说明</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>single</strong>：所有GPU配置相同的MIG实例</li>
+                <li>• <strong>mixed</strong>：部分GPU使用MIG，部分保持完整</li>
+                <li>• <strong>none</strong>：禁用MIG，使用完整GPU</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>指定GPU类型</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: select-gpu-type
+spec:
+  containers:
+  - name: training
+    image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+        nvidia.com/gpu.product: A100-SXM4-40GB  # 指定GPU型号
+    nodeSelector:
+      accelerator: nvidia-tesla-a100
+          </div>
+
+          <h3>GPU亲和性</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-affinity
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu.count
+            operator: Gt
+            values:
+            - 0
+    # 节点反亲和性，分散到不同节点
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - training
+          topologyKey: kubernetes.io/hostname
+  containers:
+  - name: training
+    image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+    resources:
+      limits:
+        nvidia.com/gpu: 2
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPU共享与切分</h2>
+
+          <div class="card">
+            <h3 class="card-title">GPU共享方案</h3>
+            <p class="card-text">原生设备插件不支持GPU共享，需要第三方方案：</p>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">NVIDIA MPS</h4>
+              <ul class="feature-list">
+                <li>官方共享方案</li>
+                <li>进程级共享</li>
+                <li>需要适配应用</li>
+              </ul>
+              <div class="code-block">
+# MPS配置示例
+env:
+- name: CUDA_MPS_PIPE_DIRECTORY
+  value: /tmp/nvidia-mps
+- name: CUDA_MPS_LOG_DIRECTORY
+  value: /tmp/nvidia-mps-log
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Aliyun cGPU</h4>
+              <ul class="feature-list">
+                <li>阿里云方案</li>
+                <li>显存与算力隔离</li>
+                <li>无需修改应用</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Volcano vGPU</h4>
+              <ul class="feature-list">
+                <li>开源方案</li>
+                <li>支持多种切分策略</li>
+                <li>社区活跃</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Run:AI</h4>
+              <ul class="feature-list">
+                <li>商业方案</li>
+                <li>完整的GPU池化</li>
+                <li>企业级支持</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与调试</h2>
+          <div class="code-block">
+# 查看GPU使用情况
+kubectl exec -it gpu-pod -- nvidia-smi
+
+# 查看节点GPU详细信息
+kubectl exec -it nvidia-device-plugin-xxxxx -n gpu-operator -- nvidia-smi
+
+# GPU监控（使用DCGM）
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/dcgm-exporter/master/dcgm-exporter.yaml
+
+# Prometheus配置采集GPU指标
+          </div>
+
+          <div class="tip-box warning">
+            <span class="icon">⚠️</span>
+            <div class="content">
+              <div class="title">常见问题</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• Pod启动失败：检查驱动和容器运行时</li>
+                <li>• GPU不可见：验证设备插件状态</li>
+                <li>• 性能问题：检查GPU亲和性和NUMA</li>
+                <li>• 资源不足：使用GPU共享方案</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 生产环境使用GPU Operator统一管理</li>
+              <li>• 为不同工作负载设置合适的GPU配额</li>
+              <li>• 使用节点亲和性优化GPU利用率</li>
+              <li>• 实施GPU监控和告警</li>
+              <li>• 对于小模型推理，考虑GPU共享方案</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• GPU设备插件通过DaemonSet部署</li>
+                <li>• 使用nvidia.com/gpu资源名请求GPU</li>
+                <li>• GPU Operator提供完整的管理方案</li>
+                <li>• 第三方方案支持GPU共享与切分</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter26/26-5-存储管理-PV-PVC.html">← 上一节</a>
+          <a href="27-2-NVIDIA-Kubernetes-Operator.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

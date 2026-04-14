@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.4 投机解码 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>24.4 投机解码</h1>
+          <p class="subtitle">通过预测加速LLM推理</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解投机解码的原理</li>
+            <li>掌握投机解码的流程</li>
+            <li>学习小模型作为Draft策略</li>
+            <li>了解投机解码的优化技巧</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="投机解码" class="card-image">
+          <h3 class="card-title">什么是投机解码</h3>
+          <p class="card-text">
+            <strong>投机解码（Speculative Decoding）</strong>是一种大语言模型推理加速技术。
+            它使用一个快速的小模型（Draft模型）预测多个token，
+            然后用大模型（Target模型）验证这些预测，正确的被接受，错误的被丢弃。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 核心思想</h2>
+          <div class="card">
+            <h3 class="card-title">Draft-Verify机制</h3>
+            <div style="margin-top: 20px;">
+              <p>投机解码的核心是Draft-Verify机制：</p>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+                <div style="padding: 15px; background: #E8F5E9; border-radius: 8px;">
+                  <div style="font-weight: bold; margin-bottom: 8px; color: #388E3C;">Draft阶段</div>
+                  <ul style="color: var(--text-secondary); font-size: 0.9em;">
+                    <li>小模型快速预测N个token</li>
+                    <li>计算成本低，速度快</li>
+                    <li>生成候选序列</li>
+                  </ul>
+                </div>
+                <div style="padding: 15px; background: #E3F2FD; border-radius: 8px;">
+                  <div style="font-weight: bold; margin-bottom: 8px; color: #1976D2;">Verify阶段</div>
+                  <ul style="color: var(--text-secondary); font-size: 0.9em;">
+                    <li>大模型验证预测结果</li>
+                    <li>接受正确的token</li>
+                    <li>拒绝错误的token</li>
+                  </ul>
+                </div>
+                <div style="padding: 15px; background: #FFF3E0; border-radius: 8px;">
+                  <div style="font-weight: bold; margin-bottom: 8px; color: #F57C00;">加速效果</div>
+                  <ul style="color: var(--text-secondary); font-size: 0.9em;">
+                    <li>接受率高则加速明显</li>
+                    <li>通常加速2-3倍</li>
+                    <li>不改变输出结果</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 工作流程</h2>
+          <div class="card">
+            <h3 class="card-title">投机解码流程</h3>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; justify-content: center;">
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: #4CAF50; color: white; border-radius: 8px; font-weight: bold;">
+                当前状态
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                Draft预测N个token
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                Target验证
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                接受/拒绝
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: #4CAF50; color: white; border-radius: 8px; font-weight: bold;">
+                更新状态
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="投机解码流程">
+          <div class="caption">图：投机解码的Draft-Verify流程示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 接受率</h2>
+          <div class="card">
+            <h3 class="card-title">加速的关键因素</h3>
+            <p>接受率（Acceptance Rate）是投机解码加速效果的关键指标：</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; background: #E8F5E9; border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5em; font-weight: bold; color: #4CAF50;">>80%</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">优秀</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 5px;">3-4倍加速</div>
+              </div>
+              <div style="padding: 15px; background: #FFF3E0; border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5em; font-weight: bold; color: #FF9800;">60-80%</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">良好</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 5px;">2-3倍加速</div>
+              </div>
+              <div style="padding: 15px; background: #FFEBEE; border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5em; font-weight: bold; color: #F44336;"><60%</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">较差</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 5px;"><2倍加速</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 加速效果</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">最佳情况</h3>
+              <ul class="feature-list">
+                <li>接受率100%</li>
+                <li>加速比 ≈ Draft速度</li>
+                <li>理想情况</li>
+                <li>可达10倍加速</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">实际情况</h3>
+              <ul class="feature-list">
+                <li>接受率60-80%</li>
+                <li>加速比 ≈ 接受率 × Draft速度</li>
+                <li>常见情况</li>
+                <li>2-4倍加速</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 投机解码实现示例</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.nn as nn
+from typing import Tuple
+
+class SpeculativeDecoder:
+    """
+    投机解码器
+    """
+    def __init__(self, target_model, draft_model, n_draft_tokens=5):
+        self.target_model = target_model  # 大模型
+        self.draft_model = draft_model    # 小模型
+        self.n_draft_tokens = n_draft_tokens
+
+    def draft(self, input_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Draft阶段：小模型预测N个token
+        """
+        draft_tokens = []
+        draft_logits = []
+
+        current_ids = input_ids.clone()
+
+        for _ in range(self.n_draft_tokens):
+            # 小模型预测下一个token
+            with torch.no_grad():
+                outputs = self.draft_model(current_ids)
+                logits = outputs.logits[:, -1, :]  # (batch, vocab_size)
+                probs = torch.softmax(logits, dim=-1)
+
+            # 采样或greedy
+            next_token = torch.argmax(probs, dim=-1, keepdim=True)
+
+            draft_tokens.append(next_token)
+            draft_logits.append(logits)
+
+            # 更新输入
+            current_ids = torch.cat([current_ids, next_token], dim=-1)
+
+        draft_tokens = torch.cat(draft_tokens, dim=-1)  # (batch, n_draft)
+        draft_logits = torch.stack(draft_logits, dim=1)   # (batch, n_draft, vocab_size)
+
+        return draft_tokens, draft_logits
+
+    def verify(self, input_ids: torch.Tensor, draft_tokens: torch.Tensor,
+              draft_logits: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Verify阶段：大模型验证
+        """
+        # 拼接原始输入和draft tokens
+        full_input = torch.cat([input_ids, draft_tokens], dim=-1)
+
+        # 大模型前向传播
+        with torch.no_grad():
+            outputs = self.target_model(full_input)
+            target_logits = outputs.logits[:, -(self.n_draft_tokens+1):, :]  # (batch, n_draft+1, vocab_size)
+
+        # 计算接受情况
+        accepted_tokens = []
+        accept_mask = []
+
+        for i in range(self.n_draft_tokens):
+            # 比较draft和target的logits
+            # 这里简化处理，实际应该计算概率比值
+            draft_prob = torch.softmax(draft_logits[:, i, :], dim=-1)
+            target_prob = torch.softmax(target_logits[:, i, :], dim=-1)
+
+            draft_token = draft_tokens[:, i]
+
+            # 接受条件（简化）
+            accepted = (torch.argmax(target_prob, dim=-1) == draft_token) & \
+                      (target_prob.gather(1, draft_token.unsqueeze(-1)).squeeze(-1) > 0.5)
+
+            accept_mask.append(accepted)
+            accepted_tokens.append(draft_token * accepted)
+
+            # 如果不接受，停止接受后续token
+            if not accepted.any():
+                break
+
+        accept_mask = torch.stack(accept_mask, dim=-1)  # (batch, n_draft)
+        accepted_tokens = torch.stack(accepted_tokens, dim=-1)
+
+        # 最后的target token总是接受
+        final_token = torch.argmax(target_logits[:, -1, :], dim=-1, keepdim=True)
+
+        return accepted_tokens, final_token, accept_mask
+
+    def generate(self, input_ids: torch.Tensor, max_tokens: int) -> torch.Tensor:
+        """
+        使用投机解码生成
+        """
+        current_ids = input_ids.clone()
+        generated_tokens = []
+
+        for _ in range(max_tokens // self.n_draft_tokens):
+            # Draft阶段
+            draft_tokens, draft_logits = self.draft(current_ids)
+
+            # Verify阶段
+            accepted_tokens, final_token, accept_mask = self.verify(
+                current_ids, draft_tokens, draft_logits
+            )
+
+            # 接受正确的token
+            for i in range(self.n_draft_tokens):
+                if accept_mask[:, i].any():
+                    current_ids = torch.cat([current_ids, accepted_tokens[:, i:i+1]], dim=-1)
+                    generated_tokens.append(accepted_tokens[:, i:i+1])
+                else:
+                    break
+
+            # 接受最终的target token
+            current_ids = torch.cat([current_ids, final_token], dim=-1)
+            generated_tokens.append(final_token)
+
+        return torch.cat(generated_tokens, dim=-1)
+
+# Medusa方法（多分支投机）
+class MedusaSpeculative:
+    """
+    Medusa：多分支投机解码
+    """
+    def __init__(self, target_model, num_heads=5):
+        self.target_model = target_model
+        self.num_heads = num_heads
+        # Medusa heads（额外的小网络）
+        self.medusa_heads = nn.ModuleList([
+            nn.Linear(target_model.config.hidden_size, target_model.config.vocab_size)
+            for _ in range(num_heads)
+        ])
+
+    def medusa_decode(self, input_ids: torch.Tensor, max_tokens: int) -> torch.Tensor:
+        """
+        Medusa投机解码
+        """
+        current_ids = input_ids.clone()
+
+        for _ in range(max_tokens):
+            # 获取target模型的隐藏状态
+            with torch.no_grad():
+                outputs = self.target_model(current_ids, output_hidden_states=True)
+                hidden_states = outputs.hidden_states[-1]  # 最后一层隐藏状态
+
+            # 每个head预测多个token
+            medusa_predictions = []
+            for head in self.medusa_heads:
+                predictions = head(hidden_states)
+                medusa_predictions.append(predictions)
+
+            # 合并预测（简化处理）
+            # 实际实现需要更复杂的验证逻辑
+            next_token = torch.argmax(medusa_predictions[0], dim=-1, keepdim=True)
+            current_ids = torch.cat([current_ids, next_token], dim=-1)
+
+        return current_ids[:, input_ids.shape[-1]:]
+
+# 使用示例
+def example_usage():
+    """
+    使用投机解码的示例
+    """
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    # 加载模型
+    model_name = "meta-llama/Llama-2-7b-hf"
+    target_model = AutoModelForCausalLM.from_pretrained(model_name)
+    draft_model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+
+    # 创建投机解码器
+    spec_decoder = SpeculativeDecoder(
+        target_model=target_model,
+        draft_model=draft_model,
+        n_draft_tokens=5
+    )
+
+    # Tokenize输入
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    input_text = "写一个Python函数"
+    input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+    # 生成（使用投机解码）
+    output_ids = spec_decoder.generate(input_ids, max_tokens=100)
+
+    # 解码输出
+    output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    print(output_text)
+
+# vLLM中的投机解码
+def vllm_speculative_decoding():
+    """
+    vLLM中的投机解码
+    """
+    from vllm import LLM, SamplingParams
+
+    # 配置投机解码
+    llm = LLM(
+        model="meta-llama/Llama-2-7b-hf",
+        speculative_model="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        num_speculative_tokens=5,  # Draft token数量
+        tensor_parallel_size=1
+    )
+
+    sampling_params = SamplingParams(
+        temperature=0.8,
+        max_tokens=100
+    )
+
+    prompts = ["写一个Python函数"]
+
+    outputs = llm.generate(prompts, sampling_params)
+
+    for output in outputs:
+        print(f"Output: {output.outputs[0].text}")
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 优化策略</h2>
+          <div class="card">
+            <h3 class="card-title">提升接受率的策略</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: #E8F5E9;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #388E3C;">知识蒸馏</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">用Target训练Draft</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: #E3F2FD;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #1976D2;">Temperature调整</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">匹配分布</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: #FFF3E0;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #F57C00;">Top-k采样</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">提高概率</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: #F3E5F5;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #7B1FA2;">多分支</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">Medusa方法</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">投机解码实践建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>Draft模型参数量约为Target的10-20%</li>
+              <li>Draft token数量5-10为宜</li>
+              <li>使用知识蒸馏提升Draft质量</li>
+              <li>接受率是关键指标，需持续监控</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 投机解码使用小模型预测，大模型验证</li>
+                <li>• 接受率决定加速效果，通常60-80%</li>
+                <li>• 可实现2-4倍推理加速</li>
+                <li>• Medusa等多分支方法进一步提升效果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="24-3-连续批处理.html">← 上一节</a>
+          <a href="24-5-推理并行策略.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

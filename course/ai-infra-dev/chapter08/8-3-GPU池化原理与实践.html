@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.3 GPU池化原理与实践 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>8.3 GPU池化原理与实践</h1>
+          <p class="subtitle">构建弹性的GPU资源池</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU池化的核心概念</li>
+            <li>掌握GPU池化的实现技术</li>
+            <li>学会构建GPU资源池</li>
+            <li>了解GPU池化的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800" alt="资源池" class="card-image">
+          <h3 class="card-title">什么是GPU池化</h3>
+          <p class="card-text">
+            <strong>GPU池化（GPU Pooling）</strong>是将分散的GPU资源集中管理，形成统一资源池，
+            按需动态分配给应用，提高资源利用率，简化管理复杂度。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 池化架构</h2>
+          <div class="card">
+            <h3 class="card-title">GPU池化架构</h3>
+            <div class="code-block">
+<pre><strong>GPU池化架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                        应用层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • 训练作业 • 推理服务 • 开发环境                           │
+│  • 容器应用 • 虚拟机 • Batch Job                            │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      池化管理层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │ Scheduler    │  │ ResourceMgr  │  │ Monitor      │   │
+│  │ 资源调度     │  │ 资源管理     │  │ 监控统计     │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘   │
+│                                                             │
+│  • 统一资源视图                                              │
+│  • 动态资源分配                                              │
+│  • 弹性伸缩                                                  │
+│  • 多租户隔离                                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      虚拟化层                               │
+│  ─────────────────────────────────────────────────────────   │
+│  • vGPU • MIG • MPS • Soft Sharing                        │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      物理资源层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  • GPU Node 1 • GPU Node 2 • GPU Node 3                   │
+│  • Storage • Network • Management                          │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 池化技术</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">静态池化</h3>
+              <div class="code-block">
+<pre><strong>静态资源池：</strong>
+
+特点：
+• 预定义资源池
+• 固定资源分配
+• 简单易管理
+
+配置：
+训练池: 256 GPU
+推理池: 128 GPU
+开发池: 64 GPU
+
+适用场景：
+• 资源需求稳定
+• 预算固定
+• 简单管理</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">动态池化</h3>
+              <div class="code-block">
+<pre><strong>动态资源池：</strong>
+
+特点：
+• 动态资源分配
+• 弹性伸缩
+• 按需扩展
+
+配置：
+基础池: 200 GPU
+弹性池: 0-200 GPU
+总资源: 400 GPU
+
+适用场景：
+• 资源需求波动
+• 成本优化
+• 云原生环境</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 池化实现</h2>
+          <div class="card">
+            <h3 class="card-title">Kubernetes GPU池化</h3>
+            <div class="code-block">
+<pre><strong>使用NVIDIA GPU Operator：</strong>
+
+# 安装GPU Operator
+kubectl apply -f https://nvidia.github.io/gpu-operator/stable/nvidia-device-plugin-deployment.yaml
+
+# 配置GPU池化
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-pool-config
+  namespace: gpu-operator
+data:
+  config.yaml: |
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: true
+        renameByDefault: false
+
+# MIG配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mig-config
+  namespace: gpu-operator
+data:
+  config.yaml: |
+    mig-strategy: mixed
+    devices:
+      - name: all
+        mig-enabled: true
+        mig-devices:
+          mig-devices-config:
+            - "all"
+
+# 验证GPU池
+kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">池化策略</div>
+            <p><strong>分池策略：</strong>按业务类型（训练/推理/开发）划分资源池</p>
+            <p><strong>共享策略：</strong>共享资源池，按需分配</p>
+            <p><strong>混合策略：</strong>结合固定池和弹性池</p>
+            <p><strong>优先级策略：</strong>关键任务优先使用资源</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 池化监控</h2>
+          <div class="card">
+            <h3 class="card-title">资源池监控</h3>
+            <div class="code-block">
+<pre><strong>GPU池监控指标：</strong>
+
+# 资源池状态
+• 总GPU数
+• 已分配GPU
+• 可用GPU
+• 利用率
+
+# 性能指标
+• GPU利用率
+• 显存使用率
+• 温度监控
+• 错误统计
+
+# 业务指标
+• 等待队列长度
+• 平均等待时间
+• 作业完成率
+• 资源浪费率
+
+# Prometheus配置
+groups:
+- name: gpu_pool
+  rules:
+  - record: gpu_pool_total
+    expr: sum(kube_node_status_capacity_nvidia_com_gpu)
+  - record: gpu_pool_used
+    expr: sum(kube_pod_container_resource_requests{resource="nvidia.com/gpu"})
+  - record: gpu_pool_available
+    expr: gpu_pool_total - gpu_pool_used
+  - record: gpu_pool_utilization
+    expr: gpu_pool_used / gpu_pool_total * 100</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 自动扩缩容</h2>
+          <div class="card">
+            <h3 class="card-title">弹性扩缩容</h3>
+            <div class="code-block">
+<pre><strong>Cluster Autoscaler配置：</strong>
+
+# 安装Autoscaler
+kubectl apply -f https://github.com/kubernetes/autoscaler/releases/download/cluster-autoscaler-v1.27.0/cluster-autoscaler.yaml
+
+# 配置GPU节点组
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineSet
+metadata:
+  name: gpu-nodeset
+spec:
+  replicas: 3
+  template:
+    spec:
+      template:
+        spec:
+          instanceType: p3.8xlarge
+          extraAnnotations:
+            cluster.k8s.io/cluster-api-autoscaler-node-group-min-size: "3"
+            cluster.k8s.io/cluster-api-autoscaler-node-group-max-size: "10"
+
+# 扩缩容策略
+• 基于利用率: GPU利用率 > 80% 扩容
+• 基于队列: 等待队列 > 10 扩容
+• 基于时间: 定时扩缩容
+• 基于成本: 优化成本</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">池化注意事项</div>
+            <p><strong>资源碎片：</strong>长期运行会形成资源碎片，需定期整理</p>
+            <p><strong>性能隔离：</strong>确保不同池之间的性能隔离</p>
+            <p><strong>成本控制：</strong>监控资源使用，避免过度配置</p>
+            <p><strong>故障处理：</strong>节点故障时自动迁移和恢复</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU池化将分散GPU资源集中管理，提高利用率</li>
+                <li>• 池化架构包括应用层、池化管理层、虚拟化层和物理资源层</li>
+                <li>• 静态池化适合稳定场景，动态池化适合弹性需求</li>
+                <li>• Kubernetes通过GPU Operator和MIG实现GPU池化</li>
+                <li>• 完善的监控确保资源池高效运行</li>
+                <li>• 自动扩缩容实现按需资源供应</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="8-2-NVIDIA-vGPU技术.html">← 上一节</a>
+          <a href="8-4-MPS多进程服务.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

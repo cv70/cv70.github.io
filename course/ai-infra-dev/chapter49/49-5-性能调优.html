@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.5 性能调优 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.5 性能调优</h1>
+          <p class="subtitle">优化大模型训练性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握性能调优的方法</li>
+            <li>学会分析性能瓶颈</li>
+            <li>了解常用优化技巧</li>
+            <li>掌握性能测试工具</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 性能分析方法</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">性能分析工具</h3>
+              <ul class="feature-list">
+                <li><strong>Nsight Systems</strong> - 系统级分析</li>
+                <li><strong>Nsight Compute</strong> - Kernel级分析</li>
+                <li><strong>PyTorch Profiler</strong> - 框架级分析</li>
+                <li><strong>TensorBoard Profiler</strong> - 可视化分析</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">性能瓶颈</h3>
+              <ul class="feature-list">
+                <li><strong>计算受限</strong> - GPU利用率低</li>
+                <li><strong>内存受限</strong> - OOM频繁</li>
+                <li><strong>I/O受限</strong> - 数据加载慢</li>
+                <li><strong>通信受限</strong> - 梯度同步慢</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 数据加载优化</h2>
+          <div class="code-block">
+<pre><code># 高效数据加载
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+
+# 优化DataLoader配置
+dataloader = DataLoader(
+    dataset,
+    batch_size=64,
+    shuffle=False,  # 使用DistributedSampler
+    num_workers=8,           # 多进程加载
+    pin_memory=True,         # 使用固定内存
+    prefetch_factor=2,       # 预取因子
+    persistent_workers=True   # 持久化Worker
+)
+
+# 使用分布式采样器
+sampler = DistributedSampler(
+    dataset,
+    num_replicas=world_size,
+    rank=rank,
+    shuffle=True
+)
+
+dataloader = DataLoader(
+    dataset,
+    batch_size=64,
+    sampler=sampler,
+    num_workers=8,
+    pin_memory=True,
+    prefetch_factor=2,
+    persistent_workers=True
+)
+
+# 数据增强放在GPU上
+def gpu_augmentation(batch):
+    # 在GPU上进行数据增强
+    augmented = apply_transforms(batch)
+    return augmented</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧮</span> 混合精度训练</h2>
+          <div class="code-block">
+<pre><code># PyTorch混合精度训练
+import torch
+from torch.cuda.amp import autocast, GradScaler
+
+# 创建GradScaler
+scaler = GradScaler()
+
+# 训练循环
+for batch in dataloader:
+    optimizer.zero_grad()
+
+    # 使用混合精度
+    with autocast():
+        outputs = model(batch)
+        loss = criterion(outputs, targets)
+
+    # 缩放loss并反向传播
+    scaler.scale(loss).backward()
+
+    # 反缩放梯度并更新参数
+    scaler.step(optimizer)
+
+    # 更新缩放因子
+    scaler.update()
+
+# DeepSpeed混合精度配置
+{
+    "fp16": {
+        "enabled": true,
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+    "bf16": {
+        "enabled": true
+    }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 通信优化</h2>
+          <div class="code-block">
+<pre><code># 通信优化配置
+
+# 1. 梯度累积
+accumulation_steps = 4
+
+for step, batch in enumerate(dataloader):
+    with autocast():
+        loss = model(batch) / accumulation_steps
+
+    loss.backward()
+
+    if (step + 1) % accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()
+
+# 2. 梯度压缩
+from torch.distributed.algorithms import compress
+
+# 梯度通信优化
+optimizer = compress.CommunicationOptimizer(
+    optimizer,
+    compression_fp16=True
+)
+
+# 3. NCCL优化
+import os
+
+os.environ['NCCL_IB_DISABLE'] = '0'      # 启用InfiniBand
+os.environ['NCCL_SOCKET_IFNAME'] = 'eth0'
+os.environ['NCCL_IB_HCA'] = 'mlx5_0:1'
+os.environ['NCCL_IB_GID_INDEX'] = '3'
+os.environ['NCCL_IB_TIMEOUT'] = '22'
+os.environ['NCCL_IB_RETRY_CNT'] = '7'</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 显存优化</h2>
+          <div class="code-block">
+<pre><code># 显存优化技巧
+
+# 1. 梯度检查点
+from torch.utils.checkpoint import checkpoint
+
+def forward(self, x):
+    # 使用checkpoint减少显存
+    x = checkpoint(self.layer1, x)
+    x = checkpoint(self.layer2, x)
+    return x
+
+# 2. DeepSpeed ZeRO优化
+{
+    "zero_optimization": {
+        "stage": 2,  # 或stage 3
+        "allgather_partitions": true,
+        "allgather_bucket_size": 2e8,
+        "overlap_comm": true,
+        "contiguous_gradients": true
+    }
+}
+
+# 3. 动态显存分配
+import torch
+
+# 及时释放不需要的tensor
+del large_tensor
+torch.cuda.empty_cache()
+
+# 使用inplace操作
+x = x + y  # 创建新tensor
+x += y      # inplace操作</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能测试</h2>
+          <div class="code-block">
+<pre><code># 性能测试脚本
+import time
+import torch
+
+def benchmark_training(model, dataloader, steps=100):
+    """训练性能基准测试"""
+    model.train()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
+    # 预热
+    for i, batch in enumerate(dataloader):
+        if i >= 10:
+            break
+        _ = model(batch)
+
+    # 正式测试
+    torch.cuda.synchronize()
+    start_time = time.time()
+
+    for i, batch in enumerate(dataloader):
+        if i >= steps:
+            break
+
+        optimizer.zero_grad()
+        outputs = model(batch)
+        loss = outputs.mean()
+        loss.backward()
+        optimizer.step()
+
+    torch.cuda.synchronize()
+    end_time = time.time()
+
+    # 计算性能指标
+    elapsed = end_time - start_time
+    steps_per_sec = steps / elapsed
+    samples_per_sec = steps_per_sec * dataloader.batch_size
+
+    print(f"Steps/sec: {steps_per_sec:.2f}")
+    print(f"Samples/sec: {samples_per_sec:.2f}")
+
+    # GPU利用率
+    print(f"GPU Memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+
+    return {
+        'steps_per_sec': steps_per_sec,
+        'samples_per_sec': samples_per_sec,
+        'gpu_memory': torch.cuda.memory_allocated() / 1e9
+    }</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">优化建议</div>
+            <p><strong>循序渐进</strong>：一次只优化一个方面，观察效果。<strong>基准测试</strong>：建立性能基准，对比优化效果。<strong>持续监控</strong>：优化后持续监控性能指标。<strong>文档记录</strong>：记录优化过程和结果，便于复用。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 性能调优需要先分析性能瓶颈</li>
+                <li>• 数据加载、混合精度、通信优化是关键</li>
+                <li>• 使用合适的工具进行性能分析</li>
+                <li>• 建立基准测试，对比优化效果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-4-训练监控.html">← 上一节</a>
+          <a href="../chapter50/50-1-规模化部署经验.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

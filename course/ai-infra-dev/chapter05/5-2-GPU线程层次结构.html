@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.2 GPU线程层次结构 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>5.2 GPU线程层次结构</h1>
+          <p class="subtitle">深入理解GPU线程组织与执行</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU线程的层次结构</li>
+            <li>掌握线程索引计算</li>
+            <li>了解线程同步机制</li>
+            <li>认识线程调度原理</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU线程" class="card-image">
+          <h3 class="card-title">线程层次概述</h3>
+          <p class="card-text">
+            GPU的线程层次结构是CUDA编程的核心概念。从Grid到Block再到Thread，每一层都有其特定的用途和限制。理解这一层次结构对于编写高效的GPU程序至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 三级线程结构</h2>
+          <div class="card">
+            <h3 class="card-title">Grid、Block、Thread</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+线程层次结构：
+
+                    Grid (线程网格)
+         ┌────────┴────────┐
+    Block 0                Block 1
+   ┌────┴────┐          ┌────┴────┐
+Thread    Thread     Thread    Thread
+   |         |          |         |
+   v         v          v         v
+
+维度定义：
+Grid: dim3 gridSize(gridDim.x, gridSize.y, gridSize.z)
+Block: dim3 blockSize(blockDim.x, blockDim.y, blockDim.z)
+Thread: threadIdx.x, threadIdx.y, threadIdx.z
+         blockIdx.x, blockIdx.y, blockIdx.z
+
+限制：
+• 每个Block最多1024个线程
+• Block维度最大：1024x1024x64
+• Grid维度最大：2^31-1 x 65535 x 65535
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧮</span> 线程索引计算</h2>
+          <div class="card">
+            <h3 class="card-title">多维索引映射</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              线程索引计算是将多维线程映射到一维数组的关键：
+            </p>
+            <div class="code-block">
+1D索引计算：
+
+// 计算全局线程ID
+int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+// 示例：处理一维数组
+__global__ void add_arrays(float *a, float *b, float *c, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < n) {
+        c[tid] = a[tid] + b[tid];
+    }
+}
+
+2D索引计算：
+
+// 计算全局线程ID
+int tid = blockIdx.y * blockDim.y + threadIdx.y;
+int idx = tid * blockDim.x * gridDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+
+// 更清晰的写法
+int row = blockIdx.y * blockDim.y + threadIdx.y;
+int col = blockIdx.x * blockDim.x + threadIdx.x;
+int idx = row * width + col;
+
+// 2D数组访问示例
+__global__ void process_image(uchar4 *image, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < width && y < height) {
+        int idx = y * width + x;
+        // 处理像素
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> Grid和Block配置</h2>
+          <div class="card">
+            <h3 class="card-title">配置策略</h3>
+            <div class="code-block">
+Kernel启动配置：
+
+// 标准配置
+int n = 1024 * 1024;
+int blockSize = 256;
+int numBlocks = (n + blockSize - 1) / blockSize;
+kernel<<<numBlocks, blockSize>>>(data, n);
+
+// 2D配置
+int width = 1920;
+int height = 1080;
+dim3 blockSize(16, 16);  // 256个线程
+dim3 gridSize((width + blockSize.x - 1) / blockSize.x,
+               (height + blockSize.y - 1) / blockSize.y);
+kernel<<<gridSize, blockSize>>>(image, width, height);
+
+// 3D配置
+int depth = 32;
+dim3 blockSize3d(8, 8, 8);  // 512个线程
+dim3 gridSize3d((width + 7) / 8,
+                  (height + 7) / 8,
+                  (depth + 7) / 8);
+kernel<<<gridSize3d, blockSize3d>>>(volume, width, height, depth);
+
+// 最大线程数限制
+// 当前架构：每个Block最多1024个线程
+// 典型配置：32x32 = 1024（2D）
+// 典型配置：8x8x16 = 1024（3D）
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 线程同步</h2>
+          <div class="card">
+            <h3 class="card-title">同步机制</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              CUDA提供多种同步原语来协调线程间的执行：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>同步类型</th>
+                  <th>作用域</th>
+                  <th>API</th>
+                  <th>开销</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>__syncthreads()</td>
+                  <td>Block内</td>
+                  <td>线程块同步</td>
+                  <td>高</td>
+                </tr>
+                <tr>
+                  <td>__syncwarp()</td>
+                  <td>Warp内</td>
+                  <td>Warp同步</td>
+                  <td>低</td>
+                </tr>
+                <tr>
+                  <td>cudaDeviceSynchronize()</td>
+                  <td>设备</td>
+                  <td>设备同步</td>
+                  <td>很高</td>
+                </tr>
+                <tr>
+                  <td>cudaStreamSynchronize()</td>
+                  <td>流</td>
+                  <td>流同步</td>
+                  <td>中</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block" style="margin-top: 1rem;">
+同步使用示例：
+
+// Block内同步
+__global__ void shared_memory_example(float *input, float *output, int n) {
+    __shared__ float shared_data[256];
+    int tid = threadIdx.x;
+
+    // 加载数据到共享内存
+    shared_data[tid] = input[tid];
+    __syncthreads();  // 等待所有线程完成加载
+
+    // 处理共享内存数据
+    shared_data[tid] = shared_data[tid] * 2;
+    __syncthreads();  // 等待所有线程完成处理
+
+    // 写回结果
+    output[tid] = shared_data[tid];
+}
+
+// Warp内同步
+__global__ void warp_reduce(float *data, int n) {
+    int tid = threadIdx.x;
+    float sum = data[tid];
+
+    // Warp内归约
+    for (int offset = warpSize/2; offset > 0; offset /= 2) {
+        sum += __shfl_down_sync(0xffffffff, sum, offset);
+    }
+    __syncwarp();  // Warp内同步
+
+    if (tid % warpSize == 0) {
+        data[tid / warpSize] = sum;
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> Warp执行模型</h2>
+          <div class="card">
+            <h3 class="card-title">SIMT执行</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              GPU以Warp为单位执行，32个线程同时执行相同指令：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>Warp特性</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>32个线程一组</li>
+                  <li>锁步执行</li>
+                  <li>相同指令</li>
+                  <li>数据可以不同</li>
+                </ul>
+              </div>
+              <div>
+                <h4>分支问题</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>分支导致分化</li>
+                  <li>串行执行各分支</li>
+                  <li>性能下降</li>
+                  <li>避免嵌套分支</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+分支分化示例：
+
+// 不好：分支导致分化
+__global__ void conditional_process(float *data) {
+    int tid = threadIdx.x;
+    if (tid % 2 == 0) {
+        data[tid] = data[tid] * 2;
+    } else {
+        data[tid] = data[tid] / 2;
+    }
+    // Warp需要执行两个分支，性能差
+}
+
+// 好：避免分支
+__global__ void optimized_process(float *data) {
+    int tid = threadIdx.x;
+    float factor = (tid % 2 == 0) ? 2.0f : 0.5f;
+    data[tid] = data[tid] * factor;
+    // 无分支，性能好
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 资源分配</h2>
+          <div class="card">
+            <h3 class="card-title">SM资源管理</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>资源类型</th>
+                  <th>限制</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>寄存器</td>
+                  <td>64K per SM (H100)</td>
+                  <td>线程私有，限制Block数量</td>
+                </tr>
+                <tr>
+                  <td>共享内存</td>
+                  <td>228KB per SM (H100)</td>
+                  <td>Block内共享，限制Block大小</td>
+                </tr>
+                <tr>
+                  <td>线程数</td>
+                  <td>2048 per SM (H100)</td>
+                  <td>限制并发Block数</td>
+                </tr>
+                <tr>
+                  <td>Block数</td>
+                  <td>32 per SM</td>
+                  <td>限制并发执行</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">优化建议</div>
+                <p>减少寄存器和共享内存使用可以增加并发Block数，提高GPU利用率。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU线程采用三级层次结构</li>
+                <li>• 线程索引计算是关键</li>
+                <li>• 同步机制协调线程执行</li>
+                <li>• Warp是执行的基本单位</li>
+                <li>• 资源限制影响并发性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="5-1-CUDA编程模型.html">← 上一节</a>
+          <a href="5-3-GPU内存模型.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

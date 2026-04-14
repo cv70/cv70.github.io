@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.4 I/O瓶颈分析 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>38.4 I/O瓶颈分析</h1>
+          <p class="subtitle">识别和解决I/O性能瓶颈</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解I/O瓶颈的类型</li>
+            <li>掌握I/O性能监控方法</li>
+            <li>学习I/O优化技术</li>
+            <li>实践数据加载优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="I/O性能" class="card-image">
+          <h3 class="card-title">I/O瓶颈类型</h3>
+          <p class="card-text">
+            <strong>I/O瓶颈</strong>是AI训练中常见的性能限制因素，包括磁盘I/O、网络I/O和数据加载等。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> I/O瓶颈类型</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">💾</div>
+              <h3 class="card-title">磁盘I/O</h3>
+              <p class="card-text">数据读取速度慢</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🌐</div>
+              <h3 class="card-title">网络I/O</h3>
+              <p class="card-text">数据传输延迟高</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔄</div>
+              <h3 class="card-title">数据加载</h3>
+              <p class="card-text">预处理开销大</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> I/O监控工具</h2>
+          <div class="code-block">
+# 磁盘I/O监控
+import psutil
+import time
+
+def monitor_disk_io(interval=1):
+    prev_disk_io = psutil.disk_io_counters()
+    prev_time = time.time()
+
+    while True:
+        time.sleep(interval)
+        curr_disk_io = psutil.disk_io_counters()
+        curr_time = time.time()
+
+        elapsed = curr_time - prev_time
+        read_bytes = curr_disk_io.read_bytes - prev_disk_io.read_bytes
+        write_bytes = curr_disk_io.write_bytes - prev_disk_io.write_bytes
+
+        read_mb = read_bytes / 1024 / 1024 / elapsed
+        write_mb = write_bytes / 1024 / 1024 / elapsed
+
+        print(f"Read: {read_mb:.2f} MB/s, Write: {write_mb:.2f} MB/s")
+
+        prev_disk_io = curr_disk_io
+        prev_time = curr_time
+
+# 网络I/O监控
+def monitor_network_io(interval=1):
+    prev_net_io = psutil.net_io_counters()
+    prev_time = time.time()
+
+    while True:
+        time.sleep(interval)
+        curr_net_io = psutil.net_io_counters()
+        curr_time = time.time()
+
+        elapsed = curr_time - prev_time
+        sent_bytes = curr_net_io.bytes_sent - prev_net_io.bytes_sent
+        recv_bytes = curr_net_io.bytes_recv - prev_net_io.bytes_recv
+
+        sent_mb = sent_bytes / 1024 / 1024 / elapsed
+        recv_mb = recv_bytes / 1024 / 1024 / elapsed
+
+        print(f"Sent: {sent_mb:.2f} MB/s, Recv: {recv_mb:.2f} MB/s")
+
+        prev_net_io = curr_net_io
+        prev_time = curr_time
+
+# iotop - 实时I/O监控
+# iostat - 系统I/O统计
+# ioping - I/O延迟测试
+# fio - I/O性能测试
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> I/O瓶颈分析</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">I/O瓶颈识别方法</div>
+              <p>通过监控数据识别不同类型的I/O瓶颈：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# I/O瓶颈识别指南
+
+## 1. 磁盘I/O瓶颈
+特征:
+- 高磁盘使用率 (>90%)
+- 高I/O等待时间 (iowait > 20%)
+- 低CPU利用率 (CPU空闲但任务慢)
+- 高磁盘队列长度
+
+诊断:
+```bash
+# 查看磁盘I/O状态
+iostat -x 1
+
+# 查看磁盘使用率
+df -h
+
+# 测试磁盘性能
+fio --name=random-read --ioengine=libaio --rw=randread \
+    --bs=4k --direct=1 --size=1G --numjobs=4 --runtime=60 \
+    --time_based --group_reporting
+```
+
+## 2. 网络I/O瓶颈
+特征:
+- 高网络延迟 (>10ms for LAN)
+- 带宽饱和
+- 高丢包率 (>0.1%)
+- TCP重传率高
+
+诊断:
+```bash
+# 查看网络连接
+ss -s
+
+# 测试网络延迟
+ping target_host
+
+# 测试带宽
+iperf3 -s  # 服务器
+iperf3 -c server_ip  # 客户端
+
+# 查看丢包率
+iftop
+```
+
+## 3. 数据加载瓶颈
+特征:
+- GPU利用率低 (<50%)
+- 数据加载时间长
+- CPU利用率高在数据线程
+- 多线程数据加载CPU 100%
+
+诊断:
+# 在代码中添加性能分析
+import time
+
+def track_dataloader(dataloader):
+    total_time = 0
+    for batch in dataloader:
+        start = time.time()
+        # 使用batch
+        total_time += time.time() - start
+        print(f"Batch time: {time.time() - start:.4f}s")
+    print(f"Average batch time: {total_time / len(dataloader):.4f}s")
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> I/O优化技术</h2>
+          <div class="code-block">
+# 1. 磁盘I/O优化
+
+## 使用SSD代替HDD
+# SSD的随机读写性能比HDD高10-100倍
+
+## 使用RAID配置
+# RAID0: 条带化，提高读写速度
+# RAID10: 镜像+条带，兼顾速度和冗余
+
+## 使用内存缓存
+import os
+from joblib import Memory
+
+# 使用内存缓存加速数据加载
+cachedir = '/tmp/joblib_cache'
+memory = Memory(cachedir, verbose=0)
+
+@memory.cache
+def load_and_process(file_path):
+    data = load_data(file_path)
+    return process(data)
+
+## 预取和预加载
+class FastDataLoader:
+    def __init__(self, dataset, batch_size=32, prefetch=2):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.prefetch = prefetch
+        self.buffer = Queue(maxsize=prefetch)
+        self.worker = Thread(target=self._prefetch_worker)
+        self.worker.start()
+
+    def _prefetch_worker(self):
+        for batch in self.dataset:
+            self.buffer.put(batch)
+
+    def __iter__(self):
+        while True:
+            yield self.buffer.get()
+
+# 2. 网络I/O优化
+
+## 使用压缩传输
+import zlib
+
+def send_compressed(data, socket):
+    compressed = zlib.compress(data, level=3)
+    socket.send(compressed)
+
+def receive_compressed(socket):
+    compressed = socket.recv(4096)
+    return zlib.decompress(compressed)
+
+## 使用连接池
+from urllib3 import PoolManager
+
+http = PoolManager(num_pools=10, maxsize=10)
+response = http.request('GET', 'http://example.com')
+
+## 使用异步I/O
+import aiohttp
+import asyncio
+
+async def fetch_data(session, url):
+    async with session.get(url) as response:
+        return await response.text()
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_data(session, url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        return results
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 数据加载优化</h2>
+          <div class="code-block">
+# PyTorch数据加载优化
+from torch.utils.data import DataLoader, Dataset
+
+class OptimizedDataset(Dataset):
+    def __init__(self, data_dir):
+        self.data_dir = data_dir
+        # 预先加载索引，避免重复扫描
+        self.index = self._build_index()
+
+    def _build_index(self):
+        # 构建文件索引
+        index = []
+        for root, _, files in os.walk(self.data_dir):
+            for file in files:
+                index.append(os.path.join(root, file))
+        return index
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, idx):
+        file_path = self.index[idx]
+        # 使用内存映射快速读取
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        return self._process_data(data)
+
+# 优化的DataLoader配置
+dataloader = DataLoader(
+    dataset,
+    batch_size=32,
+    shuffle=True,
+    num_workers=4,           # 多进程数据加载
+    pin_memory=True,         # 使用固定内存加速GPU传输
+    persistent_workers=True,  # 保持worker进程
+    prefetch_factor=2,       # 预取因子
+)
+
+# 使用LMDB加速数据访问
+import lmdb
+
+class LMDBDataset(Dataset):
+    def __init__(self, lmdb_path):
+        self.env = lmdb.open(lmdb_path, readonly=True, lock=False)
+        self.txn = self.env.begin()
+
+    def __len__(self):
+        return int(self.txn.get('length'.encode()))
+
+    def __getitem__(self, idx):
+        key = str(idx).encode()
+        data = self.txn.get(key)
+        return self._deserialize(data)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> I/O性能测试</h2>
+          <div class="code-block">
+# 磁盘性能测试
+import time
+
+def test_disk_speed(file_path, size_mb=100):
+    # 写入测试
+    data = b'0' * (1024 * 1024 * size_mb)
+    start = time.time()
+    with open(file_path, 'wb') as f:
+        f.write(data)
+    write_time = time.time() - start
+    write_speed = size_mb / write_time
+
+    # 读取测试
+    start = time.time()
+    with open(file_path, 'rb') as f:
+        data = f.read()
+    read_time = time.time() - start
+    read_speed = size_mb / read_time
+
+    print(f"Write: {write_speed:.2f} MB/s")
+    print(f"Read: {read_speed:.2f} MB/s")
+
+# 数据加载性能测试
+import torch
+from torch.utils.data import DataLoader
+
+def test_dataloader_speed(dataloader, num_batches=100):
+    start = time.time()
+    for i, batch in enumerate(dataloader):
+        if i >= num_batches:
+            break
+    elapsed = time.time() - start
+    batch_time = elapsed / num_batches
+    throughput = 1 / batch_time
+    print(f"Batch time: {batch_time:.4f}s")
+    print(f"Throughput: {throughput:.2f} batches/s")
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 存储优化策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>适用场景</th>
+                <th>预期提升</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SSD替换HDD</td>
+                <td>频繁读写</td>
+                <td>10-100倍</td>
+              </tr>
+              <tr>
+                <td>RAID配置</td>
+                <td>服务器部署</td>
+                <td>2-10倍</td>
+              </tr>
+              <tr>
+                <td>内存缓存</td>
+                <td>热点数据</td>
+                <td>100-1000倍</td>
+              </tr>
+              <tr>
+                <td>数据压缩</td>
+                <td>网络传输</td>
+                <td>3-10倍</td>
+              </tr>
+              <tr>
+                <td>异步I/O</td>
+                <td>高并发</td>
+                <td>2-5倍</td>
+              </tr>
+              <tr>
+                <td>多线程加载</td>
+                <td>CPU预处理</td>
+                <td>2-4倍</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="I/O监控">
+          <div class="caption">图：I/O性能监控仪表盘</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">I/O优化注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 监控I/O性能时考虑工具本身的开销</li>
+              <li>• 避免过度预取导致内存压力</li>
+              <li>• 测试结果取决于具体硬件和环境</li>
+              <li>• I/O优化要与计算优化协同</li>
+              <li>• 定期监控I/O性能变化</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• I/O瓶颈包括磁盘、网络和数据加载</li>
+                <li>• 使用监控工具识别I/O瓶颈</li>
+                <li>• 针对不同瓶颈采用相应优化策略</li>
+                <li>• 数据加载优化提升训练效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="38-3-内存泄漏排查.html">← 上一节</a>
+          <a href="38-5-网络性能调优.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

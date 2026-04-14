@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.1 DDP原理与实践 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>17.1 DDP原理与实践</h1>
+          <p class="subtitle">PyTorch分布式数据并行深度解析</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解DDP的核心原理和架构</li>
+            <li>掌握DDP的使用方法和最佳实践</li>
+            <li>了解DDP的性能优化技巧</li>
+            <li>认识DDP的适用场景和限制</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="DDP架构图" class="card-image">
+          <h3 class="card-title">什么是PyTorch DDP？</h3>
+          <p class="card-text">
+            <strong>DDP（DistributedDataParallel）</strong>是PyTorch官方提供的分布式数据并行训练框架。
+            它通过在每个进程上复制模型，并使用AllReduce同步梯度，实现高效的多GPU/多节点训练。
+            DDP是PyTorch分布式训练的基础，适用于大多数中小规模训练场景。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> DDP架构原理</h2>
+          <div class="card">
+            <h3 class="card-title">DDP工作流程</h3>
+            <div class="code-block">
+DDP核心组件：
+
+1. 进程组（Process Group）
+   • 每个GPU运行一个独立进程
+   • 所有进程组成一个进程组
+   • 使用backend进行通信（NCCL/GLOO/MPI）
+
+2. 模型复制
+   • 每个进程复制完整的模型
+   • 模型参数初始值相同
+   • 训练过程中保持参数一致
+
+3. 梯度同步
+   • 前向传播：每个进程独立计算
+   • 反向传播：自动同步梯度
+   • 使用AllReduce聚合梯度
+   • 更新参数：所有进程使用相同梯度
+
+4. 桶优化（Bucketing）
+   • 将梯度分组到不同桶中
+   • 桶内梯度一起同步
+   • 减少通信次数
+
+执行流程：
+┌─────────────────────────────────────────────┐
+│ 1. 初始化进程组和分布式环境                 │
+│ 2. 创建DDP模型包装器                        │
+│ 3. 创建分布式数据加载器                      │
+│ 4. 训练循环：                               │
+│    - 前向传播（每个进程独立）                │
+│    - 反向传播（自动梯度同步）                │
+│    - 优化器更新（每个进程独立）              │
+└─────────────────────────────────────────────┘
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> DDP基本使用</h2>
+          <div class="card">
+            <h3 class="card-title">DDP代码示例</h3>
+            <div class="code-block">
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
+
+def setup(rank, world_size):
+    # 初始化进程组
+    dist.init_process_group(
+        backend='nccl',  # 或 'gloo'（CPU）、'mpi'
+        init_method='env://',  # 从环境变量读取
+        world_size=world_size,
+        rank=rank
+    )
+    # 设置当前设备
+    torch.cuda.set_device(rank)
+
+def cleanup():
+    # 销毁进程组
+    dist.destroy_process_group()
+
+class ToyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net1 = torch.nn.Linear(10, 10)
+        self.relu = torch.nn.ReLU()
+        self.net2 = torch.nn.Linear(10, 5)
+
+    def forward(self, x):
+        return self.net2(self.relu(self.net1(x)))
+
+def train(rank, world_size):
+    setup(rank, world_size)
+
+    # 创建模型并移到当前GPU
+    model = ToyModel().to(rank)
+
+    # 用DDP包装模型
+    ddp_model = DDP(model, device_ids=[rank])
+
+    # 创建损失函数和优化器
+    loss_fn = torch.nn.MSELoss()
+    optimizer = torch.optim.SGD(ddp_model.parameters(), lr=0.001)
+
+    # 创建分布式数据加载器
+    dataset = ...  # 你的数据集
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=world_size,
+        rank=rank,
+        shuffle=True
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=32,
+        sampler=sampler
+    )
+
+    # 训练循环
+    for epoch in range(10):
+        sampler.set_epoch(epoch)  # 确保每个epoch数据打乱不同
+
+        for batch_idx, (inputs, targets) in enumerate(dataloader):
+            inputs = inputs.to(rank)
+            targets = targets.to(rank)
+
+            # 前向传播
+            outputs = ddp_model(inputs)
+            loss = loss_fn(outputs, targets)
+
+            # 反向传播（自动梯度同步）
+            optimizer.zero_grad()
+            loss.backward()
+
+            # 更新参数
+            optimizer.step()
+
+            if rank == 0 and batch_idx % 100 == 0:
+                print(f'Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item()}')
+
+    cleanup()
+
+if __name__ == '__main__':
+    world_size = 4  # 使用4个GPU
+    mp.spawn(train, args=(world_size,), nprocs=world_size, join=True)
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 启动DDP训练</h2>
+          <div class="card">
+            <h3 class="card-title">命令行启动方式</h3>
+            <div class="code-block">
+方式1：使用torchrun（推荐）
+
+# 单机多GPU
+torchrun --nproc_per_node=4 train_ddp.py
+
+# 多机训练（主节点）
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr="192.168.1.1" --master_port=29500 train_ddp.py
+
+# 从节点
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr="192.168.1.1" --master_port=29500 train_ddp.py
+
+方式2：使用mp.spawn（代码内启动）
+
+# 代码中使用mp.spawn，直接运行
+python train_ddp.py
+
+方式3：使用launch工具
+
+# 单机多GPU
+python -m torch.distributed.launch --nproc_per_node=4 train_ddp.py
+
+# 多机训练
+python -m torch.distributed.launch \
+    --nproc_per_node=8 \
+    --nnodes=2 \
+    --node_rank=0 \
+    --master_addr="192.168.1.1" \
+    --master_port=29500 \
+    train_ddp.py
+
+环境变量设置：
+
+# 必需的环境变量
+export MASTER_ADDR="192.168.1.1"  # 主节点地址
+export MASTER_PORT="29500"         # 通信端口
+export WORLD_SIZE=8                # 总进程数
+export RANK=0                     # 当前进程rank
+
+# torchrun会自动设置这些环境变量
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="DDP多节点训练">
+          <div class="caption">图：DDP可以在单机多卡或多机多卡环境下运行</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> DDP重要配置参数</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>参数</th>
+                <th>说明</th>
+                <th>推荐值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>device_ids</strong></td>
+                <td>当前进程使用的GPU列表</td>
+                <td>[rank]</td>
+              </tr>
+              <tr>
+                <td><strong>output_device</strong></td>
+                <td>输出设备</td>
+                <td>device_ids[0]</td>
+              </tr>
+              <tr>
+                <td><strong>bucket_cap_mb</strong></td>
+                <td>梯度桶大小（MB）</td>
+                <td>25（默认）</td>
+              </tr>
+              <tr>
+                <td><strong>find_unused_parameters</strong></td>
+                <td>是否查找未使用的参数</td>
+                <td>False（性能优先）</td>
+              </tr>
+              <tr>
+                <td><strong>gradient_as_bucket_view</strong></td>
+                <td>是否使用梯度作为桶视图</td>
+                <td>True（节省显存）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> DDP最佳实践</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">数据加载</h3>
+              <ul class="feature-list">
+                <li>使用DistributedSampler</li>
+                <li>每个epoch调用set_epoch()</li>
+                <li>确保数据均衡分配</li>
+                <li>使用足够的worker数量</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">模型包装</h3>
+              <ul class="feature-list">
+                <li>在DDP前将模型移到GPU</li>
+                <li>避免在DDP上使用DataParallel</li>
+                <li>保存模型时使用model.module</li>
+                <li>只在rank 0上保存模型</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">性能优化</h3>
+              <ul class="feature-list">
+                <li>使用NCCL backend</li>
+                <li>增大batch size</li>
+                <li>调整梯度桶大小</li>
+                <li>禁用find_unused_parameters</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调试技巧</h3>
+              <ul class="feature-list">
+                <li>先单GPU验证代码</li>
+                <li>使用小batch size测试</li>
+                <li>监控GPU利用率</li>
+                <li>检查通信时间占比</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">常见问题</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>梯度爆炸：</strong>检查学习率和梯度裁剪</li>
+              <li><strong>通信超时：</strong>检查网络连接和防火墙</li>
+              <li><strong>显存不足：</strong>减小batch size或使用梯度累积</li>
+              <li><strong>训练不收敛：</strong>确保数据采样正确，检查学习率调度</li>
+              <li><strong>保存模型错误：</strong>使用model.module.state_dict()</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DDP vs DataParallel</h2>
+          <div class="card">
+            <h3 class="card-title">两种数据并行对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>特性</th>
+                  <th>DataParallel（DP）</th>
+                  <th>DistributedDataParallel（DDP）</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>实现方式</strong></td>
+                  <td>单进程多线程</td>
+                  <td>多进程</td>
+                </tr>
+                <tr>
+                  <td><strong>性能</strong></td>
+                  <td>一般（GIL限制）</td>
+                  <td>优秀</td>
+                </tr>
+                <tr>
+                  <td><strong>可扩展性</strong></td>
+                  <td>≤ 4 GPU</td>
+                  <td>可扩展到多节点</td>
+                </tr>
+                <tr>
+                  <td><strong>易用性</strong></td>
+                  <td>简单</td>
+                  <td>中等</td>
+                </tr>
+                <tr>
+                  <td><strong>推荐场景</th></td>
+                  <td>快速原型</td>
+                  <td>生产训练</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">实用建议</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>新手从DP开始：</strong>快速验证代码逻辑</li>
+              <li><strong>生产用DDP：</strong>性能和可扩展性更好</li>
+              <li><strong>单节点≤8卡：</strong>DDP是最佳选择</li>
+              <li><strong>多节点训练：</strong>必须使用DDP</li>
+              <li><strong>监控训练：</strong>使用tensorboard监控loss和指标</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• DDP是PyTorch官方的分布式数据并行框架</li>
+                <li>• 每个进程运行一个GPU副本，通过AllReduce同步梯度</li>
+                <li>• 使用torchrun启动是最推荐的方式</li>
+                <li>• DDP支持单机多卡和多机多卡</li>
+                <li>• 性能优于DataParallel，适合生产环境</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter16/16-5-混合并行策略.html">← 上一节</a>
+          <a href="17-2-FSDP原理与实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

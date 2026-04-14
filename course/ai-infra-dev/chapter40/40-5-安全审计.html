@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.5 安全审计 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>40.5 安全审计</h1>
+          <p class="subtitle">建立AI系统的安全审计体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解安全审计的重要性</li>
+            <li>掌握审计日志管理</li>
+            <li>学习安全监控方法</li>
+            <li>实践合规性审计</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="安全审计" class="card-image">
+          <h3 class="card-title">安全审计</h3>
+          <p class="card-text">
+            <strong>安全审计</strong>是对AI系统安全性的系统性检查，确保系统符合安全标准和法规要求。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 审计要素</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📋</div>
+              <h3 class="card-title">日志审计</h3>
+              <p class="card-text">检查系统日志</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+              <h3 class="card-title">访问审计</h3>
+              <p class="card-text">跟踪用户访问</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">行为审计</h3>
+              <p class="card-text">监控异常行为</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 审计日志管理</h2>
+          <div class="code-block">
+# 审计日志系统
+
+import logging
+import json
+from datetime import datetime
+from typing import Dict, Any
+
+class AuditLogger:
+    def __init__(self, log_file='audit.log'):
+        self.logger = logging.getLogger('AuditLogger')
+        self.logger.setLevel(logging.INFO)
+
+        # 文件处理器
+        file_handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
+
+    def log_event(self, event_type: str, user_id: str, details: Dict[str, Any]):
+        """
+        记录审计事件
+        """
+        log_entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'event_type': event_type,
+            'user_id': user_id,
+            'details': details
+        }
+
+        self.logger.info(json.dumps(log_entry))
+
+    def log_access(self, user_id: str, resource: str, action: str, success: bool):
+        """
+        记录访问事件
+        """
+        details = {
+            'resource': resource,
+            'action': action,
+            'success': success
+        }
+        self.log_event('ACCESS', user_id, details)
+
+    def log_model_access(self, user_id: str, model_id: str, action: str):
+        """
+        记录模型访问
+        """
+        details = {
+            'model_id': model_id,
+            'action': action
+        }
+        self.log_event('MODEL_ACCESS', user_id, details)
+
+    def log_data_access(self, user_id: str, data_id: str, action: str):
+        """
+        记录数据访问
+        """
+        details = {
+            'data_id': data_id,
+            'action': action
+        }
+        self.log_event('DATA_ACCESS', user_id, details)
+
+    def log_security_event(self, event_type: str, details: Dict[str, Any]):
+        """
+        记录安全事件
+        """
+        self.log_event('SECURITY', 'system', details)
+
+# 使用示例
+audit_logger = AuditLogger()
+
+# 记录用户访问
+audit_logger.log_access('user123', '/api/model/train', 'POST', True)
+
+# 记录模型访问
+audit_logger.log_model_access('user123', 'model_001', 'inference')
+
+# 记录数据访问
+audit_logger.log_data_access('user123', 'dataset_001', 'read')
+
+# 记录安全事件
+audit_logger.log_security_event('FAILED_LOGIN', {
+    'user_id': 'user456',
+    'ip_address': '192.168.1.100',
+    'attempt': 3
+})
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 安全监控</h2>
+          <div class="code-block">
+# 安全监控系统
+
+import psutil
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+class SecurityMonitor:
+    def __init__(self):
+        self.failed_login_attempts = defaultdict(list)
+        self.unusual_access_patterns = defaultdict(list)
+        self.resource_usage_history = defaultdict(list)
+
+    def monitor_failed_logins(self, user_id: str, ip_address: str):
+        """
+        监控失败登录
+        """
+        now = datetime.utcnow()
+
+        # 记录失败尝试
+        self.failed_login_attempts[user_id].append({
+            'timestamp': now,
+            'ip_address': ip_address
+        })
+
+        # 清理旧记录
+        self.failed_login_attempts[user_id] = [
+            attempt for attempt in self.failed_login_attempts[user_id]
+            if now - attempt['timestamp'] < timedelta(minutes=15)
+        ]
+
+        # 检查是否超过阈值
+        if len(self.failed_login_attempts[user_id]) >= 5:
+            raise SecurityException(f"Multiple failed login attempts for user {user_id}")
+
+    def monitor_unusual_access(self, user_id: str, resource: str):
+        """
+        监控异常访问
+        """
+        now = datetime.utcnow()
+
+        # 记录访问
+        self.unusual_access_patterns[user_id].append({
+            'timestamp': now,
+            'resource': resource
+        })
+
+        # 清理旧记录
+        self.unusual_access_patterns[user_id] = [
+            access for access in self.unusual_access_patterns[user_id]
+            if now - access['timestamp'] < timedelta(hours=1)
+        ]
+
+        # 检查访问频率
+        recent_accesses = self.unusual_access_patterns[user_id]
+        if len(recent_accesses) > 1000:
+            raise SecurityException(f"Unusual access pattern detected for user {user_id}")
+
+    def monitor_resource_usage(self, user_id: str, resource_type: str, usage: float):
+        """
+        监控资源使用
+        """
+        now = datetime.utcnow()
+
+        # 记录使用情况
+        self.resource_usage_history[user_id].append({
+            'timestamp': now,
+            'resource_type': resource_type,
+            'usage': usage
+        })
+
+        # 清理旧记录
+        self.resource_usage_history[user_id] = [
+            record for record in self.resource_usage_history[user_id]
+            if now - record['timestamp'] < timedelta(hours=24)
+        ]
+
+        # 检查异常使用
+        recent_usage = [
+            record['usage'] for record in self.resource_usage_history[user_id]
+            if record['resource_type'] == resource_type
+        ]
+
+        if recent_usage:
+            avg_usage = sum(recent_usage) / len(recent_usage)
+            if usage > avg_usage * 10:  # 超过平均值10倍
+                raise SecurityException(f"Unusual resource usage detected for user {user_id}")
+
+    def monitor_system_resources(self):
+        """
+        监控系统资源
+        """
+        # CPU使用率
+        cpu_percent = psutil.cpu_percent(interval=1)
+        if cpu_percent > 90:
+            audit_logger.log_security_event('HIGH_CPU_USAGE', {
+                'cpu_percent': cpu_percent
+            })
+
+        # 内存使用率
+        memory = psutil.virtual_memory()
+        if memory.percent > 90:
+            audit_logger.log_security_event('HIGH_MEMORY_USAGE', {
+                'memory_percent': memory.percent
+            })
+
+        # 磁盘使用率
+        disk = psutil.disk_usage('/')
+        if disk.percent > 90:
+            audit_logger.log_security_event('HIGH_DISK_USAGE', {
+                'disk_percent': disk.percent
+            })
+
+# 定期监控任务
+def monitoring_task():
+    monitor = SecurityMonitor()
+
+    while True:
+        try:
+            monitor.monitor_system_resources()
+        except Exception as e:
+            print(f"Monitoring error: {e}")
+
+        time.sleep(60)  # 每分钟检查一次
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 审计报告</h2>
+          <div class="code-block">
+# 审计报告生成
+
+from datetime import datetime, timedelta
+from typing import List, Dict
+import pandas as pd
+
+class AuditReport:
+    def __init__(self, audit_logger):
+        self.audit_logger = audit_logger
+
+    def generate_daily_report(self, date: datetime) -> Dict:
+        """
+        生成每日审计报告
+        """
+        start_date = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = start_date + timedelta(days=1)
+
+        # 读取日志
+        audit_events = self._read_audit_logs(start_date, end_date)
+
+        # 统计数据
+        report = {
+            'date': date.strftime('%Y-%m-%d'),
+            'total_events': len(audit_events),
+            'access_events': self._count_events(audit_events, 'ACCESS'),
+            'model_access_events': self._count_events(audit_events, 'MODEL_ACCESS'),
+            'data_access_events': self._count_events(audit_events, 'DATA_ACCESS'),
+            'security_events': self._count_events(audit_events, 'SECURITY'),
+            'top_users': self._get_top_users(audit_events),
+            'top_resources': self._get_top_resources(audit_events),
+            'failed_logins': self._get_failed_logins(audit_events)
+        }
+
+        return report
+
+    def _read_audit_logs(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """
+        读取审计日志
+        """
+        # 实际实现中从日志文件或数据库读取
+        pass
+
+        return []
+
+    def _count_events(self, events: List[Dict], event_type: str) -> int:
+        """
+        统计特定类型事件
+        """
+        return len([e for e in events if e['event_type'] == event_type])
+
+    def _get_top_users(self, events: List[Dict], top_n: int = 10) -> List[Dict]:
+        """
+        获取活跃用户
+        """
+        user_counts = defaultdict(int)
+        for event in events:
+            user_id = event['user_id']
+            user_counts[user_id] += 1
+
+        sorted_users = sorted(user_counts.items(), key=lambda x: x[1], reverse=True)
+
+        return [{'user_id': user, 'count': count} for user, count in sorted_users[:top_n]]
+
+    def _get_top_resources(self, events: List[Dict], top_n: int = 10) -> List[Dict]:
+        """
+        获取热门资源
+        """
+        resource_counts = defaultdict(int)
+        for event in events:
+            if 'details' in event and 'resource' in event['details']:
+                resource = event['details']['resource']
+                resource_counts[resource] += 1
+
+        sorted_resources = sorted(resource_counts.items(), key=lambda x: x[1], reverse=True)
+
+        return [{'resource': resource, 'count': count} for resource, count in sorted_resources[:top_n]]
+
+    def _get_failed_logins(self, events: List[Dict]) -> List[Dict]:
+        """
+        获取失败登录
+        """
+        failed_logins = []
+        for event in events:
+            if event['event_type'] == 'SECURITY' and 'FAILED_LOGIN' in event['details']:
+                failed_logins.append(event['details']['FAILED_LOGIN'])
+
+        return failed_logins
+
+    def generate_security_report(self) -> Dict:
+        """
+        生成安全报告
+        """
+        today = datetime.now()
+        yesterday = today - timedelta(days=1)
+
+        # 生成报告
+        daily_report = self.generate_daily_report(yesterday)
+
+        # 安全指标
+        security_metrics = {
+            'security_score': self._calculate_security_score(daily_report),
+            'risk_level': self._assess_risk_level(daily_report),
+            'recommendations': self._generate_recommendations(daily_report)
+        }
+
+        return {
+            'daily_report': daily_report,
+            'security_metrics': security_metrics
+        }
+
+    def _calculate_security_score(self, report: Dict) -> float:
+        """
+        计算安全评分
+        """
+        # 简单的评分逻辑
+        base_score = 100.0
+
+        # 扣分项
+        deductions = 0
+        deductions += len(report['failed_logins']) * 5
+        deductions += len([e for e in report.get('security_events', [])]) * 10
+
+        score = max(0, base_score - deductions)
+        return score
+
+    def _assess_risk_level(self, report: Dict) -> str:
+        """
+        评估风险等级
+        """
+        score = self._calculate_security_score(report)
+
+        if score >= 80:
+            return 'LOW'
+        elif score >= 60:
+            return 'MEDIUM'
+        elif score >= 40:
+            return 'HIGH'
+        else:
+            return 'CRITICAL'
+
+    def _generate_recommendations(self, report: Dict) -> List[str]:
+        """
+        生成安全建议
+        """
+        recommendations = []
+
+        if len(report['failed_logins']) > 5:
+            recommendations.append('Consider implementing rate limiting for login attempts')
+
+        if self._calculate_security_score(report) < 70:
+            recommendations.append('Review security logs and investigate potential security incidents')
+
+        if report['total_events'] > 100000:
+            recommendations.append('Consider implementing real-time security monitoring')
+
+        return recommendations
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 合规性审计</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">合规标准</div>
+              <p>AI系统需要符合多种安全合规标准：</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>标准</th>
+                <th>要求</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GDPR</td>
+                <td>数据保护、隐私权利</td>
+                <td>欧盟用户数据</td>
+              </tr>
+              <tr>
+                <td>HIPAA</td>
+                <td>医疗数据保护</td>
+                <td>医疗AI系统</td>
+              </tr>
+              <tr>
+                <td>ISO 27001</td>
+                <td>信息安全管理体系</td>
+                <td>企业级系统</td>
+              </tr>
+              <tr>
+                <td>NIST</td>
+                <td>网络安全框架</td>
+                <td>政府系统</td>
+              </tr>
+              <tr>
+                <td>CSA STAR</td>
+                <td>云安全评估</td>
+                <td>云AI服务</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 审计检查清单</h2>
+          <div class="code-block">
+# AI系统安全审计检查清单
+
+## 1. 访问控制
+- [ ] 实施了身份认证机制
+- [ ] 实施了最小权限原则
+- [ ] 定期审查用户权限
+- [ ] 记录所有访问行为
+- [ ] 启用了多因素认证
+
+## 2. 数据保护
+- [ ] 敏感数据加密存储
+- [ ] 传输数据使用TLS/SSL
+- [ ] 实施数据备份策略
+- [ ] 定期测试数据恢复
+- [ ] 遵守数据保留政策
+
+## 3. 网络安全
+- [ ] 网络分段隔离
+- [ ] 防火墙规则配置
+- [ ] 入侵检测系统
+- [ ] 定期漏洞扫描
+- [ ] 网络流量监控
+
+## 4. 应用安全
+- [ ] 输入验证机制
+- [ ] 输出过滤机制
+- [ ] 依赖项安全更新
+- [ ] 安全编码实践
+- [ ] 定期安全测试
+
+## 5. 日志审计
+- [ ] 完整的审计日志
+- [ ] 日志完整性保护
+- [ ] 日志定期归档
+- [ ] 日志访问控制
+- [ ] 日志分析工具
+
+## 6. 监控告警
+- [ ] 实时安全监控
+- [ ] 异常行为检测
+- [ ] 及时告警通知
+- [ ] 事件响应流程
+- [ ] 定期演练测试
+
+## 7. 合规性
+- [ ] 符合GDPR要求
+- [ ] 符合行业标准
+- [ ] 定期合规审计
+- [ ] 隐私影响评估
+- [ ] 数据处理协议
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 审计最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">审计实践建议</h3>
+            <ul class="feature-list">
+              <li><strong>全面记录</strong> - 记录所有关键操作</li>
+              <li><strong>定期审计</strong> - 定期检查审计日志</li>
+              <li><strong>自动化工具</strong> - 使用自动化审计工具</li>
+              <li><strong>持续改进</strong> - 根据审计结果改进</li>
+              <li><strong>培训团队</strong> - 提升安全意识</li>
+              <li><strong>合规性检查</strong> - 定期进行合规审计</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="安全审计">
+          <div class="caption">图：安全审计仪表盘</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">安全审计注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 确保日志完整性</li>
+              <li>• 保护审计日志不被篡改</li>
+              <li>• 及时响应安全事件</li>
+              <li>• 定期更新审计策略</li>
+              <li>• 遵守相关法律法规</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 安全审计是AI系统安全的重要保障</li>
+                <li>• 全面的日志记录是审计的基础</li>
+                <li>• 安全监控及时发现异常行为</li>
+                <li>• 合规性审计确保符合标准</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="40-4-推理安全.html">← 上一节</a>
+          <a href="#">课程完成</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

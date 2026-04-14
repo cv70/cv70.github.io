@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.3 分布式训练部署 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.3 分布式训练部署</h1>
+          <p class="subtitle">部署大模型分布式训练环境</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握分布式训练部署流程</li>
+            <li>学会配置训练环境</li>
+            <li>了解训练任务提交</li>
+            <li>掌握监控与调试方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 部署架构</h2>
+          <div class="card">
+            <h3 class="card-title">分布式训练架构</h3>
+            <div class="code-block">
+<pre><code># 训练集群架构
+
+# 主节点（login-01）
+- 负责任务调度
+- 分布式协调
+- 日志收集
+
+# 训练节点（gpu-01, gpu-02, ...）
+- 执行训练任务
+- GPU计算
+- 数据加载
+
+# 存储节点（storage-01）
+- 数据存储
+- Checkpoint保存
+- 模型存储</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 环境配置</h2>
+          <div class="code-block">
+<pre><code># 训练环境配置
+
+# 1. Docker镜像构建
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+
+# 安装依赖
+RUN pip install --no-cache-dir \
+    transformers \
+    deepspeed \
+    wandb \
+    tensorboard
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 复制训练代码
+COPY train.py /workspace/
+COPY model.py /workspace/
+COPY data_loader.py /workspace/
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV NCCL_DEBUG=INFO
+ENV NCCL_IB_DISABLE=0
+
+# 构建镜像
+# docker build -t ai-training:latest .
+
+# 2. 启动训练容器
+docker run --gpus all \
+  --network host \
+  -v /data:/data \
+  -v /workspace:/workspace \
+  -e MASTER_ADDR=login-01 \
+  -e MASTER_PORT=29500 \
+  -e WORLD_SIZE=8 \
+  -e RANK=$RANK \
+  ai-training:latest \
+  python -m torch.distributed.launch \
+    --nproc_per_node=4 \
+    --nnodes=2 \
+    --node_rank=$NODE_RANK \
+    --master_addr=$MASTER_ADDR \
+    --master_port=$MASTER_PORT \
+    train.py</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> Kubernetes部署</h2>
+          <div class="code-block">
+<pre><code># PyTorchJob部署
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: llm-training
+  namespace: ai-training
+spec:
+  elasticPolicy:
+    rdzvBackend: c10d
+    minReplicas: 8
+    maxReplicas: 16
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - name: pytorch
+            image: ai-training:latest
+            command:
+            - python
+            - train.py
+            env:
+            - name: MASTER_PORT
+              value: "29500"
+            resources:
+              requests:
+                nvidia.com/gpu: 4
+                cpu: 16
+                memory: 64Gi
+              limits:
+                nvidia.com/gpu: 4
+                cpu: 16
+                memory: 64Gi
+            volumeMounts:
+            - name: data
+              mountPath: /data
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: training-data-pvc
+
+    Worker:
+      replicas: 3
+      template:
+        spec:
+          containers:
+          - name: pytorch
+            image: ai-training:latest
+            command:
+            - python
+            - train.py
+            resources:
+              requests:
+                nvidia.com/gpu: 4
+                cpu: 16
+                memory: 64Gi
+              limits:
+                nvidia.com/gpu: 4
+                cpu: 16
+                memory: 64Gi</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 训练监控</h2>
+          <div class="code-block">
+<pre><code># 训练监控代码
+import torch
+import wandb
+from torch.utils.tensorboard import SummaryWriter
+
+# 初始化监控
+wandb.init(project="llm-training", name="experiment-001")
+writer = SummaryWriter(log_dir="./logs")
+
+# 训练循环
+for step, batch in enumerate(dataloader):
+    # 前向传播
+    outputs = model(batch)
+    loss = criterion(outputs, targets)
+
+    # 反向传播
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+
+    # 记录指标
+    if step % 100 == 0:
+        # WandB记录
+        wandb.log({
+            "train/loss": loss.item(),
+            "train/learning_rate": optimizer.param_groups[0]['lr'],
+            "train/step": step,
+            "train/gpu_memory": torch.cuda.memory_allocated() / 1e9
+        })
+
+        # TensorBoard记录
+        writer.add_scalar("Loss/train", loss.item(), step)
+        writer.add_scalar("LR", optimizer.param_groups[0]['lr'], step)
+        writer.add_scalar("GPU_Memory",
+                         torch.cuda.memory_allocated() / 1e9, step)
+
+    # 定期保存checkpoint
+    if step % 1000 == 0:
+        save_checkpoint(model, optimizer, step)
+
+# 完成训练
+wandb.finish()
+writer.close()</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 调试技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">常见问题</h3>
+              <ul class="feature-list">
+                <li><strong>NCCL错误</strong>：检查网络配置、IB状态</li>
+                <li><strong>OOM错误</strong>：减小batch size，启用梯度累积</li>
+                <li><strong>训练发散</strong>：检查学习率、数据质量</li>
+                <li><strong>速度慢</strong>：检查数据加载、GPU利用率</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调试工具</h3>
+              <ul class="feature-list">
+                <li>nvidia-smi - 监控GPU状态</li>
+                <li>nsight sys - 性能分析</li>
+                <li>py-spy - Python性能分析</li>
+                <li>torch.profiler - PyTorch性能分析</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">部署注意事项</div>
+            <p><strong>环境一致性</strong>：所有节点使用相同的软件版本。<strong>网络配置</strong>：确保节点间网络畅通。<strong>存储挂载</strong>：正确配置数据存储访问。<strong>监控告警</strong>：设置合理的监控告警规则。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 分布式训练需要配置主节点、训练节点和存储节点</li>
+                <li>• 使用Docker或Kubernetes部署训练环境</li>
+                <li>• 完善的监控和日志系统对训练很重要</li>
+                <li>• 掌握调试技巧可以快速定位问题</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-2-数据准备.html">← 上一节</a>
+          <a href="49-4-训练监控.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

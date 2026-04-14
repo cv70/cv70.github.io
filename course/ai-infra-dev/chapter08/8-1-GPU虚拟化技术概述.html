@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.1 GPU虚拟化技术概述 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>8.1 GPU虚拟化技术概述</h1>
+          <p class="subtitle">理解GPU虚拟化的原理与应用</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU虚拟化的基本概念</li>
+            <li>掌握GPU虚拟化的技术分类</li>
+            <li>了解GPU虚拟化的应用场景</li>
+            <li>认识不同虚拟化方案的优劣</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=800" alt="GPU硬件" class="card-image">
+          <h3 class="card-title">什么是GPU虚拟化</h3>
+          <p class="card-text">
+            <strong>GPU虚拟化（GPU Virtualization）</strong>是指将物理GPU资源抽象为多个虚拟GPU（vGPU），
+            允许多个虚拟机或容器共享单个物理GPU资源，提高资源利用率，降低硬件成本。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 虚拟化分类</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔗</div>
+              <h3 class="card-title">直通模式 (Passthrough)</h3>
+              <p class="card-text">物理GPU直接分配给VM</p>
+              <ul class="feature-list">
+                <li>性能最优</li>
+                <li>独占资源</li>
+                <li>硬件要求高</li>
+                <li>不支持共享</li>
+              </ul>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🧩</div>
+              <h3 class="card-title">共享模式 (Sharing)</h3>
+              <p class="card-text">多个VM共享物理GPU</p>
+              <ul class="feature-list">
+                <li>资源利用率高</li>
+                <li>成本降低</li>
+                <li>性能隔离</li>
+                <li>需要vGPU支持</li>
+              </ul>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔧</div>
+              <h3 class="card-title">切分模式 (Slicing)</h3>
+              <p class="card-text">GPU物理切分为多个实例</p>
+              <ul class="feature-list">
+                <li>MIG技术</li>
+                <li>硬隔离</li>
+                <li>灵活配置</li>
+                <li>支持A100+</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 虚拟化实现方式</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>方式</th>
+                <th>描述</th>
+                <th>优点</th>
+                <th>缺点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>API层虚拟化</td>
+                <td>拦截CUDA调用</td>
+                <td>实现简单，无硬件要求</td>
+                <td>性能损失大，兼容性差</td>
+                <td>轻量级测试</td>
+              </tr>
+              <tr>
+                <td>驱动层虚拟化</td>
+                <td>共享GPU驱动</td>
+                <td>平衡性能与成本</td>
+                <td>需要修改驱动</td>
+                <td>MPS</td>
+              </tr>
+              <tr>
+                <td>虚拟机直通</td>
+                <td>SR-IOV/PCI直通</td>
+                <td>性能接近裸机</td>
+                <td>无法共享</td>
+                <td>高性能需求</td>
+              </tr>
+              <tr>
+                <td>vGPU</td>
+                <td>NVIDIA官方方案</td>
+                <td>成熟稳定，功能完善</td>
+                <td>需要vGPU授权</td>
+                <td>企业级应用</td>
+              </tr>
+              <tr>
+                <td>MIG</td>
+                <td>硬件切分</td>
+                <td>硬隔离，性能稳定</td>
+                <td>仅限A100/H100</td>
+                <td>大模型推理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 虚拟化架构</h2>
+          <div class="card">
+            <h3 class="card-title">GPU虚拟化架构</h3>
+            <div class="code-block">
+<pre><strong>虚拟化层次结构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                        应用层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • PyTorch • TensorFlow • JAX                               │
+│  • Inference Service • Training Job                         │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      框架层                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • CUDA • cuDNN • NCCL                                     │
+│  • MIG Manager • MPS Server                                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      驱动层                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • NVIDIA Driver (vGPU Driver / Native Driver)             │
+│  • GPU Scheduler                                           │
+│  • MIG Monitor                                             │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      虚拟化层                               │
+│  ─────────────────────────────────────────────────────────   │
+│  • Hypervisor (KVM/Xen/VMware)                             │
+│  • Container Runtime (Docker/Containerd)                    │
+│  • vGPU Manager / MIG Device                               │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      硬件层                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • Physical GPU (A100/H100/T4)                             │
+│  • GPU Memory (HBM/VRAM)                                   │
+│  • NVLink/PCIe                                              │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💼</span> 应用场景</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">训练场景</h3>
+              <div class="code-block">
+<pre><strong>训练虚拟化需求：</strong>
+
+资源需求：
+• 大显存: 需要独占GPU
+• 高带宽: NVLink优先
+• 长时间: 稳定性要求高
+
+适用方案：
+• 直通模式: 高性能训练
+• MIG: 大模型多租户
+• 池化: 动态资源分配
+
+不适用：
+• API层虚拟化
+• 共享模式(训练)</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">推理场景</h3>
+              <div class="code-block">
+<pre><strong>推理虚拟化需求：</strong>
+
+资源需求：
+• 小显存: 模型小
+• 高并发: 多实例
+• 低延迟: 快速响应
+
+适用方案：
+• vGPU: 多租户隔离
+• MIG: 硬隔离
+• MPS: 软共享
+• 池化: 弹性扩展
+
+优势：
+• 成本降低: 提高利用率
+• 隔离保证: 独立性能</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">虚拟化选择建议</div>
+            <p><strong>训练：</strong>优先直通模式或MIG，确保性能</p>
+            <p><strong>推理：</strong>vGPU或MIG，提高利用率</p>
+            <p><strong>开发测试：</strong>MPS或软共享，降低成本</p>
+            <p><strong>生产环境：</strong>vGPU或MIG，稳定可靠</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>性能</th>
+                <th>隔离性</th>
+                <th>灵活性</th>
+                <th>成本</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>直通模式</td>
+                <td>100%</td>
+                <td>硬件级</td>
+                <td>低</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>NVIDIA vGPU</td>
+                <td>85-95%</td>
+                <td>硬件级</td>
+                <td>中</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>MIG</td>
+                <td>90-98%</td>
+                <td>硬件级</td>
+                <td>中高</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>MPS</td>
+                <td>90-95%</td>
+                <td>进程级</td>
+                <td>高</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>软共享</td>
+                <td>70-85%</td>
+                <td>无</td>
+                <td>高</td>
+                <td>极低</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 发展趋势</h2>
+          <div class="card">
+            <h3 class="card-title">GPU虚拟化演进</h3>
+            <div class="code-block">
+<pre><strong>技术演进：</strong>
+
+2015-2018: 直通模式
+• SR-IOV技术成熟
+• KVM直通支持
+• 性能接近裸机
+
+2018-2020: vGPU普及
+• NVIDIA vGPU发布
+• 企业级应用
+• 云平台集成
+
+2020-2022: MIG出现
+• A100引入MIG
+• 硬件级切分
+• 大模型优化
+
+2022-2024: 智能池化
+• GPU池化平台
+• 动态资源分配
+• 云原生集成
+
+2024+: 未来方向
+• 统一虚拟化平台
+• 跨厂商支持
+• 自动化调度
+• AI驱动优化</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">虚拟化挑战</div>
+            <p><strong>性能损失：</strong>虚拟化引入一定开销，需权衡</p>
+            <p><strong>兼容性：</strong>不同方案兼容性不同，需测试</p>
+            <p><strong>管理复杂：</strong>增加了运维复杂度</p>
+            <p><strong>成本考虑：</strong>企业级方案需要授权</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU虚拟化将物理GPU抽象为多个虚拟GPU，提高资源利用率</li>
+                <li>• 主要类型包括直通模式、共享模式和切分模式</li>
+                <li>• vGPU和MIG是企业级的主流选择</li>
+                <li>• 训练场景推荐直通或MIG，推理场景推荐vGPU</li>
+                <li>• 虚拟化在性能、隔离性、灵活性和成本间权衡</li>
+                <li>• 未来趋势是更智能的GPU池化和云原生集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="#">← 上一节</a>
+          <a href="8-2-NVIDIA-vGPU技术.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

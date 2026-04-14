@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.4 推理安全 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>40.4 推理安全</h1>
+          <p class="subtitle">保护AI推理服务的安全与稳定</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解推理安全威胁</li>
+            <li>掌握输入验证方法</li>
+            <li>学习输出过滤技术</li>
+            <li>实践推理服务防护</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="推理安全" class="card-image">
+          <h3 class="card-title">推理安全</h3>
+          <p class="card-text">
+            <strong>推理安全</strong>保护AI推理服务免受恶意输入、滥用攻击和资源耗尽。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 推理安全威胁</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">输入攻击</h3>
+              <ul class="feature-list">
+                <li>提示注入</li>
+                <li>对抗样本</li>
+                <li>恶意文件</li>
+                <li>超大输入</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">资源攻击</h3>
+              <ul class="feature-list">
+                <li>DoS攻击</li>
+                <li>资源耗尽</li>
+                <li>慢速攻击</li>
+                <li>批量请求</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">输出攻击</h3>
+              <ul class="feature-list">
+                <li>越狱攻击</li>
+                <li>有害内容生成</li>
+                <li>隐私泄露</li>
+                <li>模型窃取</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">系统攻击</h3>
+              <ul class="feature-list">
+                <li>权限提升</li>
+                <li>命令注入</li>
+                <li>API滥用</li>
+                <li>数据泄露</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 输入验证</h2>
+          <div class="code-block">
+# 输入验证实现
+
+import torch
+from PIL import Image
+import numpy as np
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+class InputValidator:
+    def __init__(self):
+        self.max_size = 10 * 1024 * 1024  # 10MB
+        self.allowed_formats = ['jpg', 'jpeg', 'png', 'webp']
+        self.min_dimension = 32
+        self.max_dimension = 4096
+        self.max_value = 1.0
+        self.min_value = 0.0
+
+    def validate_file_size(self, file_size):
+        """
+        验证文件大小
+        """
+        if file_size > self.max_size:
+            raise ValueError(f"File size exceeds limit: {file_size} > {self.max_size}")
+        return True
+
+    def validate_format(self, file_name):
+        """
+        验证文件格式
+        """
+        ext = file_name.split('.')[-1].lower()
+        if ext not in self.allowed_formats:
+            raise ValueError(f"Invalid format: {ext}")
+        return True
+
+    def validate_image(self, image):
+        """
+        验证图像
+        """
+        # 检查尺寸
+        if image.size[0] < self.min_dimension or image.size[1] < self.min_dimension:
+            raise ValueError(f"Image too small: {image.size}")
+
+        if image.size[0] > self.max_dimension or image.size[1] > self.max_dimension:
+            raise ValueError(f"Image too large: {image.size}")
+
+        return True
+
+    def validate_tensor(self, tensor):
+        """
+        验证张量
+        """
+        # 检查维度
+        if len(tensor.shape) != 4:
+            raise ValueError(f"Invalid tensor shape: {tensor.shape}")
+
+        # 检查值范围
+        if tensor.max() > self.max_value or tensor.min() < self.min_value:
+            raise ValueError(f"Invalid tensor values: [{tensor.min()}, {tensor.max()}]")
+
+        # 检查NaN和Inf
+        if torch.isnan(tensor).any():
+            raise ValueError("Tensor contains NaN")
+
+        if torch.isinf(tensor).any():
+            raise ValueError("Tensor contains Inf")
+
+        return True
+
+    def validate_text(self, text):
+        """
+        验证文本输入
+        """
+        # 检查长度
+        if len(text) > 10000:
+            raise ValueError(f"Text too long: {len(text)} characters")
+
+        # 检查恶意字符
+        malicious_patterns = [
+            '<script>',
+            'javascript:',
+            'onload=',
+            'onerror=',
+            '<iframe'
+        ]
+
+        text_lower = text.lower()
+        for pattern in malicious_patterns:
+            if pattern in text_lower:
+                raise ValueError(f"Malicious pattern detected: {pattern}")
+
+        return True
+
+# 使用示例
+validator = InputValidator()
+
+@app.route('/predict/image', methods=['POST'])
+def predict_image():
+    try:
+        # 验证文件大小
+        file = request.files['image']
+        validator.validate_file_size(len(file.read()))
+        file.seek(0)
+
+        # 验证格式
+        validator.validate_format(file.filename)
+
+        # 验证图像
+        image = Image.open(file)
+        validator.validate_image(image)
+
+        # 转换为张量
+        tensor = torch.from_numpy(np.array(image)).float() / 255.0
+        tensor = tensor.permute(2, 0, 1).unsqueeze(0)
+
+        # 验证张量
+        validator.validate_tensor(tensor)
+
+        # 模型推理
+        with torch.no_grad():
+            output = model(tensor)
+
+        return jsonify({'prediction': output.tolist()})
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/predict/text', methods=['POST'])
+def predict_text():
+    try:
+        # 获取文本
+        text = request.json.get('text', '')
+
+        # 验证文本
+        validator.validate_text(text)
+
+        # 模型推理
+        with torch.no_grad():
+            output = model(text)
+
+        return jsonify({'prediction': output.tolist()})
+
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': 'Internal server error'}), 500
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 提示注入防护</h2>
+          <div class="code-block">
+# 提示注入防护
+
+import re
+from typing import List
+
+class PromptInjectionProtection:
+    def __init__(self):
+        # 恶意提示模式
+        self.malicious_patterns = [
+            r'ignore previous instructions',
+            r'disregard all previous',
+            r'forget everything',
+            r'system:',
+            r'\b(admin|root|sudo)\b',
+            r'<script[^>]*>',
+            r'javascript:',
+            r'eval\(',
+            r'exec\(',
+            r'__import__',
+            r'from .* import',
+            r'import .*',
+            r'\bshell\b',
+            r'\bcmd\b',
+            r'\bash\b',
+        ]
+
+    def detect_injection(self, prompt: str) -> bool:
+        """
+        检测提示注入
+        """
+        for pattern in self.malicious_patterns:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                return True
+        return False
+
+    def sanitize_prompt(self, prompt: str) -> str:
+        """
+        清理提示
+        """
+        # 移除HTML标签
+        sanitized = re.sub(r'<[^>]+>', '', prompt)
+
+        # 移除特殊字符
+        sanitized = re.sub(r'[^\w\s\.,!?-]', '', sanitized)
+
+        # 限制长度
+        sanitized = sanitized[:1000]
+
+        return sanitized
+
+    def validate_context(self, prompt: str, context: str) -> bool:
+        """
+        验证上下文一致性
+        """
+        # 检查提示是否尝试改变上下文
+        context_keywords = ['switch context', 'new topic', 'change subject']
+        for keyword in context_keywords:
+            if keyword in prompt.lower():
+                return False
+
+        return True
+
+# LLM推理服务防护
+class SecureLLMInference:
+    def __init__(self, model):
+        self.model = model
+        self.protection = PromptInjectionProtection()
+
+    def inference(self, prompt: str) -> str:
+        """
+        安全推理
+        """
+        # 检测注入
+        if self.protection.detect_injection(prompt):
+            raise ValueError("Potential prompt injection detected")
+
+        # 清理提示
+        sanitized_prompt = self.protection.sanitize_prompt(prompt)
+
+        # 添加系统提示
+        system_prompt = "You are a helpful AI assistant. Respond only to relevant questions."
+
+        # 组合提示
+        full_prompt = f"{system_prompt}\n\nUser: {sanitized_prompt}\nAssistant:"
+
+        # 模型推理
+        response = self.model.generate(full_prompt)
+
+        # 输出过滤
+        filtered_response = self.filter_response(response)
+
+        return filtered_response
+
+    def filter_response(self, response: str) -> str:
+        """
+        输出过滤
+        """
+        # 过滤有害内容
+        harmful_keywords = [
+            'hack', 'exploit', 'malware', 'virus',
+            'illegal', 'criminal', 'violence'
+        ]
+
+        filtered = response
+        for keyword in harmful_keywords:
+            if keyword in filtered.lower():
+                filtered = filtered.replace(keyword, '***')
+
+        return filtered
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 输出过滤</h2>
+          <div class="code-block">
+# 输出过滤实现
+
+import re
+from typing import List
+
+class OutputFilter:
+    def __init__(self):
+        # 敏感词列表
+        self.sensitive_words = [
+            'password', 'secret', 'confidential',
+            'api_key', 'token', 'private_key'
+        ]
+
+        # 有害内容模式
+        self.harmful_patterns = [
+            r'\b\d{16}\b',  # 信用卡号
+            r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # 邮箱
+            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
+            r'1[3-9]\d{9}',  # 手机号
+        ]
+
+    def filter_sensitive_info(self, text: str) -> str:
+        """
+        过滤敏感信息
+        """
+        filtered = text
+
+        # 过滤敏感词
+        for word in self.sensitive_words:
+            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            filtered = pattern.sub('[REDACTED]', filtered)
+
+        # 过滤有害模式
+        for pattern in self.harmful_patterns:
+            filtered = re.sub(pattern, '[REDACTED]', filtered)
+
+        return filtered
+
+    def filter_harmful_content(self, text: str) -> str:
+        """
+        过滤有害内容
+        """
+        # 使用内容审核API或本地模型
+        pass
+
+        return text
+
+    def validate_output(self, output: str) -> bool:
+        """
+        验证输出安全
+        """
+        # 检查敏感信息
+        for word in self.sensitive_words:
+            if word.lower() in output.lower():
+                return False
+
+        # 检查有害模式
+        for pattern in self.harmful_patterns:
+            if re.search(pattern, output):
+                return False
+
+        # 检查长度
+        if len(output) > 10000:
+            return False
+
+        return True
+
+# 使用示例
+output_filter = OutputFilter()
+
+@app.route('/inference', methods=['POST'])
+def inference():
+    prompt = request.json.get('prompt', '')
+
+    try:
+        # 模型推理
+        response = model.generate(prompt)
+
+        # 验证输出
+        if not output_filter.validate_output(response):
+            return jsonify({'error': 'Output validation failed'}), 400
+
+        # 过滤输出
+        filtered_response = output_filter.filter_sensitive_info(response)
+
+        return jsonify({'response': filtered_response})
+
+    except Exception as e:
+        return jsonify({'error': 'Internal server error'}), 500
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 资源防护</h2>
+          <div class="code-block">
+# 资源防护实现
+
+from flask import Flask, request, jsonify
+from functools import wraps
+from collections import defaultdict
+from datetime import datetime, timedelta
+import threading
+
+app = Flask(__name__)
+
+class ResourceProtection:
+    def __init__(self):
+        self.request_counts = defaultdict(list)
+        self.lock = threading.Lock()
+        self.max_requests_per_minute = 60
+        self.max_requests_per_hour = 1000
+        self.max_concurrent = 10
+        self.concurrent_requests = 0
+
+    def rate_limit(self, ip_address):
+        """
+        频率限制
+        """
+        with self.lock:
+            now = datetime.now()
+
+            # 清理过期记录
+            self.request_counts[ip_address] = [
+                timestamp for timestamp in self.request_counts[ip_address]
+                if now - timestamp < timedelta(hours=1)
+            ]
+
+            # 检查分钟限制
+            minute_ago = now - timedelta(minutes=1)
+            minute_requests = sum(
+                1 for timestamp in self.request_counts[ip_address]
+                if timestamp > minute_ago
+            )
+
+            if minute_requests >= self.max_requests_per_minute:
+                return False
+
+            # 检查小时限制
+            hour_requests = len(self.request_counts[ip_address])
+
+            if hour_requests >= self.max_requests_per_hour:
+                return False
+
+            # 记录请求
+            self.request_counts[ip_address].append(now)
+            return True
+
+    def concurrent_limit(self):
+        """
+        并发限制
+        """
+        with self.lock:
+            if self.concurrent_requests >= self.max_concurrent:
+                return False
+
+            self.concurrent_requests += 1
+            return True
+
+    def release_concurrent(self):
+        """
+        释放并发计数
+        """
+        with self.lock:
+            self.concurrent_requests -= 1
+
+# 装饰器
+def require_resource_protection(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        ip_address = request.remote_addr
+
+        # 频率限制
+        if not resource_protection.rate_limit(ip_address):
+            return jsonify({'error': 'Rate limit exceeded'}), 429
+
+        # 并发限制
+        if not resource_protection.concurrent_limit():
+            return jsonify({'error': 'Too many concurrent requests'}), 429
+
+        try:
+            result = f(*args, **kwargs)
+            return result
+        finally:
+            resource_protection.release_concurrent()
+
+    return decorated_function
+
+# 使用示例
+resource_protection = ResourceProtection()
+
+@app.route('/predict', methods=['POST'])
+@require_resource_protection
+def predict():
+    # 限制输入大小
+    data = request.json.get('data')
+
+    if len(str(data)) > 1024 * 1024:  # 1MB
+        return jsonify({'error': 'Input too large'}), 400
+
+    # 模型推理
+    try:
+        output = model(data)
+        return jsonify({'prediction': output.tolist()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> API安全</h2>
+          <div class="code-block">
+# API安全实现
+
+from flask import Flask, request, jsonify
+import jwt
+import hashlib
+from functools import wraps
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+class APISecurity:
+    def __init__(self):
+        self.api_keys = {}
+        self.token_blacklist = set()
+
+    def generate_token(self, user_id, expires_in=3600):
+        """
+        生成JWT token
+        """
+        token = jwt.encode({
+            'user_id': user_id,
+            'exp': datetime.utcnow() + timedelta(seconds=expires_in)
+        }, app.config['SECRET_KEY'])
+
+        return token
+
+    def verify_token(self, token):
+        """
+        验证JWT token
+        """
+        if token in self.token_blacklist:
+            return None
+
+        try:
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            return payload
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
+
+    def revoke_token(self, token):
+        """
+        撤销token
+        """
+        self.token_blacklist.add(token)
+
+    def register_api_key(self, user_id, key):
+        """
+        注册API key
+        """
+        hashed_key = hashlib.sha256(key.encode()).hexdigest()
+        self.api_keys[hashed_key] = {
+            'user_id': user_id,
+            'created_at': datetime.utcnow(),
+            'rate_limit': 1000,
+            'usage': 0
+        }
+
+    def validate_api_key(self, key):
+        """
+        验证API key
+        """
+        hashed_key = hashlib.sha256(key.encode()).hexdigest()
+
+        if hashed_key not in self.api_keys:
+            return False
+
+        api_key_info = self.api_keys[hashed_key]
+
+        # 检查使用量
+        if api_key_info['usage'] >= api_key_info['rate_limit']:
+            return False
+
+        # 更新使用量
+        api_key_info['usage'] += 1
+
+        return True
+
+# 装饰器
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+
+        if not api_key or not api_security.validate_api_key(api_key):
+            return jsonify({'error': 'Invalid API key'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+def require_jwt_token(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return jsonify({'error': 'Missing token'}), 401
+
+        # 移除'Bearer '前缀
+        if token.startswith('Bearer '):
+            token = token[7:]
+
+        payload = api_security.verify_token(token)
+
+        if not payload:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+# 使用示例
+api_security = APISecurity()
+
+@app.route('/predict', methods=['POST'])
+@require_api_key
+def predict():
+    data = request.json.get('data')
+    output = model(data)
+    return jsonify({'prediction': output.tolist()})
+          </code>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="推理安全">
+          <div class="caption">图：推理安全防护</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">推理安全注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 严格验证所有输入</li>
+              <li>• 过滤所有输出</li>
+              <li>• 实施访问控制</li>
+              <li>• 监控异常行为</li>
+              <li>• 定期更新防护规则</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 推理服务面临多种安全威胁</li>
+                <li>• 严格的输入验证是第一道防线</li>
+                <li>• 输出过滤保护用户隐私</li>
+                <li>• 资源防护防止服务滥用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="40-3-模型安全.html">← 上一节</a>
+          <a href="40-5-安全审计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

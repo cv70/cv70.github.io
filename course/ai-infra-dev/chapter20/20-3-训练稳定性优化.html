@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.3 训练稳定性优化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.3 训练稳定性优化</h1>
+          <p class="subtitle">确保大模型训练稳定收敛</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解训练不稳定的原因</li>
+            <li>掌握数值稳定性优化方法</li>
+            <li>了解收敛性优化技巧</li>
+            <li>学会监控和调试训练</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="训练稳定性" class="card-image">
+          <h3 class="card-title">训练稳定性概述</h3>
+          <p class="card-text">
+            大模型训练往往面临数值不稳定、收敛困难、梯度爆炸/消失等问题。
+            这些问题会导致训练中断、性能下降甚至完全失败。通过系统化的稳定性优化，
+            可以确保训练稳定进行并获得良好的模型性能。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 训练不稳定的现象</h2>
+          <div class="card">
+            <h3 class="card-title">常见不稳定问题</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>表现</th>
+                  <th>原因</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>梯度爆炸</strong></td>
+                  <td>Loss变为NaN或Inf</td>
+                  <td>学习率过大、梯度累积</td>
+                </tr>
+                <tr>
+                  <td><strong>梯度消失</strong></td>
+                  <td>Loss不下降或极小</td>
+                  <td>学习率过小、深层网络</td>
+                </tr>
+                <tr>
+                  <td><strong>Loss波动</strong></td>
+                  <td>Loss剧烈震荡</td>
+                  <td>batch size小、学习率不稳定</td>
+                </tr>
+                <tr>
+                  <td><strong>数值溢出</strong></td>
+                  <td>FP16溢出</td>
+                  <td>FP16范围有限</td>
+                </tr>
+                <tr>
+                  <td><strong>精度损失</strong></td>
+                  <td>模型性能下降</td>
+                  <td>混合精度训练</td>
+                </tr>
+                <tr>
+                  <td><strong>训练停滞</strong></td>
+                  <td>Loss长时间不变</td>
+                  <td>陷入局部最优</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 数值稳定性优化</h2>
+          <div class="card">
+            <h3 class="card-title">混合精度和Loss Scaling</h3>
+            <div class="code-block">
+FP16 Loss Scaling：
+
+问题：
+• FP16范围有限: ±65504
+• 梯度容易溢出
+• 训练不稳定
+
+解决方案：动态Loss Scaling
+
+原理：
+• 在反向传播前放大loss
+• 梯度相应放大
+• 更新时缩小梯度
+• 动态调整scale factor
+
+实现：
+
+from torch.cuda.amp import autocast, GradScaler
+
+scaler = GradScaler(
+    init_scale=2.**16,    # 初始scale = 65536
+    growth_factor=2.0,     # 成功时倍增
+    backoff_factor=0.5,   # 失败时减半
+    growth_interval=2000,  # 连续成功2000步后增长
+)
+
+for inputs, labels in dataloader:
+    optimizer.zero_grad()
+
+    with autocast():
+        outputs = model(inputs)
+        loss = loss_fn(outputs, labels)
+
+    # 反向传播（自动loss scaling）
+    scaler.scale(loss).backward()
+
+    # 梯度裁剪
+    scaler.unscale_(optimizer)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+    # 更新参数
+    scaler.step(optimizer)
+    scaler.update()
+
+BF16训练（推荐Ampere+）：
+
+优势：
+• 范围更大: ±3.3×10³⁸
+• 不需要loss scaling
+• 更好的数值稳定性
+• 与FP32相同的指数位
+
+实现：
+
+from torch.cuda.amp import autocast
+
+model = model.bfloat16()  # 转换为BF16
+
+for inputs, labels in dataloader:
+    optimizer.zero_grad()
+
+    with autocast(dtype=torch.bfloat16):
+        outputs = model(inputs)
+        loss = loss_fn(outputs, labels)
+
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    optimizer.step()
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 学习率优化</h2>
+          <div class="card">
+            <h3 class="card-title">学习率调度策略</h3>
+            <div class="code-block">
+Warmup:
+
+问题：
+• 训练初期梯度不稳定
+• 大学习率导致震荡
+
+解决方案：Warmup
+
+原理：
+• 初始学习率很小
+• 逐步增加到目标学习率
+• 避免早期不稳定
+
+实现：
+
+import math
+
+def get_warmup_lr(current_step, total_warmup_steps, base_lr):
+    """线性warmup"""
+    if current_step < total_warmup_steps:
+        return base_lr * current_step / total_warmup_steps
+    return base_lr
+
+# 使用
+for step in range(total_steps):
+    lr = get_warmup_lr(step, warmup_steps, base_lr)
+    optimizer.param_groups[0]['lr'] = lr
+    # ...
+
+Cosine Decay:
+
+原理：
+• 训练后期逐步降低学习率
+• 使用cosine函数平滑衰减
+• 改善最终收敛
+
+实现：
+
+def get_cosine_lr(current_step, total_steps, base_lr, min_lr):
+    """Cosine decay"""
+    if current_step < total_steps:
+        alpha = current_step / total_steps
+        lr = min_lr + 0.5 * (base_lr - min_lr) * (1 + math.cos(math.pi * alpha))
+    else:
+        lr = min_lr
+    return lr
+
+Warmup + Cosine Decay组合：
+
+def get_lr_with_warmup_cosine(current_step, warmup_steps, total_steps, base_lr, min_lr):
+    """Warmup + Cosine decay"""
+    if current_step < warmup_steps:
+        # Warmup阶段
+        return base_lr * current_step / warmup_steps
+    elif current_step < total_steps:
+        # Cosine decay阶段
+        alpha = (current_step - warmup_steps) / (total_steps - warmup_steps)
+        lr = min_lr + 0.5 * (base_lr - min_lr) * (1 + math.cos(math.pi * alpha))
+        return lr
+    else:
+        return min_lr
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✂️</span> 梯度裁剪</h2>
+          <div class="card">
+            <h3 class="card-title">防止梯度爆炸</h3>
+            <div class="code-block">
+梯度裁剪原理：
+
+问题：
+• 梯度可能变得非常大
+• 导致参数更新过大
+• 模型崩溃
+
+解决方案：限制梯度范数
+
+实现方式：
+
+1. 按范数裁剪（Clipping by Norm）
+
+def clip_grad_norm(parameters, max_norm):
+    """按范数裁剪梯度"""
+    parameters = list(filter(lambda p: p.grad is not None, parameters))
+    total_norm = 0
+
+    for p in parameters:
+        param_norm = p.grad.data.norm(2)
+        total_norm += param_norm.item() ** 2
+    total_norm = total_norm ** 0.5
+
+    if total_norm > max_norm:
+        clip_coef = max_norm / total_norm
+        for p in parameters:
+            p.grad.data.mul_(clip_coef)
+
+    return total_norm
+
+# 使用
+for batch in dataloader:
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    optimizer.step()
+
+2. 按值裁剪（Clipping by Value）
+
+def clip_grad_value(parameters, clip_value):
+    """按值裁剪梯度"""
+    for p in parameters:
+        if p.grad is not None:
+            p.grad.data.clamp_(-clip_value, clip_value)
+
+# 使用
+for batch in dataloader:
+    loss.backward()
+    clip_grad_value(model.parameters(), clip_value=1.0)
+    optimizer.step()
+
+最佳实践：
+• max_norm通常设为1.0或0.5
+• 在混合精度训练中使用
+• 与loss scaling配合使用
+• 监控梯度范数
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="训练监控">
+          <div class="caption">图：持续监控训练是保持稳定性的关键</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 训练监控</h2>
+          <div class="card">
+            <h3 class="card-title">关键监控指标</h3>
+            <div class="code-block">
+监控指标：
+
+1. Loss曲线
+   • 正常: 平滑下降
+   • 异常: 震荡、不下降、突然上升
+
+2. 学习率
+   • 确认warmup和decay正常
+   • 监控是否过大或过小
+
+3. 梯度范数
+   • 监控梯度大小
+   • 检测梯度爆炸/消失
+
+4. 参数更新
+   • 监控参数变化幅度
+   • 确保合理更新
+
+5. GPU利用率
+   • 确保GPU正常工作
+   • 检测GPU空闲
+
+6. 内存使用
+   • 显存占用
+   • 系统内存
+
+实现监控：
+
+import torch
+import numpy as np
+from torch.utils.tensorboard import SummaryWriter
+
+writer = SummaryWriter()
+
+gradient_norms = []
+losses = []
+
+for step, (inputs, labels) in enumerate(dataloader):
+    # 前向传播
+    outputs = model(inputs)
+    loss = loss_fn(outputs, labels)
+
+    # 反向传播
+    optimizer.zero_grad()
+    loss.backward()
+
+    # 记录loss
+    losses.append(loss.item())
+    if step % 100 == 0:
+        avg_loss = np.mean(losses[-100:])
+        writer.add_scalar('Loss/train', avg_loss, step)
+
+    # 计算梯度范数
+    total_norm = 0
+    for p in model.parameters():
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+    total_norm = total_norm ** 0.5
+    gradient_norms.append(total_norm)
+
+    if step % 100 == 0:
+        avg_grad_norm = np.mean(gradient_norms[-100:])
+        writer.add_scalar('Gradients/norm', avg_grad_norm, step)
+
+    # 更新参数
+    optimizer.step()
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 其他优化技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">权重初始化</h3>
+              <ul class="feature-list">
+                <li><strong>Xavier初始化：</strong>适合sigmoid/tanh</li>
+                <li><strong>He初始化：</strong>适合ReLU</li>
+                <li><strong>预训练模型：</strong>微调时使用</li>
+              </ul>
+              <div class="code-block">
+torch.nn.init.xavier_uniform_(layer.weight)
+torch.nn.init.kaiming_normal_(layer.weight, mode='fan_out')
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">正则化</h3>
+              <ul class="feature-list">
+                <li><strong>Dropout：</strong>防止过拟合</li>
+                <li><strong>权重衰减：</strong>L2正则化</li>
+                <li><strong>LayerNorm：</strong>稳定训练</li>
+              </ul>
+              <div class="code-block">
+torch.nn.Dropout(p=0.1)
+torch.nn.LayerNorm(hidden_size)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 调试技巧</h2>
+          <div class="card">
+            <h3 class="card-title">常见问题诊断</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>诊断方法</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Loss为NaN</strong></td>
+                  <td>检查梯度、学习率</td>
+                  <td>降低学习率、启用loss scaling</td>
+                </tr>
+                <tr>
+                  <td><strong>Loss不下降</strong></td>
+                  <td>检查梯度大小</td>
+                  <td>增加学习率、检查数据</td>
+                </tr>
+                <tr>
+                  <td><strong>Loss震荡</strong></td>
+                  <td>观察loss曲线</td>
+                  <td>减小学习率、增大batch size</td>
+                </tr>
+                <tr>
+                  <td><strong>精度低</strong></td>
+                  <td>对比FP32训练</td>
+                  <td>使用BF16、调整loss scaling</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">稳定性注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>从小规模开始：</strong>先用小模型验证训练流程</li>
+              <li><strong>逐步增大batch：</strong>逐步增加batch size</li>
+              <li><strong>监控关键指标：</strong>持续监控loss、梯度等</li>
+              <li><strong>定期保存checkpoint：</strong>防止训练失败丢失进度</li>
+              <li><strong>及时调整：</strong>发现异常及时调整参数</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 训练不稳定是常见问题，需要系统化优化</li>
+                <li>• 混合精度和loss scaling是关键</li>
+                <li>• Warmup和Cosine Decay改善收敛</li>
+                <li>• 梯度裁剪防止梯度爆炸</li>
+                <li>• 持续监控训练状态和关键指标</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="20-2-显存优化技术.html">← 上一节</a>
+          <a href="20-4-长序列训练.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

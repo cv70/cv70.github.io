@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.1 训练任务规划 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.1 训练任务规划</h1>
+          <p class="subtitle">大模型训练的前期准备</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握训练任务规划的方法</li>
+            <li>学会估算资源需求</li>
+            <li>了解训练时间预估</li>
+            <li>掌握成本分析技巧</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 训练规划框架</h2>
+          <div class="card">
+            <h3 class="card-title">规划步骤</h3>
+            <div class="grid grid-5">
+              <div class="step-card">
+                <div class="step-number">1</div>
+                <div class="step-title">需求分析</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">2</div>
+                <div class="step-title">资源估算</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">3</div>
+                <div class="step-title">时间规划</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">4</div>
+                <div class="step-title">成本分析</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">5</div>
+                <div class="step-title">风险评估</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 模型规模分析</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>模型类型</th>
+                <th>参数量</th>
+                <th>训练数据</th>
+                <th>推荐GPU</th>
+                <th>训练时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>小语言模型</td>
+                <td>1-3B</td>
+                <td>100B-500B tokens</td>
+                <td>8×A100 40GB</td>
+                <td>1-2周</td>
+              </tr>
+              <tr>
+                <td>中型语言模型</td>
+                <td>7-13B</td>
+                <td>500B-2T tokens</td>
+                <td>32×A100 40GB</td>
+                <td>2-4周</td>
+              </tr>
+              <tr>
+                <td>大语言模型</td>
+                <td>30-70B</td>
+                <td>1T-5T tokens</td>
+                <td>128×A100 80GB</td>
+                <td>1-3月</td>
+              </tr>
+              <tr>
+                <td>超大规模模型</td>
+                <td>100B+</td>
+                <td>5T-10T tokens</td>
+                <td>256×A100 80GB</td>
+                <td>3-6月</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧮</span> 资源需求计算</h2>
+          <div class="code-block">
+<pre><code># 大模型训练资源估算
+import math
+
+def calculate_training_resources(params, tokens, batch_size, gpu_memory, flops_per_gpu):
+    """
+    计算训练所需资源
+
+    params: 模型参数量
+    tokens: 训练token数
+    batch_size: 批大小
+    gpu_memory: 单卡显存（GB）
+    flops_per_gpu: 单卡算力（TFLOPS）
+    """
+    # 计算总计算量（6×参数×tokens）
+    total_flops = 6 * params * tokens
+
+    # 计算每步计算量
+    flops_per_step = 6 * params * batch_size
+
+    # 计算总步数
+    total_steps = tokens / batch_size
+
+    # 计算显存需求
+    model_memory = params * 2 / 1e9  # 模型参数（FP16）
+    optimizer_memory = params * 4 / 1e9  # 优化器状态
+    gradient_memory = params * 2 / 1e9  # 梯度
+    activation_memory = batch_size * seq_len * hidden_dim * layers * 4 / 1e9
+
+    total_memory = model_memory + optimizer_memory + gradient_memory + activation_memory
+
+    # 计算所需GPU数
+    gpus_needed = math.ceil(total_memory / gpu_memory)
+
+    # 计算训练时间（秒）
+    training_time = total_flops / (flops_per_gpu * 1e12 * gpus_needed)
+
+    # 计算所需卡时
+    gpu_hours = training_time * gpus_needed / 3600
+
+    return {
+        'total_flops': total_flops,
+        'memory_needed': total_memory,
+        'gpus_needed': gpus_needed,
+        'training_time': training_time,
+        'gpu_hours': gpu_hours
+    }
+
+# 示例：训练7B模型，1T tokens
+result = calculate_training_resources(
+    params=7e9,
+    tokens=1e12,
+    batch_size=512,
+    gpu_memory=40,
+    flops_per_gpu=300
+)
+
+print(f"所需GPU数: {result['gpus_needed']}")
+print(f"训练时间: {result['training_time'] / 86400:.2f} 天")
+print(f"所需卡时: {result['gpu_hours']:.0f} GPU小时")</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📅</span> 训练时间预估</h2>
+          <div class="card">
+            <h3 class="card-title">时间分解</h3>
+            <div class="code-block">
+<pre><code># 训练时间分解
+
+## 数据准备（5-10%）
+- 数据清洗
+- 数据格式化
+- 数据验证
+
+## 预训练（70-80%）
+- 基础预训练
+- 中间检查点
+
+## 指令微调（5-10%）
+- 指令数据准备
+- 微调训练
+
+## 评估优化（5-10%）
+- 模型评估
+- 参数调优
+- 最终验证
+
+## 实例：7B模型训练时间表
+
+| 阶段 | 时间占比 | 实际时间 |
+|------|----------|----------|
+| 数据准备 | 10% | 2天 |
+| 预训练 | 75% | 15天 |
+| 指令微调 | 10% | 2天 |
+| 评估优化 | 5% | 1天 |
+| **总计** | 100% | **20天** |</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💰</span> 成本分析</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">成本构成</h3>
+              <ul class="feature-list">
+                <li><strong>算力成本</strong>：GPU租赁/折旧</li>
+                <li><strong>存储成本</strong>：数据存储</li>
+                <li><strong>网络成本</strong>：带宽费用</li>
+                <li><strong>人力成本</strong>：开发、运维</li>
+                <li><strong>能源成本</strong>：电力消耗</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">成本优化</h3>
+              <ul class="feature-list">
+                <li>使用Spot实例节省50-70%</li>
+                <li>混合精度训练节省50%</li>
+                <li>高效并行策略</li>
+                <li>资源复用提高利用率</li>
+                <li>优化数据加载减少等待</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 风险评估</h2>
+          <div class="card">
+            <h3 class="card-title">风险矩阵</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>风险</th>
+                  <th>概率</th>
+                  <th>影响</th>
+                  <th>应对措施</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>硬件故障</td>
+                  <td>中</td>
+                  <td>高</td>
+                  <td>定期checkpoint，快速恢复</td>
+                </tr>
+                <tr>
+                  <td>训练发散</td>
+                  <td>低</td>
+                  <td>高</td>
+                  <td>充分实验验证，监控训练指标</td>
+                </tr>
+                <tr>
+                  <td>数据质量</td>
+                  <td>中</td>
+                  <td>中</td>
+                  <td>严格数据清洗，多轮验证</td>
+                </tr>
+                <tr>
+                  <td>资源不足</td>
+                  <td>低</td>
+                  <td>高</td>
+                  <td>预留20%资源冗余</td>
+                </tr>
+                <tr>
+                  <td>时间延误</td>
+                  <td>中</td>
+                  <td>中</td>
+                  <td>预留缓冲时间，里程碑检查</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">规划建议</div>
+            <p><strong>渐进式训练</strong>：从小模型开始，逐步扩展规模。<strong>充分实验</strong>：在大规模训练前进行充分的小规模实验。<strong>监控机制</strong>：建立完善的训练监控和告警机制。<strong>灵活调整</strong>：根据训练情况及时调整策略。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 训练规划包括需求分析、资源估算、时间规划等步骤</li>
+                <li>• 需要根据模型规模准确估算资源需求</li>
+                <li>• 时间规划要包含数据准备、训练、评估等各阶段</li>
+                <li>• 需要进行风险评估，制定应对措施</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter48/48-5-运维体系设计.html">← 上一节</a>
+          <a href="49-2-数据准备.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.2 数据并行原理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>16.2 数据并行原理</h1>
+          <p class="subtitle">深入理解数据并行的核心机制与实现</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解数据并行的基本原理</li>
+            <li>掌握数据并行的同步机制</li>
+            <li>了解同步SGD与异步SGD的区别</li>
+            <li>认识数据并行的优化技术</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据并行示意图" class="card-image">
+          <h3 class="card-title">什么是数据并行？</h3>
+          <p class="card-text">
+            <strong>数据并行（Data Parallelism）</strong>是最常用的分布式训练策略。
+            在数据并行中，每个GPU/节点都维护完整的模型副本，但处理不同的数据子集。
+            各节点独立计算梯度，然后同步梯度并更新模型参数。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 数据并行工作原理</h2>
+          <div class="card">
+            <h3 class="card-title">标准数据并行流程</h3>
+            <div class="code-block">
+每轮训练迭代：
+
+1. 数据分片
+   ├─ 将总batch size = N × batch_size_per_gpu
+   └─ 每个GPU处理 batch_size_per_gpu 个样本
+
+2. 前向传播
+   ├─ 每个GPU独立进行前向传播
+   └─ 计算本地损失和梯度
+
+3. 梯度同步
+   ├─ 通过AllReduce操作聚合所有GPU的梯度
+   ├─ 通常采用平均：gradient = sum(all_gradients) / N
+   └─ 所有GPU获得相同的全局梯度
+
+4. 参数更新
+   ├─ 所有GPU使用相同的全局梯度更新模型
+   └─ 确保所有GPU的模型参数保持一致
+
+5. 下一轮迭代
+   └─ 重复上述步骤
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 梯度同步机制</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">同步SGD（Synchronous）</h3>
+              <ul class="feature-list">
+                <li>所有GPU等待梯度同步完成后才进行下一轮</li>
+                <li>使用全局batch size = N × local_batch_size</li>
+                <li>训练收敛性更好</li>
+                <li>受最慢GPU限制（木桶效应）</li>
+              </ul>
+              <div class="tip-box info">
+                <span class="icon">💡</span>
+                <div class="content">
+                  <p>这是目前最常用的方式，PyTorch DDP、DeepSpeed等框架都采用同步SGD。</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">异步SGD（Asynchronous）</h3>
+              <ul class="feature-list">
+                <li>GPU完成计算后立即更新参数</li>
+                <li>无需等待其他GPU</li>
+                <li>训练速度更快</li>
+                <li>收敛性可能受影响</li>
+              </ul>
+              <div class="tip-box warning">
+                <span class="icon">⚠️</span>
+                <div class="content">
+                  <p>异步SGD可能导致梯度过期问题，需要谨慎使用。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📡</span> 集合通信：AllReduce</h2>
+          <div class="card">
+            <h3 class="card-title">AllReduce操作详解</h3>
+            <p class="card-text">AllReduce是数据并行中最核心的通信原语，用于在所有进程间聚合数据。</p>
+            <div class="code-block">
+假设有4个GPU，各自有梯度数据：
+
+GPU0: [g0, g1, g2, g3]
+GPU1: [h0, h1, h2, h3]
+GPU2: [i0, i1, i2, i3]
+GPU3: [j0, j1, j2, j3]
+
+AllReduce(求和)后，所有GPU得到：
+[(g0+h0+i0+j0), (g1+h1+i1+j1), (g2+h2+i2+j2), (g3+h3+i3+j3)]
+
+常用算法：
+• Ring AllReduce：环形通信，适合中小规模集群
+• Tree AllReduce：树形通信，适合大规模集群
+• NCCL：NVIDIA优化的通信库，自动选择最优算法
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Ring AllReduce通信">
+          <div class="caption">图：Ring AllReduce通过环形网络高效聚合梯度</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 数据并行的效率分析</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>因素</th>
+                <th>影响</th>
+                <th>优化策略</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>通信带宽</strong></td>
+                <td>带宽越高，梯度同步越快</td>
+                <td>使用高速网络（InfiniBand/RoCE）</td>
+              </tr>
+              <tr>
+                <td><strong>通信计算比</strong></td>
+                <td>计算量越大，通信开销占比越小</td>
+                <td>增加batch size或使用更复杂的模型</td>
+              </tr>
+              <tr>
+                <td><strong>梯度累积</strong></td>
+                <td>减少通信频率</td>
+                <td>累积多步后再同步</td>
+              </tr>
+              <tr>
+                <td><strong>混合精度</strong></td>
+                <td>减少通信数据量</td>
+                <td>使用FP16/BF16进行梯度同步</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 数据并行优化技术</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">梯度累积</h3>
+              <p class="card-text">累积多步梯度后再同步，减少通信次数</p>
+              <div class="code-block">
+# 梯度累积示例
+accumulation_steps = 4
+for i, (inputs, labels) in enumerate(dataloader):
+    loss = model(inputs)
+    loss = loss / accumulation_steps
+    loss.backward()
+
+    if (i + 1) % accumulation_steps == 0:
+        # 同步梯度并更新参数
+        optimizer.step()
+        optimizer.zero_grad()
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">梯度压缩</h3>
+              <p class="card-text">压缩梯度数据，减少通信量</p>
+              <div class="code-block">
+# 梯度压缩技术
+1. 量化：FP32 -> FP16 -> FP8
+2. 稀疏化：只传输大的梯度值
+3. TopK：只传输前K%的梯度
+4. 误差反馈：补偿压缩误差
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 数据并行的实现框架</h2>
+          <div class="card">
+            <h3 class="card-title">主流框架对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>框架</th>
+                  <th>特点</th>
+                  <th>适用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>PyTorch DDP</strong></td>
+                  <td>官方实现，易用性好</td>
+                  <td>中小规模（≤16卡）</td>
+                </tr>
+                <tr>
+                  <td><strong>PyTorch FSDP</strong></td>
+                  <td>参数分片，节省显存</td>
+                  <td>大规模模型</td>
+                </tr>
+                <tr>
+                  <td><strong>DeepSpeed</strong></td>
+                  <td>ZeRO优化，极致显存优化</td>
+                  <td>超大规模模型</td>
+                </tr>
+                <tr>
+                  <td><strong>Horovod</strong></td>
+                  <td>多框架支持</td>
+                  <td>TensorFlow/PyTorch/MXNet</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">实用建议</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li>起步使用PyTorch DDP，简单易用</li>
+              <li>显存不足时考虑FSDP或DeepSpeed</li>
+              <li>确保数据加载器正确设置shuffle和sampler</li>
+              <li>监控通信时间占比，优化通信效率</li>
+              <li>使用NCCL backend获得最佳性能</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 数据并行是最常用的分布式训练策略</li>
+                <li>• 每个GPU维护完整模型副本，处理不同数据</li>
+                <li>• 通过AllReduce同步梯度是核心机制</li>
+                <li>• 同步SGD保证收敛性，异步SGD提升速度</li>
+                <li>• 梯度累积、压缩等技术可优化效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="16-1-分布式训练概述.html">← 上一节</a>
+          <a href="16-3-模型并行原理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

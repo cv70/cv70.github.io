@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.5 混合精度量化 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>22.5 混合精度量化</h1>
+          <p class="subtitle">灵活组合不同精度的量化策略</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解混合精度量化的概念</li>
+            <li>掌握分层量化策略</li>
+            <li>学习动态量化技术</li>
+            <li>了解LLM低比特量化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="混合精度量化" class="card-image">
+          <h3 class="card-title">什么是混合精度量化</h3>
+          <p class="card-text">
+            <strong>混合精度量化</strong>是指在同一模型中使用不同精度的参数。
+            通过对不同层、不同权重和激活使用不同的量化精度，可以在保持精度的同时最大化压缩效果。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> 混合精度类型</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">权重混合精度</h3>
+              <ul class="feature-list">
+                <li><strong>方法</strong>：不同层使用不同比特数</li>
+                <li><strong>策略</strong>：敏感层高精度，非敏感层低精度</li>
+                <li><strong>优势</strong>：平衡精度和压缩</li>
+                <li><strong>挑战</strong>：需要确定敏感度</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">激活混合精度</h3>
+              <ul class="feature-list">
+                <li><strong>方法</strong>：不同激活使用不同精度</li>
+                <li><strong>策略</strong>：根据激活范围动态选择</li>
+                <li><strong>优势</strong>：减少内存带宽</li>
+                <li><strong>挑战</strong>：需要动态处理</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">逐通道混合</h3>
+              <ul class="feature-list">
+                <li><strong>方法</strong>：同层不同通道不同精度</li>
+                <li><strong>策略</strong>：重要通道高精度</li>
+                <li><strong>优势</strong>：更细粒度控制</li>
+                <li><strong>挑战</strong>：实现复杂</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">逐层混合</h3>
+              <ul class="feature-list">
+                <li><strong>方法</strong>：不同层整体不同精度</li>
+                <li><strong>策略</strong>：首尾层高精度，中间层低精度</li>
+                <li><strong>优势</strong>：实现相对简单</li>
+                <li><strong>挑战</strong>：粒度较粗</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 分层敏感度分析</h2>
+          <div class="card">
+            <h3 class="card-title">层级敏感度</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 15px;">
+              <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5rem;">🔴</div>
+                <div style="font-weight: bold; margin: 5px 0;">输入层</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary);">高敏感</div>
+                <div style="font-size: 0.8em; color: #4CAF50; margin-top: 5px;">建议: FP16/INT16</div>
+              </div>
+              <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5rem;">🟠</div>
+                <div style="font-weight: bold; margin: 5px 0;">浅层</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary);">中敏感</div>
+                <div style="font-size: 0.8em; color: #FF9800; margin-top: 5px;">建议: INT8</div>
+              </div>
+              <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5rem;">🟡</div>
+                <div style="font-weight: bold; margin: 5px 0;">中层</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary);">低敏感</div>
+                <div style="font-size: 0.8em; color: #FF9800; margin-top: 5px;">建议: INT8/INT4</div>
+              </div>
+              <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5rem;">🟢</div>
+                <div style="font-weight: bold; margin: 5px 0;">深层</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary);">中敏感</div>
+                <div style="font-size: 0.8em; color: #FF9800; margin-top: 5px;">建议: INT8</div>
+              </div>
+              <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.5rem;">🔴</div>
+                <div style="font-weight: bold; margin: 5px 0;">输出层</div>
+                <div style="font-size: 0.8em; color: var(--text-secondary);">高敏感</div>
+                <div style="font-size: 0.8em; color: #4CAF50; margin-top: 5px;">建议: FP16/INT16</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="神经网络结构">
+          <div class="caption">图：混合精度量化的神经网络层结构</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> LLM低比特量化</h2>
+          <div class="card">
+            <h3 class="card-title">大模型专用量化方法</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">GPTQ</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">基于权重的量化，支持INT4，精度损失小</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">AWQ</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">激活感知权重量化，INT4效果好</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">SpQR</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">稀疏量化，处理异常值</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: var(--bg-secondary);">
+                <div style="font-weight: bold; margin-bottom: 5px;">QLoRA</div>
+                <div style="font-size: 0.9em; color: var(--text-secondary);">低秩适配器，支持4bit训练</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 混合精度量化实现</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.nn as nn
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+# 使用BitsAndBytes进行混合精度量化
+def quantize_llm(model_name, load_in_4bit=True, load_in_8bit=False):
+    """
+    量化LLM模型
+    """
+    # 配置量化
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=load_in_4bit,
+        load_in_8bit=load_in_8bit,
+        bnb_4bit_compute_dtype=torch.float16,  # 计算用FP16
+        bnb_4bit_use_double_quant=True,      # 双重量化
+        bnb_4bit_quant_type="nf4"             # NF4量化类型
+    )
+
+    # 加载量化模型
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        quantization_config=bnb_config,
+        device_map="auto"
+    )
+
+    return model
+
+# 分层量化示例
+from torch.ao.quantization import (
+    get_default_qconfig,
+    prepare,
+    convert
+)
+
+def layerwise_quantize(model):
+    """
+    逐层不同精度量化
+    """
+    # 第一层：高精度
+    model.layer1.qconfig = get_default_qconfig('fbgemm')
+    model.layer1.qconfig.weight.qscheme = torch.per_channel_symmetric
+
+    # 中间层：标准精度
+    for i in range(2, len(model.layers) - 1):
+        model.layers[i].qconfig = get_default_qconfig('fbgemm')
+
+    # 最后一层：高精度
+    model.layer_last.qconfig = get_default_qconfig('fbgemm')
+
+    # 准备和转换
+    model = prepare(model)
+    # 使用校准数据进行校准
+    # calibrate_model(model, calibration_data)
+    model = convert(model)
+
+    return model
+
+# 动态量化
+from torch.ao.quantization import quantize_dynamic
+
+def dynamic_quantize(model):
+    """
+    动态量化（权重静态量化，激活动态量化）
+    """
+    quantized_model = quantize_dynamic(
+        model,
+        {nn.Linear, nn.LSTM},  # 要量化的层
+        dtype=torch.qint8
+    )
+    return quantized_model
+
+# 使用示例
+# 量化LLM
+model = quantize_llm("meta-llama/Llama-2-7b-hf",
+                    load_in_4bit=True)
+
+# 计算模型大小
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters())
+
+print(f"量化后参数量: {count_parameters(model) / 1e9:.2f}B")
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 量化精度权衡</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>配置</th>
+                <th>模型大小</th>
+                <th>精度损失</th>
+                <th>推理速度</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>FP32</strong></td>
+                <td>100%</td>
+                <td>0%</td>
+                <td>1x</td>
+                <td>基准</td>
+              </tr>
+              <tr>
+                <td><strong>FP16</strong></td>
+                <td>50%</td>
+                <td><1%</td>
+                <td>1.5x</td>
+                <td>训练/推理</td>
+              </tr>
+              <tr>
+                <td><strong>INT8</strong></td>
+                <td>25%</td>
+                <td>1-2%</td>
+                <td>2-4x</td>
+                <td>通用推理</td>
+              </tr>
+              <tr>
+                <td><strong>INT4 (混合)</strong></td>
+                <td>15%</td>
+                <td>2-3%</td>
+                <td>4-8x</td>
+                <td>LLM推理</td>
+              </tr>
+              <tr>
+                <td><strong>INT4 (纯)</strong></td>
+                <td>12.5%</td>
+                <td>5-10%</td>
+                <td>6-10x</td>
+                <td>边缘推理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">混合精度量化建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>对LLM使用专门的量化方法（GPTQ/AWQ）</li>
+              <li>第一层和最后一层保持较高精度</li>
+              <li>INT4量化建议结合校准和微调</li>
+              <li>实际部署前务必测试精度和性能</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 混合精度量化对不同层使用不同精度</li>
+                <li>• 分层敏感度分析指导量化策略</li>
+                <li>• LLM需要专门的低比特量化方法</li>
+                <li>• 混合精度可以在精度和压缩间取得最佳平衡</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="22-4-模型量化基础.html">← 上一节</a>
+          <a href="../chapter23/23-1-TensorRT.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

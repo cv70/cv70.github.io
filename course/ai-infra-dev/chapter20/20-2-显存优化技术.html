@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20.2 显存优化技术 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>20.2 显存优化技术</h1>
+          <p class="subtitle">突破GPU显存限制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握显存占用的主要来源</li>
+            <li>了解各种显存优化技术</li>
+            <li>学会组合使用优化技术</li>
+            <li>认识显存优化的权衡</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="显存优化" class="card-image">
+          <h3 class="card-title">显存优化概述</h3>
+          <p class="card-text">
+            显存是大模型训练的首要瓶颈。显存优化技术通过减少各类显存占用，
+            使得在有限硬件上训练更大模型成为可能。显存优化技术包括ZeRO、
+            激活值检查点、混合精度、梯度压缩、CPU Offload等。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 显存占用分析</h2>
+          <div class="card">
+            <h3 class="card-title">显存占用组成</h3>
+            <div class="code-block">
+大模型训练显存占用（假设100B参数）：
+
+1. 模型参数
+   • FP16: 100B × 2 = 200 GB
+   • FP32: 100B × 4 = 400 GB
+   • 占比: ~14%
+
+2. 梯度
+   • FP16: 100B × 2 = 200 GB
+   • 占比: ~14%
+
+3. 优化器状态
+   • Adam (FP32):
+     - Momentum: 100B × 4 = 400 GB
+     - Variance: 100B × 4 = 400 GB
+     - 总计: 800 GB
+   • 占比: ~57%
+
+4. 激活值
+   • 假设: B=8, S=2048, H=12288, L=80
+   • Activations: ~32 GB
+   • 占比: ~2%
+
+5. 临时缓冲
+   • 通信缓冲、计算中间结果等
+   • 估计: 50-100 GB
+   • 占比: ~4-7%
+
+6. 框架开销
+   • PyTorch/DeepSpeed框架开销
+   • 估计: 50-100 GB
+   • 占比: ~4-7%
+
+总计: 1432 GB
+
+优化目标：
+• 参数: -75% (50 GB) → ZeRO-3
+• 梯度: -75% (50 GB) → ZeRO-3
+• 优化器: -75% (200 GB) → ZeRO-3
+• 激活值: -80% (6.4 GB) → 检查点
+• 优化后总计: ~306 GB
+• 节省: ~78%
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> ZeRO优化</h2>
+          <div class="card">
+            <h3 class="card-title">DeepSpeed ZeRO技术</h3>
+            <div class="code-block">
+ZeRO-1: 优化器状态分片
+
+原理：
+• Adam的momentum和variance分片到不同GPU
+• 每个GPU只存储1/N的优化器状态
+
+效果：
+• 优化器状态: 800 GB → 200 GB
+• 节省: 75%
+• 总显存: 1432 → 832 GB
+
+通信开销：
+• 参数更新时AllBroadcast
+• 通信量: 参数大小
+• 额外开销: ~10%
+
+ZeRO-2: + 梯度分片
+
+原理：
+• 梯度也分片存储
+• 每个GPU只计算和存储1/N的梯度
+
+效果：
+• 优化器状态: 200 GB
+• 梯度: 200 GB → 50 GB
+• 节省: ~37%（相比ZeRO-1）
+• 总显存: 832 → 682 GB
+
+通信开销：
+• 使用ReduceScatter替代AllReduce
+• 更高效的通信
+• 额外开销: ~15%
+
+ZeRO-3: + 参数分片
+
+原理：
+• 模型参数也分片存储
+• 每个GPU只存储1/N的参数
+
+效果：
+• 参数: 200 GB → 50 GB
+• 梯度: 50 GB
+• 优化器状态: 200 GB
+• 节省: ~53%（相比ZeRO-2）
+• 总显存: 682 → 432 GB
+
+通信开销：
+• 前向传播: 每层AllGather
+• 反向传播: 每层ReduceScatter
+• 通信量: 参数大小 × 层数
+• 额外开销: ~50%
+
+ZeRO-Offload: + CPU Offload
+
+原理：
+• 将部分状态卸载到CPU内存
+• GPU显存大幅减少
+
+效果：
+• CPU内存通常比GPU大10-100倍
+• 可以训练更大模型
+• 训练速度: 降低5-20倍
+
+适用场景：
+• 显存严重不足
+• 单GPU训练大模型
+• 可接受速度降低
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 激活值检查点</h2>
+          <div class="card">
+            <h3 class="card-title">减少激活值显存</h3>
+            <div class="code-block">
+激活值检查点原理：
+
+传统方式：
+• 前向传播: 保存所有层的激活值
+• 反向传播: 使用保存的激活值计算梯度
+• 显存占用: 与层数线性增长
+
+检查点方式：
+• 前向传播: 只保存部分层的激活值
+• 反向传播: 重新计算未保存的激活值
+• 显存占用: 大幅减少
+
+实现：
+
+def forward_with_checkpointing(model, x):
+    """带检查点的前向传播"""
+    activations = []
+
+    for i, layer in enumerate(model.layers):
+        x = layer(x)
+
+        # 只保存检查点的激活值
+        if i % checkpoint_interval == 0:
+            activations.append(x.clone())
+
+    return x, activations
+
+def backward_with_checkpointing(model, x, activations, grad_output):
+    """带检查点的反向传播"""
+    grads = []
+
+    for i, layer in enumerate(reversed(model.layers)):
+        # 重新计算激活值（如果未保存）
+        if (len(model.layers) - i - 1) % checkpoint_interval != 0:
+            # 重新计算前向传播
+            x = layer(x)
+            # 获取保存的激活值
+        else:
+            x = activations.pop()
+
+        # 计算梯度
+        grad_x = layer.backward(x, grad_output)
+        grads.append(grad_x)
+        grad_output = grad_x
+
+    return list(reversed(grads))
+
+效果：
+• 激活值显存: 32 GB → 6.4 GB（80%节省）
+• 计算开销: 增加~30%（需要重新计算）
+• 权衡: 显存 vs 计算
+
+最佳实践：
+• 检查点间隔: 通常每2-4层
+• 结合ZeRO: ZeRO-3 + 激活值检查点
+• 监控性能: 平衡显存和速度
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="显存优化">
+          <div class="caption">图：多种显存优化技术可以组合使用</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 混合精度</h2>
+          <div class="card">
+            <h3 class="card-title">FP16和BF16训练</h3>
+            <div class="code-block">
+混合精度原理：
+
+FP16 (Half Precision):
+• 范围: ±65504
+• 精度: 3-4位有效数字
+• 显存: FP32的50%
+• 速度: 通常更快（Tensor Core加速）
+• 问题: 容易溢出/下溢
+
+BF16 (Bfloat16):
+• 范围: ±3.3×10³⁸
+• 精度: 与FP32相同的指数
+• 显存: FP32的50%
+• 速度: Ampere+ GPU加速
+• 优势: 更大的范围，更稳定
+
+使用PyTorch混合精度:
+
+from torch.cuda.amp import autocast, GradScaler
+
+model = MyModel().cuda()
+optimizer = torch.optim.AdamW(model.parameters())
+scaler = GradScaler()  # FP16需要，BF16不需要
+
+for inputs, labels in dataloader:
+    optimizer.zero_grad()
+
+    # 自动混合精度上下文
+    with autocast(enabled=True, dtype=torch.float16):
+        outputs = model(inputs)
+        loss = loss_fn(outputs, labels)
+
+    # 反向传播（自动loss scaling）
+    scaler.scale(loss).backward()
+
+    # 更新参数
+    scaler.step(optimizer)
+    scaler.update()
+
+显存节省：
+
+FP16 vs FP32:
+• 参数: 400 GB → 200 GB
+• 梯度: 400 GB → 200 GB
+• 优化器: 1600 GB → 800 GB
+• 激活值: ~64 GB → ~32 GB
+• 总计: ~2364 GB → ~1232 GB
+• 节省: ~48%
+
+BF16 vs FP32:
+• 与FP16相同显存节省
+• 更稳定（不需要loss scaling）
+• 更好的收敛性
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📉</span> 梯度累积</h2>
+          <div class="card">
+            <h3 class="card-title">模拟大batch size</h3>
+            <div class="code-block">
+梯度累积原理：
+
+目标：使用更大的batch size
+限制：单batch显存不足
+
+解决方案：累积多次梯度后更新
+
+实现：
+
+accumulation_steps = 4
+optimizer.zero_grad()
+
+for i, (inputs, labels) in enumerate(dataloader):
+    # 前向传播
+    outputs = model(inputs)
+    loss = loss_fn(outputs, labels)
+
+    # 缩放loss（因为累积）
+    loss = loss / accumulation_steps
+
+    # 反向传播（累积梯度）
+    loss.backward()
+
+    # 每accumulation_steps步更新一次
+    if (i + 1) % accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()
+
+效果：
+
+假设：
+• micro_batch_size: 4
+• accumulation_steps: 4
+• effective_batch_size: 4 × 4 = 16
+
+显存：
+• 使用micro_batch_size=4的显存
+• 获得batch_size=16的效果
+• 显存节省: 75%
+
+注意事项：
+• 梯度累积需要更长时间
+• 可能影响Batch Normalization
+• 学习率可能需要调整
+• 需要调整warmup
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 优化技术对比</h2>
+          <div class="card">
+            <h3 class="card-title">显存优化技术对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>技术</th>
+                  <th>显存节省</th>
+                  <th>计算开销</th>
+                  <th>易用性</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>ZeRO-1</strong></td>
+                  <td>~14%</td>
+                  <td>~10%</td>
+                  <td>简单</td>
+                </tr>
+                <tr>
+                  <td><strong>ZeRO-2</strong></td>
+                  <td>~28%</td>
+                  <td>~15%</td>
+                  <td>简单</td>
+                </tr>
+                <tr>
+                  <td><strong>ZeRO-3</strong></td>
+                  <td>~53%</td>
+                  <td>~50%</td>
+                  <td>中等</td>
+                </tr>
+                <tr>
+                  <td><strong>ZeRO-Offload</strong></td>
+                  <td>~90%</td>
+                  <td>~500%</td>
+                  <td>复杂</td>
+                </tr>
+                <tr>
+                  <td><strong>激活值检查点</strong></td>
+                  <td>~5-10%</td>
+                  <td>~30%</td>
+                  <td>中等</td>
+                </tr>
+                <tr>
+                  <td><strong>混合精度</strong></td>
+                  <td>~50%</td>
+                  <td>-50%（更快）</td>
+                  <td>简单</td>
+                </tr>
+                <tr>
+                  <td><strong>梯度累积</strong></td>
+                  <td>~75%</td>
+                  <td>0%</td>
+                  <td>简单</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">显存优化策略</h3>
+            <div class="code-block">
+场景1：显存略微不足
+
+优化方案：
+• 混合精度: FP16/BF16
+• ZeRO-1 或 ZeRO-2
+• 梯度累积
+
+效果：
+• 显存节省: ~65-75%
+• 计算开销: ~10-20%
+
+场景2：显存明显不足
+
+优化方案：
+• 混合精度
+• ZeRO-2
+• 激活值检查点
+• 梯度累积
+
+效果：
+• 显存节省: ~75-80%
+• 计算开销: ~30-40%
+
+场景3：显存严重不足
+
+优化方案：
+• 混合精度
+• ZeRO-3 + Offload
+• 激活值检查点
+• 梯度累积
+
+效果：
+• 显存节省: ~95%
+• 计算开销: ~200-500%
+
+场景4：单GPU训练大模型
+
+优化方案：
+• 混合精度
+• ZeRO-3 + CPU Offload
+• NVMe Offload
+• 激活值检查点
+
+效果：
+• 显存节省: ~98%
+• 计算开销: ~500-1000%
+
+优化原则：
+1. 先用简单的优化（混合精度、ZeRO-1）
+2. 逐步增加优化强度（ZeRO-2、激活值检查点）
+3. 最后才使用激进的优化（ZeRO-Offload）
+4. 始终监控训练速度和收敛性
+5. 在显存和速度间找到最佳平衡
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>性能权衡：</strong>显存优化通常以计算为代价</li>
+              <li><strong>收敛影响：</strong>可能影响训练收敛性</li>
+              <li><strong>调试困难：</strong>优化后状态难以检查</li>
+              <li><strong>兼容性问题：</strong>某些优化可能不兼容</li>
+              <li><strong>需要测试：</strong>必须测试优化后的训练</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 显存占用主要来自参数、梯度、优化器状态、激活值</li>
+                <li>• ZeRO-1/2/3逐步优化，显存节省更多</li>
+                <li>• 激活值检查点以计算换显存</li>
+                <li>• 混合精度可节省50%显存并加速训练</li>
+                <li>• 需要根据场景组合使用优化技术</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="20-1-大模型训练挑战.html">← 上一节</a>
+          <a href="20-3-训练稳定性优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

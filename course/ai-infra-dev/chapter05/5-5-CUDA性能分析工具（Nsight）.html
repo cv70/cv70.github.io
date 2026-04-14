@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.5 CUDA性能分析工具（Nsight） - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>5.5 CUDA性能分析工具（Nsight）</h1>
+          <p class="subtitle">使用Nsight工具分析GPU程序性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>了解Nsight工具套件</li>
+            <li>掌握Nsight Compute的使用</li>
+            <li>学会Nsight Systems分析</li>
+            <li>认识性能优化指南</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Nsight工具" class="card-image">
+          <h3 class="card-title">Nsight工具概述</h3>
+          <p class="card-text">
+            Nsight是NVIDIA提供的GPU性能分析工具套件，包括Nsight Compute（Kernel级分析）和Nsight Systems（系统级分析）。这些工具帮助开发者深入了解GPU程序的执行细节，找出性能瓶颈并进行优化。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Nsight Compute</h2>
+          <div class="card">
+            <h3 class="card-title">Kernel性能分析</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              Nsight Compute提供详细的Kernel执行分析，包括资源使用、内存访问、指令执行等：
+            </p>
+            <div class="code-block">
+命令行使用：
+
+# 基本分析
+ncu ./my_app
+
+# 详细分析（所有指标）
+ncu --set full ./my_app
+
+# 分析特定Kernel
+ncu --kernel myKernel ./my_app
+
+# 输出报告
+ncu --set full -o my_report ./my_app
+
+# 分析CUDA图
+ncu --graph-level ./my_app
+
+# 查看特定Kernel的详细信息
+ncu --kernel "void myKernel(float*, int)" ./my_app
+
+# 使用配置文件
+ncu --config-file my_config.cfg ./my_app
+
+常用参数：
+--set full                    # 收集所有指标
+--kernel <name>              # 分析特定Kernel
+--metrics <list>             # 收集特定指标
+--section <name>             # 分析特定部分
+--range <start>:<end>        # 分析指定范围
+--page <name>                # 生成特定页面
+--csv-export                 # 导出CSV格式
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+关键指标：
+
+1. 占用率（Occupancy）
+   - SM资源使用率
+   - 理想值：> 80%
+
+2. 计算效率（Compute Efficiency）
+   - 实际计算/理论峰值
+   - 理想值：> 70%
+
+3. 内存带宽效率（Memory Bandwidth）
+   - 实际带宽/理论带宽
+   - 理想值：> 70%
+
+4. 访问效率（Memory Efficiency）
+   - 合并访问比率
+   - 理想值：> 90%
+
+5. IPC（Instructions Per Cycle）
+   - 每周期指令数
+   - 理想值：接近理论最大值
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Nsight Systems</h2>
+          <div class="card">
+            <h3 class="card-title">系统级分析</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              Nsight Systems提供系统级的性能分析，查看整个应用的执行流程：
+            </p>
+            <div class="code-block">
+命令行使用：
+
+# 基本分析
+nsys profile ./my_app
+
+# 追踪CUDA和API调用
+nsys profile --trace=cuda,nvtx,osrt ./my_app
+
+# 生成报告
+nsys profile -o my_report ./my_app
+
+# 追踪CUDA流
+nsys profile --trace=cuda ./my_app
+
+# 追踪内存分配
+nsys profile --trace=cuda --cuda-memory-usage=true ./my_app
+
+# 生成详细报告
+nsys profile --stats=true ./my_app
+
+# 分析Python应用
+nsys profile python my_script.py
+
+常用选项：
+--trace=<type>              # 追踪类型
+--gpu-metrics=<list>        # GPU指标
+--cuda-memory-usage=true    # 追踪内存
+--stats=true                # 生成统计
+--force-overwrite=true       # 覆盖已有报告
+--output=<name>             # 输出文件名
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">使用建议</div>
+                <p>先用Nsight Systems找出整体瓶颈，再用Nsight Compute深入分析特定Kernel。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 性能分析流程</h2>
+          <div class="card">
+            <h3 class="card-title">分析方法</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+性能分析流程：
+
+1. 初步分析
+   └─ 使用nsys profile获取整体视图
+   └─ 识别瓶颈阶段（CPU vs GPU）
+   └─ 找出耗时最长的Kernel
+
+2. Kernel级分析
+   └─ 使用ncu分析瓶颈Kernel
+   └─ 检查占用率和效率指标
+   └─ 分析内存访问模式
+
+3. 深入分析
+   └─ 检查资源使用情况
+   └─ 分析指令执行统计
+   └─ 查看内存访问细节
+
+4. 优化实施
+   └─ 根据分析结果实施优化
+   └─ 重新编译和测试
+   └─ 验证性能提升
+
+5. 迭代优化
+   └─ 重复上述过程
+   └─ 达到目标性能为止
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 常见性能问题</h2>
+          <div class="card">
+            <h3 class="card-title">问题与解决方案</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>症状</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>低占用率</td>
+                  <td>< 50%</td>
+                  <td>减少寄存器使用，增加Block数</td>
+                </tr>
+                <tr>
+                  <td>内存带宽瓶颈</td>
+                  <td>低算术强度</td>
+                  <td>合并访问，使用共享内存</td>
+                </tr>
+                <tr>
+                  <td>分支发散</td>
+                  <td>效率下降</td>
+                  <td>减少分支，使用条件选择</td>
+                </tr>
+                <tr>
+                  <td>寄存器溢出</td>
+                  <td>性能下降</td>
+                  <td>减少局部变量，降低占用率</td>
+                </tr>
+                <tr>
+                  <td>同步开销</td>
+                  <td>高延迟</td>
+                  <td>减少__syncthreads调用</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 优化建议</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化策略</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>先分析，后优化</li>
+                  <li>关注瓶颈而非细节</li>
+                  <li>优化前建立性能基准</li>
+                  <li>一次优化一个问题</li>
+                  <li>验证每次优化的效果</li>
+                  <li>使用NVTX标记代码段</li>
+                  <li>定期使用性能分析工具</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Nsight Compute提供Kernel级分析</li>
+                <li>• Nsight Systems提供系统级分析</li>
+                <li>• 性能分析需要遵循科学流程</li>
+                <li>• 识别瓶颈是优化的第一步</li>
+                <li>• 验证优化效果很重要</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="5-4-Kernel优化基础.html">← 上一节</a>
+          <a href="#">完成本章 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

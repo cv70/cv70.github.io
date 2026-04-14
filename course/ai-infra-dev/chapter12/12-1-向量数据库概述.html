@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.1 向量数据库概述 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>12.1 向量数据库概述</h1>
+          <p class="subtitle">理解向量数据库的核心概念与应用场景</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解向量数据库的基本概念</li>
+            <li>掌握向量相似度计算方法</li>
+            <li>了解向量数据库的核心功能</li>
+            <li>认识向量数据库的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="向量数据库架构图" class="card-image">
+          <h3 class="card-title">什么是向量数据库</h3>
+          <p class="card-text">
+            向量数据库是专门用于存储、索引和查询高维向量数据的数据库系统。
+            它与传统数据库的核心区别在于：传统数据库基于精确匹配和结构化查询，
+            而向量数据库基于相似度计算和高维空间搜索，是AI应用的核心基础设施。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧮</span> 向量表示与相似度</h2>
+
+          <h3>什么是向量</h3>
+          <p><strong>向量</strong>是具有大小和方向的数学对象，在AI领域通常指高维数组。
+            文本、图像、音频等数据都可以通过深度学习模型转换为向量表示。</p>
+
+          <div class="code-block">
+# 示例：将文本转换为向量
+from sentence_transformers import SentenceTransformer
+
+# 加载预训练模型
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# 文本转向量
+text = "人工智能正在改变世界"
+vector = model.encode(text)
+
+print(f"向量维度: {len(vector)}")
+print(f"向量示例: {vector[:10]}")
+
+# 输出:
+# 向量维度: 384
+# 向量示例: [0.1234, -0.5678, 0.9012, ...]
+          </div>
+
+          <h3>相似度计算方法</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>方法</th>
+                <th>公式</th>
+                <th>范围</th>
+                <th>特点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>余弦相似度</td>
+                <td>cos(θ) = (A·B) / (|A||B|)</td>
+                <td>[-1, 1]</td>
+                <td>关注方向，忽略大小</td>
+                <td>文本相似度</td>
+              </tr>
+              <tr>
+                <td>欧氏距离</td>
+                <td>||A - B||</td>
+                <td>[0, ∞)</td>
+                <td>几何距离</td>
+                <td>图像相似度</td>
+              </tr>
+              <tr>
+                <td>点积</td>
+                <td>A·B = ΣAi·Bi</td>
+                <td>[-∞, ∞)</td>
+                <td>方向和大小的综合</td>
+                <td>已归一化向量</td>
+              </tr>
+              <tr>
+                <td>曼哈顿距离</td>
+                <td>||A - B||₁ = Σ|Ai - Bi|</td>
+                <td>[0, ∞)</td>
+                <td>网格距离</td>
+                <td>稀疏数据</td>
+              </tr>
+              <tr>
+                <td>汉明距离</td>
+                <td>不同位数</td>
+                <td>[0, n]</td>
+                <td>二进制向量</td>
+                <td>哈希索引</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 相似度搜索原理</h2>
+
+          <h3>暴力搜索（Brute Force）</h3>
+          <div class="code-block">
+import numpy as np
+
+def brute_force_search(query_vector, database_vectors, k=10):
+    """
+    暴力搜索最近的k个向量
+    """
+    # 计算所有向量的相似度
+    similarities = np.dot(database_vectors, query_vector)
+
+    # 找到最相似的k个索引
+    top_k_indices = np.argsort(similarities)[-k:][::-1]
+
+    # 返回结果
+    results = [
+        {
+            'index': idx,
+            'similarity': float(similarities[idx]),
+            'vector': database_vectors[idx]
+        }
+        for idx in top_k_indices
+    ]
+
+    return results
+
+# 性能分析
+# 时间复杂度: O(n*d)，其中n是向量数量，d是向量维度
+# 空间复杂度: O(n*d)
+# 适用于: 小规模数据集（<10万向量）
+          </div>
+
+          <h3>近似最近邻搜索（ANN）</h3>
+          <div class="card">
+            <h4 class="card-title">ANN算法分类</h4>
+            <div class="grid grid-2">
+              <div class="card">
+                <h5 class="card-title">树形方法</h5>
+                <ul class="feature-list">
+                  <li>KD-Tree</li>
+                  <li>Ball Tree</li>
+                  <li>Annoy</li>
+                </ul>
+                <p class="card-text">通过空间划分快速缩小搜索范围</p>
+              </div>
+              <div class="card">
+                <h5 class="card-title">图方法</h5>
+                <ul class="feature-list">
+                  <li>HNSW</li>
+                  <li>NSG</li>
+                  <li>SPTAG</li>
+                </ul>
+                <p class="card-text">构建近邻图进行快速遍历</p>
+              </div>
+              <div class="card">
+                <h5 class="card-title">量化方法</h5>
+                <ul class="feature-list">
+                  <li>IVF</li>
+                  <li>PQ</li>
+                  <li>OPQ</li>
+                </ul>
+                <p class="card-text">通过量化减少计算量</p>
+              </div>
+              <div class="card">
+                <h5 class="card-title">哈希方法</h5>
+                <ul class="feature-list">
+                  <li>LSH</li>
+                  <li>Multi-probe LSH</li>
+                </ul>
+                <p class="card-text">使用局部敏感哈希快速定位</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 向量数据库核心功能</h2>
+
+          <h3>核心能力</h3>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📥</div>
+              <h3 class="card-title">向量存储</h3>
+              <p class="card-text">高效存储大规模高维向量数据</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔍</div>
+              <h3 class="card-title">相似度搜索</h3>
+              <p class="card-text">毫秒级响应的近似最近邻搜索</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">实时索引</h3>
+              <p class="card-text">动态更新索引结构</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔗</div>
+              <h3 class="card-title">元数据过滤</h3>
+              <p class="card-text">支持结构化元数据过滤查询</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🌐</div>
+              <h3 class="card-title">分布式扩展</h3>
+              <p class="card-text">水平扩展支持超大规模数据</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">⚡</div>
+              <h3 class="card-title">高性能</h3>
+              <p class="card-text">高并发、低延迟的查询服务</p>
+            </div>
+          </div>
+
+          <h3>向量数据库 vs 传统数据库</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>向量数据库</th>
+                <th>传统关系数据库</th>
+                <th>搜索引擎</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>查询方式</td>
+                <td>相似度搜索</td>
+                <td>精确匹配</td>
+                <td>关键词搜索</td>
+              </tr>
+              <tr>
+                <td>数据类型</td>
+                <td>高维向量</td>
+                <td>结构化数据</td>
+                <td>文本</td>
+              </tr>
+              <tr>
+                <td>索引结构</td>
+                <td>空间索引/HNSW</td>
+                <td>B-Tree/Hash</td>
+                <td>倒排索引</td>
+              </tr>
+              <tr>
+                <td>查询性能</td>
+                <td>O(log n) 毫秒级</td>
+                <td>O(1) 或 O(log n)</td>
+                <td>O(1) 或 O(log n)</td>
+              </tr>
+              <tr>
+                <td>适用场景</td>
+                <td>语义搜索、推荐</td>
+                <td>事务处理</td>
+                <td>全文搜索</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 应用场景</h2>
+
+          <h3>语义搜索</h3>
+          <div class="code-block"""
+场景: 文档智能搜索系统
+
+流程:
+1. 将所有文档转换为向量并存储
+2. 用户输入查询文本
+3. 将查询转换为向量
+4. 在向量数据库中搜索最相似的文档向量
+5. 返回最相关的文档
+
+优势:
+- 理解语义而非关键词
+- 跨语言搜索能力
+- 处理同义词和多义词
+          </div>
+
+          <h3>推荐系统</h3>
+          <div class="code-block"""
+场景: 个性化商品推荐
+
+流程:
+1. 将用户行为数据编码为用户向量
+2. 将商品特征编码为商品向量
+3. 计算用户向量与商品向量的相似度
+4. 返回相似度最高的商品作为推荐
+
+优势:
+- 基于兴趣而非历史行为
+- 发现潜在兴趣
+- 冷启动问题缓解
+          </div>
+
+          <h3>图像检索</h3>
+          <div class="code-block"""
+场景: 以图搜图系统
+
+流程:
+1. 使用CNN提取图像特征向量
+2. 存储所有图像的向量
+3. 用户上传查询图像
+4. 提取查询图像的向量
+5. 搜索最相似的图像向量
+6. 返回相似图像
+
+优势:
+- 不依赖元数据
+- 处理相似图像变体
+- 跨模态检索（文搜图、图搜文）
+          </div>
+
+          <h3>异常检测</h3>
+          <div class="code-block"""
+场景: 金融交易异常检测
+
+流程:
+1. 将历史交易数据编码为向量
+2. 存储正常交易的向量分布
+3. 新交易转换为向量
+4. 搜索最近的正常交易向量
+5. 计算距离，超出阈值则标记为异常
+
+优势:
+- 检测未知类型异常
+- 实时响应
+- 降低误报率
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 向量数据库选型考虑</h2>
+
+          <h3>选型维度</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">性能指标</h4>
+              <ul class="feature-list">
+                <li>查询延迟（P95/P99）</li>
+                <li>吞吐量（QPS）</li>
+                <li>索引构建时间</li>
+                <li>存储效率</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">功能特性</h4>
+              <ul class="feature-list">
+                <li>支持的向量维度</li>
+                <li>相似度度量方式</li>
+                <li>元数据过滤能力</li>
+                <li>实时索引更新</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">扩展性</h4>
+              <ul class="feature-list">
+                <li>水平扩展能力</li>
+                <li>数据分片策略</li>
+                <li>副本机制</li>
+                <li>负载均衡</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">运维友好</h4>
+              <ul class="feature-list">
+                <li>部署复杂度</li>
+                <li>监控告警</li>
+                <li>备份恢复</li>
+                <li>社区支持</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">选型建议</div>
+              <p>小规模（<100万向量）可以使用轻量级方案如FAISS；中等规模（100万-1亿）推荐使用Milvus或Qdrant；大规模（>1亿）考虑云托管服务如Pinecone或自建Milvus集群。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据可视化">
+          <div class="caption">图：向量数据库为AI应用提供强大的语义理解能力</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 向量数据库专门处理高维向量的相似度搜索</li>
+                <li>• ANN算法提供了高效的近似搜索能力</li>
+                <li>• 向量数据库在语义搜索、推荐、图像检索等领域有广泛应用</li>
+                <li>• 选型需要综合考虑性能、功能、扩展性和运维成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter11/11-5-模型压缩与存储优化.html">← 上一节</a>
+          <a href="12-2-向量索引算法.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

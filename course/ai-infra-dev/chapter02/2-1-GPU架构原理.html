@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.1 GPU架构原理（NVIDIA/AMD） - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>2.1 GPU架构原理（NVIDIA/AMD）</h1>
+          <p class="subtitle">深入理解GPU的硬件架构与工作原理</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU的基本架构组成</li>
+            <li>掌握NVIDIA GPU架构演进</li>
+            <li>了解AMD GPU架构特点</li>
+            <li>认识GPU的并行计算原理</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1591488320449-011701bb6704?w=800" alt="GPU芯片" class="card-image">
+          <h3 class="card-title">GPU概述</h3>
+          <p class="card-text">
+            <strong>GPU（图形处理器）</strong>最初设计用于图形渲染，后来因其强大的并行计算能力被广泛应用于深度学习训练和推理。与CPU相比，GPU拥有数千个计算核心，专为大规模并行计算优化，非常适合深度学习中的矩阵运算和向量计算。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> GPU的基本架构</h2>
+          <div class="card">
+            <h3 class="card-title">架构层次</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+GPU架构层次（以NVIDIA为例）：
+
+┌─────────────────────────────────────────┐
+│        GPU Device (设备)                │
+│  ┌─────────────────────────────────────┐ │
+│  │   GPC (Graphics Processing Cluster)  │ │
+│  │  ┌─────────────────────────────────┐ │ │
+│  │  │  SM (Streaming Multiprocessor)   │ │ │
+│  │  │  • CUDA Cores (FP32/INT32)     │ │ │ │
+│  │  │  • Tensor Cores (FP16/INT8)    │ │ │ │
+│  │  │  • Shared Memory               │ │ │ │
+│  │  │  • Register File               │ │ │ │
+│  │  │  • Special Function Units      │ │ │ │
+│  │  └─────────────────────────────────┘ │ │
+│  │              ↑                       │ │
+│  │         多个SM                      │ │
+│  └─────────────────────────────────────┘ │
+│              ↑                           │
+│         多个GPC                          │
+└─────────────────────────────────────────┘
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> NVIDIA GPU架构演进</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>架构代号</th>
+                <th>发布年份</th>
+                <th>关键特性</th>
+                <th>代表产品</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Fermi</strong></td>
+                <td>2010</td>
+                <td>统一着色器架构，引入CUDA</td>
+                <td>GF100</td>
+              </tr>
+              <tr>
+                <td><strong>Kepler</strong></td>
+                <td>2012</td>
+                <td>动态并行，Hyper-Q</td>
+                <td>GK110 (K80)</td>
+              </tr>
+              <tr>
+                <td><strong>Maxwell</strong></td>
+                <td>2014</td>
+                <td>能效提升，动态频率</td>
+                <td>GM200 (M40)</td>
+              </tr>
+              <tr>
+                <td><strong>Pascal</strong></td>
+                <td>2016</td>
+                <td>16GB HBM2，NVLink</td>
+                <td>GP100 (P100)</td>
+              </tr>
+              <tr>
+                <td><strong>Volta</strong></td>
+                <td>2017</td>
+                <td>Tensor Core，HBM2</td>
+                <td>GV100 (V100)</td>
+              </tr>
+              <tr>
+                <td><strong>Turing</strong></td>
+                <td>2018</td>
+                <td>RT Core，DLSS</td>
+                <td>TU104 (T4)</td>
+              </tr>
+              <tr>
+                <td><strong>Ampere</strong></td>
+                <td>2020</td>
+                <td>MIG，Sparse，TF32</td>
+                <td>GA100 (A100)</td>
+              </tr>
+              <tr>
+                <td><strong>Hopper</strong></td>
+                <td>2022</td>
+                <td>Transformer引擎，DPX</td>
+                <td>GH100 (H100)</td>
+              </tr>
+              <tr>
+                <td><strong>Blackwell</strong></td>
+                <td>2024</td>
+                <td>1.8TB显存，第二Transformer引擎</td>
+                <td>GB200</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> H100 (Hopper) 架构详解</h2>
+          <div class="card">
+            <h3 class="card-title">核心规格</h3>
+            <div class="grid grid-3">
+              <div>
+                <strong>计算核心</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>144个SM</li>
+                  <li>18432个CUDA Core</li>
+                  <li>576个Tensor Core</li>
+                  <li>第四代Tensor Core</li>
+                </ul>
+              </div>
+              <div>
+                <strong>显存系统</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>80GB HBM3</li>
+                  <li>3.35 TB/s带宽</li>
+                  <li>内存墙优化</li>
+                  <li>TCC GDS</li>
+                </ul>
+              </div>
+              <div>
+                <strong>互连技术</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>NVLink 4.0</li>
+                  <li>900GB/s带宽</li>
+                  <li>18个NVLink通道</li>
+                  <li>GPU Direct</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="tip-box success">
+            <span class="icon">🚀</span>
+            <div class="content">
+              <div class="title">Transformer引擎</div>
+              <p>H100引入的Transformer引擎可以智能地在FP8和FP16之间切换，相比A100在大模型训练上性能提升可达<strong>3-6倍</strong>，在推理上提升可达<strong>30倍</strong>。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔷</span> AMD GPU架构</h2>
+          <div class="card">
+            <h3 class="card-title">ROCm与CDNA架构</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              AMD通过ROCm开源软件栈提供对深度学习的支持，其CDNA架构专门针对计算优化：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>架构代号</th>
+                  <th>发布年份</th>
+                  <th>关键特性</th>
+                  <th>代表产品</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>GCN</strong></td>
+                  <td>2012</td>
+                  <td>图形计算统一架构</td>
+                  <td>HD 7000系列</td>
+                </tr>
+                <tr>
+                  <td><strong>Vega</strong></td>
+                  <td>2017</td>
+                  <td>HBM2，Infinity Fabric</td>
+                  <td>MI25</td>
+                </tr>
+                <tr>
+                  <td><strong>CDNA 1</strong></td>
+                  <td>2020</td>
+                  <td>纯计算架构</td>
+                  <td>MI100</td>
+                </tr>
+                <tr>
+                  <td><strong>CDNA 2</strong></td>
+                  <td>2021</td>
+                  <td>矩阵乘法加速器</td>
+                  <td>MI200系列</td>
+                </tr>
+                <tr>
+                  <td><strong>CDNA 3</strong></td>
+                  <td>2023</td>
+                  <td>Chiplet设计，3D堆叠</td>
+                  <td>MI300系列</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> NVIDIA vs AMD GPU对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>对比维度</th>
+                <th>NVIDIA (CUDA生态)</th>
+                <th>AMD (ROCm生态)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>编程模型</strong></td>
+                <td>CUDA（成熟稳定）</td>
+                <td>ROCm（开源，发展中）</td>
+              </tr>
+              <tr>
+                <td><strong>生态成熟度</strong></td>
+                <td>极为成熟，框架支持完善</td>
+                <td>持续完善，主流框架已支持</td>
+              </tr>
+              <tr>
+                <td><strong>性能</strong></td>
+                <td>H100领先</td>
+                <td>MI300X在特定场景有竞争力</td>
+              </tr>
+              <tr>
+                <td><strong>价格</strong></td>
+                <td>较高</td>
+                <td>相对较低</td>
+              </tr>
+              <tr>
+                <td><strong>互连</strong></td>
+                <td>NVLink（专有）</td>
+                <td>Infinity Fabric（开放）</td>
+              </tr>
+              <tr>
+                <td><strong>适用场景</strong></td>
+                <td>生产环境首选</td>
+                <td>成本敏感、开源需求</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> GPU并行计算原理</h2>
+          <div class="card">
+            <h3 class="card-title">SIMT（单指令多线程）</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              GPU采用SIMT执行模型，允许一个Warp（32个线程）同时执行相同的指令，但处理不同的数据：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <strong>线程层次结构</strong>
+                <div class="code-block" style="font-size: 0.85rem; line-height: 1.6;">
+Thread (线程)
+  ↓ 32个
+Warp (线程束)
+  ↓ 多个
+Block (线程块)
+  ↓ 多个
+Grid (线程网格)
+                </div>
+              </div>
+              <div>
+                <strong>内存层次结构</strong>
+                <div class="code-block" style="font-size: 0.85rem; line-height: 1.6;">
+Registers (寄存器)
+  ↓ 线程私有
+Shared Memory
+  ↓ Block内共享
+Global Memory
+  ↓ 所有线程共享
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> Tensor Core详解</h2>
+          <div class="card">
+            <h3 class="card-title">专用矩阵计算单元</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              Tensor Core是NVIDIA Volta架构引入的专用矩阵计算单元，专门用于加速深度学习中的矩阵乘法运算：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>类型</th>
+                  <th>输入维度</th>
+                  <th>输出精度</th>
+                  <th>性能提升</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>FP16 × FP16</td>
+                  <td>4×4 × 4×4</td>
+                  <td>FP32/FP16</td>
+                  <td>8x vs FP32</td>
+                </tr>
+                <tr>
+                  <td>BF16 × BF16</td>
+                  <td>4×4 × 4×4</td>
+                  <td>FP32/BF16</td>
+                  <td>8x vs FP32</td>
+                </tr>
+                <tr>
+                  <td>FP8 × FP8</td>
+                  <td>16×16 × 16×16</td>
+                  <td>FP16/BF16</td>
+                  <td>2x vs FP16</td>
+                </tr>
+                <tr>
+                  <td>INT8 × INT8</td>
+                  <td>4×4 × 4×4</td>
+                  <td>INT32</td>
+                  <td>4x vs INT32</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">使用建议</div>
+                <p>为了充分利用Tensor Core，建议使用混合精度训练（Mixed Precision），将权重和梯度存储为FP16/BF16，而维持关键计算的FP32精度。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能指标</h2>
+          <div class="card">
+            <h3 class="card-title">关键性能指标</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>定义</th>
+                  <th>典型值（H100）</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>FP32算力</strong></td>
+                  <td>单精度浮点运算性能</td>
+                  <td>67 TFLOPS</td>
+                </tr>
+                <tr>
+                  <td><strong>TF32算力</strong></td>
+                  <td>张量浮点运算性能</td>
+                  <td>1979 TFLOPS</td>
+                </tr>
+                <tr>
+                  <td><strong>FP16算力</strong></td>
+                  <td>半精度浮点运算性能</td>
+                  <td>3958 TFLOPS</td>
+                </tr>
+                <tr>
+                  <td><strong>FP8算力</strong></td>
+                  <td>8位浮点运算性能</td>
+                  <td>7916 TFLOPS</td>
+                </tr>
+                <tr>
+                  <td><strong>显存带宽</strong></td>
+                  <td>显存传输速率</td>
+                  <td>3.35 TB/s</td>
+                </tr>
+                <tr>
+                  <td><strong>TDP</strong></td>
+                  <td>热设计功耗</td>
+                  <td>700W</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU由SM、CUDA Core、Tensor Core等核心组件构成</li>
+                <li>• NVIDIA架构从Fermi演进到Blackwell，性能持续提升</li>
+                <li>• AMD通过ROCm提供开源AI计算方案</li>
+                <li>• GPU采用SIMT并行计算模型</li>
+                <li>• Tensor Core是深度学习加速的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter01/1-5-AI基础设施的重要性与价值.html">← 上一节</a>
+          <a href="2-2-TPU架构与原理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

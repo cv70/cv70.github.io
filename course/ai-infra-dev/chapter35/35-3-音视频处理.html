@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>35.3 音视频处理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>35.3 音视频处理</h1>
+          <p class="title">构建高效的音视频处理系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解音视频处理的特点与挑战</li>
+            <li>掌握音视频预处理技术</li>
+            <li>学习特征提取方法</li>
+            <li>了解批量处理与优化</li>
+            <li>认识流式处理架构</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="音视频处理" class="card-image">
+          <h3 class="card-title">音视频处理概述</h3>
+          <p class="card-text">
+            <strong>音视频处理</strong>涉及<strong>音频分析</strong>、<strong>视频解码</strong>、<strong>特征提取</strong>等多个环节。相比图像处理，音视频具有<strong>数据量大</strong>、<strong>时间维度</strong>、<strong>多模态</strong>等特点，需要专门的处理架构和优化策略。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 处理架构</h2>
+          <div class="card">
+            <h3 class="card-title">音视频处理架构</h3>
+            <div class="code-block">
+<pre>音视频处理架构：
+
+┌─────────────────────────────────────┐
+│         音视频采集                  │
+│  ├── 文件上传                        │
+│  ├── 摄像头捕获                      │
+│  ├── 麦克风录制                      │
+│  └── 流媒体接收                      │
+└─────────────────────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+        ▼                   ▼
+┌──────────┐       ┌──────────┐
+│ 音频处理  │       │ 视频处理  │
+├──────────┤       ├──────────┤
+│ 音频解码  │       │ 视频解码  │
+│ 格式转换  │       │ 帧提取    │
+│ 降噪处理  │       │ 格式转换  │
+│ 特征提取  │       │ 压缩优化  │
+└──────────┘       └──────────┘
+        │                   │
+        └─────────┬─────────┘
+                  ▼
+┌─────────────────────────────────────┐
+│         多模态融合                  │
+│  ├── 音视频对齐                    │
+│  ├── 联合特征提取                    │
+│  ├── 跨模态检索                      │
+│  └── 多模态理解                      │
+└─────────────────────────────────────┘</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎵</span> 音频处理</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>处理步骤</th>
+                <th>技术方法</th>
+                <th>目的</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>音频解码</td>
+                <td>ffmpeg/pydub</td>
+                <td>格式统一</td>
+              </tr>
+              <tr>
+                <td>采样率转换</td>
+                <td>重采样算法</td>
+                <td>标准采样率</td>
+              </tr>
+              <tr>
+                <td>降噪处理</td>
+                <td>谱减法/深度学习</td>
+                <td>提高质量</td>
+              </tr>
+              <tr>
+                <td>分段处理</td>
+                <td>固定窗口/语音检测</td>
+                <td>处理大文件</td>
+              </tr>
+              <tr>
+                <td>特征提取</td>
+                <td>MFCC/Log-Mel</td>
+                <td>提取特征</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Python音频处理</h2>
+          <div class="card">
+            <h3 class="card-title">音频处理实现</h3>
+            <div class="code-block">
+<pre>import librosa
+import numpy as np
+import soundfile as sf
+from pydub import AudioSegment
+
+class AudioProcessor:
+    def __init__(self, sr=16000):
+        self.sr = sr
+
+    def load_audio(self, audio_path: str):
+        """加载音频"""
+        audio, sr = librosa.load(audio_path, sr=self.sr)
+        return audio, sr
+
+    def resample(self, audio: np.ndarray, original_sr: int):
+        """重采样"""
+        if original_sr != self.sr:
+            audio = librosa.resample(audio, orig_sr=original_sr,
+                                    target_sr=self.sr)
+        return audio
+
+    def denoise(self, audio: np.ndarray):
+        """降噪处理"""
+        # 使用频谱减法
+        stft = librosa.stft(audio)
+        magnitude, phase = librosa.magphase(stft)
+
+        # 估计噪声谱
+        noise = np.mean(magnitude[:, :10], axis=1, keepdims=True)
+
+        # 减去噪声
+        magnitude_denoised = magnitude - noise
+        magnitude_denoised = np.maximum(magnitude_denoised, 0)
+
+        # 重建信号
+        stft_denoised = magnitude_denoised * phase
+        audio_denoised = librosa.istft(stft_denoised)
+
+        return audio_denoised
+
+    def extract_mfcc(self, audio: np.ndarray, n_mfcc=13):
+        """提取MFCC特征"""
+        mfcc = librosa.feature.mfcc(
+            y=audio,
+            sr=self.sr,
+            n_mfcc=n_mfcc
+        )
+        return mfcc
+
+    def extract_mel(self, audio: np.ndarray, n_mels=80):
+        """提取Mel频谱"""
+        mel = librosa.feature.melspectrogram(
+            y=audio,
+            sr=self.sr,
+            n_mels=n_mels
+        )
+        log_mel = librosa.power_to_db(mel)
+        return log_mel
+
+    def segment_audio(self, audio: np.ndarray,
+                    segment_length=10.0):
+        """分段处理"""
+        samples_per_segment = int(segment_length * self.sr)
+        segments = []
+
+        for i in range(0, len(audio), samples_per_segment):
+            segment = audio[i:i + samples_per_segment]
+            if len(segment) == samples_per_segment:
+                segments.append(segment)
+
+        return segments
+
+    def process(self, audio_path: str):
+        """完整处理流程"""
+        # 加载音频
+        audio, sr = self.load_audio(audio_path)
+
+        # 重采样
+        audio = self.resample(audio, sr)
+
+        # 降噪
+        audio = self.denoise(audio)
+
+        # 提取特征
+        mfcc = self.extract_mfcc(audio)
+        mel = self.extract_mel(audio)
+
+        return {
+            "audio": audio,
+            "mfcc": mfcc,
+            "mel": mel
+        }
+
+# 使用示例
+processor = AudioProcessor(sr=16000)
+result = processor.process("input.wav")</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎬</span> 视频处理</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>处理步骤</th>
+                <th>技术方法</th>
+                <th>目的</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>视频解码</td>
+                <td>OpenCV/ffmpeg</td>
+                <td>提取帧</td>
+              </tr>
+              <tr>
+                <td>帧采样</td>
+                <td>均匀采样/关键帧</td>
+                <td>减少数据量</td>
+              </tr>
+              <tr>
+                <td>分辨率调整</td>
+                <td>Resize/Pad</td>
+                <td>标准尺寸</td>
+              </tr>
+              <tr>
+                <td>压缩优化</td>
+                <td>H.264/H.265</td>
+                <td>降低大小</td>
+              </tr>
+              <tr>
+                <td>特征提取</td>
+                <td>CNN/I3D/SlowFast</td>
+                <td>时空特征</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> Python视频处理</h2>
+          <div class="card">
+            <h3 class="card-title">视频处理实现</h3>
+            <div class="code-block">
+<pre>import cv2
+import numpy as np
+from typing import List
+import imageio
+
+class VideoProcessor:
+    def __init__(self, target_size=(224, 224)):
+        self.target_size = target_size
+
+    def extract_frames(self, video_path: str,
+                     max_frames=None,
+                     fps=None) -> List[np.ndarray]:
+        """提取视频帧"""
+        cap = cv2.VideoCapture(video_path)
+        frames = []
+
+        if fps:
+            # 按FPS采样
+            video_fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_interval = int(video_fps / fps)
+        else:
+            frame_interval = 1
+
+        frame_count = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_count % frame_interval == 0:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.resize(frame, self.target_size)
+                frames.append(frame)
+
+                if max_frames and len(frames) >= max_frames:
+                    break
+
+            frame_count += 1
+
+        cap.release()
+        return frames
+
+    def extract_keyframes(self, video_path: str,
+                         threshold=30.0):
+        """提取关键帧"""
+        cap = cv2.VideoCapture(video_path)
+        frames = []
+
+        prev_frame = None
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # 转换为灰度图
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            if prev_frame is not None:
+                # 计算帧间差异
+                diff = cv2.absdiff(gray, prev_frame)
+                diff_score = np.mean(diff)
+
+                # 如果差异超过阈值，保存关键帧
+                if diff_score > threshold:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame = cv2.resize(frame, self.target_size)
+                    frames.append(frame)
+
+            prev_frame = gray
+
+        cap.release()
+        return frames
+
+    def create_video(self, frames: List[np.ndarray],
+                    output_path: str, fps=30):
+        """创建视频"""
+        if not frames:
+            return
+
+        height, width = frames[0].shape[:2]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        writer = cv2.VideoWriter(output_path, fourcc,
+                              fps, (width, height))
+
+        for frame in frames:
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            writer.write(frame_bgr)
+
+        writer.release()
+
+    def extract_temporal_features(self, frames: List[np.ndarray]):
+        """提取时序特征"""
+        # 计算光流
+        if len(frames) < 2:
+            return None
+
+        prev_gray = cv2.cvtColor(frames[0], cv2.COLOR_RGB2GRAY)
+        optical_flows = []
+
+        for frame in frames[1:]:
+            curr_gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+            # 计算光流
+            flow = cv2.calcOpticalFlowFarneback(
+                prev_gray, curr_gray, None, 0.5, 3, 15, 3, 5, 1.2, 0
+            )
+
+            optical_flows.append(flow)
+            prev_gray = curr_gray
+
+        return optical_flows
+
+    def process(self, video_path: str):
+        """完整处理流程"""
+        # 提取帧
+        frames = self.extract_frames(video_path, max_frames=16)
+
+        # 提取时序特征
+        optical_flows = self.extract_temporal_features(frames)
+
+        return {
+            "frames": frames,
+            "optical_flows": optical_flows
+        }
+
+# 使用示例
+processor = VideoProcessor()
+result = processor.process("input.mp4")</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">处理建议</div>
+            <p>对于大视频文件，建议使用<strong>关键帧提取</strong>减少处理量。音频处理使用<strong>分段处理</strong>避免内存溢出。使用<strong>GPU加速</strong>提升处理速度。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 流式处理</h2>
+          <div class="card">
+            <h3 class="card-title">实时流处理架构</h3>
+            <div class="code-block">
+<pre>流式处理架构：
+
+1. 流媒体输入
+   ├── RTSP流
+   ├── RTMP流
+   ├── HLS/DASH流
+   └── WebSocket流
+
+2. 实时处理
+   ├── 帧级处理
+   ├── 低延迟要求
+   ├── 内存优化
+   └── 实时反馈
+
+3. 流式输出
+   ├── 实时结果
+   ├── 增量更新
+   ├── 流式传输
+   └── 边缘处理
+
+流式处理实现：
+import asyncio
+import cv2
+
+class StreamProcessor:
+    def __init__(self, stream_url: str):
+        self.stream_url = stream_url
+        self.processing = False
+
+    async def process_stream(self):
+        """处理视频流"""
+        cap = cv2.VideoCapture(self.stream_url)
+        self.processing = True
+
+        while self.processing:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # 异步处理帧
+            await self.process_frame(frame)
+
+        cap.release()
+
+    async def process_frame(self, frame):
+        """处理单帧"""
+        # 图像处理
+        processed = self._preprocess(frame)
+
+        # 特征提取
+        features = self._extract_features(processed)
+
+        # 推理
+        result = await self._inference(features)
+
+        # 发送结果
+        await self._send_result(result)
+
+    async def _inference(self, features):
+        """异步推理"""
+        # 模拟异步推理
+        await asyncio.sleep(0.1)
+        return {"prediction": "class_1"}
+
+    async def _send_result(self, result):
+        """发送结果"""
+        # 实现结果发送逻辑
+        pass
+
+    def stop(self):
+        """停止处理"""
+        self.processing = False</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 性能优化</h2>
+          <div class="card">
+            <h3 class="card-title">优化策略</h3>
+            <ul class="feature-list">
+              <li><strong>硬件加速</strong>：GPU/TPU加速处理</li>
+              <li><strong>并行处理</strong>：多帧并行处理</li>
+              <li><strong>内存优化</strong>：流式处理减少内存</li>
+              <li><strong>批处理</strong>：批量处理提高吞吐</li>
+              <li><strong>编码优化</strong>：使用高效编码格式</li>
+              <li><strong>边缘处理</strong>：就近处理降低延迟</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 音视频处理需要专门的架构和工具</li>
+                <li>• 音频处理包括解码、降噪、特征提取</li>
+                <li>• 视频处理包括帧提取、采样、特征提取</li>
+                <li>• 流式处理支持实时应用</li>
+                <li>• 硬件加速和并行处理优化性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="35-2-图像处理流水线.html">← 上一节</a>
+          <a href="35-4-多模态模型训练.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

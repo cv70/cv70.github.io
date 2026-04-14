@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.5 混合并行策略 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>16.5 混合并行策略</h1>
+          <p class="subtitle">组合多种并行策略，实现最优训练效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解混合并行的必要性</li>
+            <li>掌握常见的混合并行组合</li>
+            <li>了解如何设计并行策略</li>
+            <li>认识业界最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="混合并行示意图" class="card-image">
+          <h3 class="card-title">什么是混合并行？</h3>
+          <p class="card-text">
+            <strong>混合并行（Hybrid Parallelism）</strong>是指同时使用多种并行策略来训练模型。
+            没有一种并行策略是完美的，不同的策略各有优劣。通过组合多种策略，
+            可以充分利用集群资源，达到最优的训练效率。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 为什么需要混合并行？</h2>
+          <div class="card">
+            <h3 class="card-title">单一并行策略的局限性</h3>
+            <div class="code-block">
+数据并行的局限：
+• 显存限制：每个GPU需要存储完整模型
+• 通信瓶颈：大规模集群下通信开销大
+
+模型并行的局限：
+• 实现复杂：需要手动划分模型
+• 通信频繁：张量并行通信密集
+• 可扩展性：张量并行不适合大规模集群
+
+流水线并行的局限：
+• 流水线气泡：填充和排水阶段GPU空闲
+• 微批次调优：需要仔细调整
+• 负载均衡：难以保证完全均衡
+
+混合并行的优势：
+• 结合多种策略的优点
+• 规避单一策略的缺点
+• 适应不同的场景需求
+• 最大化资源利用率
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 常见混合并行组合</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">数据并行 + 模型并行</h3>
+              <p class="card-text">最常用的组合，兼顾显存和效率</p>
+              <ul class="feature-list">
+                <li>模型并行：解决显存限制</li>
+                <li>数据并行：提升训练速度</li>
+                <li>适用：大模型训练</li>
+              </ul>
+              <div class="code-block">
+示例配置：
+• 8节点 × 8 GPU = 64 GPU
+• 模型并行：8（跨节点）
+• 数据并行：8（节点内）
+• 每个：张量并行 × 数据并行
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">张量并行 + 流水线并行</h3>
+              <p class="card-text">Megatron-LM的经典组合</p>
+              <ul class="feature-list">
+                <li>张量并行：层内并行</li>
+                <li>流水线并行：层间并行</li>
+                <li>适用：超大模型</li>
+              </ul>
+              <div class="code-block">
+示例配置：
+• 128 GPU
+• 张量并行：8
+• 流水线并行：16
+• 总并行度：8 × 16 = 128
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 三维并行架构</h2>
+          <div class="card">
+            <h3 class="card-title">DeepSpeed + Megatron-LM的三维并行</h3>
+            <p class="card-text">最强大的并行组合，支持万卡级别训练。</p>
+            <div class="code-block">
+三维并行维度：
+
+1. 数据并行（Data Parallelism, DP）
+   • 多个副本并行处理不同数据
+   • 通过AllReduce同步梯度
+   • 支持梯度累积
+
+2. 张量并行（Tensor Parallelism, TP）
+   • 单个张量切分到多个GPU
+   • 层内并行
+   • 高带宽通信
+
+3. 流水线并行（Pipeline Parallelism, PP）
+   • 模型层分配到不同GPU
+   • 层间并行
+   • 1F1B调度
+
+示例：训练GPT-3 175B模型
+
+配置：
+• 总GPU数：1024
+• DP：32
+• TP：8
+• PP：4
+• 验证：32 × 8 × 4 = 1024 ✓
+
+显存分配：
+• 每GPU模型参数：175B / (TP×PP) = 175B / 32 = 5.5B
+• 使用FP16：5.5B × 2 bytes = 11GB
+• 加上梯度和优化器状态：约35GB
+• A100 80GB显存可以满足
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="三维并行架构">
+          <div class="caption">图：三维并行架构结合了数据、张量和流水线并行</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 并行策略设计指南</h2>
+          <div class="card">
+            <h3 class="card-title">如何选择并行策略？</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>场景</th>
+                  <th>推荐策略</th>
+                  <th>理由</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>小模型（<1B）</strong></td>
+                  <td>纯数据并行</td>
+                  <td>实现简单，效率高</td>
+                </tr>
+                <tr>
+                  <td><strong>中模型（1-10B）</strong></td>
+                  <td>DP + TP</td>
+                  <td>平衡显存和通信</td>
+                </tr>
+                <tr>
+                  <td><strong>大模型（10-100B）</strong></td>
+                  <td>DP + TP + PP</td>
+                  <td>充分利用资源</td>
+                </tr>
+                <tr>
+                  <td><strong>超大模型（>100B）</strong></td>
+                  <td>3D并行 + ZeRO</td>
+                  <td>极致显存优化</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 并行度分配策略</h2>
+          <div class="card">
+            <h3 class="card-title">如何分配DP、TP、PP？</h3>
+            <p class="card-text">给定总GPU数，需要合理分配各维度的并行度。</p>
+            <div class="code-block">
+分配原则：
+
+1. 优先保证数据并行
+   • 数据并行对通信要求相对较低
+   • 可以使用梯度累积减少同步频率
+   • 建议DP ≥ 4
+
+2. 张量并行度不宜过大
+   • TP通信密集，需要高带宽
+   • 建议TP ≤ 8（通常4或8）
+   • 单机内TP效果最好
+
+3. 流水线并行度适中
+   • PP会增加流水线气泡
+   • 建议PP ≤ 16
+   • 与TP配合使用
+
+示例计算：
+总GPU：256
+
+方案1：
+• TP = 4
+• PP = 4
+• DP = 256 / (4×4) = 16
+• 评价：DP较小，但通信开销可控
+
+方案2：
+• TP = 8
+• PP = 4
+• DP = 256 / (8×4) = 8
+• 评价：DP偏小，可能影响训练速度
+
+方案3（推荐）：
+• TP = 4
+• PP = 2
+• DP = 256 / (4×2) = 32
+• 评价：DP较大，通信开销适中
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏢</span> 集群拓扑感知并行</h2>
+          <div class="card">
+            <h3 class="card-title">根据集群拓扑设计并行策略</h3>
+            <p class="card-text">利用集群的层次结构优化并行效率。</p>
+            <div class="code-block">
+集群层次结构：
+
+┌─────────────────────────────────────┐
+│            节点间网络（高速互联）       │
+│  ┌───────┐  ┌───────┐  ┌───────┐   │
+│  │Node 0 │  │Node 1 │  │Node 2 │   │
+│  │       │  │       │  │       │   │
+│  │GPU0-7 │  │GPU0-7 │  │GPU0-7 │   │
+│  │ NVLink│  │ NVLink│  │ NVLink│   │
+│  └───────┘  └───────┘  └───────┘   │
+└─────────────────────────────────────┘
+
+并行策略设计：
+
+1. 节点内：张量并行
+   • NVLink提供高带宽低延迟
+   • TP通信密集，适合NVLink
+
+2. 节点间：流水线并行
+   • PP通信较少，可以容忍网络延迟
+   • 每个节点包含一个或多个流水线阶段
+
+3. 全局：数据并行
+   • 使用InfiniBand/RoCE同步梯度
+   • 可以跨越多个机架
+
+示例：32节点 × 8 GPU = 256 GPU
+
+配置：
+• 节点内TP = 8（NVLink）
+• 跨节点PP = 4（8个节点/流水线）
+• 数据并行副本 = 32 / 4 = 8
+
+通信路径：
+TP：NVLink（300GB/s）
+PP：节点间网络（200-400Gbps）
+DP：InfiniBand AllReduce
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">并行策略优化技巧</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>监控通信时间：</strong>确保计算时间 >> 通信时间</li>
+              <li><strong>调整batch size：</strong>增大batch size可掩盖通信开销</li>
+              <li><strong>使用混合精度：</strong>FP16/BF16可减少通信数据量</li>
+              <li><strong>梯度压缩：</strong>进一步减少通信量</li>
+              <li><strong>通信计算重叠：</strong>异步通信与计算并行</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> 业界实践案例</h2>
+          <div class="card">
+            <h3 class="card-title">大模型训练的并行策略</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>参数量</th>
+                  <th>并行策略</th>
+                  <th>GPU数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>GPT-3</strong></td>
+                  <td>175B</td>
+                  <td>DP+TP+PP</td>
+                  <td>1024 V100</td>
+                </tr>
+                <tr>
+                  <td><strong>LLaMA 2</strong></td>
+                  <td>70B</td>
+                  <td>TP+PP+FSDP</td>
+                  <td>2048 A100</td>
+                </tr>
+                <tr>
+                  <td><strong>PaLM</strong></td>
+                  <td>540B</td>
+                  <td>3D并行+ZeRO</td>
+                  <td>6144 TPU</td>
+                </tr>
+                <tr>
+                  <td><strong>GLaM</strong></td>
+                  <td>1.2T</td>
+                  <td>MoE+3D并行</td>
+                  <td>2048 TPU</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔮</span> 未来趋势</h2>
+          <div class="card">
+            <h3 class="card-title">自动化并行优化</h3>
+            <p class="card-text">随着模型规模增长，手动设计并行策略越来越困难。自动化工具正在兴起。</p>
+            <ul class="feature-list">
+              <li><strong>Alpa：</strong>自动优化和编译并行策略</li>
+              <li><strong>GSPMD：</strong>Google的自动并行编译器</li>
+              <li><strong>Ray Tune：</strong>自动搜索最优并行配置</li>
+              <li><strong>Triton：</strong>可扩展的并行计算语言</li>
+            </ul>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <p>未来，自动化并行工具将使并行策略设计更加简单，让开发者专注于模型本身而非底层并行细节。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 混合并行组合多种策略，发挥各自优势</li>
+                <li>• 常见组合：DP+TP、TP+PP、3D并行</li>
+                <li>• 需要根据场景、集群拓扑设计并行策略</li>
+                <li>• 节点内TP、跨节点PP、全局DP是常见模式</li>
+                <li>• 自动化并行是未来趋势</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="16-4-流水线并行原理.html">← 上一节</a>
+          <a href="../chapter17/17-1-DDP原理与实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

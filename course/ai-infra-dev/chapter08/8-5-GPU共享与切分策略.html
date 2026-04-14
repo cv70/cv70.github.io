@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8.5 GPU共享与切分策略 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>8.5 GPU共享与切分策略</h1>
+          <p class="subtitle">优化GPU资源分配</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU共享与切分的区别</li>
+            <li>掌握不同切分策略的适用场景</li>
+            <li>学会选择合适的切分方案</li>
+            <li>了解性能权衡与优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="资源切分" class="card-image">
+          <h3 class="card-title">共享与切分</h3>
+          <p class="card-text">
+            <strong>GPU共享</strong>是软件层面的资源共享，<strong>GPU切分</strong>是硬件层面的物理分割。
+            选择合适的策略对性能和成本都有重要影响。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 策略对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>实现方式</th>
+                <th>隔离性</th>
+                <th>性能</th>
+                <th>成本</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>直通</td>
+                <td>PCI直通</td>
+                <td>硬件</td>
+                <td>100%</td>
+                <td>高</td>
+                <td>高性能训练</td>
+              </tr>
+              <tr>
+                <td>MPS</td>
+                <td>软件共享</td>
+                <td>进程</td>
+                <td>90%</td>
+                <td>低</td>
+                <td>推理/小训练</td>
+              </tr>
+              <tr>
+                <td>vGPU</td>
+                <td>Hypervisor</td>
+                <td>硬件</td>
+                <td>95%</td>
+                <td>中</td>
+                <td>企业应用</td>
+              </tr>
+              <tr>
+                <td>MIG</td>
+                <td>硬件切分</td>
+                <td>硬件</td>
+                <td>98%</td>
+                <td>中</td>
+                <td>大模型推理</td>
+              </tr>
+              <tr>
+                <td>软共享</td>
+                <td>时间片轮转</td>
+                <td>无</td>
+                <td>80%</td>
+                <td>极低</td>
+                <td>测试/开发</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧩</span> MIG切分</h2>
+          <div class="card">
+            <h3 class="card-title">MIG配置选项</h3>
+            <div class="code-block">
+<pre><strong>A100 MIG配置：</strong>
+
+Profile类型：
+• 1g.5gb: 1/16 GPU, 5GB显存
+• 2g.10gb: 1/8 GPU, 10GB显存
+• 3g.20gb: 1/4 GPU, 20GB显存
+• 4g.20gb: 1/4 GPU, 20GB显存
+• 7g.40gb: 1/2 GPU, 40GB显存
+
+切分配置示例：
+
+# 切分为7个MIG实例
+nvidia-smi mig -cgi 7g.40gb,7g.40gb,2g.10gb,1g.5gb,1g.5gb,1g.5gb,1g.5gb
+
+# 查看MIG配置
+nvidia-smi mig -lgi
+
+# 启用MIG
+nvidia-smi -i 0 -mig 1
+
+# 禁用MIG
+nvidia-smi -i 0 -mig 0
+
+# 查看MIG设备
+nvidia-smi -L
+
+# Kubernetes使用MIG
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - resources:
+      limits:
+        nvidia.com/mig-1g.5gb: 2</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 切分策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">训练切分</h3>
+              <div class="code-block">
+<pre><strong>训练场景切分：</strong>
+
+大模型训练：
+• 使用直通或MIG
+• 保证性能和稳定
+• 资源独占
+
+小模型训练：
+• 可使用MPS
+• 提高利用率
+• 注意显存
+
+多任务训练：
+• 使用vGPU隔离
+• 独立资源
+• 保证SLA</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">推理切分</h3>
+              <div class="code-block">
+<pre><strong>推理场景切分：</strong>
+
+在线推理：
+• MIG硬隔离
+• 保证低延迟
+• 性能稳定
+
+离线推理：
+• MPS软共享
+• 提高吞吐
+• 成本优化
+
+混合推理：
+• vGPU多租户
+• 资源隔离
+• 灵活配置</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">切分策略选择</div>
+            <p><strong>性能优先：</strong>直通或MIG，硬件隔离</p>
+            <p><strong>成本优先：</strong>MPS或软共享，软件共享</p>
+            <p><strong>平衡方案：</strong>vGPU，性能与成本平衡</p>
+            <p><strong>混合策略：</strong>根据场景灵活选择</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能权衡</h2>
+          <div class="card">
+            <h3 class="card-title">性能分析</h3>
+            <div class="code-block">
+<pre><strong>切分性能分析：</strong>
+
+显存切分：
+• 1/2切分: ~90%性能
+• 1/4切分: ~80%性能
+• 1/8切分: ~70%性能
+• 1/16切分: ~60%性能
+
+性能下降原因：
+• 资源开销增加
+• 通信延迟增加
+• 调度复杂性增加
+
+优化策略：
+• 减少切分粒度
+• 优化调度算法
+• 使用硬件加速
+
+监控指标：
+• GPU利用率
+• 显存使用率
+• 任务完成时间
+• 资源浪费率</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 自动化切分</h2>
+          <div class="card">
+            <h3 class="card-title">智能切分策略</h3>
+            <div class="code-block">
+<pre><strong>自动切分算法：</strong>
+
+# 基于工作负载的切分
+def determine_slice_strategy(job):
+    if job.gpu_request <= 0.25 and job.type == 'inference':
+        return 'mig-1g.5gb'
+    elif job.gpu_request <= 0.5:
+        return 'mig-7g.40gb'
+    else:
+        return 'passthrough'
+
+# 动态切分
+def dynamic_slicing():
+    available_gpu = get_available_gpu()
+    pending_jobs = get_pending_jobs()
+
+    for job in pending_jobs:
+        if available_gpu >= job.gpu_request:
+            allocate_gpu(job, available_gpu)
+            available_gpu -= job.gpu_request
+
+# 基于性能的切分
+def performance_based_slicing():
+    utilization = get_gpu_utilization()
+    if utilization > 0.9:
+        # 考虑切分提高利用率
+        propose_slicing()
+    elif utilization < 0.5:
+        # 考虑合并提高性能
+        propose_merging()</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💼</span> 实践案例</h2>
+          <div class="card">
+            <h3 class="card-title">切分配置示例</h3>
+            <div class="code-block">
+<pre><strong>企业级切分配置：</strong>
+
+GPU资源池 (1000 GPU):
+- 直通池: 500 GPU (大模型训练)
+- vGPU池: 300 GPU (企业应用)
+- MIG池: 150 GPU (推理服务)
+- MPS池: 50 GPU (开发测试)
+
+切分规则:
+- 训练 > 64GPU: 直通
+- 训练 8-64GPU: vGPU
+- 推理: MIG或MPS
+- 开发: MPS或软共享
+
+性能要求:
+- 训练: > 90%性能
+- 推理: > 80%性能
+- 开发: > 60%性能
+
+成本目标:
+- GPU利用率: > 75%
+- 资源浪费: < 15%
+- 总成本: 降低30%</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">切分注意事项</div>
+            <p><strong>性能损失：</strong>切分粒度越小，性能损失越大</p>
+            <p><strong>兼容性：</strong>不同应用对切分的兼容性不同</p>
+            <p><strong>管理复杂：</strong>多切分策略增加管理复杂度</p>
+            <p><strong>监控调优：</strong>需要持续监控和优化</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU共享是软件层面，GPU切分是硬件层面</li>
+                <li>• 直通适合高性能训练，MPS适合推理</li>
+                <li>• vGPU是企业级平衡方案，MIG是硬件硬隔离</li>
+                <li>• 切分粒度越小，性能损失越大</li>
+                <li>• 根据工作负载类型选择切分策略</li>
+                <li>• 自动化切分能提高资源利用效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="8-4-MPS多进程服务.html">← 上一节</a>
+          <a href="8-6-国产芯片虚拟化方案.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

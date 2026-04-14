@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32.3 高并发推理方案 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>32.3 高并发推理方案</h1>
+          <p class="subtitle">支撑大规模并发请求的推理系统优化</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解高并发推理面临的挑战</li>
+            <li>掌握连续批处理技术</li>
+            <li>学习请求调度与队列管理</li>
+            <li>了解KV Cache优化策略</li>
+            <li>认识极限并发优化方案</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="高并发系统" class="card-image">
+          <h3 class="card-title">高并发推理挑战</h3>
+          <p class="card-text">
+            LLM推理服务需要支撑<strong>成千上万并发请求</strong>，同时保证<strong>低延迟</strong>和<strong>高吞吐</strong>。传统的静态批处理难以满足需求，需要<strong>动态调度</strong>、<strong>内存优化</strong>和<strong>计算优化</strong>等技术。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 并发模式对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>批处理模式</th>
+                <th>工作原理</th>
+                <th>优势</th>
+                <th>劣势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>静态批处理</td>
+                <td>固定批次大小</td>
+                <td>实现简单</td>
+                <td>资源浪费、延迟高</td>
+                <td>离线推理</td>
+              </tr>
+              <tr>
+                <td>连续批处理</td>
+                <td>动态合并请求</td>
+                <td>高吞吐、低延迟</td>
+                <td>复杂度高</td>
+                <td>在线推理</td>
+              </tr>
+              <tr>
+                <td>流水线批处理</td>
+                <td>多阶段流水线</td>
+                <td>重叠计算与通信</td>
+                <td>实现复杂</td>
+                <td>分布式推理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 连续批处理</h2>
+          <div class="card">
+            <h3 class="card-title">Continuous Batching原理</h3>
+            <div class="code-block">
+<pre>
+连续批处理工作流程：
+
+1. 请求到达
+   ├── 解析请求参数
+   ├── 计算资源需求
+   └── 加入等待队列
+
+2. 批次构建
+   ├── 扫描等待队列
+   ├── 选择可合并请求
+   ├── 构建动态批次
+   └── 提交GPU执行
+
+3. 并行推理
+   ├── 预填充阶段（并行）
+   ├── 解码阶段（串行）
+   └── 动态调度执行
+
+4. 动态调整
+   ├── 完成请求移出
+   ├── 新请求加入批次
+   ├── 批次大小动态调整
+   └── 持续优化调度
+
+关键优化：
+• 请求到达即开始处理
+• 不同阶段请求可合并
+• 完成的请求立即移除
+• 最小化GPU空闲时间</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> KV Cache优化</h2>
+          <div class="card">
+            <h3 class="card-title">PagedAttention技术</h3>
+            <div class="code-block">
+<pre>PagedAttention核心概念：
+
+1. KV Cache分页
+   ├── 将KV Cache分页存储
+   ├── 每页固定大小（如16 tokens）
+   └── 动态分配/释放页面
+
+2. 内存管理
+   ├── Page Table管理页面映射
+   ├── 支持页面共享
+   └── 支持页面复制
+
+3. 高效计算
+   ├── 并行计算多个页面
+   ├── 减少内存碎片
+   └── 提高内存利用率
+
+4. 长上下文支持
+   ├── 支持超长上下文
+   ├── 动态扩展KV Cache
+   └── 内存按需分配
+
+性能提升：
+• 内存利用率：2-4x
+• 吞吐量：2-4x
+• 支持并发：10x+</pre>
+            </div>
+            <p class="card-text">
+              PagedAttention将KV Cache分页管理，解决了传统连续内存分配的<strong>碎片化</strong>和<strong>浪费</strong>问题，大幅提升了内存利用率和并发能力。
+            </p>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">PagedAttention实现</div>
+            <p>PagedAttention是vLLM的核心创新，通过借鉴操作系统的<strong>虚拟内存</strong>思想，将KV Cache分页管理，实现了<strong>动态、高效</strong>的内存管理，是高并发推理的关键技术。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏰</span> 请求调度策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">调度算法</h3>
+              <ul class="feature-list">
+                <li>FIFO：先进先出</li>
+                <li>优先级：按优先级调度</li>
+                <li>最短任务优先：预估执行时间</li>
+                <li>公平调度：保证公平性</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">调度时机</h3>
+              <ul class="feature-list">
+                <li>新请求到达时</li>
+                <li>请求完成时</li>
+                <li>定时触发</li>
+                <li>资源可用时</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 请求队列管理</h2>
+          <div class="card">
+            <h3 class="card-title">多队列调度架构</h3>
+            <div class="code-block">
+<pre>
+请求队列设计：
+
+1. 多优先级队列
+   ├── 高优先级队列（VIP请求）
+   ├── 普通优先级队列（标准请求）
+   └── 低优先级队列（批量请求）
+
+2. 队列选择策略
+   ├── 优先级队列优先
+   ├── 同级队列FIFO
+   └── 低优先级队列饥饿保护
+
+3. 队列管理
+   ├── 请求超时处理
+   ├── 队列长度限制
+   └── 请求拒绝策略
+
+4. 调度器工作流程
+   ├── 检查高优先级队列
+   ├── 检查普通优先级队列
+   ├── 填充剩余槽位
+   └── 构建执行批次
+
+代码示例：
+class RequestScheduler:
+    def __init__(self):
+        self.queues = {
+            'high': PriorityQueue(),
+            'normal': Queue(),
+            'low': Queue()
+        }
+
+    def add_request(self, request, priority='normal'):
+        self.queues[priority].put(request)
+
+    def select_batch(self, batch_size):
+        batch = []
+        # 优先高优先级
+        while len(batch) < batch_size and not self.queues['high'].empty():
+            batch.append(self.queues['high'].get())
+        # 填充普通优先级
+        while len(batch) < batch_size and not self.queues['normal'].empty():
+            batch.append(self.queues['normal'].get())
+        # 填充低优先级
+        while len(batch) < batch_size and not self.queues['low'].empty():
+            batch.append(self.queues['low'].get())
+        return batch</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 推理加速技术</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>原理</th>
+                <th>性能提升</th>
+                <th>实现难度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Flash Attention</td>
+                <td>IO感知注意力计算</td>
+                <td>2-3x速度</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>投机解码</td>
+                <td>小模型预测+验证</td>
+                <td>2-3x速度</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>量化推理</td>
+                <td>降低计算精度</td>
+                <td>2-4x吞吐</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td>模型剪枝</td>
+                <td>移除冗余参数</td>
+                <td>1.5-2x速度</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>知识蒸馏</td>
+                <td>小模型学习大模型</td>
+                <td>2-4x吞吐</td>
+                <td>高</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 投机解码</h2>
+          <div class="card">
+            <h3 class="card-title">Speculative Decoding</h3>
+            <div class="code-block">
+<pre>投机解码原理：
+
+1. 预测阶段（Draft Model）
+   ├── 使用小型draft模型
+   ├── 快速生成多个候选token
+   └── 并行生成N个token
+
+2. 验证阶段（Target Model）
+   ├── 使用大型target模型
+   ├── 验证候选token序列
+   └── 批量验证提高效率
+
+3. 接受与拒绝
+   ├── 接受匹配的token
+   ├── 拒绝不匹配的token
+   └─ 从不匹配处重新生成
+
+4. 性能提升
+   ├── 接受率越高，加速比越大
+   ├── 理想加速比 = 1 / (1 - accept_rate)
+   └── 实际加速比 = 1.5x - 3x
+
+关键参数：
+• Draft Model：比Target Model小10-100x
+• 预测长度：通常4-16个token
+• 验证策略：串行验证或并行验证
+
+实现示例：
+class SpeculativeDecoding:
+    def __init__(self, draft_model, target_model, n_tokens=8):
+        self.draft_model = draft_model
+        self.target_model = target_model
+        self.n_tokens = n_tokens
+
+    def generate(self, prompt):
+        # Draft model生成候选
+        candidates = self.draft_model.generate(
+            prompt, max_tokens=self.n_tokens
+        )
+
+        # Target model验证
+        verified = self.target_model.verify(prompt, candidates)
+
+        # 返回验证通过的部分
+        return verified</pre>
+            </div>
+            <p class="card-text">
+              投机解码利用<strong>小模型快速预测</strong>、<strong>大模型批量验证</strong>的思路，在保证输出质量的前提下显著提升推理速度，是当前最热门的推理加速技术之一。
+            </p>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">投机解码注意事项</div>
+            <p>投机解码的效果取决于<strong>draft模型</strong>的质量和<strong>接受率</strong>。draft模型需要足够准确才能获得理想的加速比，但draft模型越大，加速比越低。需要根据具体场景选择合适的draft模型和预测长度。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化对比</h2>
+          <div class="card">
+            <h3 class="card-title">不同技术的性能提升</h3>
+            <div class="code-block">
+<pre>优化技术组合效果：
+
+基础性能（7B模型，A100）：
+• TTFT: 150ms
+• TPOT: 25ms
+• 吞吐: 40 tokens/s
+• 并发: 16
+
++ 连续批处理：
+• TTFT: 150ms
+• TPOT: 25ms
+• 吞吐: 160 tokens/s
+• 并发: 64
+提升: 4x
+
++ PagedAttention：
+• TTFT: 150ms
+• TPOT: 20ms
+• 吞吐: 320 tokens/s
+• 并发: 256
+提升: 8x
+
++ Flash Attention：
+• TTFT: 100ms
+• TPOT: 15ms
+• 吞吐: 480 tokens/s
+• 并发: 256
+提升: 12x
+
++ INT8量化：
+• TTFT: 80ms
+• TPOT: 10ms
+• 吞吐: 800 tokens/s
+• 并发: 256
+提升: 20x
+
++ 投机解码：
+• TTFT: 80ms
+• TPOT: 5ms
+• 吞吐: 1600 tokens/s
+• 并发: 256
+提升: 40x
+
+结论：组合使用多种优化技术可以获得
+数量级的性能提升。</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> vLLM高并发配置</h2>
+          <div class="card">
+            <h3 class="card-title">vLLM高性能配置</h3>
+            <div class="code-block">
+<pre># vLLM高并发启动配置
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-2-7b-chat-hf \
+  --tensor-parallel-size 1 \
+  --gpu-memory-utilization 0.95 \
+  --max-model-len 4096 \
+  --block-size 16 \
+  --max-num-batched-tokens 8192 \
+  --max-num-seqs 256 \
+  --dtype float16 \
+  --quantization awq \
+  --load-format awq \
+  --enable-prefix-caching \
+  --disable-log-requests
+
+# 关键参数说明
+# --gpu-memory-utilization: GPU内存利用率
+# --block-size: KV Cache块大小
+# --max-num-batched-tokens: 最大批token数
+# --max-num-seqs: 最大并发请求数
+# --enable-prefix-caching: 启用前缀缓存
+
+# 性能优化技巧
+1. 调整block_size（8/16/32）
+2. 优化max-num-seqs
+3. 启用前缀缓存
+4. 使用量化模型
+5. 启用Flash Attention 2</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 连续批处理是高并发推理的核心技术</li>
+                <li>• PagedAttention解决了KV Cache管理难题</li>
+                <li>• 智能请求调度优化资源利用</li>
+                <li>• 投机解码可获得2-3x加速</li>
+                <li>• 多种技术组合可实现数量级提升</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="32-2-推理集群规划.html">← 上一节</a>
+          <a href="32-4-推理成本优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

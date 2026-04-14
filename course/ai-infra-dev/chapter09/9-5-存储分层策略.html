@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.5 存储分层策略 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>9.5 存储分层策略</h1>
+          <p class="subtitle">优化存储成本与性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解存储分层的概念</li>
+            <li>掌握分层存储的设计方法</li>
+            <li>学会数据生命周期管理</li>
+            <li>了解自动分层策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="存储分层" class="card-image">
+          <h3 class="card-title">存储分层简介</h3>
+          <p class="card-text">
+            <strong>存储分层</strong>根据数据的访问频率和重要性，将数据存储在不同性能和成本的介质上，
+            在性能和成本之间找到最佳平衡点。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 分层模型</h2>
+          <div class="card">
+            <h3 class="card-title">三层存储架构</h3>
+            <div class="code-block">
+<pre><strong>分层存储架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│  热数据层 (Hot Tier)                                       │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: NVMe SSD / RAM-Disk                                │
+│  • 容量: 50TB - 500TB                                     │
+│  • 性能: 50GB/s - 200GB/s 吞吐                             │
+│  • 延迟: < 100μs                                           │
+│  • 成本: 高                                                 │
+│  • 用途: 训练数据缓存、Checkpoint、活跃模型                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑ 自动分层
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  温数据层 (Warm Tier)                                      │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: SATA SSD / 分布式文件系统                         │
+│  • 容量: 2PB - 20PB                                       │
+│  • 性能: 10GB/s - 50GB/s 吞透                              │
+│  • 延迟: 1ms - 10ms                                       │
+│  • 成本: 中                                                 │
+│  • 用途: 中期项目数据、历史模型、预处理结果                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↑ 自动归档
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  冷数据层 (Cold Tier)                                      │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: 对象存储 / 磁带库 / Cloud                        │
+│  • 容量: 50PB+                                             │
+│  • 性能: GB/s级别吞吐                                       │
+│  • 延迟: 100ms - 1s                                      │
+│  • 成本: 低                                                 │
+│  • 用途: 原始数据、归档数据、长期保存                       │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 分层策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>访问频率</th>
+                <th>推荐层级</th>
+                <th>存储介质</th>
+                <th>数据类型</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>每日多次</td>
+                <td>热数据层</td>
+                <td>NVMe SSD</td>
+                <td>训练数据、模型</td>
+              </tr>
+              <tr>
+                <td>每周多次</td>
+                <td>热数据层</td>
+                <td>SATA SSD</td>
+                <td>频繁使用的模型</td>
+              </tr>
+              <tr>
+                <td>每月多次</td>
+                <td>温数据层</td>
+                <td>HDD阵列</td>
+                <td>历史数据</td>
+              </tr>
+              <tr>
+                <td>每年多次</td>
+                <td>温数据层</td>
+                <td>对象存储</td>
+                <td>归档模型</td>
+              </tr>
+              <tr>
+                <td>极少访问</td>
+                <td>冷数据层</td>
+                <td>磁带库/云</td>
+                <td>原始数据备份</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 数据生命周期</h2>
+          <div class="card">
+            <h3 class="card-title">生命周期管理</h3>
+            <div class="code-block">
+<pre><strong>数据迁移规则：</strong>
+
+┌──────────────────────────────────────────────────────────────┐
+│ 访问频率 → 分层策略                                           │
+├──────────────────────────────────────────────────────────────┤
+│ 每日访问    → 保持在Hot Tier (NVMe)                         │
+│ 每周访问    → 保持在Hot Tier，必要时预加载到计算节点         │
+│ 每月访问    → 迁移到Warm Tier (文件系统)                    │
+│ 半年以上    → 归档到Cold Tier (对象存储)                    │
+│ 永久保存    → 迁移到磁带库或 Glacier                         │
+└──────────────────────────────────────────────────────────────┘
+
+<strong>实现方式：</strong>
+
+1. 使用策略引擎（如Lustre HSM）
+   # 配置HSM策略
+   hsm_setpolicy -f /data \
+       --hot-tier --max-size=100GB \
+       --cold-tier --age=30d
+
+2. 基于访问热度自动迁移
+   # 监控访问频率
+   monitor_access_pattern()
+
+   # 自动迁移
+   if access_frequency < threshold:
+       migrate_to_cold()
+
+3. 手动或定期批量迁移
+   # 定期任务
+   crontab -e
+   0 2 * * 0 /opt/scripts/archive_data.sh
+
+4. 数据保留策略合规管理
+   # 保留策略
+   set_retention_policy("training_data", "3y")
+   set_retention_policy("models", "5y")</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">分层注意事项</div>
+            <p><strong>性能监控：</strong>持续监控各层性能，及时调整</p>
+            <p><strong>数据迁移：</strong>选择低峰期进行，避免影响业务</p>
+            <p><strong>容量规划：</strong>各层容量合理配置，避免瓶颈</p>
+            <p><strong>成本优化：</strong>定期评估，优化成本结构</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 存储分层根据访问频率选择不同性能和成本的介质</li>
+                <li>• 三层架构包括热数据、温数据和冷数据</li>
+                <li>• 数据生命周期管理自动优化存储成本</li>
+                <li>• 策略引擎和自动迁移实现智能化分层</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="9-4-高性能缓存层设计.html">← 上一节</a>
+          <a href="#">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

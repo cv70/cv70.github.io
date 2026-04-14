@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.5 内存与存储层次结构 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>2.5 内存与存储层次结构</h1>
+          <p class="subtitle">构建高效的AI数据存储体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解AI系统的内存层次结构</li>
+            <li>掌握各类存储设备的特点</li>
+            <li>了解存储性能优化策略</li>
+            <li>认识分层存储设计原则</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="存储设备" class="card-image">
+          <h3 class="card-title">存储体系概述</h3>
+          <p class="card-text">
+            AI训练和推理对存储系统有极高的要求。从GPU显存到分布式文件系统，从NVMe SSD到对象存储，每一层存储都需要精心设计，以确保数据访问的高效性和经济性。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 存储层次结构</h2>
+          <div class="card">
+            <h3 class="card-title">金字塔结构</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+AI存储层次结构：
+
+                  ↑ 速度 ↑
+                  ↓ 容量 ↓
+
+┌─────────────────────────────────────┐
+│  GPU显存 (HBM/HBM2/HBM3)           │  80GB, 3TB/s, 最快
+│  • 临时存储张量、激活值、梯度        │
+├─────────────────────────────────────┤
+│  系统内存 (DDR4/DDR5)              │  2TB, 100-200GB/s
+│  • 数据缓存、模型加载、预处理        │
+├─────────────────────────────────────┤
+│  NVMe SSD阵列 (本地存储)           │  10TB, 7-14GB/s
+│  • 热数据、训练中频繁访问            │
+├─────────────────────────────────────┤
+│  分布式文件系统 (网络存储)          │  1PB, 1-10GB/s
+│  • 训练数据集、模型仓库             │
+├─────────────────────────────────────┤
+│  对象存储 (S3/MinIO)               │  100PB, 100-500MB/s
+│  • 原始数据归档、历史模型           │
+└─────────────────────────────────────┘
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎴</span> GPU显存（HBM）</h2>
+          <div class="card">
+            <h3 class="card-title">高带宽显存</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              HBM（High Bandwidth Memory）是GPU专用的显存技术，通过3D堆叠实现超高带宽：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>显存类型</th>
+                  <th>容量/带宽</th>
+                  <th>代表产品</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>GDDR6</strong></td>
+                  <td>24GB, ~900GB/s</td>
+                  <td>RTX 4090</td>
+                </tr>
+                <tr>
+                  <td><strong>HBM2e</strong></td>
+                  <td>40GB, 1.55TB/s</td>
+                  <td>A100 (40GB)</td>
+                </tr>
+                <tr>
+                  <td><strong>HBM3</strong></td>
+                  <td>80GB, 2TB/s</td>
+                  <td>A100 (80GB)</td>
+                </tr>
+                <tr>
+                  <td><strong>HBM3e</strong></td>
+                  <td>141GB, 3.35TB/s</td>
+                  <td>H100</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">显存使用建议</div>
+                <p>大模型训练时，显存是主要瓶颈。可通过梯度检查点、模型并行、混合精度等技术有效利用有限显存。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 系统内存（DDR）</h2>
+          <div class="card">
+            <h3 class="card-title">主机内存设计</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              系统内存承担着数据预处理、模型加载、中间结果存储等任务：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>配置项</th>
+                  <th>推荐值</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>容量</strong></td>
+                  <td>512GB - 2TB</td>
+                  <td>每GPU 64-256GB</td>
+                </tr>
+                <tr>
+                  <td><strong>类型</strong></td>
+                  <td>DDR5-4800/5600</td>
+                  <td>更高带宽和能效</td>
+                </tr>
+                <tr>
+                  <td><strong>通道</strong></td>
+                  <td>≥ 8通道</td>
+                  <td>多通道提升带宽</td>
+                </tr>
+                <tr>
+                  <td><strong>ECC</strong></td>
+                  <td>必需</td>
+                  <td>错误纠正保证稳定性</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block" style="margin-top: 1rem;">
+内存使用场景：
+
+1. 数据预处理缓存
+   • 解码后的图像/文本
+   • 增强后的数据
+
+2. 模型加载
+   • 训练前模型权重
+   • 优化器状态
+
+3. 梯度累积
+   • 多步梯度累积
+   • 梯度同步缓冲
+
+4. 检查点
+   • 模型状态保存
+   • 断点续训支持
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 本地存储（NVMe SSD）</h2>
+          <div class="card">
+            <h3 class="card-title">高速存储层</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              NVMe SSD阵列提供极高的IOPS和带宽，是训练数据热数据存储的理想选择：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>NVMe优势</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>低延迟（< 100μs）</li>
+                  <li>高IOPS（> 1M）</li>
+                  <li>高带宽（7-14GB/s）</li>
+                  <li>PCIe直连</li>
+                </ul>
+              </div>
+              <div>
+                <h4>配置建议</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>使用RAID提升性能</li>
+                  <li>NVMe over Fabrics网络</li>
+                  <li>配置足够的容量</li>
+                  <li>定期监控健康状态</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+典型配置（训练节点）：
+
+NVMe SSD阵列配置：
+• 型号：Samsung PM9A3 / Intel D7
+• 容量：4TB × 8 = 32TB (RAID 0)
+• 带宽：~50GB/s (读取)
+• IOPS：> 5M (随机读)
+• 用途：训练数据集、Checkpoint
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 分布式文件系统</h2>
+          <div class="card">
+            <h3 class="card-title">共享存储架构</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              分布式文件系统为多节点训练提供统一的命名空间和高性能数据访问：
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>文件系统</th>
+                  <th>特点</th>
+                  <th>适用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Lustre</strong></td>
+                  <td>高性能、可扩展</td>
+                  <td>HPC、大规模训练</td>
+                </tr>
+                <tr>
+                  <td><strong>GPFS (IBM)</strong></td>
+                  <td>企业级、稳定</td>
+                  <td>企业应用</td>
+                </tr>
+                <tr>
+                  <td><strong>CephFS</strong></td>
+                  <td>开源、灵活</td>
+                  <td>成本敏感场景</td>
+                </tr>
+                <tr>
+                  <td><strong>BeegFS</strong></td>
+                  <td>低延迟</td>
+                  <td>小文件密集型</td>
+                </tr>
+                <tr>
+                  <td><strong>NFS</strong></td>
+                  <td>简单、成熟</td>
+                  <td>小型集群</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="tip-box warning">
+              <span class="icon">⚠️</span>
+              <div class="content">
+                <div class="title">性能优化</div>
+                <p>分布式文件系统的性能受网络限制。建议在训练节点本地缓存热数据，使用高速网络（InfiniBand/RoCE）连接存储节点。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 对象存储</h2>
+          <div class="card">
+            <h3 class="card-title">海量数据归档</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              对象存储提供无限扩展能力和低成本的大数据存储方案：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>主要特点</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>无限扩展性</li>
+                  <li>高可用性</li>
+                  <li>低成本</li>
+                  <li>REST API访问</li>
+                </ul>
+              </div>
+              <div>
+                <h4>使用场景</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>原始数据归档</li>
+                  <li>历史模型存储</li>
+                  <li>数据湖构建</li>
+                  <li>备份与恢复</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+对象存储使用示例（Python）：
+
+import boto3
+
+s3 = boto3.client('s3',
+    endpoint_url='http://minio:9000',
+    aws_access_key_id='access_key',
+    aws_secret_access_key='secret_key'
+)
+
+# 上传模型checkpoint
+s3.upload_file('checkpoint.pt', 'models', 'epoch_100.pt')
+
+# 下载原始数据
+s3.download_file('datasets', 'training.zip', 'data.zip')
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 存储性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>定义</th>
+                <th>目标值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>IOPS</strong></td>
+                <td>每秒读写次数</td>
+                <td>> 100K (SSD)</td>
+              </tr>
+              <tr>
+                <td><strong>带宽</strong></td>
+                <td>数据传输速率</td>
+                <td>> 10GB/s (本地)</td>
+              </tr>
+              <tr>
+                <td><strong>延迟</strong></td>
+                <td>访问响应时间</td>
+                <td>< 1ms (SSD)</td>
+              </tr>
+              <tr>
+                <td><strong>吞吐量</strong></td>
+                <td>并发处理能力</td>
+                <td>满足训练需求</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 存储优化策略</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化建议</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>使用分层存储：热数据放SSD，冷数据放对象存储</li>
+                  <li>数据预加载：训练开始前预加载到本地</li>
+                  <li>压缩数据：减少存储空间和网络传输</li>
+                  <li>并行读取：利用多线程加速数据加载</li>
+                  <li>缓存策略：LRU缓存热点数据</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• AI存储体系形成金字塔层次结构</li>
+                <li>• GPU显存是最快但最昂贵的存储</li>
+                <li>• NVMe SSD提供本地高速存储</li>
+                <li>• 分布式文件系统提供共享存储</li>
+                <li>• 对象存储用于大规模数据归档</li>
+                <li>• 分层存储策略可平衡性能与成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="2-4-CPU在AI系统中的角色.html">← 上一节</a>
+          <a href="2-6-网络硬件基础（InfiniBandRoCE以太网）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

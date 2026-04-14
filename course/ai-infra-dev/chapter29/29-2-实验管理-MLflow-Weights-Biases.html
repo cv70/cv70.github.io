@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.2 实验管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>29.2 实验管理</h1>
+          <p class="subtitle">MLflow与Weights & Biases</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解实验管理在MLOps中的作用</li>
+            <li>掌握MLflow的使用方法</li>
+            <li>学会Weights & Biases的高级功能</li>
+            <li>了解实验管理的最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="实验管理" class="card-image">
+          <h3 class="card-title">实验管理概述</h3>
+          <p class="card-text">
+            <strong>实验管理</strong>用于追踪机器学习实验的参数、指标、代码和模型版本，
+            帮助数据科学家和工程师系统地组织、比较和重现实验结果。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 实验管理功能</h2>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">参数追踪</h3>
+              <p class="card-text">记录实验的超参数和配置。</p>
+              <ul class="feature-list">
+                <li>超参数记录</li>
+                <li>配置文件版本</li>
+                <li>环境信息</li>
+                <li>依赖版本</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">指标监控</h3>
+              <p class="card-text">实时监控训练指标。</p>
+              <ul class="feature-list">
+                <li>损失曲线</li>
+                <li>准确率</li>
+                <li>自定义指标</li>
+                <li>实时可视化</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">模型管理</h3>
+              <p class="card-text">存储和管理模型文件。</p>
+              <ul class="feature-list">
+                <li>模型版本</li>
+                <li>模型文件</li>
+                <li>模型描述</li>
+                <li>部署准备</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">代码追踪</h3>
+              <p class="card-text">关联实验与代码版本。</p>
+              <ul class="feature-list">
+                <li>Git commit</li>
+                <li>代码片段</li>
+                <li>依赖环境</li>
+                <li>复现支持</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">比较分析</h3>
+              <p class="card-text">对比不同实验的结果。</p>
+              <ul class="feature-list">
+                <li>并排比较</li>
+                <li>性能排序</li>
+                <li>差异分析</li>
+                <li>最佳选择</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">团队协作</h3>
+              <p class="card-text">共享实验结果和洞察。</p>
+              <ul class="feature-list">
+                <li>团队工作区</li>
+                <li>结果共享</li>
+                <li>评论讨论</li>
+                <li>报告生成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔵</span> MLflow实战</h2>
+
+          <h3>安装与配置</h3>
+          <div class="code-block">
+# 安装MLflow
+pip install mlflow
+
+# 启动MLflow Tracking Server
+mlflow server \
+  --backend-store-uri sqlite:///mlflow.db \
+  --default-artifact-root ./mlruns \
+  --host 0.0.0.0 \
+  --port 5000
+
+# 访问UI
+# http://localhost:5000
+
+# 配置远程服务器
+export MLFLOW_TRACKING_URI=http://localhost:5000
+          </div>
+
+          <h3>追踪实验</h3>
+          <div class="code-block">
+import mlflow
+import mlflow.sklearn
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+# 开始实验
+with mlflow.start_run():
+    # 记录参数
+    mlflow.log_param("n_estimators", 100)
+    mlflow.log_param("max_depth", 10)
+    mlflow.log_param("random_state", 42)
+
+    # 训练模型
+    model = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=10,
+        random_state=42
+    )
+    model.fit(X_train, y_train)
+
+    # 评估模型
+    predictions = model.predict(X_test)
+    accuracy = accuracy_score(y_test, predictions)
+
+    # 记录指标
+    mlflow.log_metric("accuracy", accuracy)
+    mlflow.log_metric("precision", precision)
+    mlflow.log_metric("recall", recall)
+
+    # 记录模型
+    mlflow.sklearn.log_model(model, "model")
+
+    # 记录其他artifact
+    mlflow.log_artifact("config.yaml")
+    mlflow.log_artifact("preprocessing.pkl")
+          </div>
+
+          <h3>记录超参数</h3>
+          <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 批量记录参数
+params = {
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    "optimizer": "adam"
+}
+
+run_id = mlflow.active_run().info.run_id
+client.log_batch(run_id, metrics={}, params=params, tags={})
+          </code>
+
+          <h3>记录图表</h3>
+          <div class="code-block">
+import matplotlib.pyplot as plt
+
+# 训练循环
+for epoch in range(epochs):
+    # 训练代码...
+    train_loss = train_one_epoch()
+    val_loss = validate()
+
+    # 记录指标
+    mlflow.log_metric("train_loss", train_loss, step=epoch)
+    mlflow.log_metric("val_loss", val_loss, step=epoch)
+
+# 绘制并记录图表
+plt.figure()
+plt.plot(train_losses, label="train")
+plt.plot(val_losses, label="val")
+plt.legend()
+plt.savefig("loss_curve.png")
+mlflow.log_artifact("loss_curve.png")
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">MLflow组件</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Tracking</strong>：实验追踪和记录</li>
+                <li>• <strong>Projects</strong>：代码打包和运行</li>
+                <li>• <strong>Models</strong>：模型管理和部署</li>
+                <li>• <strong>Model Registry</strong>：模型版本控制</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔥</span> Weights & Biases实战</h2>
+
+          <h3>安装与配置</h3>
+          <div class="code-block">
+# 安装wandb
+pip install wandb
+
+# 登录
+wandb login
+
+# 或使用API key
+import wandb
+wandb.login(key="your-api-key")
+
+# 初始化项目
+wandb.init(
+    project="my-awesome-project",
+    config={
+        "learning_rate": 0.001,
+        "batch_size": 32,
+        "epochs": 100
+    }
+)
+          </code>
+
+          <h3>追踪PyTorch训练</h3>
+          <div class="code-block">
+import wandb
+from pytorch_lightning.loggers import WandbLogger
+
+# 配置WandB
+wandb_logger = WandbLogger(
+    project="mnist-classification",
+    name="experiment-1"
+)
+
+# 使用PyTorch Lightning
+trainer = Trainer(
+    logger=wandb_logger,
+    max_epochs=10
+)
+
+# 或手动记录
+wandb.watch(model, log="all", log_freq=100)
+
+for epoch in range(epochs):
+    for batch_idx, (data, target) in enumerate(train_loader):
+        # 训练代码...
+
+        # 记录指标
+        wandb.log({
+            "epoch": epoch,
+            "batch": batch_idx,
+            "loss": loss.item(),
+            "accuracy": accuracy
+        })
+
+# 记录模型
+wandb.save("model.pt")
+
+# 结束实验
+wandb.finish()
+          </code>
+
+          <h3>记录图像和视频</h3>
+          <div class="code-block">
+import wandb
+import matplotlib.pyplot as plt
+
+# 记录图像
+wandb.log({
+    "predictions": [
+        wandb.Image(image, caption=f"Pred: {pred}, True: {true}")
+        for image, pred, true in zip(images, predictions, labels)
+    ]
+})
+
+# 记录表格
+table = wandb.Table(
+    columns=["Image", "Prediction", "Label", "Confidence"]
+)
+for img, pred, label, conf in zip(images, predictions, labels, confidences):
+    table.add_data(
+        wandb.Image(img),
+        pred,
+        label,
+        f"{conf:.2f}"
+    )
+wandb.log({"predictions_table": table})
+
+# 记录PR曲线
+wandb.log({
+    "pr_curve": wandb.plot.pr_curve(
+        y_true, y_scores, labels=["class_0", "class_1"]
+    )
+})
+          </code>
+
+          <h3>超参数优化</h3>
+          <div class="code-block">
+import wandb
+from wandb.sweep import sweep
+
+# 配置搜索空间
+sweep_config = {
+    "method": "bayes",  # random, grid, bayes
+    "metric": {"name": "val_accuracy", "goal": "maximize"},
+    "parameters": {
+        "learning_rate": {
+            "min": 0.0001,
+            "max": 0.1
+        },
+        "batch_size": {
+            "values": [16, 32, 64, 128]
+        },
+        "dropout": {
+            "min": 0.1,
+            "max": 0.5
+        }
+    }
+}
+
+# 定义训练函数
+def train():
+    wandb.init()
+    config = wandb.config
+
+    # 使用超参数训练
+    model = Model(
+        learning_rate=config.learning_rate,
+        dropout=config.dropout
+    )
+    trainer = Trainer(
+        batch_size=config.batch_size,
+        max_epochs=50
+    )
+    trainer.fit(model)
+
+# 运行超参数搜索
+sweep_id = wandb.sweep(sweep_config, project="my-project")
+wandb.agent(sweep_id, train, count=20)
+          </code>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">W&B优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 实时可视化训练过程</li>
+                <li>• 强大的超参数优化</li>
+                <li>• 丰富的可视化工具</li>
+                <li>• 云端协作平台</li>
+                <li>• 自动化报告生成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 模型注册与版本管理</h2>
+
+          <h3>MLflow Model Registry</h3>
+          <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 注册模型
+model_uri = "runs:/<run-id>/model"
+model_details = mlflow.register_model(
+    model_uri=model_uri,
+    name="my-model"
+)
+
+# 更新模型阶段
+client.transition_model_version_stage(
+    name="my-model",
+    version=model_details.version,
+    stage="Staging"  # Staging | Production | Archived
+)
+
+# 获取生产版本
+production_model = mlflow.pyfunc.load_model(
+    "models:/my-model/Production"
+)
+          </code>
+
+          <h3>W&B Artifacts</h3>
+          <div class="code-block">
+# 保存artifact
+artifact = wandb.Artifact(
+    name="model-v1",
+    type="model"
+)
+
+artifact.add_file("model.pt")
+wandb.log_artifact(artifact)
+
+# 使用artifact
+run = wandb.init()
+artifact = run.use_artifact("my-model:latest")
+artifact_dir = artifact.download()
+
+# 版本管理
+wandb.Artifact.version("model-v1")
+wandb.Artifact.alias("best-model")
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 实验比较与分析</h2>
+
+          <h3>MLflow UI比较</h3>
+          <div class="code-block">
+# 在MLflow UI中比较实验
+# 1. 选择多个实验
+# 2. 查看参数和指标对比表
+# 3. 使用筛选器筛选实验
+# 4. 排序最佳模型
+
+# 通过API查询
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+runs = client.search_runs(
+    experiment_ids=["0"],
+    order_by=["metrics.accuracy DESC"],
+    max_results=10
+)
+
+for run in runs:
+    print(f"Run ID: {run.info.run_id}")
+    print(f"Accuracy: {run.data.metrics['accuracy']}")
+    print(f"Params: {run.data.params}")
+          </code>
+
+          <h3>W&B Dashboard</h3>
+          <div class="code-block">
+# W&B自动生成对比面板
+# - 并行运行图
+# - 超参数相关性图
+# - 误差分析
+# - 模型对比表
+
+# 创建自定义面板
+import wandb
+
+panel = wandb.visualize(
+    wandb.plot.line_series(
+        xs=[range(epochs), range(epochs)],
+        ys=[[0.8, 0.85, 0.9], [0.75, 0.8, 0.85]],
+        keys=["Model A", "Model B"],
+        xname="Epoch",
+        yname="Accuracy"
+    )
+)
+wandb.log({"comparison": panel})
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">实验设计</h4>
+              <ul class="feature-list">
+                <li>定义清晰的实验目标</li>
+                <li>记录所有相关参数</li>
+                <li>设置合理的baseline</li>
+                <li>使用有意义的实验名称</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">指标选择</h4>
+              <ul class="feature-list">
+                <li>选择业务相关指标</li>
+                <li>记录多个指标</li>
+                <li>区分训练/验证/测试指标</li>
+                <li>监控指标变化趋势</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">复现性</h4>
+              <ul class="feature-list">
+                <li>设置随机种子</li>
+                <li>记录代码版本</li>
+                <li>保存环境配置</li>
+                <li>记录数据版本</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">团队协作</h4>
+              <ul class="feature-list">
+                <li>使用统一的项目结构</li>
+                <li>定期同步实验结果</li>
+                <li>建立实验审查机制</li>
+                <li>编写实验文档</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">工具选择建议</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>MLflow</strong>：开源、灵活、适合自建</li>
+                <li>• <strong>W&B</strong>：SaaS、强大可视化、团队协作</li>
+                <li>• <strong>选择依据</strong>：预算、团队规模、功能需求</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 实验管理是MLOps的核心组件</li>
+                <li>• MLflow提供完整的开源解决方案</li>
+                <li>• W&B提供强大的云端协作平台</li>
+                <li>• 良好的实验管理可显著提高研究效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="29-1-MLOps概述.html">← 上一节</a>
+          <a href="29-3-模型注册中心.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.3 训练断点续训 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>31.3 训练断点续训</h1>
+          <p class="subtitle">实现大模型训练的容错与恢复机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解断点续训的必要性与挑战</li>
+            <li>掌握分布式Checkpoint机制</li>
+            <li>学习Checkpoint存储与恢复策略</li>
+            <li>了解智能Checkpoint调度</li>
+            <li>认识断点续训的最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="数据备份与恢复" class="card-image">
+          <h3 class="card-title">断点续训概述</h3>
+          <p class="card-text">
+            大模型训练周期长达数周甚至数月，期间<strong>硬件故障</strong>、<strong>网络中断</strong>、<strong>软件错误</strong>等在所难免。断点续训机制确保训练任务能够从最近的状态恢复，避免数周的训练成果付诸东流。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 故障类型分析</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">硬件故障</h3>
+              <ul class="feature-list">
+                <li>GPU故障（XID错误）</li>
+                <li>节点掉电/重启</li>
+                <li>网络设备故障</li>
+                <li>存储设备故障</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">软件故障</h3>
+              <ul class="feature-list">
+                <li>OOM（内存不足）</li>
+                <li>NCCL通信超时</li>
+                <li>进程崩溃</li>
+                <li>容器调度失败</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> Checkpoint机制</h2>
+          <div class="card">
+            <h3 class="card-title">分布式Checkpoint架构</h3>
+            <div class="code-block">
+<pre>
+分布式Checkpoint组件：
+├── 模型状态：各rank的模型权重、优化器状态
+├── 训练状态：全局步数、学习率调度器、随机种子
+├── 数据状态：数据加载器状态、当前样本索引
+├── 系统状态：进程rank映射、节点拓扑
+└── 元数据：Checkpoint时间戳、版本信息
+
+Checkpoint类型：
+• 同步Checkpoint：所有rank同步保存，一致性高
+• 异步Checkpoint：后台保存，不阻塞训练
+• 增量Checkpoint：只保存变化部分
+• 分层Checkpoint：快速/完整分层保存</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> PyTorch分布式Checkpoint</h2>
+          <div class="card">
+            <h3 class="card-title">实现示例</h3>
+            <div class="code-block">
+<pre>
+import torch
+import torch.distributed as dist
+from torch.distributed.checkpoint import save, load
+
+def save_checkpoint(model, optimizer, scheduler, step, path):
+    """保存分布式checkpoint"""
+    checkpoint = {
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'step': step,
+        'rng_state': torch.get_rng_state_all(),
+    }
+
+    # 使用分布式Checkpoint API
+    state_dict = {
+        'model': model,
+        'optimizer': optimizer,
+        'scheduler': scheduler,
+    }
+
+    save(state_dict, checkpoint_id=path)
+
+def load_checkpoint(model, optimizer, scheduler, path):
+    """加载分布式checkpoint"""
+    state_dict = {
+        'model': model,
+        'optimizer': optimizer,
+        'scheduler': scheduler,
+    }
+
+    # 自动加载到正确的rank
+    load(state_dict, checkpoint_id=path)
+    return checkpoint['step']</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⏰</span> Checkpoint调度策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>保存频率</th>
+                <th>恢复时间</th>
+                <th>存储开销</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>固定间隔</td>
+                <td>每N步</td>
+                <td>中等</td>
+                <td>中等</td>
+                <td>一般训练任务</td>
+              </tr>
+              <tr>
+                <td>指数间隔</td>
+                <td>1,2,4,8,16...</td>
+                <td>快</td>
+                <td>低</td>
+                <td>长周期训练</td>
+              </tr>
+              <tr>
+                <td>损失阈值</td>
+                <td>损失下降N%</td>
+                <td>快</td>
+                <td>低</td>
+                <td>模型收敛关键点</td>
+              </tr>
+              <tr>
+                <td>自适应</td>
+                <td>根据故障率调整</td>
+                <td>自适应</td>
+                <td>自适应</td>
+                <td>生产环境</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">分层Checkpoint策略</div>
+            <p>建议采用<strong>三层Checkpoint策略</strong>：每100步保存快速checkpoint（仅模型权重），每1000步保存完整checkpoint，每10000步保存归档checkpoint。这样平衡了恢复速度和存储成本。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 异步Checkpoint优化</h2>
+          <div class="card">
+            <h3 class="card-title">减少Checkpoint对训练的影响</h3>
+            <div class="code-block">
+<pre>
+异步Checkpoint实现：
+import threading
+import queue
+
+class AsyncCheckpointManager:
+    def __init__(self, max_queue_size=2):
+        self.queue = queue.Queue(maxsize=max_queue_size)
+        self.thread = threading.Thread(
+            target=self._save_worker,
+            daemon=True
+        )
+        self.thread.start()
+
+    def async_save(self, state_dict, path):
+        """异步保存checkpoint"""
+        if self.queue.full():
+            self.queue.get()  # 丢弃最旧的
+        self.queue.put((state_dict.copy(), path))
+
+    def _save_worker(self):
+        """后台保存线程"""
+        while True:
+            state_dict, path = self.queue.get()
+            torch.save(state_dict, path)
+
+# 使用方式
+checkpoint_mgr = AsyncCheckpointManager()
+if step % 100 == 0:
+    checkpoint_mgr.async_save(
+        {'model': model.state_dict()},
+        f'checkpoint/step_{step}.pt'
+    )</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📂</span> Checkpoint存储优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">存储配置</h3>
+              <ul class="feature-list">
+                <li>独立的Checkpoint存储池</li>
+                <li>高速NVMe SSD</li>
+                <li>RDMA网络直连存储</li>
+                <li>多副本冗余</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">压缩与去重</h3>
+              <ul class="feature-list">
+                <li>权重压缩（FP16/INT8）</li>
+                <li>增量Checkpoint</li>
+                <li>对象去重</li>
+                <li>分层存储策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> Checkpoint恢复流程</h2>
+          <div class="card">
+            <h3 class="card-title">完整恢复流程</h3>
+            <div class="code-block">
+<pre>
+恢复流程步骤：
+1. 检测最新Checkpoint
+   ├── 查找最近的完整checkpoint
+   └── 验证checkpoint完整性
+
+2. 节点重新分配
+   ├── 如果节点数不变，直接恢复
+   └── 如果节点数变化，重新分配rank
+
+3. 模型状态恢复
+   ├── 加载模型权重
+   ├── 加载优化器状态
+   └── 恢复学习率调度器
+
+4. 数据状态恢复
+   ├── 恢复数据加载器状态
+   └── 定位到正确的样本位置
+
+5. 训练参数恢复
+   ├── 恢复全局步数
+   ├── 恢复随机种子
+   └── 恢复其他训练状态
+
+6. 继续训练
+   └── 从中断点继续训练</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> DeepSpeed Checkpoint</h2>
+          <div class="card">
+            <h3 class="card-title">DeepSpeed Checkpoint特性</h3>
+            <div class="code-block">
+<pre>
+# DeepSpeed Checkpoint配置
+{
+    "checkpoint": {
+        "use_node_local_storage": true,
+        "parallel_write": true,
+        "async_save": true,
+        "monitor_dist": 0.02
+    }
+}
+
+# 自动Checkpoint间隔
+# 每N步或N分钟保存一次
+ds_engine.save_checkpoint(
+    save_dir="checkpoint",
+    tag=f"step_{global_step}",
+    save_latest=True
+)
+
+# 从Checkpoint恢复
+model, optimizer, _, _ = deepspeed.initialize(
+    args=args,
+    model=model,
+    optimizer=optimizer,
+    model_parameters=model.parameters()
+)
+
+# 自动加载checkpoint
+_, client_state = model.load_checkpoint(
+    load_dir="checkpoint",
+    tag="latest"
+)</pre>
+            </div>
+            <p class="card-text">
+              DeepSpeed提供<strong>自动Checkpoint</strong>和<strong>智能恢复</strong>功能，支持ZeRO优化器的状态管理，大幅简化了分布式训练的容错实现。
+            </p>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <p>Checkpoint恢复时要确保<strong>超参数一致性</strong>、<strong>软件版本一致</strong>、<strong>硬件拓扑一致</strong>。如果这些条件不满足，可能导致恢复失败或训练异常。建议在Checkpoint中记录所有相关元信息。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Checkpoint性能指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>目标值</th>
+                <th>监测方式</th>
+                <th>优化建议</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Checkpoint耗时</td>
+                <td><5分钟</td>
+                <td>训练日志</td>
+                <td>异步存储、压缩优化</td>
+              </tr>
+              <tr>
+                <td>恢复耗时</td>
+                <td><10分钟</td>
+                <td>恢复日志</td>
+                <td>预热加载、并行恢复</td>
+              </tr>
+              <tr>
+                <td>Checkpoint大小</td>
+                <100GB</td>
+                <td>存储监控</td>
+                <td>增量Checkpoint</td>
+              </tr>
+              <tr>
+                <td>Checkpoint成功率</td>
+                <td>≥99%</td>
+                <td>日志分析</td>
+                <td>存储冗余、重试机制</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 断点续训是大模型训练的必备能力</li>
+                <li>• 分布式Checkpoint需要处理状态一致性</li>
+                <li>• 分层Checkpoint平衡恢复速度与存储成本</li>
+                <li>• 异步Checkpoint减少对训练的影响</li>
+                <li>• 完善的恢复流程确保训练连续性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="31-2-千卡-万卡集群调度.html">← 上一节</a>
+          <a href="31-4-训练监控与告警.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

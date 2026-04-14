@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.4 分布式数据加载 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>17.4 分布式数据加载</h1>
+          <p class="subtitle">高效处理大规模数据集</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式数据加载的原理</li>
+            <li>掌握DistributedSampler的使用</li>
+            <li>了解数据加载的性能优化技巧</li>
+            <li>学会处理数据不平衡问题</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式数据加载" class="card-image">
+          <h3 class="card-title">分布式数据加载概述</h3>
+          <p class="card-text">
+            在分布式训练中，数据需要被正确地分配到不同的GPU上。
+            使用DistributedSampler可以确保每个GPU处理不同的数据子集，
+            同时保持数据的随机性和均衡性。高效的数据加载对训练性能至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DistributedSampler原理</h2>
+          <div class="card">
+            <h3 class="card-title">数据采样机制</h3>
+            <div class="code-block">
+DistributedSampler工作原理：
+
+1. 数据划分
+   • 将整个数据集分成num_replicas个子集
+   • 每个rank处理一个子集
+   • 子集大小 = ceil(total_size / num_replicas)
+
+2. 索引分配
+   总数据集：[0, 1, 2, ..., 9999] (10000个样本)
+   world_size = 4
+
+   Rank 0: [0, 4, 8, ..., 9996]   (2500个样本)
+   Rank 1: [1, 5, 9, ..., 9997]   (2500个样本)
+   Rank 2: [2, 6, 10, ..., 9998]  (2500个样本)
+   Rank 3: [3, 7, 11, ..., 9999]  (2500个样本)
+
+3. 随机打乱
+   • 每个epoch打乱数据顺序
+   • 使用set_epoch()确保每个epoch打乱不同
+   • 保持数据的随机性
+
+4. 数据完整性
+   • 所有rank处理的数据并集 = 完整数据集
+   • 没有重复，也没有遗漏
+   • 确保训练数据的一致性
+
+关键特性：
+• 自动处理数据划分
+• 支持drop_last（丢弃不完整batch）
+• 支持shuffle（随机打乱）
+• 与DataLoader无缝集成
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 基本使用</h2>
+          <div class="card">
+            <h3 class="card-title">DistributedSampler示例</h3>
+            <div class="code-block">
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
+
+class SimpleDataset(Dataset):
+    def __init__(self, size=10000):
+        self.size = size
+        self.data = list(range(size))
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+def create_dataloader(batch_size=32, shuffle=True):
+    # 创建数据集
+    dataset = SimpleDataset(size=10000)
+
+    # 创建分布式采样器
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=dist.get_world_size(),  # 总进程数
+        rank=dist.get_rank(),                # 当前进程rank
+        shuffle=shuffle,                    # 是否随机打乱
+        drop_last=False                     # 是否丢弃最后一个不完整batch
+    )
+
+    # 创建数据加载器
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=sampler,      # 使用分布式采样器
+        num_workers=4,         # 数据加载worker数
+        pin_memory=True       # 锁页内存，加速数据传输
+    )
+
+    return dataloader, sampler
+
+def train(rank, world_size):
+    # 初始化分布式环境
+    dist.init_process_group(backend='nccl')
+    torch.cuda.set_device(rank)
+
+    # 创建数据加载器
+    dataloader, sampler = create_dataloader(batch_size=32, shuffle=True)
+
+    # 训练循环
+    for epoch in range(10):
+        # 重要：每个epoch都要设置epoch，确保数据打乱不同
+        sampler.set_epoch(epoch)
+
+        for batch_idx, data in enumerate(dataloader):
+            # 处理数据
+            data = data.cuda()
+            # ...
+
+            if rank == 0 and batch_idx % 100 == 0:
+                print(f'Epoch {epoch}, Batch {batch_idx}')
+
+    # 清理
+    dist.destroy_process_group()
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 高级配置</h2>
+          <div class="card">
+            <h3 class="card-title">DistributedSampler参数详解</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>说明</th>
+                  <th>推荐值</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>dataset</strong></td>
+                  <td>要采样的数据集</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td><strong>num_replicas</strong></td>
+                  <td>总进程数</td>
+                  <td>dist.get_world_size()</td>
+                </tr>
+                <tr>
+                  <td><strong>rank</strong></td>
+                  <td>当前进程rank</td>
+                  <td>dist.get_rank()</td>
+                </tr>
+                <tr>
+                  <td><strong>shuffle</strong></td>
+                  <td>是否随机打乱</td>
+                  <td>True（训练），False（验证/测试）</td>
+                </tr>
+                <tr>
+                  <td><strong>drop_last</strong></td>
+                  <td>丢弃不完整batch</td>
+                  <td>True（推荐），False（最大化数据使用）</td>
+                </tr>
+                <tr>
+                  <td><strong>seed</strong></td>
+                  <td>随机种子</td>
+                  <td>0（默认）</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 性能优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">DataLoader优化</h3>
+              <ul class="feature-list">
+                <li><strong>num_workers：</strong>设置为CPU核心数，通常4-8</li>
+                <li><strong>pin_memory：</strong>True加速数据传输到GPU</li>
+                <li><strong>prefetch_factor：</strong>预取因子，默认2</li>
+                <li><strong>persistent_workers：</strong>保持worker活跃</li>
+              </ul>
+              <div class="code-block">
+优化配置示例：
+
+dataloader = DataLoader(
+    dataset,
+    batch_size=batch_size,
+    sampler=sampler,
+    num_workers=8,              # 根据CPU核心数设置
+    pin_memory=True,            # 加速GPU传输
+    prefetch_factor=2,          # 预取2个batch
+    persistent_workers=True     # 保持worker
+)
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">数据预处理优化</h3>
+              <ul class="feature-list">
+                <li><strong>在线预处理：</strong>使用DataLoader的transform</li>
+                <li><strong>离线预处理：</strong>提前处理并保存</li>
+                <li><strong>缓存数据：</strong>缓存常用数据到内存</li>
+                <li><strong>批量处理：</strong>使用Vectorized操作</li>
+              </ul>
+              <div class="code-block">
+预处理优化示例：
+
+from torchvision import transforms
+
+transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+
+dataset = ImageFolder(
+    'path/to/data',
+    transform=transform  # 在DataLoader中应用
+)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 数据加载器模式</h2>
+          <div class="card">
+            <h3 class="card-title">不同场景的配置</h3>
+            <div class="code-block">
+场景1：训练集（需要随机打乱）
+
+train_sampler = DistributedSampler(
+    dataset,
+    shuffle=True,
+    drop_last=True
+)
+train_loader = DataLoader(
+    dataset,
+    batch_size=32,
+    sampler=train_sampler,
+    num_workers=8
+)
+
+for epoch in range(epochs):
+    train_sampler.set_epoch(epoch)  # 重要！
+    for batch in train_loader:
+        # 训练
+
+场景2：验证集（不需要随机）
+
+val_sampler = DistributedSampler(
+    dataset,
+    shuffle=False,
+    drop_last=False
+)
+val_loader = DataLoader(
+    dataset,
+    batch_size=32,
+    sampler=val_sampler,
+    num_workers=8
+)
+
+# 不需要set_epoch()
+for batch in val_loader:
+    # 验证
+
+场景3：测试集（需要完整数据）
+
+test_sampler = DistributedSampler(
+    dataset,
+    shuffle=False,
+    drop_last=False
+)
+test_loader = DataLoader(
+    dataset,
+    batch_size=1,
+    sampler=test_sampler,
+    num_workers=4
+)
+
+# 聚合所有rank的结果
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据流水线">
+          <div class="caption">图：高效的数据流水线是分布式训练性能的关键</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 常见问题</h2>
+          <div class="card">
+            <h3 class="card-title">问题与解决方案</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>原因</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>数据重复</strong></td>
+                  <td>忘记设置sampler</td>
+                  <td>必须指定sampler参数</td>
+                </tr>
+                <tr>
+                  <td><strong>数据不随机</strong></td>
+                  <td>忘记调用set_epoch()</td>
+                  <td>每个epoch调用set_epoch()</td>
+                </tr>
+                <tr>
+                  <td><strong>数据量不同</strong></td>
+                  <td>drop_last=False且数据集大小不能整除</td>
+                  <td>使用drop_last=True</td>
+                </tr>
+                <tr>
+                  <td><strong>加载慢</strong></td>
+                  <td>num_workers太少</td>
+                  <td>增加num_workers到4-8</td>
+                </tr>
+                <tr>
+                  <td><strong>显存不足</strong></td>
+                  <td>数据预处理在GPU上</td>
+                  <td>将预处理移到CPU</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 数据不平衡处理</h2>
+          <div class="card">
+            <h3 class="card-title">类别不平衡处理</h3>
+            <div class="code-block">
+方案1：重采样（WeightedRandomSampler）
+
+from torch.utils.data import WeightedRandomSampler
+
+# 计算每个样本的权重
+class_counts = [1000, 500, 100]  # 每个类别的样本数
+class_weights = 1.0 / torch.tensor(class_counts, dtype=torch.float)
+sample_weights = [class_weights[label] for label in labels]
+
+# 创建加权采样器
+sampler = WeightedRandomSampler(
+    weights=sample_weights,
+    num_samples=len(sample_weights),
+    replacement=True
+)
+
+# 注意：不能直接与DistributedSampler一起使用
+# 需要手动实现分布式加权采样
+
+方案2：Focal Loss
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
+        return focal_loss.mean()
+
+方案3：类别权重（在CrossEntropy中）
+
+class_weights = torch.tensor([1.0, 2.0, 10.0])  # 反比于样本数
+criterion = nn.CrossEntropyLoss(weight=class_weights)
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>训练集：</strong>使用shuffle=True和drop_last=True</li>
+              <li><strong>验证/测试集：</strong>使用shuffle=False和drop_last=False</li>
+              <li><strong>每个epoch：</strong>调用sampler.set_epoch(epoch)</li>
+              <li><strong>性能优化：</strong>设置合适的num_workers和pin_memory</li>
+              <li><strong>数据格式：</strong>使用高效的格式如HDF5、LMDB</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• DistributedSampler将数据均匀分配到各GPU</li>
+                <li>• 每个epoch调用set_epoch()确保数据随机</li>
+                <li>• 训练集用shuffle=True，验证集用shuffle=False</li>
+                <li>• 优化DataLoader参数可显著提升性能</li>
+                <li>• 数据不平衡需要特殊处理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="17-3-分布式初始化.html">← 上一节</a>
+          <a href="17-5-分布式Checkpoint.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

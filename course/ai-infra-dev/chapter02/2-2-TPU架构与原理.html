@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2.2 TPU架构与原理 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>2.2 TPU架构与原理</h1>
+          <p class="subtitle">谷歌专用AI加速芯片的深度解析</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解TPU的设计理念</li>
+            <li>掌握TPU的架构组成</li>
+            <li>了解TPU的演进历程</li>
+            <li>认识TPU的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="TPU芯片" class="card-image">
+          <h3 class="card-title">TPU概述</h3>
+          <p class="card-text">
+            <strong>TPU（Tensor Processing Unit，张量处理单元）</strong>是谷歌为神经网络计算专门设计的ASIC芯片。与通用GPU不同，TPU针对机器学习工作负载进行了深度优化，在大规模深度学习训练和推理任务中展现出卓越的能效和性能。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> TPU的设计理念</h2>
+          <div class="card">
+            <h3 class="card-title">专用化设计</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              TPU的设计哲学是"针对机器学习做减法"，通过精准优化神经网络中的关键操作来提升效率：
+            </p>
+            <div class="grid grid-3">
+              <div class="card" style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">📊</div>
+                <h4>矩阵乘法优化</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">大规模二维脉动阵列专门加速矩阵运算</p>
+              </div>
+              <div class="card" style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">⚡</div>
+                <h4>低精度计算</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">支持bfloat16和int8，大幅提升吞吐量</p>
+              </div>
+              <div class="card" style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔋</div>
+                <h4>能效优先</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">每瓦特算力远超通用芯片</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> TPU架构详解</h2>
+          <div class="card">
+            <h3 class="card-title">核心架构</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+TPU v4 Pod架构：
+
+┌─────────────────────────────────────────┐
+│            TPU Pod (4096 chips)         │
+│  ┌─────────────────────────────────────┐ │
+│  │        TPU Board (4 chips)          │ │
+│  │  ┌─────────────────────────────────┐ │ │
+│  │  │          TPU Chip               │ │ │
+│  │  │  ┌───────────────────────────┐  │ │ │
+│  │  │  │  Tensor Cores (MXU)       │  │ │ │
+│  │  │  │  • 128x128 脉动阵列       │  │ │ │
+│  │  │  └───────────────────────────┘  │ │ │
+│  │  │  ┌───────────────────────────┐  │ │ │
+│  │  │  │  Vector Units            │  │ │ │
+│  │  │  │  • Vector/Scalar units    │  │ │ │
+│  │  │  └───────────────────────────┘  │ │ │
+│  │  │  ┌───────────────────────────┐  │ │ │
+│  │  │  │  On-chip Memory          │  │ │ │
+│  │  │  │  • 16GB HBM              │  │ │ │
+│  │  │  └───────────────────────────┘  │ │ │
+│  │  └─────────────────────────────────┘  │ │
+│  └─────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 脉动阵列原理</h2>
+          <div class="card">
+            <h3 class="card-title">Systolic Array</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              TPU的核心是大规模二维脉动阵列，通过让数据在PE（Processing Element）之间流动来计算矩阵乘法：
+            </p>
+            <div class="code-block" style="font-size: 0.85rem; line-height: 1.6;">
+矩阵乘法计算流程（简化）：
+
+输入矩阵 A (m×k) 和 B (k×n)
+
+Step 1: 将矩阵A的行加载到阵列左侧
+Step 2: 将矩阵B的列加载到阵列顶部
+Step 3: 数据在PE之间同步流动
+Step 4: 每个PE完成乘累加操作
+Step 5: 结果从阵列右侧输出
+
+优势：
+• 数据只从存储读取一次
+• 计算与数据传输并行
+• 高度规整，硬件效率高
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">效率优势</div>
+                <p>传统GPU每次矩阵运算都需要从显存读取数据，而TPU的脉动阵列让数据在芯片内部持续流动，大幅减少了内存访问开销，能效比显著提升。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📅</span> TPU演进历程</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>版本</th>
+                <th>发布时间</th>
+                <th>关键特性</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>TPU v1</strong></td>
+                <td>2016</td>
+                <td>8位整数，推理专用</td>
+                <td>AlphaGo围棋比赛</td>
+              </tr>
+              <tr>
+                <td><strong>TPU v2</strong></td>
+                <td>2017</td>
+                <td>支持训练，bfloat16</td>
+                <td>Google Cloud TPU</td>
+              </tr>
+              <tr>
+                <td><strong>TPU v3</strong></td>
+                <td>2018</td>
+                <td>液冷，2倍性能</td>
+                <td>大规模训练</td>
+              </tr>
+              <tr>
+                <td><strong>TPU v4</strong></td>
+                <td>2021</td>
+                <td>光互连，Pod扩展性</td>
+                <td>PaLM大模型训练</td>
+              </tr>
+              <tr>
+                <td><strong>TPU v5</strong></td>
+                <td>2023</td>
+                <td>更高速互连，多芯片模块</td>
+                <td>新一代大模型</td>
+              </tr>
+              <tr>
+                <td><strong>TPU v5p</strong></td>
+                <td>2024</td>
+                <td>推理专用，超高性价比</td>
+                <td>推理服务优化</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> TPU v4 性能规格</h2>
+          <div class="card">
+            <h3 class="card-title">核心指标</h3>
+            <div class="grid grid-3">
+              <div>
+                <strong>计算性能</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>275 TFLOPS (bfloat16)</li>
+                  <li>1100 TOPS (int8)</li>
+                  <li>多芯片协同</li>
+                </ul>
+              </div>
+              <div>
+                <strong>内存系统</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>16GB HBM</li>
+                  <li>1.2 TB/s带宽</li>
+                  <li>高速互联</li>
+                </ul>
+              </div>
+              <div>
+                <strong>互连技术</strong>
+                <ul class="feature-list" style="list-style: disc; font-size: 0.9rem;">
+                  <li>光互连</li>
+                  <li>高带宽环网</li>
+                  <li>Pod级扩展</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> TPU vs GPU 对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>对比维度</th>
+                <th>TPU</th>
+                <th>GPU</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>设计理念</strong></td>
+                <td>专用ASIC，针对ML优化</td>
+                <td>通用并行处理器</td>
+              </tr>
+              <tr>
+                <td><strong>计算核心</strong></td>
+                <td>脉动阵列</td>
+                <td>CUDA Core + Tensor Core</td>
+              </tr>
+              <tr>
+                <td><strong>数值精度</strong></td>
+                <td>bfloat16/int8为主</td>
+                <td>FP32/FP16/BF16/FP8</td>
+              </tr>
+              <tr>
+                <td><strong>编程模型</strong></td>
+                <td>XLA编译器</td>
+                <td>CUDA编程</td>
+              </tr>
+              <tr>
+                <td><strong>框架支持</strong></td>
+                <td>TensorFlow原生，PyTorch通过XLA</td>
+                <td>所有主流框架</td>
+              </tr>
+              <tr>
+                <td><strong>部署方式</strong></td>
+                <td>主要在Google Cloud</td>
+                <td>公有云、私有化、边缘</td>
+              </tr>
+              <tr>
+                <td><strong>适用场景</strong></td>
+                <td>大规模训练、推理</td>
+                <td>通用ML任务</td>
+              </tr>
+              <tr>
+                <td><strong>成本</strong></td>
+                <td>按需付费，适合短时任务</td>
+                <td>采购成本高，适合长期使用</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> TPU应用场景</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">训练场景</h3>
+              <ul class="feature-list" style="list-style: disc;">
+                <li>超大规模语言模型训练</li>
+                <li>推荐系统训练</li>
+                <li>计算机视觉大模型</li>
+                <li>强化学习训练</li>
+              </ul>
+              <div class="code-block" style="font-size: 0.85rem; margin-top: 1rem;">
+TPU Pod优势：
+• 4096芯片协同训练
+• 高带宽光互连
+• 软件栈自动优化
+• 弹性伸缩
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">推理场景</h3>
+              <ul class="feature-list" style="list-style: disc;">
+                <li>在线搜索推理</li>
+                <li>翻译服务</li>
+                <li>图像识别API</li>
+                <li>语音合成</li>
+              </ul>
+              <div class="code-block" style="font-size: 0.85rem; margin-top: 1rem;">
+TPU推理优势：
+• 高吞吐量
+• 低延迟
+• 成本效率高
+• 自动扩展
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> 使用TPU的最佳实践</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">使用建议</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>使用<bfloat16>精度</bfloat16>以获得最佳性能</li>
+                  <li>利用XLA编译器自动优化计算图</li>
+                  <li>批量输入以提高利用率</li>
+                  <li>使用tpu_strategy进行分布式训练</li>
+                  <li>针对TPU优化数据流水线</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block">
+PyTorch使用TPU示例：
+
+import torch
+import torch_xla
+import torch_xla.core.xla_model as xm
+
+# 获取TPU设备
+device = xm.xla_device()
+
+# 将模型和数据移到TPU
+model = model.to(device)
+data = data.to(device)
+
+# 使用XLA优化
+with xm.optimize_step():
+    output = model(data)
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• TPU是谷歌为神经网络设计的专用ASIC芯片</li>
+                <li>• 脉动阵列是TPU的核心技术，大幅提升矩阵运算效率</li>
+                <li>• TPU经历了从推理专用到全面支持训练的演进</li>
+                <li>• TPU在大规模训练和推理场景有独特优势</li>
+                <li>• 适合在Google Cloud环境中使用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="2-1-GPU架构原理（NVIDIAAMD）.html">← 上一节</a>
+          <a href="2-3-NPU与国产AI芯片概览.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

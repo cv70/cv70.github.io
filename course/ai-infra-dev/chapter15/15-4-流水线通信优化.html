@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.4 流水线通信优化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.4 流水线通信优化</h1>
+          <p class="subtitle">流水线并行中的通信优化策略</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解流水线通信的特点</li>
+            <li>掌握流水线通信优化方法</li>
+            <li>学习通信调度策略</li>
+            <li>了解流水线并行框架</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="流水线架构" class="card-image">
+          <h3 class="card-title">流水线通信概述</h3>
+          <p class="card-text">
+            流水线并行将模型分配到多个GPU，通过micro-batch的流水线执行
+            提升GPU利用率。流水线中的通信优化对于减少气泡（bubble）时间、
+            提升整体吞吐至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 流水线通信特点</h2>
+
+          <h3>通信模式</h3>
+
+          <div class="code-block"""
+流水线并行通信模式:
+
+1. 前向通信 (Forward Comm)
+   - 激活值传递到下一阶段
+   - 类型: Send/Recv
+   - 特点: 每个micro-batch一次
+
+2. 反向通信 (Backward Comm)
+   - 梯度传递到前一阶段
+   - 类型: Send/Recv
+   - 特点: 每个micro-batch一次
+
+3. 梯度同步 (Gradient Sync)
+   - 在每个阶段内部同步梯度
+   - 类型: All-Reduce
+   - 特点: 每个micro-batch一次
+
+4. 参数更新 (Parameter Update)
+   - 更新模型参数
+   - 特点: 每个micro-batch一次
+
+通信密度:
+- 高: 每个micro-batch都有通信
+- 频繁: 多种类型通信
+- 耦合: 计算与通信紧密耦合
+          </div>
+
+          <h3>气泡时间</h3>
+
+          <div class="code-block"""
+气泡时间分析:
+
+流水线气泡:
+- 第一个micro-batch进入流水线前的空闲时间
+- 最后一个micro-batch离开流水线后的空闲时间
+
+气泡大小 = (流水线深度 - 1) × micro-batch时间
+
+影响:
+- 降低GPU利用率
+- 增加总训练时间
+- 浪费计算资源
+
+计算示例:
+- 流水线深度: 4
+- micro-batch时间: 100ms
+- 气泡时间: 3 × 100ms = 300ms
+
+总时间:
+- 无气泡: 4 × 100ms = 400ms
+- 有气泡: 4 × 100ms + 300ms = 700ms
+
+优化目标:
+- 减少气泡时间
+- 增加GPU利用率
+- 提升训练吞吐
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 通信优化策略</h2>
+
+          <h3>1. 微批次调度</h3>
+
+          <div class="code-block"""
+微批次调度优化:
+
+1. 合理的micro-batch size
+   - 太小: 通信比例高
+   - 太大: 显存不足
+   - 平衡: 通信/计算 ≈ 1
+
+2. 调度策略
+   - 1F1B: 一个前向一个反向
+   - GF1B: 梯度累积一个前向一个反向
+   - Interleaved: 交错执行
+
+3. 动态调度
+   - 根据网络状况调整
+   - 根据显存使用调整
+   - 根据性能指标调整
+
+实现示例:
+def schedule_microbatches(global_batch_size, num_stages):
+    """
+    计算最优micro-batch size
+    """
+    # 考虑显存限制
+    max_microbatch = get_max_microbatch()
+
+    # 考虑通信效率
+    optimal_microbatch = int(global_batch_size / num_stages)
+
+    # 选择合适的大小
+    microbatch_size = min(max_microbatch, optimal_microbatch)
+
+    return microbatch_size
+          </div>
+
+          <h3>2. 通信重叠</h3>
+
+          <div class="code-block"""
+通信重叠优化:
+
+1. 前向通信重叠
+   # 在前向计算完成前启动通信
+   with overlap_forward_comm():
+       output = stage_forward(input)
+       async_send(output, next_stage)
+
+2. 反向通信重叠
+   # 在反向计算完成前启动通信
+   with overlap_backward_comm():
+       grad = stage_backward(output)
+       async_send(grad, prev_stage)
+
+3. 梯度同步重叠
+   # 在梯度同步时进行其他计算
+   with overlap_allreduce():
+       async_allreduce(grad)
+       # 同时进行其他工作
+       compute_metrics()
+
+4. 流水线重叠
+   # 使用多个流重叠通信和计算
+   comm_stream = cuda.Stream()
+   compute_stream = cuda.Stream()
+   # 在不同流中执行通信和计算
+          </div>
+
+          <h3>3. 通信聚合</h3>
+
+          <div class="code-block"""
+通信聚合优化:
+
+1. 激活值聚合
+   # 合并多个micro-batch的激活值
+   def aggregate_activations(activations):
+       batched = torch.cat(activations, dim=0)
+       return batched
+
+2. 梯度聚合
+   # 合并多个micro-batch的梯度
+   def aggregate_gradients(gradients):
+       total = sum(gradients)
+       return total / len(gradients)
+
+3. 批量通信
+   # 一次发送多个micro-batch数据
+   def batch_send(data, num_microbatches):
+       chunked = data.chunk(num_microbatches)
+       for chunk in chunked:
+           async_send(chunk)
+
+优势:
+- 减少通信次数
+- 更好的带宽利用
+- 降低通信延迟
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📡</span> 通信调度算法</h2>
+
+          <h3>Gpipe调度</h3>
+
+          <div class="code-block"""
+GPipe调度:
+
+特点:
+- 确定性的调度
+- 每个micro-batch依次流水
+- 简单但可能有气泡
+
+调度流程:
+for i in range(num_microbatches):
+    for stage in range(num_stages):
+        # 执行前向
+        forward_output = stages[stage].forward(input)
+        # 传递到下一阶段
+        send_to_next_stage(forward_output, stage)
+
+for i in range(num_microbatches):
+    for stage in reversed(range(num_stages)):
+        # 执行反向
+        grad = stages[stage].backward(loss)
+        # 传递到前一阶段
+        send_to_prev_stage(grad, stage)
+
+问题:
+- 最后一个stage先完成
+- 造成气泡时间
+          </div>
+
+          <h3>1F1B调度</h3>
+
+          <div class="code-block"""
+1F1B (One Forward One Backward) 调度:
+
+特点:
+- 每个micro-batch独立完成前向和反向
+- 梯度在micro-batch后同步
+- 减少内存占用
+
+调度流程:
+for i in range(num_microbatches):
+    # 前向传播
+    forward_output = pipeline_forward(input[i])
+
+    # 反向传播
+    grad = pipeline_backward(forward_output, loss[i])
+
+    # 梯度同步
+    allreduce_gradients(grad)
+
+优势:
+- 内存效率高
+- 梯度同步及时
+- 适合梯度累积
+
+问题:
+- 通信次数多
+- 可能有气泡
+          </div>
+
+          <h3>Interleaved调度</h3>
+
+          <div class="code-block"""
+Interleaved交错调度:
+
+特点:
+- 不同micro-batch交错执行
+- 减少气泡时间
+- 提高GPU利用率
+
+调度流程:
+# 交错执行不同micro-batch
+for stage in range(num_stages):
+    # 处理多个micro-batch
+    for i in range(num_microbatches_per_stage):
+        microbatch_idx = stage * num_microbatches_per_stage + i
+        # 前向
+        forward_output = stages[stage].forward(input[microbatch_idx])
+        # 传递
+        send_to_next_stage(forward_output, stage)
+
+        # 反向
+        grad = stages[stage].backward(loss[microbatch_idx])
+        # 传递
+        send_to_prev_stage(grad, stage)
+
+优势:
+- 更好的资源利用
+- 减少气泡时间
+- 更高的吞吐
+
+问题:
+- 复杂度增加
+- 调试困难
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 框架实现</h2>
+
+          <h3>DeepSpeed</h3>
+
+          <div class="code-block"""
+DeepSpeed流水线配置:
+
+ds_config = {
+    "train_batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 1e-4
+        }
+    },
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "warmup_min_lr": 0,
+            "warmup_max_lr": 1e-4,
+            "total_num_steps": 1000000
+        }
+    },
+    "fp16": {
+        "enabled": True
+    },
+    "activation_checkpointing": {
+        "partition_activations": True
+    },
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": True,        # 通信重叠
+        "contiguous_gradients": True
+    },
+    "pipeline": {
+        "enabled": True,
+        "parallel_size": 4,          # 流水线stage数
+        "data_parallel_size": 2,      # 数据并行大小
+        "micro_batch_size_per_gpu": 1,  # micro-batch大小
+        "schedule": "1f1b"         # 调度策略
+    }
+}
+
+# 启动
+deepspeed train.py \
+    --deepspeed ds_config.json \
+    --pipeline parallel_size 4
+          </div>
+
+          <h3>Megatron-LM</h3>
+
+          <div class="code-block"""
+Megatron-LM流水线配置:
+
+#!/bin/bash
+# 启动脚本
+
+MODEL_SIZE="7B"
+TP_SIZE=1          # Tensor并行大小
+PP_SIZE=4          # Pipeline并行大小
+GPUS_PER_NODE=8
+NUM_GPUS=32
+MICRO_BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=32
+
+DISTRIBUTED_ARGS="
+    --nproc_per_node $GPUS_PER_NODE \
+    --nnodes $((NUM_GPUS / GPUS_PER_NODE)) \
+    --node_rank $RANK \
+    --master_addr $MASTER_ADDR \
+    --master_port $MASTER_PORT
+"
+
+MODEL_ARGS="
+    --tensor-model-parallel-size $TP_SIZE \
+    --pipeline-model-parallel-size $PP_SIZE \
+    --micro-batch-size $MICRO_BATCH_SIZE \
+    --global-batch-size $GLOBAL_BATCH_SIZE \
+    --num-layers 32 \
+    --hidden-size 4096 \
+    --num-attention-heads 32 \
+    --seq-length 2048 \
+    --max-position-embeddings 2048 \
+    --log-interval 10
+"
+
+TRAINING_ARGS="
+    --fp16 \
+    --no-load-optim \
+    --no-load-rng \
+    --lr 1.0e-4 \
+    --min-lr 1.0e-5 \
+    --lr-decay-style cosine \
+    --weight-decay 0.1 \
+    --clip-grad 1.0 \
+    --lr-warmup-fraction 0.01 \
+    --train-iters 500000 \
+    --save-interval 10000 \
+    --eval-interval 1000 \
+    --eval-iters 10 \
+    --split 949,50,1 \
+    --log-interval 10
+"
+
+torchrun $DISTRIBUTED_ARGS \
+    pretrain_gpt.py \
+    $MODEL_ARGS \
+    $TRAINING_ARGS
+          </div>
+
+          <h3>vLLM</h3>
+
+          <div class="code-block"""
+vLLM流水线配置:
+
+from vllm import LLM, SamplingParams
+
+# 初始化LLM
+llm = LLM(
+    model="meta-llama/Llama-2-7b-hf",
+    tensor_parallel_size=4,      # Tensor并行
+    pipeline_parallel_size=2,    # Pipeline并行
+    enable_prefix_caching=True,
+    max_model_len=4096
+)
+
+# 设置采样参数
+sampling_params = SamplingParams(
+    temperature=0.8,
+    top_p=0.95,
+    max_tokens=256
+)
+
+# 批量推理
+prompts = [
+    "Hello, my name is",
+    "The future of AI is",
+    "In 2024,"
+]
+
+outputs = llm.generate(
+    prompts,
+    sampling_params=sampling_params
+)
+
+# 打印结果
+for output in outputs:
+    print(output.outputs[0].text)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化</h2>
+
+          <h3>优化指标</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>指标</th>
+                <th>目标</th>
+                <th>测量方法</th>
+                <th>优化方向</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPU利用率</td>
+                <td>> 85%</td>
+                <td>nvidia-smi</td>
+                <td>减少气泡</td>
+              </tr>
+              <tr>
+                <td>内存带宽</td>
+                <td>> 70%</td>
+                <td>nsight</td>
+                <td>优化数据布局</td>
+              </tr>
+              <tr>
+                <td>通信带宽</td>
+                <td>> 60%</td>
+                <td>NCCL日志</td>
+                <td>优化通信模式</td>
+              </tr>
+              <tr>
+                <td>吞吐量</td>
+                <td>最大化</td>
+                <td>tokens/s</td>
+                <td>整体优化</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>调优技巧</h3>
+
+          <div class="code-block"""
+流水线调优技巧:
+
+1. 微调micro-batch size
+   # 尝试不同大小
+   for microbatch in [1, 2, 4, 8]:
+       # 测试性能
+       throughput = test_microbatch(microbatch)
+       # 选择最优大小
+       if throughput > best_throughput:
+           best_microbatch = microbatch
+
+2. 调整调度策略
+   # 对比不同调度
+   for schedule in ["1f1b", "interleaved"]:
+       throughput = test_schedule(schedule)
+       # 选择最优调度
+       if throughput > best_throughput:
+           best_schedule = schedule
+
+3. 优化重叠
+   # 启用各种重叠
+   enable_all_overlap(
+       forward_comm_overlap=True,
+       backward_comm_overlap=True,
+       allreduce_overlap=True
+   )
+
+4. 监控和调整
+   # 持续监控性能
+   monitor_pipeline_performance()
+   # 根据监控结果调整
+   adjust_pipeline_config()
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">优化建议</div>
+            <p>1）从简单的1F1B调度开始；2）合理设置micro-batch size；3）充分利用通信重叠；4）监控GPU利用率减少气泡；5）使用成熟框架的优化实现。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="流水线并行">
+          <div class="caption">图：流水线通信优化提升训练效率</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 流水线通信优化减少气泡时间</li>
+                <li>• 合理的micro-batch调度是关键</li>
+                <li>• 通信重叠和聚合提升效率</li>
+                <li>• 框架提供了优化的实现</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="15-3-梯度压缩技术.html">← 上一节</a>
+          <a href="15-5-混合精度通信.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

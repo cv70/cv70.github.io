@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>42.2 GPU利用率优化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>42.2 GPU利用率优化</h1>
+          <p class="subtitle">最大化GPU资源的使用效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU利用率低下的原因</li>
+            <li>掌握GPU利用率监控方法</li>
+            <li>学习各种优化技术</li>
+            <li>建立持续优化机制</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU利用率概念图" class="card-image">
+          <h3 class="card-title">GPU利用率概述</h3>
+          <p class="card-text">
+            <strong>GPU利用率</strong>是指GPU实际被使用的时间比例，是衡量资源使用效率的关键指标。
+            低GPU利用率意味着昂贵的计算资源被浪费，直接导致成本增加。
+            优化GPU利用率是降低AI基础设施成本最有效的方法之一。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPU利用率指标</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">⚡</div>
+              <h3 class="card-title">计算利用率</h3>
+              <p class="card-text">SM单元活跃时间比例</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">💾</div>
+              <h3 class="card-title">显存利用率</h3>
+              <p class="card-text">显存使用比例</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔄</div>
+              <h3 class="card-title">时间利用率</h3>
+              <p class="card-text">GPU被任务占用的时间</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> GPU利用率低下的原因</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>原因</th>
+                <th>影响</th>
+                <th>解决方案</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>I/O瓶颈</td>
+                <td>数据加载慢，GPU等待</td>
+                <td>优化数据流水线、使用缓存</td>
+              </tr>
+              <tr>
+                <td>通信瓶颈</td>
+                <td>分布式训练通信延迟</td>
+                <td>优化通信、梯度压缩</td>
+              </tr>
+              <tr>
+                <td>小batch size</td>
+                <td>GPU资源未充分利用</td>
+                <td>增大batch、梯度累积</td>
+              </tr>
+              <tr>
+                <td>资源碎片化</td>
+                <td>GPU空闲但无法分配</td>
+                <td>资源池化、智能调度</td>
+              </tr>
+              <tr>
+                <td>任务等待</td>
+                <td>调度延迟导致空闲</td>
+                <td>优化调度算法</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> 数据加载优化</h2>
+          <div class="code-block">
+<pre class="language-python"># PyTorch高效数据加载优化
+from torch.utils.data import DataLoader
+
+# 优化配置
+dataloader = DataLoader(
+    dataset,
+    batch_size=128,           # 增大batch size
+    shuffle=True,
+    num_workers=8,            # 多进程加载数据
+    pin_memory=True,          # 使用页锁定内存
+    persistent_workers=True,  # 保持worker进程
+    prefetch_factor=2,        # 预取数据
+)
+
+# 自定义数据集优化
+class OptimizedDataset:
+    def __init__(self, data):
+        self.data = data
+        self.cache = {}  # 实现数据缓存
+
+    def __getitem__(self, idx):
+        if idx not in self.cache:
+            # 预处理并缓存
+            self.cache[idx] = self.preprocess(self.data[idx])
+        return self.cache[idx]</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 计算与通信重叠</h2>
+          <div class="card">
+            <h3 class="card-title">异步通信优化</h3>
+            <div class="code-block">
+<pre class="language-python"># PyTorch分布式训练中的异步通信
+import torch.distributed as dist
+
+# 前向传播
+outputs = model(inputs)
+loss = criterion(outputs, labels)
+
+# 启动异步梯度通信
+dist.all_reduce_async(loss.grad)
+
+# 反向传播在通信进行时执行
+loss.backward()
+
+# 等待通信完成
+dist.barrier()
+
+# 使用gradient_hook实现更精细的控制
+handle = dist.all_reduce_async(tensor)
+
+# 在等待通信时执行其他计算
+other_work()
+
+# 等待通信完成
+handle.wait()</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 批处理优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">动态批处理</h3>
+              <ul class="feature-list">
+                <li>动态调整batch大小</li>
+                <li>适应不同GPU显存</li>
+                <li>平衡吞吐和延迟</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">梯度累积</h3>
+              <ul class="feature-list">
+                <li>模拟大batch训练</li>
+                <li>突破显存限制</li>
+                <li>保持训练效果</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3 style="margin-top: 2rem;">梯度累积实现</h3>
+          <div class="code-block">
+<pre class="language-python"># 梯度累积实现
+accumulation_steps = 4
+optimizer.zero_grad()
+
+for i, (inputs, labels) in enumerate(dataloader):
+    outputs = model(inputs)
+    loss = criterion(outputs, labels)
+
+    # 缩放损失以适应累积
+    loss = loss / accumulation_steps
+
+    loss.backward()
+
+    # 每accumulation_steps步更新一次
+    if (i + 1) % accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> 模型并行优化</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>并行策略</th>
+                <th>适用场景</th>
+                <th>利用率影响</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>数据并行</td>
+                <td>小模型、大batch</td>
+                <td>高，通信开销小</td>
+              </tr>
+              <tr>
+                <td>模型并行</td>
+                <td>大模型、单卡放不下</td>
+                <td>中，通信开销大</td>
+              </tr>
+              <tr>
+                <td>流水线并行</td>
+                <td>超长模型</td>
+                <td>中，存在气泡</td>
+              </tr>
+              <tr>
+                <td>混合并行</td>
+                <td>大规模训练</td>
+                <td>高，平衡各维度</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">选择并行策略的原则</div>
+            <p>对于大多数场景，数据并行是首选。当模型太大无法放入单卡显存时，
+            考虑模型并行或流水线并行。大规模训练通常采用混合并行策略。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 混合精度训练</h2>
+          <div class="code-block">
+<pre class="language-python"># PyTorch AMP自动混合精度训练
+from torch.cuda.amp import autocast, GradScaler
+
+scaler = GradScaler()
+
+for inputs, labels in dataloader:
+    optimizer.zero_grad()
+
+    # 自动混合精度上下文
+    with autocast():
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+
+    # 梯度缩放防止下溢
+    scaler.scale(loss).backward()
+
+    # 反向缩放并更新
+    scaler.step(optimizer)
+    scaler.update()</pre>
+          </div>
+          <p style="margin-top: 1rem;">混合精度训练可以提升2-3倍速度，同时降低显存使用。</p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPU利用率监控</h2>
+          <div class="code-block">
+<pre class="language-bash"># NVIDIA GPU监控命令
+
+# 实时监控
+nvidia-smi
+
+# 持续监控
+watch -n 1 nvidia-smi
+
+# DCGM监控（更详细）
+dcgmi dmon -e 155,154,153,150,151,152,1001,1002
+
+# Python监控脚本
+import nvidia_smi
+
+def monitor_gpu():
+    nvidia_smi.nvmlInit()
+    device_count = nvidia_smi.nvmlDeviceGetCount()
+
+    for i in range(device_count):
+        handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
+        util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
+        mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+
+        print(f"GPU {i}: "
+              f"Compute: {util.gpu}%, "
+              f"Memory: {util.memory}%, "
+              f"Used: {mem.used/1024**3:.2f}GB")</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 调度优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">任务调度</h3>
+              <ul class="feature-list">
+                <li>智能排队机制</li>
+                <li>GPU affinity调度</li>
+                <li>任务回填策略</li>
+                <li>预留机制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">资源池化</h3>
+              <ul class="feature-list">
+                <li>GPU池化技术</li>
+                <li>MPS多进程服务</li>
+                <li>虚拟GPU</li>
+                <li>弹性资源分配</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">优化误区</div>
+            <ul>
+              <li><strong>过度优化</strong>: 追求100%利用率可能得不偿失</li>
+              <li><strong>忽视稳定性</strong>: 极限优化可能影响训练稳定性</li>
+              <li><strong>一刀切</strong>: 不同任务需要不同的优化策略</li>
+              <li><strong>缺乏监控</strong>: 没有数据支持的优化是盲目的</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 利用率优化流程</h2>
+          <div class="code-block">
+<pre>1. 基线测量
+   ├─ 监控当前利用率
+   ├─ 识别瓶颈
+   └─ 设定目标
+
+2. 瓶颈分析
+   ├─ I/O分析
+   ├─ 通信分析
+   ├─ 计算分析
+   └─ 调度分析
+
+3. 优化实施
+   ├─ 数据优化
+   ├─ 通信优化
+   ├─ 计算优化
+   └─ 调度优化
+
+4. 效果验证
+   ├─ 对比优化前后
+   ├─ 验证稳定性
+   └─ 成本效益分析
+
+5. 持续改进
+   ├─ 定期监控
+   ├─ 新技术评估
+   └─ 最佳实践积累</pre>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU优化">
+          <div class="caption">图：多层次的GPU利用率优化策略</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU利用率优化是降低成本最有效的方法</li>
+                <li>• 识别瓶颈是优化的第一步</li>
+                <li>• 数据加载和通信是常见瓶颈</li>
+                <li>• 持续监控和改进是保持高利用率的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="42-1-AI成本构成分析.html">← 上一节</a>
+          <a href="42-3-资源配额管理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

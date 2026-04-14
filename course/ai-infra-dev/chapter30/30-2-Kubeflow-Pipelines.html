@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.2 Kubeflow Pipelines - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>30.2 Kubeflow Pipelines</h1>
+          <p class="subtitle">Kubernetes上的ML流水线</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Kubeflow Pipelines的核心概念</li>
+            <li>掌握KFP的安装与配置</li>
+            <li>学会定义和运行流水线</li>
+            <li>了解KFP的高级特性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Kubeflow" class="card-image">
+          <h3 class="card-title">Kubeflow Pipelines简介</h3>
+          <p class="card-text">
+            <strong>Kubeflow Pipelines（KFP）</strong>是Kubernetes原生的机器学习流水线平台。
+            它提供端到端的ML流水线编排、实验追踪、模型部署等功能，是云原生AI的标准选择。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> KFP架构</h2>
+
+          <div class="image-container">
+            <img src="https://www.kubeflow.org/docs/images/pipelines-architecture.png" alt="KFP架构">
+            <div class="caption">图：Kubeflow Pipelines架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">前端UI</h3>
+              <p class="card-text">用户交互界面。</p>
+              <ul class="feature-list">
+                <li>流水线上传</li>
+                <li>运行监控</li>
+                <li>结果查看</li>
+                <li>实验对比</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">API服务</h3>
+              <p class="card-text">RESTful API服务。</p>
+              <ul class="feature-list">
+                <li>流水线管理</li>
+                <li>运行调度</li>
+                <li>元数据存储</li>
+                <li>资源管理</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">执行器</h3>
+              <p class="card-text">运行流水线步骤。</p>
+              <ul class="feature-list">
+                <li>Pod调度</li>
+                <li>资源分配</li>
+                <li>状态追踪</li>
+                <li>结果收集</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装Kubeflow Pipelines</h2>
+
+          <h3>使用Helm安装</h3>
+          <div class="code-block">
+# 添加Kubeflow仓库
+helm repo add kubeflow https://kubeflow.github.io/pipelines/
+helm repo update
+
+# 创建命名空间
+kubectl create namespace kubeflow
+
+# 安装KFP
+helm install kubeflow-pipelines kubeflow/pipelines \
+  --namespace kubeflow \
+  --set pipeline.apiService.serviceType=LoadBalancer
+
+# 查看安装状态
+kubectl get pods -n kubeflow
+kubectl get svc -n kubeflow
+
+# 获取访问URL
+kubectl get svc ml-pipeline-ui -n kubeflow
+          </code>
+
+          <h3>使用kustomize安装</h3>
+          <div class="code-block">
+# 克隆Kubeflow仓库
+git clone https://github.com/kubeflow/pipelines.git
+cd pipelines
+
+# 部署到Kubernetes
+kubectl apply -k manifests/kustomize/standalone
+
+# 等待Pod就绪
+kubectl wait --for=condition=ready pod -l app=ml-pipeline -n kubeflow
+
+# 端口转发
+kubectl port-forward \
+  svc/ml-pipeline-ui \
+  8080:80 \
+  -n kubeflow
+          </code>
+
+          <h3>验证安装</h3>
+          <div class="code-block">
+# 访问KFP UI
+# http://localhost:8080
+
+# 安装Python SDK
+pip install kfp
+
+# 验证连接
+kfp list_experiments(host="http://localhost:8080")
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">安装选项</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• Standalone：单节点部署，适合开发</li>
+                <li>• Distributed：分布式部署，适合生产</li>
+                <li>• Cloud：云厂商托管版本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 定义流水线</h2>
+
+          <h3>基础流水线示例</h3>
+          <div class="code-block">
+from kfp import dsl
+from kfp.dsl import component, pipeline, OutputPath
+
+# 定义组件
+@component(base_image="python:3.9")
+def load_data(
+    output_path: OutputPath()
+):
+    import pandas as pd
+    df = pd.read_csv("data.csv")
+    df.to_csv(output_path, index=False)
+
+@component(base_image="python:3.9")
+def train_model(
+    data_path: str,
+    model_path: OutputPath()
+):
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression
+    import joblib
+
+    df = pd.read_csv(data_path)
+    X = df.drop("target", axis=1)
+    y = df["target"]
+
+    model = LogisticRegression()
+    model.fit(X, y)
+
+    joblib.dump(model, model_path)
+
+# 定义流水线
+@pipeline(
+    name="training-pipeline",
+    description="Training pipeline"
+)
+def training_pipeline():
+    load_task = load_data()
+    train_task = train_model(
+        data_path=load_task.output
+    )
+          </code>
+
+          <h3>上传并运行流水线</h3>
+          <div class="code-block">
+from kfp import Client
+
+# 连接到KFP
+client = Client(host="http://localhost:8080")
+
+# 编译流水线
+compiler.Compiler().compile(
+    pipeline_func=training_pipeline,
+    package_path="pipeline.yaml"
+)
+
+# 上传流水线
+pipeline = client.upload_pipeline(
+    pipeline_package_path="pipeline.yaml",
+    pipeline_name="training-pipeline",
+    description="Training pipeline"
+)
+
+# 创建实验
+experiment = client.create_experiment(
+    name="training-experiment"
+)
+
+# 运行流水线
+run = client.run_pipeline(
+    experiment_id=experiment.experiment_id,
+    job_name="training-run-1",
+    pipeline_id=pipeline.id
+)
+          </code>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">KFP组件类型</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Lightweight</strong>：Python函数，简单快速</li>
+                <li>• <strong>Containerized</strong>：自定义容器，功能强大</li>
+                <li>• <strong>Reusable</strong>：可复用组件，共享代码</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 高级流水线特性</h2>
+
+          <h3>条件执行</h3>
+          <div class="code-block">
+from kfp.dsl import Condition, SchedulingStrategy
+
+@component
+def evaluate_model(model_path: str, metric_path: OutputPath()):
+    # 评估模型并输出指标
+    pass
+
+@component
+def deploy_model(model_path: str):
+    # 部署模型
+    pass
+
+@pipeline
+def conditional_pipeline():
+    train_task = train_model()
+    eval_task = evaluate_model(
+        model_path=train_task.output
+    )
+
+    # 条件部署
+    with Condition(eval_task.outputs["accuracy"] > 0.9):
+        deploy_task = deploy_model(
+            model_path=train_task.output
+        )
+          </code>
+
+          <h3>循环执行</h3>
+          <div class="code-block">
+from kfp.dsl import ParallelFor
+
+@component
+def train_model_fold(
+    fold: int,
+    data_path: str,
+    model_path: OutputPath()
+):
+    # 训练单个fold的模型
+    pass
+
+@component
+def aggregate_models(
+    model_paths: list,
+    final_model_path: OutputPath()
+):
+    # 聚合多个模型
+    pass
+
+@pipeline
+def cv_pipeline():
+    # 交叉验证
+    train_tasks = ParallelFor(
+        items=[0, 1, 2, 3, 4]
+    )() >> train_model_fold
+
+    # 聚合模型
+    aggregate_task = aggregate_models(
+        model_paths=[task.output for task in train_tasks]
+    )
+          </code>
+
+          <h3>参数化流水线</h3>
+          <div class="code-block">
+from kfp.dsl import PipelineParam
+
+@pipeline(
+    name="parametrized-pipeline"
+)
+def parametrized_pipeline(
+    learning_rate: float = 0.001,
+    batch_size: int = 32,
+    epochs: int = 100
+):
+    # 使用参数
+    train_task = train_model(
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        epochs=epochs
+    )
+
+# 使用不同参数运行
+client.run_pipeline(
+    experiment_id=experiment.experiment_id,
+    job_name="run-lr-0001",
+    pipeline_id=pipeline.id,
+    params={
+        "learning_rate": 0.001
+    }
+)
+
+client.run_pipeline(
+    experiment_id=experiment.experiment_id,
+    job_name="run-lr-0005",
+    pipeline_id=pipeline.id,
+    params={
+        "learning_rate": 0.0005
+    }
+)
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 数据传递</h2>
+
+          <h3>输出和输入</h3>
+          <div class="code-block">
+from kfp.dsl import InputPath, OutputPath
+
+@component
+def step1(output_path: OutputPath(str)):
+    # 输出文件
+    with open(output_path, 'w') as f:
+        f.write("Hello, KFP!")
+
+@component
+def step2(input_path: InputPath()):
+    # 输入文件
+    with open(input_path, 'r') as f:
+        content = f.read()
+        print(content)
+
+@pipeline
+def data_pipeline():
+    task1 = step1()
+    task2 = step2(input_path=task1.output)
+          </code>
+
+          <h3>参数传递</h3>
+          <div class="code-block">
+@component
+def step1() -> str:
+    return "result_value"
+
+@component
+def step2(input_value: str):
+    print(f"Received: {input_value}")
+
+@pipeline
+def parameter_pipeline():
+    task1 = step1()
+    task2 = step2(input_value=task1.output)
+          </code>
+
+          <h3>Artifact管理</h3>
+          <div class="code-block">
+from kfp.dsl import Artifact, Model
+
+@component
+def train_model(
+    output_model: Output[Model],
+    output_metrics: Output[Artifact]
+):
+    # 训练模型
+    model = train()
+
+    # 保存模型
+    with open(output_model.path, 'wb') as f:
+        f.write(model)
+
+    # 保存指标
+    with open(output_metrics.path, 'w') as f:
+        f.write(json.dumps({"accuracy": 0.95}))
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与调试</h2>
+
+          <h3>查看运行状态</h3>
+          <div class="code-block">
+# 获取运行详情
+run = client.get_run(run_id)
+
+# 查看状态
+print(f"Status: {run.status}")
+print(f"Started at: {run.created_at}")
+print(f"Finished at: {run.finished_at}")
+
+# 查看步骤状态
+for step in run.workflow_manifest["status"]["nodes"].values():
+    print(f"Step: {step['name']}")
+    print(f"  Status: {step['phase']}")
+    print(f"  Started: {step['startedAt']}")
+    print(f"  Finished: {step['finishedAt']}")
+          </code>
+
+          <h3>查看日志</h3>
+          <div class="code-block">
+# 获取步骤日志
+logs = client.get_run_logs(run_id)
+
+# 查看特定步骤的日志
+step_logs = client.get_task_logs(
+    run_id=run_id,
+    task_id="train-model-123"
+)
+
+print(step_logs)
+          </code>
+
+          <h3>查看输出</h3>
+          <div class="code-block">
+# 获取输出Artifact
+outputs = client.get_run_outputs(run_id)
+
+for output in outputs:
+    print(f"Name: {output.name}")
+    print(f"Type: {output.type}")
+    print(f"Path: {output.path}")
+
+# 下载输出文件
+client.download_artifact(
+    run_id=run_id,
+    node_id="train-model-123",
+    output_name="output-model",
+    output_path="./model.pkl"
+)
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">流水线设计</h4>
+              <ul class="feature-list">
+                <li>模块化组件设计</li>
+                <li>清晰的输入输出</li>
+                <li>合理的资源请求</li>
+                <li>容错和重试机制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">资源管理</h4>
+              <ul class="feature-list">
+                <li>设置资源限制</li>
+                <li>使用节点亲和性</li>
+                <li>配置GPU请求</li>
+                <li>优化资源使用</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">数据管理</h4>
+              <ul class="feature-list">
+                <li>使用共享存储</li>
+                <li>数据缓存策略</li>
+                <li>增量处理</li>
+                <li>清理临时数据</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">监控告警</h4>
+              <ul class="feature-list">
+                <li>跟踪关键指标</li>
+                <li>设置失败告警</li>
+                <li>性能监控</li>
+                <li>成本跟踪</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">KFP优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• Kubernetes原生，深度集成</li>
+                <li>• 可视化流水线设计</li>
+                <li>• 强大的实验追踪</li>
+                <li>• 丰富的组件生态</li>
+                <li>• 支持多种执行引擎</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• KFP是Kubernetes原生的ML流水线平台</li>
+                <li>• 支持复杂的流水线编排</li>
+                <li>• 提供可视化的管理界面</li>
+                <li>• 与Kubernetes生态深度集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="30-1-流水线概述.html">← 上一节</a>
+          <a href="30-3-Argo-Workflows.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

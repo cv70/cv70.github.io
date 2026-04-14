@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.1 Megatron-LM概述 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>19.1 Megatron-LM概述</h1>
+          <p class="subtitle">NVIDIA的大规模分布式训练框架</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Megatron-LM的核心价值</li>
+            <li>掌握Megatron-LM的主要特性</li>
+            <li>了解Megatron-LM的架构设计</li>
+            <li>认识Megatron-LM的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Megatron-LM框架" class="card-image">
+          <h3 class="card-title">什么是Megatron-LM？</h3>
+          <p class="card-text">
+            <strong>Megatron-LM</strong>是NVIDIA开发的大规模分布式训练框架，
+            专注于训练大规模Transformer模型。它通过高效的张量并行、流水线并行和序列并行技术，
+            在保持高训练效率的同时支持超大模型训练。Megatron-LM是训练GPT、BERT等
+            大模型的重要工具，被广泛应用于学术界和工业界。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> Megatron-LM的核心特性</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔢</div>
+              <h3 class="card-title">张量并行</h3>
+              <p class="card-text">高效的层内并行，充分利用NVLink</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
+              <h3 class="card-title">流水线并行</h3>
+              <p class="card-text">1F1B交错调度，减少流水线气泡</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📏</div>
+              <h3 class="card-title">序列并行</h3>
+              <p class="card-text">序列维度的并行，支持超长序列</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">💾</div>
+              <h3 class="card-title">显存优化</h3>
+              <p class="card-text">激活值检查点，减少显存占用</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Megatron-LM的并行策略</h2>
+          <div class="card">
+            <h3 class="card-title">多维并行架构</h3>
+            <div class="code-block">
+Megatron-LM的并行维度：
+
+1. 张量并行（Tensor Parallelism, TP）
+   • 切分矩阵乘法
+   • 层内并行
+   • 使用AllReduce通信
+   • 适合：单机多卡（NVLink）
+
+2. 流水线并行（Pipeline Parallelism, PP）
+   • 切分模型层
+   • 层间并行
+   • 使用点对点通信
+   • 适合：跨多节点
+
+3. 序列并行（Sequence Parallelism, SP）
+   • 切分序列维度
+   • 适合超长序列
+   • 结合注意力机制优化
+   • 适合：长序列任务
+
+4. 数据并行（Data Parallelism, DP）
+   • 切分数据
+   • 使用AllReduce通信
+   • 适合：大规模数据
+
+5. 专家并行（Mixture of Experts, MoE）
+   • 切分专家网络
+   • 稀疏激活
+   • 适合：超大规模模型
+
+组合策略：
+• 单机：TP + DP
+• 多节点：TP + PP + DP
+• 长序列：TP + SP + DP
+• 超大模型：TP + PP + SP + DP
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Megatron-LM架构</h2>
+          <div class="card">
+            <h3 class="card-title">系统架构设计</h3>
+            <div class="code-block">
+Megatron-LM架构层次：
+
+┌─────────────────────────────────────────┐
+│         模型层                           │
+│  • Transformer Layer                   │
+│  • Attention Layer                     │
+│  • MLP Layer                          │
+├─────────────────────────────────────────┤
+│         并行层                           │
+│  • Tensor Parallel                     │
+│  • Pipeline Parallel                   │
+│  • Sequence Parallel                   │
+│  • Mixture of Experts                  │
+├─────────────────────────────────────────┤
+│         通信层                           │
+│  • Collectives (AllReduce, AllGather)   │
+│  • Point-to-Point (Send, Recv)         │
+│  • NCCL Backend                        │
+├─────────────────────────────────────────┤
+│         优化层                           │
+│  • 混合精度 (FP16/BF16)               │
+│  • 激活值检查点                       │
+│  • 梯度裁剪                           │
+│  • 梯度累积                           │
+├─────────────────────────────────────────┤
+│         训练层                           │
+│  • 数据加载器                         │
+│  • 学习率调度器                       │
+│  • Checkpoint管理                      │
+│  • 日志和监控                         │
+└─────────────────────────────────────────┘
+
+核心组件：
+
+1. mpu (Model Parallel Unit)
+   • 管理模型并行维度
+   • 提供并行原语
+   • 处理通信
+
+2. parallel_state
+   • 维护并行状态
+   • 管理进程组
+   • 提供查询接口
+
+3. checkpoint
+   • 分布式checkpoint
+   • 支持sharded保存
+   • 支持断点续训
+
+4. optimizer
+   • 优化的优化器实现
+   • 支持分布式优化
+   • 支持多种优化算法
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Megatron-LM架构">
+          <div class="caption">图：Megatron-LM通过多层并行实现高效大规模训练</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Megatron-LM vs 其他框架</h2>
+          <div class="card">
+            <h3 class="card-title">框架对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>特性</th>
+                  <th>Megatron-LM</th>
+                  <th>DeepSpeed</th>
+                  <th>PyTorch DDP</th>
+                  <th>PyTorch FSDP</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>张量并行</strong></td>
+                  <td>核心特性</td>
+                  <td>不支持</td>
+                  <td>不支持</td>
+                  <td>不支持</td>
+                </tr>
+                <tr>
+                  <td><strong>流水线并行</strong></td>
+                  <td>支持</td>
+                  <td>支持</td>
+                  <td>不支持</td>
+                  <td>支持</td>
+                </tr>
+                <tr>
+                  <td><strong>序列并行</strong></td>
+                  <td>支持</td>
+                  <td>有限支持</td>
+                  <td>不支持</td>
+                  <td>不支持</td>
+                </tr>
+                <tr>
+                  <td><strong>显存优化</strong></td>
+                  <td>强</td>
+                  <td>极强</td>
+                  <td>无</td>
+                  <td>强</td>
+                </tr>
+                <tr>
+                  <td><strong>性能</strong></td>
+                  <td>极佳</td>
+                  <td>优秀</td>
+                  <td>优秀</td>
+                  <td>优秀</td>
+                </tr>
+                <tr>
+                  <td><strong>易用性</th></td>
+                  <td>复杂</td>
+                  <td>中等</td>
+                  <td>简单</td>
+                  <td>中等</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> Megatron-LM快速开始</h2>
+          <div class="card">
+            <h3 class="card-title">基本使用流程</h3>
+            <div class="code-block">
+1. 安装Megatron-LM
+
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+pip install -r requirements.txt
+
+2. 准备数据
+
+# 文本数据预处理
+python tools/preprocess_data.py \
+    --input /path/to/corpus.txt \
+    --output-prefix /path/to/output \
+    --tokenizer-type GPT2BPETokenizer \
+    --vocab-file gpt2-vocab.json \
+            --merge-file gpt2-merges.txt \
+            --workers 8
+
+3. 配置训练参数
+
+# 训练GPT-3 175B示例
+DISTRIBUTED_ARGS="
+    --nproc_per_node 8 \
+    --nnodes 128 \
+    --node_rank 0 \
+    --master_addr localhost \
+    --master_port 6000
+"
+
+python -m torch.distributed.launch $DISTRIBUTED_ARGS \
+    pretrain_gpt.py \
+    --tensor-model-parallel-size 8 \
+    --pipeline-model-parallel-size 16 \
+    --num-layers 96 \
+    --hidden-size 12288 \
+    --num-attention-heads 96 \
+    --micro-batch-size 1 \
+    --global-batch-size 1536 \
+    --seq-length 2048 \
+    --max-position-embeddings 2048 \
+    --train-iters 500000 \
+    --lr 0.00015 \
+    --min-lr 1.0e-5 \
+    --lr-decay-style cosine \
+    --weight-decay 0.1 \
+    --clip-grad 1.0 \
+    --fp16 \
+    --save /path/to/checkpoints \
+    --load /path/to/checkpoints
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 应用场景</h2>
+          <div class="card">
+            <h3 class="card-title">Megatron-LM适用场景</h3>
+            <div class="code-block">
+1. 超大模型训练
+   • GPT-3 (175B参数)
+   • Megatron-Turing (530B参数)
+   • 需要高效张量并行
+
+2. 长序列任务
+   • 长文本生成
+   • 长文档理解
+   • 需要序列并行
+
+3. 高性能训练
+   • 需要最大化GPU利用率
+   • 利用NVLink高速互联
+   • 精细的性能优化
+
+4. 模型研究
+   • 新的Transformer变体
+   • 并行策略研究
+   • 性能基准测试
+
+5. 生产部署
+   • 稳定的训练框架
+   • 成熟的并行策略
+   • 丰富的最佳实践
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📚</span> 学习资源</h2>
+          <div class="card">
+            <h3 class="card-title">推荐资源</h3>
+            <ul class="feature-list">
+              <li><strong>官方文档：</strong>https://github.com/NVIDIA/Megatron-LM</li>
+              <li><strong>博客：</strong>NVIDIA Developer Blog</li>
+              <li><strong>论文：</strong>"Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism"</li>
+              <li><strong>示例：</strong>examples目录下的训练脚本</li>
+              <li><strong>社区：</strong>NVIDIA Developer Forum</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">快速上手建议</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>从小模型开始：</strong>先用小规模模型熟悉框架</li>
+              <li><strong>使用示例脚本：</strong>从官方示例开始学习</li>
+              <li><strong>理解并行维度：</strong>掌握TP、PP、DP的组合</li>
+              <li><strong>监控性能：</strong>使用profiler分析瓶颈</li>
+              <li><strong>参考最佳实践：</strong>学习NVIDIA的训练建议</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Megatron-LM是NVIDIA的大规模分布式训练框架</li>
+                <li>• 核心特性：张量并行、流水线并行、序列并行</li>
+                <li>• 适合训练GPT、BERT等超大模型</li>
+                <li>• 支持多种并行策略的组合</li>
+                <li>• 性能极佳，但使用较复杂</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter18/18-5-DeepSpeed性能调优.html">← 上一节</a>
+          <a href="19-2-张量并行实现.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

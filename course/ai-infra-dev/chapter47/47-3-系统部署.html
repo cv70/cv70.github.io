@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>47.3 系统部署 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>47.3 系统部署</h1>
+          <p class="subtitle">构建训练集群的软件基础</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握操作系统配置要点</li>
+            <li>学会安装GPU驱动和CUDA</li>
+            <li>了解集群管理工具部署</li>
+            <li>掌握网络配置方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 部署流程概览</h2>
+          <p>系统部署是搭建训练集群的关键步骤，需要在每台节点上完成操作系统配置、驱动安装、网络设置等工作。</p>
+          <div class="card">
+            <h3 class="card-title">部署步骤</h3>
+            <div class="grid grid-5">
+              <div class="step-card">
+                <div class="step-number">1</div>
+                <div class="step-title">OS安装</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">2</div>
+                <div class="step-title">网络配置</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">3</div>
+                <div class="step-title">驱动安装</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">4</div>
+                <div class="step-title">软件栈安装</div>
+              </div>
+              <div class="step-card">
+                <div class="step-number">5</div>
+                <div class="step-title">集群配置</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🖥️</span> 操作系统配置</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">推荐OS</h3>
+              <ul class="feature-list">
+                <li><strong>Ubuntu 22.04 LTS</strong> - 主流选择</li>
+                <li><strong>Rocky Linux 9</strong> - 企业级稳定</li>
+                <li><strong>CentOS Stream 9</strong> - 开发友好</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">内核优化</h3>
+              <div class="code-block">
+<pre><code># 调整内核参数
+cat > /etc/sysctl.d/99-ai-cluster.conf << EOF
+# 网络优化
+net.core.rmem_max = 2147483647
+net.core.wmem_max = 2147483647
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+
+# 文件描述符
+fs.file-max = 2097152
+
+# 共享内存
+kernel.shmmax = 68719476736
+kernel.shmall = 4294967296
+EOF
+
+# 应用配置
+sysctl -p /etc/sysctl.d/99-ai-cluster.conf</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎮</span> GPU驱动与CUDA安装</h2>
+          <div class="code-block">
+<pre><code># NVIDIA驱动安装
+# 添加NVIDIA仓库
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | \
+  apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  tee /etc/apt/sources.list.d/nvidia-docker.list
+
+# 安装NVIDIA驱动
+apt update
+apt install -y nvidia-driver-535
+
+# 验证安装
+nvidia-smi
+
+# CUDA Toolkit安装
+wget https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda_12.1.0_530.30.02_linux.run
+sh cuda_12.1.0_530.30.02_linux.run --toolkit --silent
+
+# 设置环境变量
+echo 'export PATH=/usr/local/cuda-12.1/bin:$PATH' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+source ~/.bashrc
+
+# 验证CUDA
+nvcc --version</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> 容器环境部署</h2>
+          <div class="code-block">
+<pre><code># Docker安装
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+# NVIDIA Container Toolkit
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | \
+  apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  tee /etc/apt/sources.list.d/nvidia-docker.list
+
+apt update
+apt install -y nvidia-container-toolkit
+
+# 配置Docker运行时
+nvidia-ctk runtime configure --runtime=docker
+systemctl restart docker
+
+# 测试GPU容器
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 网络配置</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">IP分配示例</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>节点</th>
+                    <th>管理网IP</th>
+                    <th>数据网IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>login-01</td>
+                    <td>10.0.0.1</td>
+                    <td>192.168.0.1</td>
+                  </tr>
+                  <tr>
+                    <td>gpu-01</td>
+                    <td>10.0.0.101</td>
+                    <td>192.168.0.101</td>
+                  </tr>
+                  <tr>
+                    <td>gpu-02</td>
+                    <td>10.0.0.102</td>
+                    <td>192.168.0.102</td>
+                  </tr>
+                  <tr>
+                    <td>storage-01</td>
+                    <td>10.0.0.201</td>
+                    <td>192.168.0.201</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <h3 class="card-title">主机名解析</h3>
+              <div class="code-block">
+<pre><code># /etc/hosts配置
+cat > /etc/hosts << EOF
+# 管理网络
+10.0.0.1    login-01
+10.0.0.101  gpu-01
+10.0.0.102  gpu-02
+10.0.0.201  storage-01
+
+# 数据网络
+192.168.0.1    login-01-data
+192.168.0.101  gpu-01-data
+192.168.0.102  gpu-02-data
+192.168.0.201  storage-01-data
+EOF</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 集群管理工具部署</h2>
+          <div class="code-block">
+<pre><code># SSH免密登录配置
+ssh-keygen -t ed25519 -C "cluster-admin"
+ssh-copy-id root@gpu-01
+ssh-copy-id root@gpu-02
+ssh-copy-id root@storage-01
+
+# 使用Ansible批量管理
+# /etc/ansible/hosts
+[training_nodes]
+gpu-01 ansible_user=root
+gpu-02 ansible_user=root
+
+[storage_nodes]
+storage-01 ansible_user=root
+
+# 测试连接
+ansible all -m ping</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 存储配置</h2>
+          <div class="card">
+            <h3 class="card-title">NFS共享存储</h3>
+            <div class="code-block">
+<pre><code># 存储节点配置（storage-01）
+apt install -y nfs-kernel-server
+mkdir -p /data/nfs
+chown nobody:nogroup /data/nfs
+chmod 777 /data/nfs
+
+# /etc/exports
+/data/nfs *(rw,sync,no_subtree_check,no_root_squash)
+
+# 启动NFS服务
+systemctl enable nfs-kernel-server
+systemctl start nfs-kernel-server
+
+# 计算节点挂载
+apt install -y nfs-common
+mkdir -p /mnt/data
+mount storage-01:/data/nfs /mnt/data
+
+# 自动挂载 /etc/fstab
+storage-01:/data/nfs  /mnt/data  nfs  defaults  0 0</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">部署注意事项</div>
+            <p><strong>版本一致性</strong>：所有节点的CUDA、驱动版本必须一致。<strong>防火墙配置</strong>：合理配置防火墙规则，避免阻断集群通信。<strong>时间同步</strong>：所有节点必须时间同步，建议使用NTP服务。<strong>文档记录</strong>：详细记录部署过程，便于故障排查。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 系统部署包括OS配置、驱动安装、软件栈安装和集群配置</li>
+                <li>• 内核优化、GPU驱动和CUDA是关键步骤</li>
+                <li>• 网络配置包括IP分配和主机名解析</li>
+                <li>• 使用自动化工具（Ansible）可大幅提升部署效率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="47-2-硬件选型.html">← 上一节</a>
+          <a href="47-4-网络配置.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

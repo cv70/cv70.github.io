@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.3 KubeRay实践 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.3 KubeRay实践</h1>
+          <p class="subtitle">Kubernetes上的Ray集群管理</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Ray在分布式AI中的角色</li>
+            <li>掌握KubeRay Operator的安装与配置</li>
+            <li>学会创建和管理Ray集群</li>
+            <li>了解Ray Jobs和Ray Services的用法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="分布式计算" class="card-image">
+          <h3 class="card-title">Ray与KubeRay简介</h3>
+          <p class="card-text">
+            <strong>Ray</strong>是用于分布式AI应用的高性能执行引擎，支持机器学习训练、推理、强化学习等场景。
+            <strong>KubeRay</strong>是Ray官方的Kubernetes Operator，简化在Kubernetes上部署和管理Ray集群。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Ray架构</h2>
+          <div class="image-container">
+            <img src="https://docs.ray.io/en/latest/_images/ray-arch.png" alt="Ray架构">
+            <div class="caption">图：Ray核心架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">Head Node</h3>
+              <p class="card-text">集群控制节点，负责调度和协调。</p>
+              <ul class="feature-list">
+                <li>运行GCS服务</li>
+                <li>管理集群状态</li>
+                <li>调度任务</li>
+                <li>提供Dashboard</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Worker Node</h3>
+              <p class="card-text">工作节点，执行计算任务。</p>
+              <ul class="feature-list">
+                <li>运行Raylet</li>
+                <li>管理Actor</li>
+                <li>存储Object</li>
+                <li>执行Task</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Object Store</h3>
+              <p class="card-text">分布式内存存储。</p>
+              <ul class="feature-list">
+                <li>共享内存</li>
+                <li>零拷贝传输</li>
+                <li>自动分片</li>
+                <li>容错恢复</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装KubeRay</h2>
+
+          <h3>使用Helm安装</h3>
+          <div class="code-block">
+# 添加KubeRay Helm仓库
+helm repo add kuberay https://ray-project.github.io/kuberay-helm
+helm repo update
+
+# 创建命名空间
+kubectl create namespace kuberay-operator
+
+# 安装KubeRay Operator
+helm install kuberay-operator kuberay/kuberay-operator \
+  --namespace kuberay-operator
+
+# 验证安装
+kubectl get pods -n kuberay-operator
+kubectl get crd | grep ray.io
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">自定义资源</div>
+              <p>KubeRay引入了4个CRD：RayCluster、RayJob、RayService和RayClusterConfig。</p>
+            </div>
+          </div>
+
+          <h3>使用kubectl安装</h3>
+          <div class="code-block">
+# 安装KubeRay Operator
+kubectl create -f https://raw.githubusercontent.com/ray-project/kuberay/release-1.0/ray-operator/config/default/kustomization.yaml
+
+# 或使用特定版本
+kubectl create -k "github.com/ray-project/kuberay/ray-operator/config/default?ref=v1.0.0"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 创建Ray集群</h2>
+
+          <h3>基本RayCluster配置</h3>
+          <div class="code-block">
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-complete
+  namespace: default
+spec:
+  rayVersion: '2.8.0'
+  enableInTreeAutoscaling: false
+
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: '0.0.0.0'
+    serviceType: ClusterIP
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.8.0-py310
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+          ports:
+          - containerPort: 6379
+            name: gcs
+          - containerPort: 8265
+            name: dashboard
+          - containerPort: 10001
+            name: client
+
+  workerGroupSpecs:
+  - replicas: 2
+    minReplicas: 1
+    maxReplicas: 4
+    groupName: worker-group
+    rayStartParams: {}
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.8.0-py310
+          resources:
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+          ports:
+          - containerPort: 6379
+            name: gcs-server
+          - containerPort: 8080
+            name: dashboard-agent
+          </div>
+
+          <h3>GPU RayCluster配置</h3>
+          <div class="code-block">
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-gpu
+  namespace: default
+spec:
+  rayVersion: '2.8.0'
+
+  headGroupSpec:
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.8.0-py310-gpu
+          resources:
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+              nvidia.com/gpu: 1
+
+  workerGroupSpecs:
+  - replicas: 4
+    groupName: gpu-worker
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.8.0-py310-gpu
+          resources:
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+              nvidia.com/gpu: 2
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: 2
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Ray Jobs</h2>
+
+          <div class="card">
+            <h3 class="card-title">Ray Job简介</h3>
+            <p class="card-text">
+              <strong>Ray Job</strong>用于提交一次性任务到Ray集群，支持任务重试、失败恢复等特性。
+            </p>
+          </div>
+
+          <h3>提交Ray Job</h3>
+          <div class="code-block">
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: ray-job-sample
+spec:
+  entrypoint: python /home/ray/samples/sample_code.py
+  runtimeEnv: |
+    pip:
+      - requests==2.26.0
+    env_vars:
+      TEST_VAR: "hello world"
+
+  # shutdownAfterJobFinishes 控制Job完成后是否关闭集群
+  shutdownAfterJobFinishes: false
+
+  # 使用已存在的RayCluster
+  clusterSelector:
+    ray.io/cluster: raycluster-complete
+
+  # 或者动态创建RayCluster
+  rayClusterSpec:
+    rayVersion: '2.8.0'
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+      serviceType: ClusterIP
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - name: ray-head
+            image: rayproject/ray:2.8.0-py310
+          </div>
+
+          <h3>监控Job状态</h3>
+          <div class="code-block">
+# 查看Job状态
+kubectl get rayjob
+
+# 查看Job详情
+kubectl describe rayjob ray-job-sample
+
+# 查看日志
+kubectl logs -l ray.io/job-name=ray-job-sample
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> Ray Services</h2>
+
+          <div class="card">
+            <h3 class="card-title">Ray Service简介</h3>
+            <p class="card-text">
+              <strong>Ray Service</strong>用于部署长期运行的Ray服务，支持自动扩缩容、版本管理、负载均衡等。
+            </p>
+          </div>
+
+          <h3>部署Ray Service</h3>
+          <div class="code-block">
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: ray-service-sample
+spec:
+  serviceUnhealthySecondThreshold: 180
+  deploymentUnhealthySecondThreshold: 180
+
+  # 服务配置
+  serveConfigV2: |
+    applications:
+      - name: my_app
+        route_prefix: /
+        import_path: my_module:endpoint
+        runtime_env:
+          working_dir: "https://github.com/ray-project/serve_config_examples/archive/refs/heads/main.zip"
+          pip:
+            - transformers==4.27.4
+            - torch==2.0.0
+            - accelerate==0.18.0
+        deployments:
+          - name: Summarizer
+            autoscaling_config:
+              target_num_ongoing_requests_per_replica: 1
+              min_replicas: 1
+              max_replicas: 5
+
+  # 集群配置
+  rayClusterConfig:
+    rayVersion: '2.8.0'
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+      serviceType: ClusterIP
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - name: ray-head
+            image: rayproject/ray:2.8.0-py310
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">Service特性</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 自动部署和更新</li>
+                <li>• 零停机滚动更新</li>
+                <li>• 基于请求的自动扩缩容</li>
+                <li>• 健康检查和自动恢复</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 自动扩缩容</h2>
+
+          <h3>配置自动扩缩容</h3>
+          <div class="code-block">
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster-autoscale
+spec:
+  rayVersion: '2.8.0'
+  enableInTreeAutoscaling: true
+
+  autoscalerOptions:
+    upscalingMode: Default
+    idleTimeoutMinutes: 5
+    imagePullPolicy: Always
+
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: '0.0.0.0'
+      autoscaling-config: |
+        {
+          "max_workers": 10,
+          "upscaling_speed": 1.0,
+          "downscaling_speed": 1.0,
+          "idle_timeout_minutes": 5
+        }
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.8.0-py310
+
+  workerGroupSpecs:
+  - replicas: 2
+    minReplicas: 1
+    maxReplicas: 10
+    groupName: worker-group
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.8.0-py310
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">扩缩容策略</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Default</strong>：保守扩缩，避免频繁调整</li>
+                <li>• <strong>Aggressive</strong>：快速扩缩，响应负载变化</li>
+                <li>• <strong>Conservative</strong>：慢速扩缩，降低成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">资源规划</h4>
+              <ul class="feature-list">
+                <li>Head节点配置足够内存</li>
+                <li>Worker节点与GPU数量匹配</li>
+                <li>设置合理的资源请求和限制</li>
+                <li>使用节点亲和性优化调度</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">高可用</h4>
+              <ul class="feature-list">
+                <li>启用持久化存储</li>
+                <li>配置Ray GCS故障恢复</li>
+                <li>设置合理的副本数</li>
+                <li>监控集群健康状态</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">性能优化</h4>
+              <ul class="feature-list">
+                <li>调整Object Store大小</li>
+                <li>优化任务并行度</li>
+                <li>使用流水线并行</li>
+                <li>配置合理的超时时间</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">监控告警</h4>
+              <ul class="feature-list">
+                <li>监控集群资源使用</li>
+                <li>跟踪任务成功率和延迟</li>
+                <li>设置节点离线告警</li>
+                <li>监控GCS服务状态</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• KubeRay简化了在Kubernetes上部署Ray</li>
+                <li>• RayCluster用于长期运行的分布式应用</li>
+                <li>• RayJob适合一次性任务</li>
+                <li>• RayService用于部署在线推理服务</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-2-NVIDIA-Kubernetes-Operator.html">← 上一节</a>
+          <a href="27-4-Volcano调度器.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

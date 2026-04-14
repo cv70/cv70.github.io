@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.6 优先级与抢占机制 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>7.6 优先级与抢占机制</h1>
+          <p class="subtitle">智能调度保障关键任务</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解优先级调度的工作原理</li>
+            <li>掌握抢占机制的设计与实现</li>
+            <li>学会配置不同级别的任务调度</li>
+            <li>了解优先级调度的最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1504384308090-c54be3855833?w=800" alt="优先级调度" class="card-image">
+          <h3 class="card-title">为什么需要优先级</h3>
+          <p class="card-text">
+            <strong>AI集群资源</strong>往往供不应求，不同任务的重要性和紧急程度各不相同。
+            优先级调度确保关键任务（生产推理、紧急Bug修复）优先执行，
+            低优先级任务（探索实验、参数扫描）等待或被抢占。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 优先级模型</h2>
+          <div class="card">
+            <h3 class="card-title">多因子优先级</h3>
+            <div class="code-block">
+<pre><strong>优先级计算模型：</strong>
+
+Priority = Base_Priority +
+          Age_Weight × Job_Age +
+          Fair_Share_Weight × Fair_Share +
+          Queue_Weight × Queue_Priority +
+          Job_Size_Weight × Job_Size +
+          QOS_Weight × QOS_Priority +
+          Account_Weight × Account_Priority
+
+各因子说明：
+
+1. Base_Priority (基础优先级)
+   └─ 0-1000，由管理员配置
+
+2. Age_Weight (作业权重)
+   └─ 随时间增加，避免饥饿
+   └─ Age_Weight: 1000
+
+3. Fair_Share_Weight (公平分享)
+   └─ 资源使用少优先级高
+   └─ Fair_Share_Weight: 10000
+
+4. Queue_Weight (队列优先级)
+   └─ 不同队列不同权重
+   └─ Queue_Weight: 1000
+
+5. Job_Size_Weight (作业大小)
+   └─ 大作业可能获得更高优先级
+   └─ Job_Size_Weight: 1000
+
+6. QOS_Weight (服务质量)
+   └─ 关键QOS更高优先级
+   └─ QOS_Weight: 0-10000
+
+7. Account_Weight (账户优先级)
+   └─ VIP账户更高优先级
+   └─ Account_Weight: 1000</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Kubernetes优先级</h2>
+          <div class="card">
+            <h3 class="card-title">PriorityClass配置</h3>
+            <div class="code-block">
+<pre><strong>创建优先级类：</strong>
+
+# 生产优先级
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production
+value: 1000000
+globalDefault: false
+description: "生产环境高优先级"
+
+# 开发优先级
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: development
+value: 500000
+globalDefault: false
+description: "开发环境中优先级"
+
+# 默认优先级
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: default
+value: 0
+globalDefault: true
+description: "默认优先级"
+
+# 低优先级
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: -100000
+globalDefault: false
+description: "低优先级任务"
+
+<strong>Pod使用优先级：</strong>
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: production-pod
+spec:
+  priorityClassName: production
+  containers:
+  - name: ai-container
+    image: nvidia/pytorch:22.04
+    resources:
+      limits:
+        nvidia.com/gpu: 4</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 抢占机制</h2>
+          <div class="card">
+            <h3 class="card-title">抢占流程</h3>
+            <div class="code-block">
+<pre><strong>K8s抢占流程：</strong>
+
+1. 高优先级Pod调度失败
+   └─ 调度器发现资源不足
+
+2. 查找可抢占的Pod
+   └─ 筛选低优先级Pod
+   └─ 计算可释放资源
+
+3. 选择抢占候选
+   └─ 按优先级排序
+   └─ 选择最优组合
+
+4. 执行抢占
+   └─ 删除低优先级Pod
+   └─ 释放资源
+
+5. 重新调度高优先级Pod
+   └─ 成功调度到释放资源
+
+6. 被抢占Pod重新调度
+   └─ 加入队列等待
+
+<strong>抢占配置：</strong>
+
+# 配置抢占策略
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+enableControllerAttachDetach: true
+evictionHard:
+  memory.available: "5%"
+  imagefs.available: "10%"
+evictionSoft:
+  memory.available: "10%"
+  imagefs.available: "15%"
+evictionSoftGracePeriod:
+  memory.available: "1m"
+  imagefs.available: "1m"
+
+# 配置PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: inference-pdb
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: inference-server</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">抢占策略</div>
+            <p><strong>温和抢占：</strong>优先抢占短作业，减少影响</p>
+            <p><strong>最小化抢占：</strong>只抢占必要的Pod</p>
+            <p><strong>优雅终止：</strong>给Pod优雅退出的时间</p>
+            <p><strong>禁止抢占：</strong>关键任务设置禁止抢占</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> Slurm优先级</h2>
+          <div class="card">
+            <h3 class="card-title">Slurm QOS配置</h3>
+            <div class="code-block">
+<pre><strong>QOS配置：</strong>
+
+# 创建高优先级QOS
+sacctmgr add qos high-priority Priority=10000 \
+    MaxJobs=100 MaxNode=500 MaxSubmit=1000 \
+    MaxGRES=gpu:500 MaxTRES=cpu:32000,mem:100000
+
+# 创建正常优先级QOS
+sacctmgr add qos normal Priority=100 \
+    MaxJobs=500 MaxNode=2000 MaxSubmit=5000 \
+    MaxGRES=gpu:2000 MaxTRES=cpu:128000,mem:400000
+
+# 创建低优先级QOS
+sacctmgr add qos low-priority Priority=10 \
+    MaxJobs=1000 MaxNode=4000 MaxSubmit=10000 \
+    MaxGRES=gpu:4000 MaxTRES=cpu:256000,mem:800000 \
+    PreemptMode=REQUEUE
+
+# 设置账户QOS
+sacctmgr modify account team-a \
+    set qos=normal,high-priority
+
+# 设置用户QOS
+sacctmgr modify user alice \
+    set qos=high-priority
+
+# 设置分区QOS
+sacctmgr modify partition gpu \
+    set QOS=normal,high-priority,low-priority
+
+<strong>抢占配置：</strong>
+
+# slurm.conf配置
+PreemptType=preempt/qos
+PreemptMode=REQUEUE
+PreemptExemptTime=0
+PreemptRetries=3
+
+# QOS优先级设置
+sacctmgr modify qos high-priority set preempt=normal,low-priority
+sacctmgr modify qos normal set preempt=low-priority
+sacctmgr modify qos low-priority set preempt=none</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 任务分类</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>任务类型</th>
+                <th>优先级</th>
+                <th>QOS</th>
+                <th>抢占策略</th>
+                <th>资源保证</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>生产推理</td>
+                <td>最高</td>
+                <td>production</td>
+                <td>抢占所有</td>
+                <td>100%</td>
+              </tr>
+              <tr>
+                <td>在线训练</td>
+                <td>高</td>
+                <td>high-priority</td>
+                <td>抢占中低</td>
+                <td>80%</td>
+              </tr>
+              <tr>
+                <td>离线训练</td>
+                <td>中</td>
+                <td>normal</td>
+                <td>抢占低优先级</td>
+                <td>50%</td>
+              </tr>
+              <tr>
+                <td>实验探索</td>
+                <td>低</td>
+                <td>low-priority</td>
+                <td>可被抢占</td>
+                <td>20%</td>
+              </tr>
+              <tr>
+                <td>参数扫描</td>
+                <td>最低</td>
+                <td>lowest</td>
+                <td>可被抢占</td>
+                <td>0%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 动态优先级</h2>
+          <div class="card">
+            <h3 class="card-title">基于时间的优先级调整</h3>
+            <div class="code-block">
+<pre><strong>动态优先级算法：</strong>
+
+// 计算动态优先级
+func CalculateDynamicPriority(job *Job, basePriority int64) int64 {
+    age := time.Since(job.SubmitTime)
+    ageFactor := int64(age.Hours()) * 100
+
+    // 作业等待时间越长，优先级越高
+    if age > 24*time.Hour {
+        ageFactor *= 2  // 超过24小时加倍
+    }
+
+    // 接近截止时间的作业
+    if job.Deadline != nil {
+        timeToDeadline := time.Until(*job.Deadline)
+        if timeToDeadline < 48*time.Hour {
+            ageFactor += 1000  // 接近截止时间加分
+        }
+    }
+
+    return basePriority + ageFactor
+}
+
+// 基于资源的优先级
+func CalculateResourcePriority(job *Job, availableResources Resource) int64 {
+    priority := int64(0)
+
+    // 资源需求小的作业优先
+    if job.GPURequest <= availableResources.GPU {
+        priority += (availableResources.GPU - job.GPURequest) * 10
+    }
+
+    // 能整除的作业优先
+    if availableResources.GPU%job.GPURequest == 0 {
+        priority += 500
+    }
+
+    return priority
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 监控与告警</h2>
+          <div class="card">
+            <h3 class="card-title">优先级监控指标</h3>
+            <div class="code-block">
+<pre><strong>Prometheus规则：</strong>
+
+groups:
+- name: priority_scheduling
+  rules:
+  # 高优先级作业等待时间
+  - alert: HighPriorityJobWaitingTooLong
+    expr: k8s_job_status_completion_time == 0 and
+          k8s_pod_labels_priority_class_name == "production"
+    for: 5m
+    annotations:
+      summary: "高优先级作业等待超过5分钟"
+
+  # 抢占次数
+  - record: pod_preemption_count
+    expr: increase(kube_pod_status_reason{reason="Preemption"}[5m])
+
+  # 低优先级作业被抢占
+  - alert: LowPriorityJobPreempted
+    expr: k8s_pod_status_reason{reason="Preemption",
+            priority_class_name="low-priority"}
+    for: 1m
+    annotations:
+      summary: "低优先级作业被抢占"
+
+  # 优先级分布
+  - record: jobs_by_priority
+    expr: count by (priority_class_name)
+            (kube_pod_status_phase{phase="Running"})</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">优先级调度最佳实践</div>
+            <p><strong>合理分级：</strong>避免过多优先级级别，通常3-5级足够</p>
+            <p><strong>避免饥饿：</strong>确保低优先级作业最终能获得资源</p>
+            <p><strong>优雅抢占：</strong>给被抢占作业保存Checkpoint的机会</p>
+            <p><strong>监控优化：</strong>持续监控调度效率，调整优先级策略</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 优先级调度通过多因子模型确定作业执行顺序</li>
+                <li>• Kubernetes通过PriorityClass实现优先级管理</li>
+                <li>• 抢占机制让高优先级任务可以替换低优先级任务</li>
+                <li>• Slurm通过QOS实现精细的优先级控制</li>
+                <li>• 任务按类型分配不同的优先级和QOS</li>
+                <li>• 动态优先级根据等待时间和资源可用性调整</li>
+                <li>• 完善的监控确保优先级调度的有效性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="7-5-多租户与资源隔离.html">← 上一节</a>
+          <a href="#">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

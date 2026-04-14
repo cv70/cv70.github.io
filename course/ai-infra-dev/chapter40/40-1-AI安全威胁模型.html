@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40.1 AI安全威胁模型 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>40.1 AI安全威胁模型</h1>
+          <p class="subtitle">认识AI系统的安全威胁与风险</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解AI安全威胁类型</li>
+            <li>掌握威胁建模方法</li>
+            <li>学习常见攻击模式</li>
+            <li>实践威胁分析</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="AI安全" class="card-image">
+          <h3 class="card-title">AI安全威胁模型</h3>
+          <p class="card-text">
+            <strong>AI安全威胁模型</strong>帮助我们识别和评估AI系统面临的安全风险。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> AI安全威胁分类</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎯</div>
+              <h3 class="card-title">模型安全</h3>
+              <p class="card-text">对抗样本、模型窃取</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+              <h3 class="card-title">数据安全</h3>
+              <p class="card-text">数据泄露、隐私侵犯</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">💻</div>
+              <h3 class="card-title">系统安全</h3>
+              <p class="card-text">基础设施安全</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 威胁维度</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>维度</th>
+                <th>威胁类型</th>
+                <th>影响</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td rowspan="3">模型层</td>
+                <td>对抗攻击</td>
+                <td>模型性能下降</td>
+              </tr>
+              <tr>
+                <td>模型窃取</td>
+                <td>知识产权损失</td>
+              </tr>
+              <tr>
+                <td>模型投毒</td>
+                <td>模型行为异常</td>
+              </tr>
+              <tr>
+                <td rowspan="3">数据层</td>
+                <td>数据泄露</td>
+                <td>隐私侵犯</td>
+              </tr>
+              <tr>
+                <td>数据投毒</td>
+                <td>训练质量下降</td>
+              </tr>
+              <tr>
+                <td>成员推断</td>
+                <td>隐私泄露</td>
+              </tr>
+              <tr>
+                <td rowspan="3">推理层</td>
+                <td>模型逆向</td>
+                <td>模型信息泄露</td>
+              </tr>
+              <tr>
+                <td>提示注入</td>
+                <td>输出异常</td>
+              </tr>
+              <tr>
+                <td>越狱攻击</td>
+                <td>安全限制失效</td>
+              </tr>
+              <tr>
+                <td rowspan="2">基础设施</td>
+                <td>资源滥用</td>
+                <td>服务不可用</td>
+              </tr>
+              <tr>
+                <td>权限提升</td>
+                <td>系统被控制</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 对抗攻击</h2>
+          <div class="code-block">
+# 对抗攻击类型
+
+## 1. 白盒攻击
+# 知道模型结构和参数
+
+### FGSM攻击
+import torch
+import torch.nn.functional as F
+
+def fgsm_attack(model, image, label, epsilon=0.01):
+    image.requires_grad = True
+    output = model(image)
+    loss = F.nll_loss(output, label)
+    model.zero_grad()
+    loss.backward()
+
+    # 生成对抗样本
+    perturbed_image = image + epsilon * image.grad.data.sign()
+    return perturbed_image
+
+### PGD攻击
+def pgd_attack(model, image, label, epsilon=0.1, alpha=0.01, num_iter=40):
+    perturbed_image = image.clone().detach()
+    perturbed_image.requires_grad = True
+
+    for _ in range(num_iter):
+        output = model(perturbed_image)
+        loss = F.nll_loss(output, label)
+        model.zero_grad()
+        loss.backward()
+
+        # 生成对抗样本
+        perturbed_image = perturbed_image + alpha * perturbed_image.grad.data.sign()
+        perturbed_image = torch.clamp(perturbed_image, image - epsilon, image + epsilon)
+        perturbed_image = torch.clamp(perturbed_image, 0, 1)
+
+    return perturbed_image
+
+## 2. 黑盒攻击
+# 只知道模型输入输出
+
+### 查询攻击
+def query_attack(model, target_image, target_class, max_queries=1000):
+    current_image = target_image.clone()
+    best_loss = float('inf')
+
+    for _ in range(max_queries):
+        output = model(current_image)
+        loss = 1 - output[0, target_class].item()
+
+        if loss < best_loss:
+            best_loss = loss
+            best_image = current_image.clone()
+
+        # 简单的梯度估计
+        perturbation = torch.randn_like(current_image) * 0.1
+        output_plus = model(current_image + perturbation)
+        output_minus = model(current_image - perturbation)
+        gradient = (output_plus - output_minus) / 0.2
+
+        current_image = current_image + 0.01 * gradient[0, target_class] * perturbation
+
+    return best_image
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 数据安全威胁</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">隐私泄露</h3>
+              <ul class="feature-list">
+                <li>模型记忆训练数据</li>
+                <li>成员推断攻击</li>
+                <li>属性推断攻击</li>
+                <li>模型反演攻击</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">数据投毒</h3>
+              <ul class="feature-list">
+                <li>标签翻转攻击</li>
+                <li>后门攻击</li>
+                <li>清洗攻击</li>
+                <li>数据注入</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 威胁建模方法</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">威胁建模流程</div>
+              <p>使用系统化的方法进行威胁建模：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# 威胁建模流程
+
+## 1. 系统分解
+# 识别系统组件和接口
+- 模型组件
+- 数据组件
+- 推理接口
+- 管理接口
+
+## 2. 资产识别
+# 识别需要保护的资产
+- 模型文件
+- 训练数据
+- 推理结果
+- 用户隐私
+
+## 3. 威胁识别
+# 识别潜在威胁
+- STRIDE方法
+- Spoofing（伪装）
+- Tampering（篡改）
+- Repudiation（抵赖）
+- Information Disclosure（信息泄露）
+- Denial of Service（拒绝服务）
+- Elevation of Privilege（权限提升）
+
+## 4. 风险评估
+# 评估威胁风险
+- 概率评估
+- 影响评估
+- 风险等级
+
+## 5. 缓解措施
+# 制定缓解策略
+- 预防措施
+- 检测措施
+- 响应措施
+- 恢复措施
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 安全防护策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>威胁类型</th>
+                <th>防护措施</th>
+                <th>有效性</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>对抗攻击</td>
+                <td>对抗训练</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>模型窃取</td>
+                <td>水印技术</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>数据泄露</td>
+                <td>差分隐私</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>提示注入</td>
+                <td>输入过滤</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>越狱攻击</td>
+                <td>内容审核</td>
+                <td>中</td>
+              </tr>
+              <tr>
+                <td>资源滥用</td>
+                <td>访问控制</td>
+                <td>高</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 安全评估</h2>
+          <div class="code-block">
+# AI系统安全评估
+
+## 1. 对抗鲁棒性测试
+```python
+import numpy as np
+from cleverhans.future.tf2.attacks.fast_gradient_method import fast_gradient_method
+
+def evaluate_adversarial_robustness(model, test_dataset, epsilon=0.1):
+    correct = 0
+    total = 0
+
+    for data, target in test_dataset:
+        # 生成对抗样本
+        adv_data = fast_gradient_method(model, data, eps=epsilon, norm=np.inf)
+
+        # 测试模型
+        output = model(adv_data)
+        pred = output.argmax(axis=1)
+
+        if pred == target:
+            correct += 1
+        total += 1
+
+    accuracy = correct / total
+    return accuracy
+```
+
+## 2. 隐私保护评估
+```python
+import torch
+from torch.utils.data import DataLoader
+
+def evaluate_privacy_leakage(model, training_data, test_samples):
+    # 成员推断攻击
+    member_scores = []
+    non_member_scores = []
+
+    # 训练集样本
+    for data in training_data:
+        output = model(data)
+        confidence = output.max().item()
+        member_scores.append(confidence)
+
+    # 非训练集样本
+    for data in test_samples:
+        output = model(data)
+        confidence = output.max().item()
+        non_member_scores.append(confidence)
+
+    # 评估泄露风险
+    avg_member = np.mean(member_scores)
+    avg_non_member = np.mean(non_member_scores)
+
+    return {
+        'member_confidence': avg_member,
+        'non_member_confidence': avg_non_member,
+        'leakage_risk': abs(avg_member - avg_non_member)
+    }
+```
+
+## 3. 模型完整性检查
+```python
+import hashlib
+
+def verify_model_integrity(model_path, expected_hash):
+    with open(model_path, 'rb') as f:
+        model_data = f.read()
+
+    actual_hash = hashlib.sha256(model_data).hexdigest()
+    return actual_hash == expected_hash
+```
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="AI安全">
+          <div class="caption">图：AI安全威胁模型</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">安全注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 定期进行安全评估</li>
+              <li>• 修复已知漏洞</li>
+              <li>• 建立安全监控</li>
+              <li>• 加强安全培训</li>
+              <li>• 制定应急预案</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• AI安全威胁分为模型、数据、推理等层面</li>
+                <li>• 系统化的威胁建模有助于识别风险</li>
+                <li>• 对抗攻击是AI系统的主要威胁</li>
+                <li>• 需要多种防护措施综合防护</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter39/39-5-故障复盘与改进.html">← 上一节</a>
+          <a href="40-2-数据安全与隐私.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

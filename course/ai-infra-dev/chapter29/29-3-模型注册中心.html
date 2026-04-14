@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>29.3 模型注册中心 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>29.3 模型注册中心</h1>
+          <p class="subtitle">模型版本管理与部署</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型注册中心的作用</li>
+            <li>掌握MLflow Model Registry的使用</li>
+            <li>学会模型版本管理策略</li>
+            <li>了解模型部署流程</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="模型注册" class="card-image">
+          <h3 class="card-title">模型注册中心概述</h3>
+          <p class="card-text">
+            <strong>模型注册中心（Model Registry）</strong>是集中管理模型版本和部署状态的平台。
+            它提供模型的版本控制、阶段管理、部署跟踪等功能，是MLOps中连接实验和生产的关键组件。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 模型注册中心架构</h2>
+
+          <div class="image-container">
+            <img src="https://mlflow.org/docs/latest/_images/model-registry.png" alt="Model Registry架构">
+            <div class="caption">图：MLflow Model Registry架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">模型注册</h3>
+              <p class="card-text">管理所有模型。</p>
+              <ul class="feature-list">
+                <li>模型版本</li>
+                <li>模型元数据</li>
+                <li>模型签名</li>
+                <li>模型描述</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">阶段管理</h3>
+              <p class="card-text">跟踪部署状态。</p>
+              <ul class="feature-list">
+                <li>Staging</li>
+                <li>Production</li>
+                <li>Archived</li>
+                <li>自定义阶段</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">部署跟踪</h3>
+              <p class="card-text">管理部署流程。</p>
+              <ul class="feature-list">
+                <li>部署历史</li>
+                <li>部署目标</li>
+                <li>性能监控</li>
+                <li>回滚支持</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 注册模型</h2>
+
+          <h3>从实验注册</h3>
+          <div class="code-block">
+from mlflow import log_model, register_model
+from mlflow.sklearn import log_model as sklearn_log_model
+
+# 训练模型
+model = train_model(X_train, y_train)
+
+# 记录并注册模型
+model_info = mlflow.sklearn.log_model(
+    sk_model=model,
+    artifact_path="model",
+    registered_model_name="my-model"
+)
+
+# 记录额外的模型信息
+mlflow.set_tag("model_type", "RandomForest")
+mlflow.set_tag("training_data", "2024-01-01")
+mlflow.set_tag("author", "AI Team")
+          </code>
+
+          <h3>手动注册</h3>
+          <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 从已有run注册模型
+model_uri = "runs:/<run-id>/model"
+model_details = client.create_registered_model(
+    name="my-model",
+    description="Customer churn prediction model"
+)
+
+# 添加模型版本
+model_version = client.create_model_version(
+    name="my-model",
+    source=model_uri,
+    run_id="<run-id>",
+    description="Initial version"
+)
+          </code>
+
+          <h3>记录模型签名</h3>
+          <div class="code-block">
+import mlflow
+from mlflow.models.signature import infer_signature
+import pandas as pd
+
+# 推断模型签名
+signature = infer_signature(
+    model_input=X_train,
+    model_output=model.predict(X_train)
+)
+
+# 记录带签名的模型
+mlflow.sklearn.log_model(
+    sk_model=model,
+    artifact_path="model",
+    signature=signature,
+    registered_model_name="my-model"
+)
+
+# 签名信息包括：
+# - 输入schema（列名、类型）
+# - 输出schema（类型、形状）
+# - 参数schema
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">模型签名的作用</div>
+              <p>模型签名定义了输入输出的结构，在部署时自动验证数据格式，提高可靠性。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 版本管理</h2>
+
+          <h3>模型版本</h3>
+          <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 列出所有模型版本
+model_versions = client.search_model_versions("name='my-model'")
+for version in model_versions:
+    print(f"Version: {version.version}")
+    print(f"Stage: {version.current_stage}")
+    print(f"Run ID: {version.run_id}")
+    print(f"Status: {version.status}")
+
+# 获取特定版本
+model_version = client.get_model_version(
+    name="my-model",
+    version=2
+)
+          </code>
+
+          <h3>阶段转换</h3>
+          <div class="code-block">
+# 将模型版本转换为Production
+client.transition_model_version_stage(
+    name="my-model",
+    version=2,
+    stage="Production",
+    archive_existing_versions=True
+)
+
+# 可用阶段：
+# - Staging：预发布测试
+# - Production：生产环境
+# - Archived：已归档
+# - None：未分配
+
+# 自定义阶段
+# 需要在配置中启用
+          </code>
+
+          <h3>获取最佳模型</h3>
+          <div class="code-block">
+# 获取Production阶段的模型
+model_uri = "models:/my-model/Production"
+model = mlflow.pyfunc.load_model(model_uri)
+
+# 使用模型预测
+predictions = model.predict(X_test)
+
+# 获取Staging模型进行测试
+staging_model = mlflow.pyfunc.load_model(
+    "models:/my-model/Staging"
+)
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 模型元数据</h2>
+
+          <h3>添加元数据</h3>
+          <div class="code-block">
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# 更新模型描述
+client.update_registered_model(
+    name="my-model",
+    description="Customer churn prediction model v2.0"
+)
+
+# 添加标签
+client.set_registered_model_tag(
+    name="my-model",
+    key="business_unit",
+    value="retention"
+)
+
+# 添加自定义属性
+client.set_model_version_tag(
+    name="my-model",
+    version=2,
+    key="accuracy",
+    value="0.95"
+)
+
+# 查询元数据
+model = client.get_registered_model("my-model")
+print(model.description)
+print(model.tags)
+          </code>
+
+          <h3>记录评估结果</h3>
+          <div class="code-block">
+from mlflow.entities import Metric
+
+# 记录评估指标
+metrics = [
+    Metric(key="accuracy", value=0.95, timestamp=None, step=0),
+    Metric(key="precision", value=0.93, timestamp=None, step=0),
+    Metric(key="recall", value=0.91, timestamp=None, step=0),
+    Metric(key="f1_score", value=0.92, timestamp=None, step=0)
+]
+
+client.log_batch(
+    run_id="<run-id>",
+    metrics=metrics,
+    params=[],
+    tags=[]
+)
+
+# 在模型版本中查看评估结果
+model_version = client.get_model_version("my-model", 2)
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 模型部署</h2>
+
+          <h3>MLflow Serving</h3>
+          <div class="code-block">
+# 启动MLflow模型服务
+mlflow models serve \
+  -m models:/my-model/Production \
+  -p 5000 \
+  -h 0.0.0.0
+
+# 或使用环境变量
+export MLFLOW_MODEL_NAME="my-model"
+export MLFLOW_MODEL_VERSION="Production"
+mlflow models serve \
+  -p 5000 \
+  --env-manager local
+
+# 测试服务
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"data": [[1, 2, 3]]}' \
+  http://localhost:5000/invocations
+          </code>
+
+          <h3>Docker容器化部署</h3>
+          <div class="code-block">
+# 构建Docker镜像
+mlflow models build-docker \
+  -m models:/my-model/Production \
+  -n my-model:latest
+
+# 推送到镜像仓库
+docker tag my-model:latest registry.example.com/my-model:latest
+docker push registry.example.com/my-model:latest
+
+# 在Kubernetes中部署
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-model
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-model
+  template:
+    metadata:
+      labels:
+        app: my-model
+    spec:
+      containers:
+      - name: model
+        image: registry.example.com/my-model:latest
+        ports:
+        - containerPort: 5000
+          </code>
+
+          <h3>Kubernetes Serving</h3>
+          <div class="code-block">
+# 使用KServe部署模型
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: my-model
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: mlflow
+      storageUri: s3://mlflow-models/my-model/Production
+      runtimeVersion: "1.28.0"
+    serviceAccountName: kserve-sa
+    scaleTarget:
+      minReplicas: 1
+      maxReplicas: 5
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 模型更新策略</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">蓝绿部署</h3>
+              <p class="card-text">两个版本同时运行，切换流量。</p>
+              <div class="code-block">
+# Blue: 旧版本
+# Green: 新版本
+
+# 部署Green版本
+kubectl apply -f model-green.yaml
+
+# 切换流量
+kubectl patch service my-model \
+  -p '{"spec":{"selector":{"version":"green"}}}'
+
+# 验证后删除Blue版本
+kubectl delete -f model-blue.yaml
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">金丝雀发布</h3>
+              <p class="card-text">逐步切换流量到新版本。</p>
+              <div class="code-block">
+# 1. 部署新版本
+kubectl apply -f model-v2.yaml
+
+# 2. 10%流量到v2
+kubectl patch service my-model \
+  -p '{"spec":{"selector":{"version":"v2"}}}' \
+  --type=json \
+  -p='[{"op":"replace","path":"/spec/selector/version","value":"v2"}]'
+
+# 3. 逐步增加到50%、90%、100%
+# 4. 完全切换后删除v1
+              </div>
+            </div>
+          </div>
+
+          <h3>A/B测试</h3>
+          <div class="code-block">
+# 使用Istio流量分割
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: my-model
+spec:
+  hosts:
+  - my-model
+  http:
+  - match:
+    - headers:
+        x-model-version:
+          exact: v2
+    route:
+    - destination:
+        host: my-model-v2
+  - route:
+    - destination:
+        host: my-model-v1
+      weight: 90
+    - destination:
+        host: my-model-v2
+      weight: 10
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">版本管理</h4>
+              <ul class="feature-list">
+                <li>使用语义化版本号</li>
+                <li>记录详细的变更日志</li>
+                <li>维护Production版本稳定性</li>
+                <li>定期清理旧版本</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">部署流程</h4>
+              <ul class="feature-list">
+                <li>严格遵循阶段转换流程</li>
+                <li>在Staging充分测试</li>
+                <li>准备回滚方案</li>
+                <li>监控部署后性能</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">文档管理</h4>
+              <ul class="feature-list">
+                <li>记录模型训练数据</li>
+                <li>文档化性能指标</li>
+                <li>说明模型限制</li>
+                <li>提供使用示例</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">安全考虑</h4>
+              <ul class="feature-list">
+                <li>控制模型访问权限</li>
+                <li>审计模型使用记录</li>
+                <li>验证模型来源</li>
+                <li>定期安全扫描</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">模型治理</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 建立模型审查流程</li>
+                <li>设置模型生命周期</li>
+                <li>实施模型监控告警</li>
+                <li>定期评估模型性能</li>
+                <li>制定模型更新策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 模型注册中心是连接实验和生产的关键</li>
+                <li>• 版本管理确保模型的可追溯性</li>
+                <li>• 阶段管理控制模型部署流程</li>
+                <li>• 良好的管理实践提高模型可靠性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="29-2-实验管理-MLflow-Weights-Biases.html">← 上一节</a>
+          <a href="29-4-模型版本管理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

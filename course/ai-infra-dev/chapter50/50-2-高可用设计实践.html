@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.2 高可用设计实践 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>50.2 高可用设计实践</h1>
+          <p class="subtitle">构建高可用的AI基础设施</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解高可用设计原理</li>
+            <li>掌握高可用架构模式</li>
+            <li>学会故障转移设计</li>
+            <li>了解容灾备份策略</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 高可用指标</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>级别</th>
+                <th>可用性</th>
+                <th>年停机时间</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>一级</td>
+                <td>99.999%</td>
+                <td>5.26分钟</td>
+                <td>关键业务</td>
+              </tr>
+              <tr>
+                <td>二级</td>
+                <td>99.99%</td>
+                <td>52.6分钟</td>
+                <td>重要业务</td>
+              </tr>
+              <tr>
+                <td>三级</td>
+                <td>99.9%</td>
+                <td>8.77小时</td>
+                <td>一般业务</td>
+              </tr>
+              <tr>
+                <td>四级</td>
+                <td>99%</td>
+                <td>3.65天</td>
+                <td>非关键业务</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 高可用架构</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">主备架构</h3>
+              <ul class="feature-list">
+                <li>主节点提供服务</li>
+                <li>备节点处于待机</li>
+                <li>故障时自动切换</li>
+                <li>成本较低</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">主主架构</h3>
+              <ul class="feature-list">
+                <li>多个节点同时服务</li>
+                <li>负载均衡分发</li>
+                <li>故障时摘除节点</li>
+                <li>资源利用率高</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title>集群架构</h3>
+              <ul class="feature-list">
+                <li>多节点集群部署</li>
+                <li>数据自动复制</li>
+                <li>自动故障转移</li>
+                <li>扩展性好</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title>异地多活</h3>
+              <ul class="feature-list">
+                <li>多个数据中心</li>
+                <td>同时提供服务</td>
+                <li>跨区域容灾</li>
+                <li>成本最高</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 故障转移设计</h2>
+          <div class="code-block">
+<pre><code># 故障转移配置
+
+# 1. Kubernetes高可用部署
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+spec:
+  replicas: 3  # 多副本
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    spec:
+      # Pod反亲和性
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - inference
+            topologyKey: "kubernetes.io/hostname"
+
+---
+
+# 2. 服务健康检查
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-service
+spec:
+  selector:
+    app: inference
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: LoadBalancer</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 数据备份策略</h2>
+          <div class="code-block">
+<pre><code># 备份策略配置
+
+# 1. 增量备份
+#!/bin/bash
+BACKUP_DIR="/backup/incremental"
+DATA_DIR="/data"
+LAST_BACKUP=$(cat /tmp/last_backup)
+
+# 创建增量备份
+rsync -av --link-dest="$LAST_BACKUP" \
+  "$DATA_DIR/" "$BACKUP_DIR/$(date +%Y%m%d_%H%M%S)/"
+
+# 更新最后备份时间
+echo "$BACKUP_DIR/$(date +%Y%m%d_%H%M%S)" > /tmp/last_backup
+
+# 2. 数据库备份
+# 每日全备
+0 2 * * * mysqldump -u root -p database_name > /backup/db/daily_$(date +\%Y\%m\%d).sql
+
+# 每小时增量
+0 * * * * mysqldump -u root -p --single-transaction --flush-logs database_name > /backup/db/incremental_$(date +\%Y\%m\%d_\%H).sql
+
+# 3. Checkpoint管理
+#!/bin/bash
+# 保留最近10个checkpoint
+find /checkpoints -name "checkpoint_*.pt" -type f | \
+  sort -r | tail -n +11 | xargs rm</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚨</span> 灾难恢复</h2>
+          <div class="card">
+            <h3 class="card-title">灾备方案</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>方案</th>
+                  <th>RPO</th>
+                  <th>RTO</th>
+                  <th>成本</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>冷备份</td>
+                  <td>24小时</td>
+                  <td>数天</td>
+                  <td>低</td>
+                </tr>
+                <tr>
+                  <td>热备份</td>
+                  <td>1小时</td>
+                  <td>数小时</td>
+                  <td>中</td>
+                </tr>
+                <tr>
+                  <td>实时复制</td>
+                  <td>分钟级</td>
+                  <td>分钟级</td>
+                  <td>高</td>
+                </tr>
+                <tr>
+                  <td>异地多活</td>
+                  <td>0</td>
+                  <td>0</td>
+                  <td>很高</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">高可用设计原则</div>
+            <p><strong>消除单点</strong>：确保每个组件都有冗余。<strong>快速检测</strong>：及时发现故障并告警。<strong>自动恢复</strong>：尽可能实现自动故障转移。<strong>定期演练</strong>：定期进行故障演练验证。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 高可用设计需要消除单点故障</li>
+                <li>• 选择合适的架构模式满足业务需求</li>
+                <li>• 故障转移和备份策略是关键</li>
+                <li>• 定期演练验证灾备方案的有效性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="50-1-规模化部署经验.html">← 上一节</a>
+          <a href="50-3-性能优化实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

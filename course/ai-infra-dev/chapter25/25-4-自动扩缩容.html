@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.4 自动扩缩容 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.4 自动扩缩容</h1>
+          <p class="subtitle">根据负载动态调整资源</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解自动扩缩容的原理</li>
+            <li>掌握Kubernetes HPA配置</li>
+            <li>学习自定义扩缩容指标</li>
+            <li>了解推理服务的扩缩容策略</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 自动扩缩容原理</h2>
+          <div class="card">
+            <h3 class="card-title">为什么需要自动扩缩容</h3>
+            <p>自动扩缩容（Auto Scaling）根据负载动态调整资源，实现资源的按需分配。</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; background: #E8F5E9; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">💰</div>
+                <div style="font-weight: bold; margin: 10px 0;">成本优化</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">按需付费，节省成本</div>
+              </div>
+              <div style="padding: 15px; background: #E3F2FD; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">🚀</div>
+                <div style="font-weight: bold; margin: 10px 0;">性能保障</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">应对流量峰值</div>
+              </div>
+              <div style="padding: 15px; background: #FFF3E0; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">⚡</div>
+                <div style="font-weight: bold; margin: 10px 0;">响应能力</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">快速响应需求</div>
+              </div>
+              <div style="padding: 15px; background: #F3E5F5; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">🔧</div>
+                <div style="font-weight: bold; margin: 10px 0;">运维简化</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">减少手动干预</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">☸️</span> Kubernetes HPA</h2>
+          <div class="card">
+            <h3 class="card-title">水平Pod自动扩缩容</h3>
+            <div class="code-block">
+<pre><code># hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-inference-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-inference
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+# 部署HPA
+# kubectl apply -f hpa.yaml
+</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 自定义扩缩容指标</h2>
+          <div class="card">
+            <h3 class="card-title">推理服务专用指标</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: #E8F5E9;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #388E3C;">QPS</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">每秒查询数</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: #E3F2FD;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #1976D2;">P99延迟</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">尾部延迟</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: #FFF3E0;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #F57C00;">队列长度</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">待处理请求数</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: #F3E5F5;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #7B1FA2;">GPU利用率</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">GPU使用率</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="自动扩缩容">
+          <div class="caption">图：推理服务自动扩缩容示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 自定义Metrics Server</h2>
+          <div class="card">
+            <h3 class="card-title">实现推理服务专用指标</h3>
+            <div class="code-block">
+<pre><code># custom-metrics-server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-metrics-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-metrics-server
+  template:
+    metadata:
+      labels:
+        app: inference-metrics-server
+    spec:
+      containers:
+      - name: metrics-server
+        image: inference-metrics-server:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: INFERENCESERVICE_URL
+          value: "http://llm-inference:8000"
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-metrics-server
+spec:
+  selector:
+    app: inference-metrics-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+# 使用自定义指标的HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-inference-hpa-custom
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-inference
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: inference_qps
+      target:
+        type: AverageValue
+        averageValue: 100
+  - type: Pods
+    pods:
+      metric:
+        name: inference_p99_latency
+      target:
+        type: AverageValue
+        averageValue: 500
+</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 推理服务扩缩容策略</h2>
+          <div class="card">
+            <h3 class="card-title">LLM推理的扩缩容考虑</h3>
+            <div class="grid grid-2" style="margin-top: 15px;">
+              <div>
+                <h4 style="margin: 15px 0 10px 0;">扩容策略</h4>
+                <ul class="feature-list">
+                  <li><strong>快速扩容</strong>：应对突发流量</li>
+                  <li><strong>GPU预热</strong>：提前加载模型</li>
+                  <li><strong>渐进式</strong>：避免雪崩</li>
+                  <li><strong>预测扩容</strong>：基于历史数据</li>
+                </ul>
+              </div>
+              <div>
+                <h4 style="margin: 15px 0 10px 0;">缩容策略</h4>
+                <ul class="feature-list">
+                  <li><strong>保守缩容</strong>：避免频繁波动</li>
+                  <li><strong>延迟缩容</strong>：等待一段时间</li>
+                  <li><strong>最小实例</strong>：保持baseline</li>
+                  <li><strong>优雅关闭</strong>：完成当前请求</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 扩缩容模式对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>模式</th>
+                <th>触发条件</th>
+                <th>响应速度</th>
+                <th>复杂度</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>反应式</strong></td>
+                <td>当前指标超标</td>
+                <td>中</td>
+                <td>低</td>
+                <td>一般场景</td>
+              </tr>
+              <tr>
+                <td><strong>预测式</strong></td>
+                <td>预测未来负载</td>
+                <td>快</td>
+                <td>高</td>
+                <td>有规律负载</td>
+              </tr>
+              <tr>
+                <td><strong>混合式</strong></td>
+                <td>结合两者</td>
+                <td>快</td>
+                <td>中</td>
+                <td>复杂场景</td>
+              </tr>
+              <tr>
+                <td><strong>定时</strong></td>
+                <td>预设时间</td>
+                <td>快</td>
+                <td>低</td>
+                <td>规律负载</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">自动扩缩容实践建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>设置合理的最小和最大副本数</li>
+              <li>使用多种指标避免误判</li>
+              <li>扩容快、缩容慢的策略</li>
+              <li>LLM推理考虑GPU预热时间</li>
+              <li>监控扩缩容效果，持续优化</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 自动扩缩容根据负载动态调整资源</li>
+                <li>• Kubernetes HPA提供基础扩缩容能力</li>
+                <li>• 推理服务需要自定义扩缩容指标</li>
+                <li>• 扩容快、缩容慢是推荐策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-3-负载均衡策略.html">← 上一节</a>
+          <a href="25-5-推理服务监控.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

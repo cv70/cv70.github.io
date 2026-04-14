@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27.5 多集群管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>27.5 多集群管理</h1>
+          <p class="subtitle">跨集群AI任务调度</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解多集群管理的场景与挑战</li>
+            <li>掌握OCM（Open Cluster Management）的基本概念</li>
+            <li>学会配置跨集群资源分发</li>
+            <li>了解多集群AI任务调度策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="多集群" class="card-image">
+          <h3 class="card-title">多集群管理概述</h3>
+          <p class="card-text">
+            在AI基础设施中，多集群管理用于统一管理分布在不同地域、不同云厂商的Kubernetes集群。
+            通过多集群管理，可以实现跨集群的任务调度、资源复用、故障容灾，提高整体资源利用率和系统可靠性。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 多集群架构</h2>
+
+          <div class="image-container">
+            <img src="https://www.redhat.com/cms/managed-files/styles/rh-cropped/public/2022-11/Red_Hat_Advanced_Cluster_Management_for_Kubernetes-Architecture.png?itok=8ZjP3qZ5" alt="多集群架构">
+            <div class="caption">图：多集群管理架构</div>
+          </div>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">Hub集群</h3>
+              <p class="card-text">控制平面，集中管理和决策。</p>
+              <ul class="feature-list">
+                <li>集中管理控制</li>
+                <li>策略制定与分发</li>
+                <li>统一监控视图</li>
+                <li>跨集群调度</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Managed集群</h3>
+              <p class="card-text">工作集群，执行具体任务。</p>
+              <ul class="feature-list">
+                <li>运行AI工作负载</li>
+                <li>本地资源管理</li>
+                <li>状态上报</li>
+                <li>本地策略执行</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Agent组件</h3>
+              <p class="card-text">连接Hub和Managed集群。</p>
+              <ul class="feature-list">
+                <li>建立安全连接</li>
+                <li>同步资源和状态</li>
+                <li>执行远程命令</li>
+                <li>事件上报</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> Open Cluster Management</h2>
+
+          <div class="card">
+            <h3 class="card-title">OCM简介</h3>
+            <p class="card-text">
+              <strong>Open Cluster Management（OCM）</strong>是CNCF托管的Kubernetes多集群管理项目，
+              提供统一的控制平面来管理多个Kubernetes集群，支持应用分发、策略管理、跨集群监控等。
+            </p>
+          </div>
+
+          <h3>核心概念</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">ManagedCluster</h4>
+              <p class="card-text">代表一个被管理的集群。</p>
+              <div class="code-block">
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  name: cluster1
+  labels:
+    cloud: aws
+    region: us-east-1
+    gpu-type: A100
+spec:
+  hubAcceptsClient: true
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">ClusterRoleBinding</h4>
+              <p class="card-text">定义集群间的访问权限。</p>
+              <div class="code-block">
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: Group
+  name: system:authenticated
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 安装OCM</h2>
+
+          <h3>安装Hub集群</h3>
+          <div class="code-block">
+# 添加OCM Helm仓库
+helm repo add open-cluster-management https://open-cluster-management.io/helm-charts
+helm repo update
+
+# 安装OCM Hub组件
+kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/ocm/release-0.10/deploy/cluster-manager/components.yaml
+
+# 验证安装
+kubectl get pods -n open-cluster-management-hub
+kubectl get crd | grep open-cluster-management
+
+# 安装klusterlet（用于Managed集群）
+kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/ocm/release-0.10/deploy/klusterlet/components.yaml
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">OCM组件</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>cluster-manager</strong>：Hub集群的核心组件</li>
+                <li>• <strong>klusterlet</strong>：Managed集群的代理</li>
+                <li>• <strong>application-manager</strong>：应用分发</li>
+                <li>• <strong>policy-controller</strong>：策略管理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 注册Managed集群</h2>
+
+          <h3>使用klusterlet注册</h3>
+          <div class="code-block">
+# 在Hub集群创建ManagedCluster
+cat > managed-cluster.yaml << 'EOF'
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  name: gpu-cluster-1
+  labels:
+    cloud: aws
+    region: us-west-2
+    gpu-count: "8"
+spec:
+  hubAcceptsClient: true
+EOF
+
+kubectl apply -f managed-cluster.yaml
+
+# 获取bootstrap token
+kubectl get secret -n gpu-cluster-1 bootstrap-token-gpu-cluster-1 -o jsonpath='{.data.token}' | base64 -d
+
+# 在Managed集群安装klusterlet
+kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/ocm/release-0.10/deploy/klusterlet/components.yaml
+
+# 配置klusterlet
+cat > klusterlet-config.yaml << 'EOF'
+apiVersion: operator.open-cluster-management.io/v1
+kind: KlusterletConfig
+metadata:
+  name: gpu-cluster-1
+  namespace: open-cluster-management-agent
+spec:
+  clusterName: gpu-cluster-1
+  serverURL: https://hub-cluster-apiserver:6443
+  registrationImagePullSpec: quay.io/open-cluster-management/registration:latest
+  workImagePullSpec: quay.io/open-cluster-management/work:latest
+EOF
+
+kubectl apply -f klusterlet-config.yaml
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">验证注册</div>
+              <div class="code-block">
+# 在Hub集群查看Managed集群状态
+kubectl get managedclusters
+
+# 查看集群详情
+kubectl describe managedcluster gpu-cluster-1
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📤</span> 应用分发</h2>
+
+          <h3>使用Placement规则</h3>
+          <div class="code-block">
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: gpu-placement
+  namespace: application-samples
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - key: gpu-count
+          operator: In
+          values:
+          - "4"
+          - "8"
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - key: region
+          operator: In
+          values:
+          - us-west-2
+          - us-east-1
+            </div>
+
+            <h3>分发应用</h3>
+            <div class="code-block">
+apiVersion: app.k8s.io/v1beta1
+kind: Application
+metadata:
+  name: pytorch-training-app
+  namespace: application-samples
+spec:
+  componentKinds:
+  - group: apps.open-cluster-management.io
+    kind: Subscription
+  descriptor:
+    description: PyTorch distributed training
+    displayName: PyTorch Training
+    keywords:
+    - AI
+    - Training
+    links:
+    - description: Training code
+      url: https://github.com/example/pytorch-training
+    type: training
+  selector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - pytorch-training
+---
+apiVersion: apps.open-cluster-management.io/v1beta1
+kind: Subscription
+metadata:
+  name: pytorch-training-subscription
+  namespace: application-samples
+  labels:
+    app: pytorch-training
+  annotations:
+    apps.open-cluster-management.io/github-path: deploy
+    apps.open-cluster-management.io/github-branch: main
+spec:
+  channel: application-samples/github-channel
+  placement:
+    placementRef:
+      name: gpu-placement
+            </div>
+
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">分发方式</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• <strong>GitOps</strong>：从Git仓库同步应用</li>
+                  <li>• <strong>Helm</strong>：使用Helm Chart分发</li>
+                  <li>• <strong>Kustomize</strong>：声明式配置管理</li>
+                  <li>• <strong>ResourceSet</strong>：直接分发资源</li>
+                </ul>
+              </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧠</span> 跨集群AI任务调度</h2>
+
+          <h3>多集群训练策略</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">数据并行</h4>
+              <p class="card-text">不同集群处理不同数据分片。</p>
+              <ul class="feature-list">
+                <li>大规模数据处理</li>
+                <li>地理位置分布</li>
+                <li>数据本地性优化</li>
+              </ul>
+              <div class="code-block">
+# 集群1处理数据集A
+cluster1: data_shard = [A1, A2, A3]
+
+# 集群2处理数据集B
+cluster2: data_shard = [B1, B2, B3]
+
+# 集群3处理数据集C
+cluster3: data_shard = [C1, C2, C3]
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">模型并行</h4>
+              <p class="card-text">不同集群处理模型不同部分。</p>
+              <ul class="feature-list">
+                <li>超大模型训练</li>
+                <li>显存限制场景</li>
+                <li>流水线并行</li>
+              </ul>
+              <div class="code-block">
+# 集群1处理模型层1-10
+cluster1: layers = [1, 2, ..., 10]
+
+# 集群2处理模型层11-20
+cluster2: layers = [11, 12, ..., 20]
+
+# 集群3处理模型层21-30
+cluster3: layers = [21, 22, ..., 30]
+              </div>
+            </div>
+          </div>
+
+          <h3>跨集群Ray集群</h3>
+          <div class="code-block">
+# 在多个集群部署Ray集群
+# cluster1 - Ray Head
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-head
+  namespace: ray-system
+spec:
+  rayVersion: '2.8.0'
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: '0.0.0.0'
+    serviceType: LoadBalancer  # 公网暴露
+    replicas: 1
+
+---
+# cluster2 - Ray Worker
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-worker-1
+  namespace: ray-system
+spec:
+  rayVersion: '2.8.0'
+  headGroupSpec:
+    rayStartParams:
+      address: "ray-head-ray-head.ray-system.svc.cluster.local:6379"
+    replicas: 0  # 不创建Head
+  workerGroupSpecs:
+  - replicas: 4
+    groupName: worker
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          resources:
+            limits:
+              nvidia.com/gpu: 2
+            </div>
+
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">跨集群优势</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• 提高总体训练吞吐量</li>
+                  <li>• 利用不同地域的GPU资源</li>
+                  <li>• 数据本地性优化</li>
+                  <li>• 提高系统容错能力</li>
+                </ul>
+              </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 策略管理</h2>
+
+          <h3>创建策略</h3>
+          <div class="code-block">
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: gpu-policy
+  namespace: policies
+spec:
+  remediationAction: enforce
+  disabled: false
+  policy-templates:
+  - objectDefinition:
+      apiVersion: policy.open-cluster-management.io/v1
+      kind: ConfigurationPolicy
+      metadata:
+        name: gpu-quota
+      spec:
+        remediationAction: enforce
+        namespaceSelector:
+          include:
+          - "gpu-*"
+        object-templates:
+        - complianceType: musthave
+          objectDefinition:
+            apiVersion: v1
+            kind: ResourceQuota
+            metadata:
+              name: gpu-quota
+            spec:
+              hard:
+                nvidia.com/gpu: "10"
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: gpu-policy-binding
+  namespace: policies
+placementRef:
+  name: gpu-placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+- name: gpu-policy
+  kind: Policy
+  apiGroup: policy.open-cluster-management.io
+            </div>
+
+            <h3>策略类型</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>策略类型</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ConfigurationPolicy</td>
+                  <td>配置管理</td>
+                </tr>
+                <tr>
+                  <td>CertificatePolicy</td>
+                  <td>证书管理</td>
+                </tr>
+                <tr>
+                  <td>IAMPolicy</td>
+                  <td>权限管理</td>
+                </tr>
+                <tr>
+                  <td>NamespacePolicy</td>
+                  <td>命名空间管理</td>
+                </tr>
+              </tbody>
+            </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与可视化</h2>
+
+          <h3>多集群监控</h3>
+          <div class="code-block">
+# 使用Thanos实现多集群监控
+# 1. 在每个集群部署Prometheus
+# 2. 在Hub集群部署Thanos
+# 3. 配置Thanos接收各集群数据
+
+# 多集群Grafana仪表板
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multi-cluster-dashboard
+  namespace: monitoring
+data:
+  dashboard.json: |
+    {
+      "title": "Multi-Cluster GPU Overview",
+      "panels": [
+        {
+          "title": "GPU Usage by Cluster",
+          "targets": [
+            {
+              "expr": "sum(DCGM_FI_DEV_GPU_UTIL{cluster=~\"cluster.*\"}) by (cluster)"
+            }
+          ]
+        },
+        {
+          "title": "Training Jobs Status",
+          "targets": [
+            {
+              "expr": "ray_job_status{cluster=~\"cluster.*\"}"
+            }
+          ]
+        }
+      ]
+    }
+            </div>
+
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">监控指标</div>
+                <ul style="list-style: none; padding: 0;">
+                  <li>• 集群健康状态</li>
+                  <li>• GPU使用率</li>
+                  <li>• 任务执行情况</li>
+                  <li>• 网络延迟</li>
+                  <li>• 策略合规性</li>
+                </ul>
+              </div>
+            </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 根据地理位置和资源类型组织集群</li>
+              <li>• 使用标签和注解实现精细调度</li>
+              <li>• 配置统一的策略和合规检查</li>
+              <li>• 实施跨集群监控和告警</li>
+              <li>• 制定灾难恢复和故障切换方案</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 多集群管理提供统一的控制平面</li>
+                <li>• OCM是CNCF托管的成熟方案</li>
+                <li>• 支持应用分发和策略管理</li>
+                <li>• 跨集群调度提高资源利用率</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="27-4-Volcano调度器.html">← 上一节</a>
+          <a href="../chapter28/28-1-AI容器镜像构建.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

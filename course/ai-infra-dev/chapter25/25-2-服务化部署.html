@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25.2 服务化部署 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>25.2 服务化部署</h1>
+          <p class="subtitle">推理服务的容器化与服务化实践</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解服务化部署的优势</li>
+            <li>掌握Docker容器化技术</li>
+            <li>学习Kubernetes部署方法</li>
+            <li>了解部署最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 服务化部署的优势</h2>
+          <div class="card">
+            <h3 class="card-title">为什么需要服务化部署</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: #E8F5E9;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #388E3C;">环境一致性</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">避免环境差异</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: #E3F2FD;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #1976D2;">易于扩展</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">水平扩展能力</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: #FFF3E0;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #F57C00;">快速部署</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">自动化部署</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: #F3E5F5;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #7B1FA2;">资源隔离</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">独立资源配额</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #E91E63; background: #FCE4EC;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #C2185B;">故障隔离</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">不影响其他服务</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #00BCD4; background: #E0F7FA;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #0097A7;">运维友好</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">统一运维管理</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> Docker容器化</h2>
+          <div class="card">
+            <h3 class="card-title">推理服务容器化</h3>
+            <div class="code-block">
+<pre><code># Dockerfile示例
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装依赖
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Python依赖
+COPY requirements.txt /app/
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
+
+# 复制模型和应用代码
+COPY models/ /app/models/
+COPY app.py /app/
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动服务
+CMD ["python3", "/app/app.py"]
+
+# requirements.txt
+torch==2.1.0
+transformers==4.35.0
+accelerate==0.25.0
+vllm==0.2.6
+uvicorn==0.24.0
+fastapi==0.109.0
+
+# 构建镜像
+# docker build -t llm-inference:latest .
+
+# 运行容器
+# docker run --gpus all -p 8000:8000 llm-inference:latest
+</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">☸️</span> Kubernetes部署</h2>
+          <div class="card">
+            <h3 class="card-title">K8s部署配置</h3>
+            <div class="code-block">
+<pre><code># deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-inference
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: llm-inference
+  template:
+    metadata:
+      labels:
+        app: llm-inference
+    spec:
+      containers:
+      - name: llm-inference
+        image: llm-inference:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+        env:
+        - name: MODEL_NAME
+          value: "meta-llama/Llama-2-7b-hf"
+        - name: TENSOR_PARALLEL_SIZE
+          value: "1"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-inference
+spec:
+  selector:
+    app: llm-inference
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: LoadBalancer
+
+---
+# hpa.yaml（自动扩缩容）
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-inference-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-inference
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: custom.metrics.k8s.io/qps
+      target:
+        type: AverageValue
+        averageValue: 1000
+
+# 部署命令
+# kubectl apply -f deployment.yaml
+# kubectl apply -f service.yaml
+# kubectl apply -f hpa.yaml
+</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Kubernetes部署">
+          <div class="caption">图：推理服务在Kubernetes中的部署架构</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 安全配置</h2>
+          <div class="card">
+            <h3 class="card-title">推理服务安全最佳实践</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 15px; border-left: 4px solid #4CAF50; background: #E8F5E9;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #388E3C;">认证授权</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">API密钥、JWT</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #2196F3; background: #E3F2FD;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #1976D2;">HTTPS</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">TLS加密传输</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #FF9800; background: #FFF3E0;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #F57C00;">限流</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">防止滥用</div>
+              </div>
+              <div style="padding: 15px; border-left: 4px solid #9C27B0; background: #F3E5F5;">
+                <div style="font-weight: bold; margin-bottom: 5px; color: #7B1FA2;">日志审计</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">请求追踪</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> CI/CD流水线</h2>
+          <div class="card">
+            <h3 class="card-title">自动化部署</h3>
+            <div class="code-block">
+<pre><code># .github/workflows/deploy.yml
+name: Deploy Inference Service
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build Docker image
+      run: docker build -t llm-inference:${{ github.sha }} .
+
+    - name: Push Docker image
+      run: docker push llm-inference:${{ github.sha }}
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v1
+      with:
+        kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl set image deployment/llm-inference \
+          llm-inference=llm-inference:${{ github.sha }}
+
+    - name: Verify deployment
+      run: kubectl rollout status deployment/llm-inference
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 部署架构模式</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>模式</th>
+                <th>描述</th>
+                <th>优点</th>
+                <th>缺点</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>单容器</strong></td>
+                <td>一个容器运行整个服务</td>
+                <td>简单，易部署</td>
+                <td>扩展性差</td>
+                <td>小规模测试</td>
+              </tr>
+              <tr>
+                <td><strong>微服务</strong></td>
+                <td>多个独立服务</td>
+                <td>扩展性好，解耦</td>
+                <td>复杂度高</td>
+                <td>大规模生产</td>
+              </tr>
+              <tr>
+                <td><strong>Sidecar</strong></td>
+                <td>主服务+辅助容器</td>
+                <td>功能模块化</td>
+                <td>资源开销大</td>
+                <td>监控、日志</td>
+              </tr>
+              <tr>
+                <td><strong>Multus</strong></td>
+                <td>多网络接口</td>
+                <td>网络灵活</td>
+                <td>配置复杂</td>
+                <td>网络隔离需求</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">服务化部署实践建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>使用Docker确保环境一致性</li>
+              <li>Kubernetes适合生产环境部署</li>
+              <li>配置健康检查和自动扩缩容</li>
+              <li>建立完善的监控和日志体系</li>
+              <li>实施CI/CD自动化部署</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 服务化部署提供环境一致性和易扩展性</li>
+                <li>• Docker容器化是服务化的基础</li>
+                <li>• Kubernetes提供强大的编排能力</li>
+                <li>• CI/CD实现自动化部署和持续集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="25-1-推理服务框架.html">← 上一节</a>
+          <a href="25-3-负载均衡策略.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

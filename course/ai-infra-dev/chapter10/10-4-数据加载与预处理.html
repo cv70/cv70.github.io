@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.4 数据加载与预处理 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>10.4 数据加载与预处理</h1>
+          <p class="subtitle">优化数据管道性能</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>掌握高效数据加载方法</li>
+            <li>学会预处理流水线</li>
+            <li>了解数据增强技术</li>
+            <li>认识性能优化策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800" alt="数据加载" class="card-image">
+          <h3 class="card-title">数据加载的重要性</h3>
+          <p class="card-text">
+            <strong>数据加载</strong>往往是训练瓶颈，优化数据加载和预处理
+            能显著提高GPU利用率。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> PyTorch数据加载</h2>
+          <div class="card">
+            <h3 class="card-title">DataLoader配置</h3>
+            <div class="code-block">
+<pre><strong>高效数据加载：</strong>
+
+from torch.utils.data import DataLoader, Dataset
+import torch
+from PIL import Image
+import os
+
+class CustomDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.images = os.listdir(root_dir)
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.root_dir, self.images[idx])
+        image = Image.open(img_path)
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image
+
+# 数据增强
+train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(224),
+    transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                     std=[0.229, 0.224, 0.225])
+])
+
+# 创建数据集
+dataset = CustomDataset(root_dir='./data/train',
+                      transform=train_transform)
+
+# 高效数据加载器
+dataloader = DataLoader(
+    dataset,
+    batch_size=256,
+    shuffle=True,
+    num_workers=8,        # 多进程加载
+    pin_memory=True,       # 固定内存
+    persistent_workers=True, # 保持工作进程
+    prefetch_factor=2      # 预取因子
+)
+
+# 使用数据加载器
+for batch_idx, (images) in enumerate(dataloader):
+    # 训练代码
+    pass</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">数据加载优化</div>
+            <p><strong>多进程：</strong>使用num_workers并行加载</p>
+            <p><strong>固定内存：</strong>pin_memory加速CPU-GPU传输</p>
+            <p><strong>预取：</strong>prefetch_factor提前加载数据</p>
+            <p><strong>持久化：</strong>persistent_workers保持进程</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 数据增强</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>方法</th>
+                <th>效果</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>空间变换</td>
+                <td>旋转、翻转、缩放</td>
+                <td>增强空间不变性</td>
+                <td>图像</td>
+              </tr>
+              <tr>
+                <td>颜色变换</td>
+                <td>亮度、对比度、色调</td>
+                <td>增强颜色鲁棒性</td>
+                <td>自然图像</td>
+              </tr>
+              <tr>
+                <td>噪声添加</td>
+                <td>高斯噪声、dropout</td>
+                <td>增强抗噪能力</td>
+                <td>所有数据</td>
+              </tr>
+              <tr>
+                <td>CutMix/MixUp</td>
+                <td>图像混合</td>
+                <td>提高泛化能力</td>
+                <td>图像分类</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化</h2>
+          <div class="card">
+            <h3 class="card-title">优化策略</h3>
+            <div class="code-block">
+<pre><strong>性能优化技巧：</strong>
+
+1. 使用TFRecord或Parquet
+   # 减少文件I/O
+   dataset = tf.data.TFRecordDataset('data.tfrecord')
+
+2. 缓存数据
+   # 内存缓存
+   dataset = dataset.cache()
+
+   # 磁盘缓存
+   dataset = dataset.cache('./cache')
+
+3. 预取数据
+   dataset = dataset.prefetch(tf.data.AUTOTUNE)
+
+4. 并行处理
+   dataset = dataset.map(preprocess_func,
+                      num_parallel_calls=tf.data.AUTOTUNE)
+
+5. 批处理优化
+   batch_size = 256  # 根据GPU显存调整
+
+6. 数据本地化
+   # 将数据复制到本地SSD
+   cp /remote/data /local/ssd/</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 数据加载效率直接影响GPU利用率</li>
+                <li>• 多进程、固定内存、预取是关键优化点</li>
+                <li>• 数据增强提高模型泛化能力</li>
+                <li>• 使用高效数据格式和缓存策略</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="10-3-数据格式与序列化.html">← 上一节</a>
+          <a href="10-5-流式数据处理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

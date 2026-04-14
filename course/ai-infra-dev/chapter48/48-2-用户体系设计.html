@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>48.2 用户体系设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>48.2 用户体系设计</h1>
+          <p class="subtitle">构建安全高效的用户管理</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解用户体系的核心组成</li>
+            <li>掌握身份认证方案</li>
+            <li>学会权限管理设计</li>
+            <li>了解多租户架构</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">👥</span> 用户体系组成</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">身份管理</h3>
+              <ul class="feature-list">
+                <li>用户注册</li>
+                <li>身份认证</li>
+                <li>单点登录</li>
+                <li>密码策略</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">权限管理</h3>
+              <ul class="feature-list">
+                <li>角色定义</li>
+                <li>权限分配</li>
+                <li>资源访问控制</li>
+                <li>审计日志</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">组织管理</h3>
+              <ul class="feature-list">
+                <li>组织架构</li>
+                <li>团队管理</li>
+                <li>配额管理</li>
+                <li>账单管理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔐</span> 身份认证方案</h2>
+          <div class="card">
+            <h3 class="card-title">OIDC/OAuth2.0认证流程</h3>
+            <div class="code-block">
+<pre><code># OAuth2.0认证流程
+
+# 1. 用户发起登录请求
+GET /auth/authorize?
+    response_type=code&
+    client_id=ai-platform&
+    redirect_uri=https://platform.ai/callback&
+    scope=openid profile email&
+    state=random_string
+
+# 2. 用户在认证服务器登录
+# 输入用户名/密码或使用第三方登录
+
+# 3. 认证服务器返回授权码
+302 Found
+Location: https://platform.ai/callback?
+    code=authorization_code&
+    state=random_string
+
+# 4. 平台用授权码换取访问令牌
+POST /oauth/token
+{
+    "grant_type": "authorization_code",
+    "code": "authorization_code",
+    "redirect_uri": "https://platform.ai/callback",
+    "client_id": "ai-platform",
+    "client_secret": "client_secret"
+}
+
+# 5. 返回访问令牌
+{
+    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "refresh_token": "def50200f9..."
+}
+
+# 6. 使用访问令牌访问资源
+GET /api/v1/models
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> RBAC权限模型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>角色</th>
+                <th>权限范围</th>
+                <th>具体权限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>平台管理员</td>
+                <td>平台级别</td>
+                <td>所有资源的完全控制</td>
+              </tr>
+              <tr>
+                <td>组织管理员</td>
+                <td>组织级别</td>
+                <td>组织内资源管理</td>
+              </tr>
+              <tr>
+                <td>项目负责人</td>
+                <td>项目级别</td>
+                <td>项目内训练、部署</td>
+              </tr>
+              <tr>
+                <td>开发者</td>
+                <td>项目级别</td>
+                <td>提交任务、查看结果</td>
+              </tr>
+              <tr>
+                <td>只读用户</td>
+                <td>项目级别</td>
+                <td>仅查看权限</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏢</span> 多租户架构</h2>
+          <div class="code-block">
+<pre><code># 多租户数据模型设计
+
+# 租户表
+CREATE TABLE tenants (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    status ENUM('active', 'suspended', 'deleted'),
+    resource_quota JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+# 用户表
+CREATE TABLE users (
+    id VARCHAR(36) PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    status ENUM('active', 'inactive', 'locked'),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+# 租户用户关联
+CREATE TABLE tenant_users (
+    id VARCHAR(36) PRIMARY KEY,
+    tenant_id VARCHAR(36) REFERENCES tenants(id),
+    user_id VARCHAR(36) REFERENCES users(id),
+    role ENUM('admin', 'developer', 'viewer'),
+    UNIQUE(tenant_id, user_id)
+);
+
+# 资源命名空间
+CREATE TABLE namespaces (
+    id VARCHAR(36) PRIMARY KEY,
+    tenant_id VARCHAR(36) REFERENCES tenants(id),
+    name VARCHAR(255) NOT NULL,
+    resource_quota JSON,
+    UNIQUE(tenant_id, name)
+);</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔑</span> API密钥管理</h2>
+          <div class="code-block">
+<pre><code># API密钥生成与验证
+
+# 密钥生成
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+
+def generate_api_key():
+    # 生成随机密钥
+    key_id = secrets.token_urlsafe(16)
+    key_secret = secrets.token_urlsafe(32)
+
+    # 存储哈希值
+    key_hash = hashlib.sha256(key_secret.encode()).hexdigest()
+
+    return {
+        'key_id': key_id,
+        'key_secret': key_secret,
+        'key_hash': key_hash
+    }
+
+# 密钥验证
+def verify_api_key(key_id, key_secret, stored_hash):
+    key_hash = hashlib.sha256(key_secret.encode()).hexdigest()
+    return secrets.compare_digest(key_hash, stored_hash)
+
+# JWT Token生成
+import jwt
+
+def generate_jwt_token(user_id, tenant_id, role):
+    payload = {
+        'user_id': user_id,
+        'tenant_id': tenant_id,
+        'role': role,
+        'exp': datetime.utcnow() + timedelta(hours=24),
+        'iat': datetime.utcnow()
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return token</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔒</span> 资源隔离</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Kubernetes命名空间隔离</h3>
+              <div class="code-block">
+<pre><code># 为每个租户创建命名空间
+kubectl create namespace tenant-001
+kubectl create namespace tenant-002
+
+# 配置资源配额
+kubectl apply -f - << EOF
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: tenant-001
+spec:
+  hard:
+    requests.cpu: "16"
+    requests.memory: 64Gi
+    limits.cpu: "32"
+    limits.memory: 128Gi
+    nvidia.com/gpu: "8"
+    persistentvolumeclaims: "10"
+EOF</code></pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">网络策略隔离</h3>
+              <div class="code-block">
+<pre><code># 网络隔离策略
+kubectl apply -f - << EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-isolation
+  namespace: tenant-001
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+EOF</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">用户体系最佳实践</div>
+            <p><strong>最小权限原则</strong>：用户只获得完成任务所需的最小权限。<strong>审计日志</strong>：记录所有敏感操作，便于追溯。<strong>定期审查</strong>：定期检查和清理过期权限。<strong>多因素认证</strong>：为关键操作添加MFA保护。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 用户体系包括身份管理、权限管理、组织管理</li>
+                <li>• OIDC/OAuth2.0是标准的身份认证方案</li>
+                <li>• RBAC模型提供灵活的权限控制</li>
+                <li>• 多租户架构支持资源隔离和配额管理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="48-1-平台架构设计.html">← 上一节</a>
+          <a href="48-3-资源管理设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

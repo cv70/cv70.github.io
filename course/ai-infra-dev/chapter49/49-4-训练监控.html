@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>49.4 训练监控 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>49.4 训练监控</h1>
+          <p class="subtitle">实时监控大模型训练过程</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解训练监控的重要性</li>
+            <li>掌握关键监控指标</li>
+            <li>学会使用监控工具</li>
+            <li>了解告警配置方法</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 监控指标体系</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">训练指标</h3>
+              <ul class="feature-list">
+                <li>Loss值</li>
+                <li>学习率</li>
+                <li>准确率</li>
+                <li>梯度范数</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">资源指标</h3>
+              <ul class="feature-list">
+                <li>GPU利用率</li>
+                <li>显存使用</li>
+                <li>CPU使用率</li>
+                <td>内存使用</td>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">系统指标</h3>
+              <ul class="feature-list">
+                <li>网络带宽</li>
+                <li>I/O吞吐</li>
+                <li>温度</li>
+                <td>功耗</td>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎮</span> GPU监控</h2>
+          <div class="code-block">
+<pre><code># GPU监控脚本
+import subprocess
+import time
+import json
+
+def get_gpu_stats():
+    """获取GPU状态"""
+    result = subprocess.run(
+        ['nvidia-smi', '--query-gpu=index,name,temperature.gpu,utilization.gpu,'
+         'utilization.memory,memory.used,memory.total,power.draw',
+         '--format=csv,noheader,nounits'],
+        capture_output=True,
+        text=True
+    )
+
+    stats = []
+    for line in result.stdout.split('\n'):
+        if not line:
+            continue
+        parts = [p.strip() for p in line.split(',')]
+        stats.append({
+            'index': int(parts[0]),
+            'name': parts[1],
+            'temperature': float(parts[2]),
+            'gpu_util': float(parts[3]),
+            'mem_util': float(parts[4]),
+            'mem_used': float(parts[5]),
+            'mem_total': float(parts[6]),
+            'power': float(parts[7])
+        })
+    return stats
+
+# 持续监控
+while True:
+    gpu_stats = get_gpu_stats()
+    for gpu in gpu_stats:
+        print(f"GPU {gpu['index']}: "
+              f"Temp {gpu['temperature']}°C, "
+              f"Util {gpu['gpu_util']}%, "
+              f"Mem {gpu['mem_used']}/{gpu['mem_total']}MB")
+    time.sleep(5)</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 训练指标监控</h2>
+          <div class="code-block">
+<pre><code># 训练指标监控
+import torch
+from torch.utils.tensorboard import SummaryWriter
+import wandb
+
+# TensorBoard监控
+writer = SummaryWriter(log_dir='./logs')
+
+# WandB监控
+wandb.init(project='llm-training', config={
+    'model': '7b-llm',
+    'batch_size': 128,
+    'learning_rate': 1e-4,
+    'world_size': 8
+})
+
+# 训练循环
+for step, batch in enumerate(dataloader):
+    # 训练代码...
+    loss = compute_loss()
+
+    # 记录训练指标
+    if step % 100 == 0:
+        # TensorBoard
+        writer.add_scalar('Train/Loss', loss.item(), step)
+        writer.add_scalar('Train/LR', optimizer.param_groups[0]['lr'], step)
+        writer.add_scalar('Train/GPU_Memory',
+                         torch.cuda.memory_allocated() / 1e9, step)
+
+        # WandB
+        wandb.log({
+            'train/loss': loss.item(),
+            'train/learning_rate': optimizer.param_groups[0]['lr'],
+            'train/step': step,
+            'train/gpu_memory': torch.cuda.memory_allocated() / 1e9,
+            'train/gradient_norm': torch.nn.utils.clip_grad_norm_(model.parameters(), float('inf')).item()
+        })
+
+    # 记录梯度
+    if step % 1000 == 0:
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                writer.add_histogram(f'Gradients/{name}', param.grad, step)
+                writer.add_histogram(f'Parameters/{name}', param, step)
+
+# 完成训练
+writer.close()
+wandb.finish()</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔔</span> 告警配置</h2>
+          <div class="code-block">
+<pre><code># 训练告警规则
+import requests
+
+class TrainingMonitor:
+    def __init__(self, webhook_url):
+        self.webhook_url = webhook_url
+        self.thresholds = {
+            'loss_spike': 10.0,        # Loss异常
+            'gpu_low_util': 10.0,      # GPU利用率过低
+            'gpu_high_temp': 85.0,      # GPU温度过高
+            'oom': 0.95               # 显存使用过高
+        }
+
+    def check_and_alert(self, metrics):
+        """检查指标并发送告警"""
+        alerts = []
+
+        # 检查Loss
+        if metrics['loss'] > self.thresholds['loss_spike']:
+            alerts.append({
+                'type': 'loss_spike',
+                'value': metrics['loss'],
+                'message': f"Loss spike detected: {metrics['loss']}"
+            })
+
+        # 检查GPU利用率
+        if metrics['gpu_util'] < self.thresholds['gpu_low_util']:
+            alerts.append({
+                'type': 'gpu_low_util',
+                'value': metrics['gpu_util'],
+                'message': f"Low GPU utilization: {metrics['gpu_util']}%"
+            })
+
+        # 检查GPU温度
+        if metrics['gpu_temp'] > self.thresholds['gpu_high_temp']:
+            alerts.append({
+                'type': 'gpu_high_temp',
+                'value': metrics['gpu_temp'],
+                'message': f"High GPU temperature: {metrics['gpu_temp']}°C"
+            })
+
+        # 发送告警
+        for alert in alerts:
+            self.send_alert(alert)
+
+    def send_alert(self, alert):
+        """发送告警消息"""
+        payload = {
+            'text': f"⚠️ Training Alert: {alert['message']}",
+            'attachments': [{
+                'color': 'danger',
+                'fields': [
+                    {'title': 'Type', 'value': alert['type']},
+                    {'title': 'Value', 'value': str(alert['value'])}
+                ]
+            }]
+        }
+        requests.post(self.webhook_url, json=payload)</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 监控仪表盘</h2>
+          <div class="card">
+            <h3 class="card-title">Grafana仪表盘配置</h3>
+            <div class="code-block">
+<pre><code># Grafana面板配置示例
+
+## 面板1: 训练Loss趋势
+- 指标: train_loss
+- 图表: 折线图
+- 刷新: 30s
+
+## 面板2: GPU利用率
+- 指标: gpu_utilization
+- 图表: 多条线（每卡）
+- 刷新: 10s
+
+## 面板3: GPU显存使用
+- 指标: gpu_memory_used
+- 图表: 堆叠图
+- 刷新: 30s
+
+## 面板4: 学习率变化
+- 指标: learning_rate
+- 图表: 折线图
+- 刷新: 30s
+
+## 面板5: 训练速度
+- 指标: steps_per_second
+- 图表: 折线图
+- 刷新: 60s
+
+## 面板6: 网络带宽
+- 指标: network_bandwidth
+- 图表: 折线图
+- 刷新: 10s</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">监控最佳实践</div>
+            <p><strong>实时性</strong>：确保监控数据实时更新，及时发现异常。<strong>可视化</strong>：使用可视化工具直观展示训练状态。<strong>告警合理</strong>：设置合理的告警阈值，避免误报。<strong>历史分析</strong>：保存历史数据，便于回溯分析。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 训练监控包括训练、资源、系统三大类指标</li>
+                <li>• TensorBoard和WandB是常用的监控工具</li>
+                <li>• 合理的告警规则可以及时发现训练异常</li>
+                <li>• 可视化仪表盘提供直观的训练状态展示</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="49-3-分布式训练部署.html">← 上一节</a>
+          <a href="49-5-性能调优.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

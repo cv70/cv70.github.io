@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3.4 编译器与优化器（Triton/MLIR/XLA） - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>3.4 编译器与优化器（Triton/MLIR/XLA）</h1>
+          <p class="subtitle">AI模型自动优化与编译技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解编译器优化的重要性</li>
+            <li>掌握Triton编程语言</li>
+            <li>了解MLIR架构</li>
+            <li>认识XLA编译器</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="编译器优化" class="card-image">
+          <h3 class="card-title">编译器优化概述</h3>
+          <p class="card-text">
+            编译器优化是提升AI模型性能的关键技术。通过算子融合、内存布局优化、自动调优等技术，编译器可以自动生成高效的可执行代码，将模型性能提升数倍。现代AI编译器正在改变我们优化模型的方式。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 优化技术</h2>
+          <div class="card">
+            <h3 class="card-title">核心优化策略</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              编译器通过多种技术提升模型性能：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>算子融合</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>合并相邻算子</li>
+                  <li>减少内存访问</li>
+                  <li>提升计算密度</li>
+                  <li>降低延迟</li>
+                </ul>
+              </div>
+              <div>
+                <h4>内存优化</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>内存布局重排</li>
+                  <li>循环平铺</li>
+                  <li>缓存优化</li>
+                  <li>减少拷贝</li>
+                </ul>
+              </div>
+              <div>
+                <h4>代码生成</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>硬件特定优化</li>
+                  <li>向量化</li>
+                  <li>并行化</li>
+                  <li>指令选择</li>
+                </ul>
+              </div>
+              <div>
+                <h4>自动调优</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>搜索最优参数</li>
+                  <li>自适应优化</li>
+                  <li>性能预测</li>
+                  <li>机器学习驱动</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧊</span> Triton</h2>
+          <div class="card">
+            <h3 class="card-title">GPU编程语言</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              Triton是OpenAI开发的GPU编程语言，提供比CUDA更高级的抽象和更好的可移植性：
+            </p>
+            <div class="code-block">
+Triton示例（矩阵乘法）：
+
+import torch
+import triton
+import triton.language as tl
+
+@triton.jit
+def matmul_kernel(
+    x_ptr, y_ptr, output_ptr,
+    n_rows, n_cols, stride_x, stride_y,
+    BLOCK_SIZE: tl.constexpr
+):
+    # 获取程序ID
+    pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
+
+    # 加载数据块
+    x_block = tl.load(
+        x_ptr + block_start * stride_x,
+        shape=(BLOCK_SIZE,),
+        stride=(stride_x,)
+    )
+    y_block = tl.load(
+        y_ptr + block_start * stride_y,
+        shape=(BLOCK_SIZE,),
+        stride=(stride_y,)
+    )
+
+    # 计算结果
+    output = tl.dot(x_block, y_block)
+
+    # 存储结果
+    tl.store(
+        output_ptr + block_start,
+        output
+    )
+
+# 使用Triton kernel
+output = torch.empty(n_rows, n_cols, device='cuda')
+grid = lambda meta: (triton.cdiv(n_rows, meta['BLOCK_SIZE']),)
+matmul_kernel[grid](
+    x, y, output,
+    n_rows, n_cols,
+    x.stride(0), y.stride(0),
+    BLOCK_SIZE=128
+)
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">Triton优势</div>
+                <p>Triton自动处理线程管理、内存分配等底层细节，开发者只需关注计算逻辑，可移植到NVIDIA和AMD GPU。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> MLIR</h2>
+          <div class="card">
+            <h3 class="card-title">多级中间表示</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              MLIR（Multi-Level Intermediate Representation）是LLVM项目的编译器基础设施，提供多级IR和方言系统：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>核心概念</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>多级IR系统</li>
+                  <li>方言（Dialect）</li>
+                  <li>转换流水线</li>
+                  <li>模式匹配</li>
+                </ul>
+              </div>
+              <div>
+                <h4>MLIR方言</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>torch - PyTorch方言</li>
+                  <li>tensor - 张量运算</li>
+                  <li>scf - 控制流</li>
+                  <li>gpu - GPU特定</li>
+                  <li>llvm - LLVM IR</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="font-size: 0.85rem; margin-top: 1rem;">
+MLIR示例（张量计算）：
+
+module {
+  func.func @matmul(%arg0: tensor<128x128xf32>,
+                   %arg1: tensor<128x128xf32>)
+      -> tensor<128x128xf32> {
+    %0 = tensor.empty() : tensor<128x128xf32>
+
+    %1 = linalg.matmul
+      ins(%arg0, %arg1: tensor<128x128xf32>, tensor<128x128xf32>)
+      outs(%0: tensor<128x128xf32>)
+      -> tensor<128x128xf32>
+
+    return %1 : tensor<128x128xf32>
+  }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> XLA</h2>
+          <div class="card">
+            <h3 class="card-title">加速线性代数编译器</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              XLA（Accelerated Linear Algebra）是Google开发的编译器，用于优化TensorFlow和JAX程序：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>XLA特性</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>延迟执行</li>
+                  <li>算子融合</li>
+                  <li>内存优化</li>
+                  <li>目标特定优化</li>
+                </ul>
+              </div>
+              <div>
+                <h4>支持的硬件</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>NVIDIA GPU</li>
+                  <li>Google TPU</li>
+                  <li>ARM CPU</li>
+                  <li>x86 CPU</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+TensorFlow使用XLA：
+
+import tensorflow as tf
+
+# 启用XLA编译
+tf.config.optimizer.set_jit(True)
+
+# 标记函数使用XLA
+@tf.function(jit_compile=True)
+def train_step(model, x, y):
+    with tf.GradientTape() as tape:
+        predictions = model(x)
+        loss = loss_fn(y, predictions)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    return loss
+
+JAX使用XLA：
+
+import jax
+import jax.numpy as jnp
+
+# JIT编译函数
+@jax.jit
+def matmul(x, y):
+    return jnp.dot(x, y)
+
+# 自动使用XLA优化
+result = matmul(x, y)
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> TVM</h2>
+          <div class="card">
+            <h3 class="card-title">端到端机器学习编译框架</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              TVM（Tensor Virtual Machine）是一个端到端的机器学习编译框架，支持多种前端和后端：
+            </p>
+            <div class="code-block">
+TVM使用示例：
+
+import tvm
+from tvm import relay
+
+# 定义模型
+model = relay.from_pytorch(scripted_model, input_spec)
+
+# 编译模型
+target = tvm.target.cuda()
+with tvm.transform.PassContext(opt_level=3):
+    lib = relay.build_module.build(
+        model,
+        target=target,
+        params=params
+    )
+
+# 部署模型
+dev = tvm.cuda()
+runtime = tvm.contrib.graph_executor.GraphModule(lib['default'](dev))
+runtime.set_input('data', data)
+runtime.run()
+output = runtime.get_output(0).numpy()
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 编译器对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>编译器</th>
+                <th>优势</th>
+                <th>劣势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Triton</strong></td>
+                <td>易用、可移植</td>
+                <td>生态新</td>
+                <td>自定义kernel开发</td>
+              </tr>
+              <tr>
+                <td><strong>MLIR</strong></td>
+                <td>灵活、模块化</td>
+                <td>学习曲线陡</td>
+                <td>编译器开发</td>
+              </tr>
+              <tr>
+                <td><strong>XLA</strong></td>
+                <td>与框架集成好</td>
+                <td>依赖Google生态</td>
+                <td>TensorFlow/JAX</td>
+              </tr>
+              <tr>
+                <td><strong>TVM</strong></td>
+                <td>跨平台、灵活</td>
+                <td>配置复杂</td>
+                <td>多平台部署</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能提升</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化效果</div>
+                <p>编译器优化通常可带来<strong>2-10倍</strong>的性能提升。关键优化包括算子融合减少内存访问、循环优化提升cache命中率、向量化利用SIMD指令。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 编译器优化可显著提升模型性能</li>
+                <li>• Triton提供高级GPU编程抽象</li>
+                <li>• MLIR是灵活的多级IR系统</li>
+                <li>• XLA深度集成TensorFlow和JAX</li>
+                <li>• TVM支持跨平台部署</li>
+                <li>• 选择合适的编译器取决于具体需求</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="3-3-深度学习框架基础（PyTorchTensorFlowJAX）.html">← 上一节</a>
+          <a href="3-5-容器与虚拟化技术.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

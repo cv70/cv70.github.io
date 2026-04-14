@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12.5 混合检索架构 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>12.5 混合检索架构</h1>
+          <p class="subtitle">结合向量搜索与传统搜索的最佳实践</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解混合检索的概念与价值</li>
+            <li>掌握向量搜索与关键词搜索的融合方法</li>
+            <li>学习重排序（Rerank）技术</li>
+            <li>了解混合检索的实战应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="混合检索架构图" class="card-image">
+          <h3 class="card-title">为什么需要混合检索</h3>
+          <p class="card-text">
+            纯向量搜索擅长语义理解，但可能忽略精确匹配；纯关键词搜索精确但缺乏语义理解。
+            混合检索结合两者的优势，既能处理模糊语义，又能保持精确匹配，
+            是构建高质量搜索系统的关键策略。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 混合检索原理</h2>
+
+          <h3>检索方式对比</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>检索方式</th>
+                <th>原理</th>
+                <th>优势</th>
+                <th>劣势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>关键词搜索</td>
+                <td>倒排索引、精确匹配</td>
+                <td>精确、可控、快速</td>
+                <td>缺乏语义理解</td>
+                <td>产品搜索、代码搜索</td>
+              </tr>
+              <tr>
+                <td>向量搜索</td>
+                <td>语义相似度、高维空间</td>
+                <td>语义理解、跨语言</td>
+                <td>可能错过精确匹配</td>
+                <td>文档搜索、问答系统</td>
+              </tr>
+              <tr>
+                <td>混合搜索</td>
+                <td>融合多种检索方式</td>
+                <td>综合优势、高召回率</td>
+                <td>复杂度高</td>
+                <td>通用搜索引擎、推荐系统</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>融合策略</h3>
+          <div class="code-block"""
+混合检索融合策略:
+
+1. 简单拼接 (Concatenation)
+   - 分别执行向量搜索和关键词搜索
+   - 合并结果，去重
+   - 简单但可能效果一般
+
+2. 加权融合 (Weighted Fusion)
+   - 为不同检索方式分配权重
+   - 融合分数: score = α * vector_score + β * keyword_score
+   - 需要调参优化
+
+3. 排序融合 (Rank Fusion)
+   - Reciprocal Rank Fusion (RRF)
+   - CombSUM / CombMNZ
+   - 对分数归一化后融合
+
+4. 两阶段检索 (Two-Stage Retrieval)
+   - 第一阶段: 粗检索（高召回）
+   - 第二阶段: 重排序（高精确）
+   - 适合大规模场景
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 实现混合检索</h2>
+
+          <h3>Elasticsearch + 向量搜索</h3>
+          <div class="code-block">
+from elasticsearch import Elasticsearch
+from sentence_transformers import SentenceTransformer
+import numpy as np
+
+class HybridSearch:
+    def __init__(self, es_host='localhost', es_port=9200):
+        # 连接Elasticsearch
+        self.es = Elasticsearch([f'http://{es_host}:{es_port}'])
+        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+
+    def create_index(self):
+        """创建混合检索索引"""
+        index_mapping = {
+            "mappings": {
+                "properties": {
+                    "title": {
+                        "type": "text",
+                        "analyzer": "standard"
+                    },
+                    "content": {
+                        "type": "text",
+                        "analyzer": "standard"
+                    },
+                    "embedding": {
+                        "type": "dense_vector",
+                        "dims": 384,
+                        "index": True,
+                        "similarity": "cosine"
+                    },
+                    "category": {
+                        "type": "keyword"
+                    },
+                    "timestamp": {
+                        "type": "date"
+                    }
+                }
+            },
+            "settings": {
+                "number_of_shards": 3,
+                "number_of_replicas": 1
+            }
+        }
+
+        self.es.indices.create(
+            index='documents',
+            body=index_mapping,
+            ignore=400
+        )
+
+    def index_document(self, doc):
+        """索引文档"""
+        # 生成向量
+        text = f"{doc['title']} {doc['content']}"
+        embedding = self.encoder.encode(text).tolist()
+
+        # 构建文档
+        es_doc = {
+            "title": doc['title'],
+            "content": doc['content'],
+            "embedding": embedding,
+            "category": doc.get('category'),
+            "timestamp": doc.get('timestamp')
+        }
+
+        # 索引到Elasticsearch
+        self.es.index(
+            index='documents',
+            id=doc['id'],
+            body=es_doc
+        )
+
+    def keyword_search(self, query, top_k=10):
+        """关键词搜索"""
+        query_body = {
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title^2", "content"],
+                    "type": "best_fields"
+                }
+            },
+            "size": top_k
+        }
+
+        response = self.es.search(index='documents', body=query_body)
+        results = response['hits']['hits']
+
+        return [
+            {
+                'id': r['_id'],
+                'score': r['_score'],
+                'source': r['_source'],
+                'type': 'keyword'
+            }
+            for r in results
+        ]
+
+    def vector_search(self, query, top_k=10):
+        """向量搜索"""
+        # 生成查询向量
+        query_embedding = self.encoder.encode(query).tolist()
+
+        query_body = {
+            "query": {
+                "script_score": {
+                    "query": {"match_all": {}},
+                    "script": {
+                        "source": "cosineSimilarity(params.query_vector, 'embedding') + 1.0",
+                        "params": {"query_vector": query_embedding}
+                    }
+                }
+            },
+            "size": top_k
+        }
+
+        response = self.es.search(index='documents', body=query_body)
+        results = response['hits']['hits']
+
+        return [
+            {
+                'id': r['_id'],
+                'score': r['_score'],
+                'source': r['_source'],
+                'type': 'vector'
+            }
+            for r in results
+        ]
+
+    def hybrid_search(self, query, alpha=0.5, top_k=10):
+        """混合搜索"""
+        # 分别执行关键词和向量搜索
+        keyword_results = self.keyword_search(query, top_k=top_k * 2)
+        vector_results = self.vector_search(query, top_k=top_k * 2)
+
+        # 合并结果
+        combined = {}
+
+        # 处理关键词结果
+        for result in keyword_results:
+            doc_id = result['id']
+            if doc_id not in combined:
+                combined[doc_id] = {
+                    'id': doc_id,
+                    'source': result['source'],
+                    'keyword_score': 0,
+                    'vector_score': 0
+                }
+            combined[doc_id]['keyword_score'] = result['score']
+
+        # 处理向量结果
+        for result in vector_results:
+            doc_id = result['id']
+            if doc_id not in combined:
+                combined[doc_id] = {
+                    'id': doc_id,
+                    'source': result['source'],
+                    'keyword_score': 0,
+                    'vector_score': 0
+                }
+            combined[doc_id]['vector_score'] = result['score']
+
+        # 归一化分数并融合
+        max_keyword = max(r['keyword_score'] for r in combined.values()) or 1
+        max_vector = max(r['vector_score'] for r in combined.values()) or 1
+
+        for doc in combined.values():
+            normalized_keyword = doc['keyword_score'] / max_keyword
+            normalized_vector = doc['vector_score'] / max_vector
+            doc['combined_score'] = (
+                alpha * normalized_keyword +
+                (1 - alpha) * normalized_vector
+            )
+
+        # 排序并返回top_k结果
+        sorted_results = sorted(
+            combined.values(),
+            key=lambda x: x['combined_score'],
+            reverse=True
+        )
+
+        return sorted_results[:top_k]
+
+# 使用示例
+hybrid_search = HybridSearch()
+hybrid_search.create_index()
+
+# 索引文档
+for i in range(100):
+    doc = {
+        'id': f"doc_{i}",
+        'title': f"Document {i}",
+        'content': f"This is the content of document {i}",
+        'category': f"category_{i % 5}"
+    }
+    hybrid_search.index_document(doc)
+
+# 执行混合搜索
+query = "machine learning document"
+results = hybrid_search.hybrid_search(query, alpha=0.5)
+
+for i, result in enumerate(results[:5], 1):
+    print(f"{i}. {result['source']['title']} (Score: {result['combined_score']:.4f})")
+          </div>
+
+          <h3>Reciprocal Rank Fusion</h3>
+          <div class="code-block">
+def reciprocal_rank_fusion(results_dict, k=60):
+    """
+    Reciprocal Rank Fusion算法
+
+    参数:
+        results_dict: {检索方法: [结果列表]}
+        k: 平滑参数，通常设置为60
+
+    返回:
+        融合后的排序结果
+    """
+    fused_scores = {}
+
+    for method, results in results_dict.items():
+        for rank, result in enumerate(results):
+            doc_id = result['id']
+
+            # 计算RRF分数
+            rrf_score = 1.0 / (k + rank + 1)
+
+            if doc_id in fused_scores:
+                fused_scores[doc_id] += rrf_score
+            else:
+                fused_scores[doc_id] = rrf_score
+
+    # 按分数排序
+    sorted_results = sorted(
+        fused_scores.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    # 构建结果列表
+    final_results = []
+    for doc_id, score in sorted_results:
+        # 从原始结果中获取文档详情
+        for method, results in results_dict.items():
+            for result in results:
+                if result['id'] == doc_id:
+                    final_results.append({
+                        'id': doc_id,
+                        'score': score,
+                        'source': result['source']
+                    })
+                    break
+            break
+
+    return final_results
+
+# 使用示例
+keyword_results = hybrid_search.keyword_search("query")
+vector_results = hybrid_search.vector_search("query")
+
+# 使用RRF融合
+fused_results = reciprocal_rank_fusion({
+    'keyword': keyword_results,
+    'vector': vector_results
+}, k=60)
+
+for i, result in enumerate(fused_results[:10], 1):
+    print(f"{i}. {result['source']['title']} (RRF Score: {result['score']:.4f})")
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 重排序（Rerank）技术</h2>
+
+          <h3>两阶段检索</h3>
+          <div class="code-block"""
+两阶段检索流程:
+
+┌─────────────────────────────────────────┐
+│           第一阶段: 粗检索             │
+│  并行执行多种检索方式                  │
+│  - 关键词搜索 (1000+ 结果)            │
+│  - 向量搜索 (1000+ 结果)              │
+│  - 元数据过滤 (1000+ 结果)             │
+│  合并得到候选集 (100-500 结果)         │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│           第二阶段: 重排序              │
+│  使用更强的模型对候选集重新排序        │
+│  - Cross-Encoder                     │
+│  - LLM Rerank                        │
+│  - 多特征融合                         │
+│  返回最终结果 (10-20 个)              │
+└─────────────────────────────────────────┘
+
+优势:
+- 第一阶段高召回，第二阶段高精确
+- 降低计算成本（只对候选集精排）
+- 可以使用复杂的重排序模型
+          </div>
+
+          <h3>Cross-Encoder重排序</h3>
+          <div class="code-block">
+from sentence_transformers import CrossEncoder
+
+class Reranker:
+    def __init__(self, model_name='cross-encoder/ms-marco-MiniLM-L-6-v2'):
+        self.model = CrossEncoder(model_name)
+
+    def rerank(self, query, candidates, top_k=10):
+        """
+        使用Cross-Encoder重排序
+
+        参数:
+            query: 查询文本
+            candidates: 候选文档列表
+            top_k: 返回的top_k数量
+        """
+        # 构建query-document对
+        pairs = [[query, doc['content']] for doc in candidates]
+
+        # 计算相关性分数
+        scores = self.model.predict(pairs)
+
+        # 为候选文档添加分数
+        for doc, score in zip(candidates, scores):
+            doc['rerank_score'] = score
+
+        # 按分数排序
+        reranked = sorted(
+            candidates,
+            key=lambda x: x['rerank_score'],
+            reverse=True
+        )
+
+        return reranked[:top_k]
+
+# 使用示例
+reranker = Reranker()
+
+# 第一阶段检索（获取候选集）
+candidates = hybrid_search.hybrid_search(query, top_k=100)
+
+# 第二阶段重排序
+final_results = reranker.rerank(query, candidates, top_k=10)
+
+for i, result in enumerate(final_results, 1):
+    print(f"{i}. {result['title']} (Score: {result['rerank_score']:.4f})")
+          </div>
+
+          <h3>多特征融合</h3>
+          <div class="code-block">
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+
+class FeatureBasedReranker:
+    def __init__(self):
+        self.model = RandomForestClassifier(n_estimators=100)
+
+    def extract_features(self, query, document):
+        """提取文档特征"""
+        features = []
+
+        # 1. 关键词匹配特征
+        features.append(len(set(query.lower().split()) &
+                         set(document['title'].lower().split())))
+
+        # 2. 向量相似度特征
+        query_vec = self.encoder.encode(query)
+        doc_vec = self.encoder.encode(document['content'])
+        similarity = np.dot(query_vec, doc_vec) / (
+            np.linalg.norm(query_vec) * np.linalg.norm(doc_vec)
+        )
+        features.append(similarity)
+
+        # 3. 文档长度特征
+        features.append(len(document['content'].split()))
+
+        # 4. 时间特征
+        if 'timestamp' in document:
+            days_old = (time.time() - document['timestamp']) / 86400
+            features.append(days_old)
+
+        return features
+
+    def train(self, training_data):
+        """
+        训练重排序模型
+
+        training_data: [(query, positive_doc, negative_docs)]
+        """
+        X = []
+        y = []
+
+        for query, pos_doc, neg_docs in training_data:
+            # 正样本特征
+            pos_features = self.extract_features(query, pos_doc)
+            X.append(pos_features)
+            y.append(1)
+
+            # 负样本特征
+            for neg_doc in neg_docs:
+                neg_features = self.extract_features(query, neg_doc)
+                X.append(neg_features)
+                y.append(0)
+
+        self.model.fit(X, y)
+
+    def rerank(self, query, candidates, top_k=10):
+        """使用训练好的模型重排序"""
+        # 提取特征
+        features = [
+            self.extract_features(query, doc)
+            for doc in candidates
+        ]
+
+        # 预测相关性分数
+        scores = self.model.predict_proba(features)[:, 1]
+
+        # 添加分数并排序
+        for doc, score in zip(candidates, scores):
+            doc['rerank_score'] = score
+
+        reranked = sorted(
+            candidates,
+            key=lambda x: x['rerank_score'],
+            reverse=True
+        )
+
+        return reranked[:top_k]
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 应用场景</h2>
+
+          <h3>RAG系统</h3>
+          <div class="code-block"""
+RAG系统混合检索设计:
+
+1. 知识库准备
+   - 将文档分块
+   - 生成文本向量
+   - 建立倒排索引
+   - 提取元数据（作者、时间、类别等）
+
+2. 检索流程
+   - 用户问题 → 向量搜索 (语义相关)
+   - 用户问题 → 关键词搜索 (精确匹配)
+   - 用户问题 → 元数据过滤 (限定范围)
+   - 合并候选集 → Rerank (精排)
+
+3. 回答生成
+   - 将top-k检索结果作为上下文
+   - 生成回答
+   - 引用来源
+
+优势:
+- 提高检索准确率
+- 减少幻觉
+- 增强可解释性
+          </div>
+
+          <h3>电商搜索</h3>
+          <div class="code-block"""
+电商搜索混合检索:
+
+1. 多维检索
+   - 文本搜索: 商品名称、描述
+   - 向量搜索: 商品图片、用户意图
+   - 结构化搜索: 价格、类别、库存
+
+2. 个性化
+   - 用户历史 → 用户向量
+   - 商品特征 → 商品向量
+   - 计算用户-商品相似度
+
+3. 重排序
+   - 销量分数
+   - 评分分数
+   - 库存状态
+   - 价格竞争力
+   - 个性化分数
+
+最终分数 = α * 文本分数 + β * 向量分数 +
+            γ * 销量分数 + δ * 评分分数 +
+            ε * 个性化分数
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能评估</h2>
+
+          <h3>评估指标</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">检索质量指标</h4>
+              <ul class="feature-list">
+                <li>Recall@K</li>
+                <li>Precision@K</li>
+                <li>MAP (Mean Average Precision)</li>
+                <li>NDCG (Normalized DCG)</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">性能指标</h4>
+              <ul class="feature-list">
+                <li>查询延迟 (P95)</li>
+                <li>吞吐量 (QPS)</li>
+                <li>召回率</li>
+                <li>资源消耗</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>A/B测试</h3>
+          <div class="code-block">
+# A/B测试框架
+class ABTestFramework:
+    def __init__(self, control_search, treatment_search):
+        self.control = control_search
+        self.treatment = treatment_search
+        self.results = []
+
+    def run_test(self, query, ground_truth):
+        """运行A/B测试"""
+        # 对照组（baseline）
+        control_results = self.control.search(query, top_k=10)
+        control_metrics = self.evaluate(control_results, ground_truth)
+
+        # 实验组（new）
+        treatment_results = self.treatment.search(query, top_k=10)
+        treatment_metrics = self.evaluate(treatment_results, ground_truth)
+
+        # 记录结果
+        self.results.append({
+            'query': query,
+            'control': control_metrics,
+            'treatment': treatment_metrics
+        })
+
+    def evaluate(self, results, ground_truth):
+        """评估搜索结果"""
+        relevant_ids = set(ground_truth['relevant'])
+        returned_ids = [r['id'] for r in results]
+
+        # 计算指标
+        precision_at_10 = len(set(returned_ids[:10]) & relevant_ids) / 10
+        recall_at_10 = len(set(returned_ids[:10]) & relevant_ids) / len(relevant_ids)
+
+        return {
+            'precision@10': precision_at_10,
+            'recall@10': recall_at_10
+        }
+
+    def analyze(self):
+        """分析测试结果"""
+        control_precisions = [r['control']['precision@10'] for r in self.results]
+        treatment_precisions = [r['treatment']['precision@10'] for r in self.results]
+
+        import scipy.stats as stats
+        t_stat, p_value = stats.ttest_ind(treatment_precisions, control_precisions)
+
+        print(f"Control Precision@10: {np.mean(control_precisions):.4f}")
+        print(f"Treatment Precision@10: {np.mean(treatment_precisions):.4f}")
+        print(f"Improvement: {(np.mean(treatment_precisions) - np.mean(control_precisions)):.4f}")
+        print(f"P-value: {p_value:.4f}")
+
+        return p_value < 0.05  # 显著性检验
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <p>1）根据业务场景选择合适的融合策略；2）重排序可以显著提升质量但会增加延迟；3）定期A/B测试验证改进效果；4）监控检索质量和性能指标；5）持续优化检索和重排序模型。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="搜索系统架构">
+          <div class="caption">图：混合检索结合多种检索方式，提供最佳的搜索体验</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 混合检索结合了向量搜索和关键词搜索的优势</li>
+                <li>• RRF等融合算法有效整合多种检索结果</li>
+                <li>• 两阶段检索平衡了召回率和精确度</li>
+                <li>• RAG等应用场景受益于混合检索技术</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="12-4-向量数据库部署与优化.html">← 上一节</a>
+          <a href="../chapter13/13-1-InfiniBand技术原理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

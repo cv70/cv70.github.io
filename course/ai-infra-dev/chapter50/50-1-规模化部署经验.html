@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>50.1 规模化部署经验 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>50.1 规模化部署经验</h1>
+          <p class="subtitle">大规模AI基础设施部署实战经验</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>了解规模化部署的挑战</li>
+            <li>掌握部署流程和方法</li>
+            <li>学会自动化部署</li>
+            <li>了解部署最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 规模化部署挑战</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">规模挑战</h3>
+              <ul class="feature-list">
+                <li>节点数量激增</li>
+                <li>资源管理复杂</li>
+                <li>网络拓扑复杂</li>
+                <li>运维难度增加</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">技术挑战</h3>
+              <ul class="feature-list">
+                <li>异构资源整合</li>
+                <li>性能调优困难</li>
+                <li>故障处理复杂</li>
+                <li>数据规模巨大</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">管理挑战</h3>
+              <ul class="feature-list">
+                <li>人员技能要求</li>
+                <li>成本控制压力</li>
+                <li>安全合规要求</li>
+                <li>跨团队协作</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 部署流程</h2>
+          <div class="card">
+            <h3 class="card-title">三阶段部署模型</h3>
+            <div class="code-block">
+<pre><code># 部署流程
+
+## 第一阶段：小规模试点（1-2周）
+- 目标：验证技术方案
+- 规模：4-8张GPU
+- 任务：
+  - 搭建基础环境
+  - 部署核心服务
+  - 运行验证任务
+  - 收集性能数据
+
+## 第二阶段：中等规模部署（2-4周）
+- 目标：验证扩展性
+- 规模：32-64张GPU
+- 任务：
+  - 扩展集群规模
+  - 优化网络配置
+  - 建立监控体系
+  - 压力测试
+
+## 第三阶段：大规模部署（4-8周）
+- 目标：生产环境就绪
+- 规模：256+张GPU
+- 任务：
+  - 全量部署
+  - 完善运维体系
+  - 性能调优
+  - 安全加固</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 自动化部署</h2>
+          <div class="code-block">
+<pre><code># Ansible自动化部署示例
+- name: Deploy AI Training Cluster
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update system
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install NVIDIA driver
+      apt:
+        name: nvidia-driver-535
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Install NVIDIA Container Toolkit
+      apt:
+        name: nvidia-container-toolkit
+        state: present
+
+    - name: Configure Docker runtime
+      command: nvidia-ctk runtime configure --runtime=docker
+      notify: Restart Docker
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Pull training image
+      docker_image:
+        name: ai-training:latest
+        source: pull
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">☸️</span> Kubernetes集群扩展</h2>
+          <div class="code-block">
+<pre><code># Kubernetes集群扩展
+
+# 1. 添加新节点
+kubeadm join --token <token> <master-ip>:6443
+
+# 2. 验证节点状态
+kubectl get nodes
+
+# 3. 标注GPU节点
+kubectl label nodes <node-name> gpu=true
+
+# 4. 创建GPU节点池
+kubectl apply -f - << EOF
+apiVersion: v1
+kind: Node
+metadata:
+  name: gpu-node-pool
+  labels:
+    pool: gpu
+spec:
+  taints:
+  - key: gpu
+    value: "true"
+    effect: NoSchedule
+EOF
+
+# 5. 配置自动扩缩容
+kubectl autoscale deployment inference \
+  --cpu-percent=70 \
+  --min=4 \
+  --max=20
+
+# 6. 监控集群状态
+kubectl top nodes
+kubectl top pods</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 规模化监控</h2>
+          <div class="code-block">
+<pre><code># Prometheus大规模监控配置
+
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Kubernetes nodes
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+    - role: node
+    relabel_configs:
+    - source_labels: [__address__]
+      regex: '(.*):10250'
+      target_label: __address__
+      replacement: '${1}:9100'
+
+  # GPU metrics
+  - job_name: 'gpu'
+    static_configs:
+    - targets:
+      - 'gpu-01:9400'
+      - 'gpu-02:9400'
+      # ... 更多节点
+
+# 告警规则
+groups:
+- name: cluster_alerts
+  rules:
+  - alert: NodeDown
+    expr: up{job="kubernetes-nodes"} == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Node {{ $labels.instance }} is down"</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">规模化建议</div>
+            <p><strong>渐进式扩展</strong>：从试点开始，逐步扩展规模。<strong>自动化优先</strong>：尽量实现自动化部署和运维。<strong>监控完善</strong>：建立全面的监控体系。<strong>文档齐全</strong>：详细记录部署流程和配置。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 规模化部署面临规模、技术、管理多重挑战</li>
+                <li>• 三阶段部署模型降低部署风险</li>
+                <li>• 自动化部署是规模化成功的关键</li>
+                <li>• 完善的监控体系保障稳定运行</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter49/49-5-性能调优.html">← 上一节</a>
+          <a href="50-2-高可用设计实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26.3 资源管理与调度 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>26.3 资源管理与调度</h1>
+          <p class="subtitle">Kubernetes资源模型与调度机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Kubernetes资源请求和限制机制</li>
+            <li>掌握调度器的调度流程与策略</li>
+            <li>学会配置资源配额和限制范围</li>
+            <li>了解节点亲和性与污点容忍</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 资源模型</h2>
+          <div class="card">
+            <h3 class="card-title">请求与限制</h3>
+            <p class="card-text">
+              Kubernetes通过<strong>Requests（请求）</strong>和<strong>Limits（限制）</strong>来管理Pod的资源使用。
+            </p>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">Requests（请求）</h4>
+              <p class="card-text">Pod运行需要的最小资源量，用于调度决策。</p>
+              <div class="tip-box info">
+                <span class="icon">📌</span>
+                <div class="content">
+                  <p>调度器确保节点有足够资源满足Pod的Requests</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Limits（限制）</h4>
+              <p class="card-text">Pod能使用的最大资源量，防止资源耗尽。</p>
+              <div class="tip-box warning">
+                <span class="icon">⚠️</span>
+                <div class="content">
+                  <p>超出Limit会被限流或终止</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 资源配置示例</h2>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-pod
+spec:
+  containers:
+  - name: main-container
+    image: nginx
+    resources:
+      requests:
+        cpu: "500m"        # 0.5 CPU核心
+        memory: "512Mi"    # 512MB内存
+      limits:
+        cpu: "1"           # 1 CPU核心
+        memory: "1Gi"      # 1GB内存
+  - name: sidecar-container
+    image: busybox
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">单位说明</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• CPU：1 = 1个虚拟CPU核心，500m = 0.5个核心</li>
+                <li>• 内存：Mi = 兆字节，Gi = 吉字节</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> QoS等级</h2>
+          <p class="card-text">根据资源配置，Pod被分配不同的QoS（服务质量）等级：</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>QoS等级</th>
+                <th>配置</th>
+                <th>特点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Guaranteed</td>
+                <td>Requests == Limits（所有容器）</td>
+                <td>最高优先级，保证资源可用</td>
+              </tr>
+              <tr>
+                <td>Burstable</td>
+                <td>Requests < Limits（至少一个容器）</td>
+                <td>中等优先级，可突发使用</td>
+              </tr>
+              <tr>
+                <td>BestEffort</td>
+                <td>未设置Requests和Limits</td>
+                <td>最低优先级，可能被驱逐</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 调度流程</h2>
+          <div class="image-container">
+            <img src="https://kubernetes.io/images/docs/scheduling.svg" alt="Kubernetes调度流程">
+            <div class="caption">图：Kubernetes调度器工作流程</div>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">阶段1：预选（Filter）</h4>
+              <p class="card-text">过滤掉不符合条件的节点</p>
+              <ul class="feature-list">
+                <li>资源是否足够</li>
+                <li>节点是否就绪</li>
+                <li>端口是否冲突</li>
+                <li>是否存在污点</li>
+                <li>是否匹配节点选择器</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">阶段2：优选（Score）</h4>
+              <p class="card-text">对符合条件的节点打分排序</p>
+              <ul class="feature-list">
+                <li>资源利用率</li>
+                <li>镜像是否已存在</li>
+                <li>节点亲和性得分</li>
+                <li>跨可用区分布</li>
+                <li>Pod分布均衡性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔗</span> 节点亲和性与反亲和性</h2>
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: affinity-pod
+spec:
+  affinity:
+    # 节点亲和性：将Pod调度到特定节点
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-role.kubernetes.io/master
+            operator: DoesNotExist
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+
+    # Pod反亲和性：避免调度到同一节点
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - web
+        topologyKey: kubernetes.io/hostname
+  containers:
+  - name: nginx
+    image: nginx
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">拓扑域</div>
+              <p>topologyKey定义了亲和性的作用域，如kubernetes.io/hostname表示节点级别，topology.kubernetes.io/zone表示可用区级别。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚫</span> 污点与容忍</h2>
+          <div class="card">
+            <h3 class="card-title">污点（Taint）</h3>
+            <p class="card-text">污点标记节点，排斥不匹配的Pod。</p>
+          </div>
+
+          <div class="code-block">
+# 给节点添加污点
+kubectl taint nodes node1 key=value:NoSchedule
+kubectl taint nodes node1 key=value:PreferNoSchedule
+kubectl taint nodes node1 key=value:NoExecute
+
+# 污点类型：
+# NoSchedule: 除非有容忍，否则不调度
+# PreferNoSchedule: 尽量不调度，但不是强制的
+# NoExecute: 立即驱逐没有匹配容忍的Pod
+          </div>
+
+          <div class="card">
+            <h3 class="card-title">容忍（Toleration）</h3>
+            <p class="card-text">容忍允许Pod调度到有污点的节点。</p>
+          </div>
+
+          <div class="code-block">
+apiVersion: v1
+kind: Pod
+metadata:
+  name: toleration-pod
+spec:
+  tolerations:
+  - key: "key"
+    operator: "Equal"
+    value: "value"
+    effect: "NoSchedule"
+  # 或者
+  - key: "key"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 300  # 容忍300秒后驱逐
+  containers:
+  - name: nginx
+    image: nginx
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📏</span> 资源配额与限制范围</h2>
+          <div class="code-block">
+# ResourceQuota: 命名空间级别的资源限制
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: dev
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: "20Gi"
+    limits.cpu: "20"
+    limits.memory: "40Gi"
+    persistentvolumeclaims: "5"
+
+---
+# LimitRange: Pod/容器的默认资源限制
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: limits
+  namespace: dev
+spec:
+  limits:
+  - default:        # 默认Limits
+      cpu: "1"
+      memory: "512Mi"
+    defaultRequest:  # 默认Requests
+      cpu: "0.5"
+      memory: "256Mi"
+    type: Container
+          </div>
+        </div>
+
+        <div class="tip-box success">
+          <span class="icon">✅</span>
+          <div class="content">
+            <div class="title">调度优化建议</div>
+            <ul style="list-style: none; padding: 0;">
+              <li>• 总是设置Requests和Limits</li>
+              <li>• 关键服务使用Guaranteed QoS</li>
+              <li>• 使用节点亲和性优化资源利用率</li>
+              <li>• 合理配置Pod反亲和性提高可用性</li>
+              <li>• 使用污点保护关键节点</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• Requests用于调度，Limits用于运行时限制</li>
+                <li>• 调度分预选和优选两个阶段</li>
+                <li>• 亲和性控制Pod的放置策略</li>
+                <li>• 污点和容忍用于节点级别的调度控制</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="26-2-核心概念-Pod-Service-Deployment.html">← 上一节</a>
+          <a href="26-4-配置管理-ConfigMap-Secret.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

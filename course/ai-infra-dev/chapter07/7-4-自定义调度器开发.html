@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.4 自定义调度器开发 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>7.4 自定义调度器开发</h1>
+          <p class="subtitle">构建专属的AI作业调度系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解自定义调度器的应用场景</li>
+            <li>掌握调度器的开发框架</li>
+            <li>学会实现Gang调度等AI特殊需求</li>
+            <li>了解调度器的部署和测试方法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800" alt="代码开发" class="card-image">
+          <h3 class="card-title">为什么需要自定义调度器</h3>
+          <p class="card-text">
+            <strong>AI工作负载</strong>具有独特的调度需求：Gang调度（所有Pod同时启动）、
+            拓扑感知（GPU互联）、公平调度（多租户）、资源切分（GPU共享）等。
+            通用调度器无法满足这些需求，需要开发专用调度器。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 调度器架构设计</h2>
+          <div class="card">
+            <h3 class="card-title">自定义调度器架构</h3>
+            <div class="code-block">
+<pre><strong>调度器组件架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                        API Gateway                           │
+│                  REST API / gRPC接口                         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                      Scheduler Core                          │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Job Manager  │  │  Queue Mgmt  │  │ Resource Mgr │      │
+│  │ 作业生命周期  │  │  队列管理    │  │ 资源跟踪     │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                           │                                  │
+│  ┌────────────────────────┼────────────────────────┐       │
+│  │              Scheduling Engine                   │       │
+│  └────────────────────────┼────────────────────────┘       │
+│                           │                                  │
+│  ┌────────────────────────────────────────────────┐          │
+│  │              Policy Framework                  │          │
+│  └────────────────────────────────────────────────┘          │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                     Plugins                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │Gang Sched│  │ Topology │  │Fair Share│  │ Bin Pack │  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Kubernetes Integration                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                │
+│  │ Informer │  │ Scheduler│  │ Bind API │                │
+│  └──────────┘  └──────────┘  └──────────┘                │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 核心组件实现</h2>
+          <div class="card">
+            <h3 class="card-title">调度器核心代码</h3>
+            <div class="code-block">
+<pre><strong>调度器主程序：</strong>
+
+package main
+
+import (
+    "context"
+    "fmt"
+    "sync"
+    "time"
+
+    "k8s.io/client-go/informers"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/tools/cache"
+    "k8s.io/client-go/tools/clientcmd"
+    "k8s.io/klog/v2"
+)
+
+// AIClusterScheduler AI集群调度器
+type AIClusterScheduler struct {
+    kubeClient    kubernetes.Interface
+    informerFactory informers.SharedInformerFactory
+    schedulerQueue chan *Job
+    jobManager    *JobManager
+    resourceMgr   *ResourceManager
+    policyEngine  *PolicyEngine
+    stopCh        chan struct{}
+}
+
+// NewScheduler 创建调度器
+func NewScheduler(config *rest.Config) (*AIClusterScheduler, error) {
+    kubeClient, err := kubernetes.NewForConfig(config)
+    if err != nil {
+        return nil, err
+    }
+
+    factory := informers.NewSharedInformerFactory(kubeClient, 0)
+
+    return &AIClusterScheduler{
+        kubeClient:       kubeClient,
+        informerFactory:  factory,
+        schedulerQueue:  make(chan *Job, 1000),
+        stopCh:          make(chan struct{}),
+    }, nil
+}
+
+// Run 启动调度器
+func (s *AIClusterScheduler) Run(workers int) error {
+    // 启动Informer
+    s.informerFactory.Start(s.stopCh)
+
+    // 启动调度器
+    for i := 0; i < workers; i++ {
+        go s.schedulerWorker()
+    }
+
+    // 启动资源监控
+    go s.monitorResources()
+
+    // 启动策略引擎
+    go s.runPolicyEngine()
+
+    <-s.stopCh
+    return nil
+}
+
+func main() {
+    kubeconfig := os.Getenv("KUBECONFIG")
+    config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+    if err != nil {
+        klog.Fatalf("Error building kubeconfig: %v", err)
+    }
+
+    scheduler, err := NewScheduler(config)
+    if err != nil {
+        klog.Fatalf("Error creating scheduler: %v", err)
+    }
+
+    if err := scheduler.Run(4); err != nil {
+        klog.Fatalf("Error running scheduler: %v", err)
+    }
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> Gang调度实现</h2>
+          <div class="card">
+            <h3 class="card-title">组调度插件</h3>
+            <div class="code-block">
+<pre><strong>Gang调度策略：</strong>
+
+package gang
+
+import (
+    "context"
+    "fmt"
+
+    "k8s.io/api/core/v1"
+    "k8s.io/kubernetes/pkg/scheduler/framework"
+)
+
+// GangScheduler Gang调度器
+type GangScheduler struct {
+    handle framework.Handle
+    gangMap map[string]*GangGroup
+    mutex  sync.RWMutex
+}
+
+// GangGroup Pod组
+type GangGroup struct {
+    GroupName string
+    TotalPods int
+    ReadyPods int
+    PodList   []*v1.Pod
+    Phase     GroupPhase
+}
+
+// GroupPhase 组状态
+type GroupPhase int
+
+const (
+    PhasePending GroupPhase = iota
+    PhaseReady
+    PhaseRunning
+    PhaseCompleted
+    PhaseFailed
+)
+
+// NewGangScheduler 创建Gang调度器
+func NewGangScheduler(handle framework.Handle) *GangScheduler {
+    return &GangScheduler{
+        handle:  handle,
+        gangMap: make(map[string]*GangGroup),
+    }
+}
+
+// Filter 过滤阶段
+func (gs *GangScheduler) Filter(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeInfo *framework.NodeInfo,
+) *framework.Status {
+    gangName := getGangName(pod)
+
+    gs.mutex.RLock()
+    group, exists := gs.gangMap[gangName]
+    gs.mutex.RUnlock()
+
+    if !exists {
+        // 新组，允许调度
+        return nil
+    }
+
+    // 检查组状态
+    if group.Phase == PhaseReady || group.Phase == PhaseRunning {
+        // 组已就绪，正常调度
+        return nil
+    }
+
+    // 检查资源是否足够
+    if !hasEnoughResources(group, nodeInfo) {
+        return framework.NewStatus(
+            framework.Unschedulable,
+            fmt.Sprintf("Not enough resources for gang %s", gangName),
+        )
+    }
+
+    return nil
+}
+
+// Score 打分阶段
+func (gs *GangScheduler) Score(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeName string,
+) (int64, *framework.Status) {
+    gangName := getGangName(pod)
+
+    gs.mutex.RLock()
+    group, exists := gs.gangMap[gangName]
+    gs.mutex.RUnlock()
+
+    if !exists {
+        return 50, nil
+    }
+
+    // 优先选择已有同组Pod的节点
+    nodeInfo, err := gs.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+    if err != nil {
+        return 0, framework.NewStatus(framework.Error, err.Error())
+    }
+
+    score := int64(0)
+    for _, p := range nodeInfo.Pods {
+        if getGangName(p.Pod) == gangName {
+            score += 10
+        }
+    }
+
+    return score, nil
+}
+
+// Bind 绑定阶段
+func (gs *GangScheduler) Bind(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeName string,
+) *framework.Status {
+    gangName := getGangName(pod)
+
+    gs.mutex.Lock()
+    defer gs.mutex.Unlock()
+
+    group := gs.gangMap[gangName]
+    group.ReadyPods++
+
+    // 检查是否所有Pod都就绪
+    if group.ReadyPods == group.TotalPods {
+        group.Phase = PhaseReady
+        // 触发组启动
+        gs.startGang(group)
+    }
+
+    return nil
+}
+
+// startGang 启动组
+func (gs *GangScheduler) startGang(group *GangGroup) {
+    group.Phase = PhaseRunning
+    klog.Infof("Gang %s started with %d pods", group.GroupName, group.TotalPods)
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 拓扑感知调度</h2>
+          <div class="card">
+            <h3 class="card-title">GPU拓扑优化</h3>
+            <div class="code-block">
+<pre><strong>拓扑感知插件：</strong>
+
+package topology
+
+import (
+    "context"
+    "math"
+)
+
+// TopologyAware 拓扑感知调度
+type TopologyAware struct {
+    handle framework.Handle
+    topologyMap map[string]*TopologyInfo
+}
+
+// TopologyInfo 拓扑信息
+type TopologyInfo struct {
+    Zone      string
+    Rack      string
+    Host      string
+    GPUCount  int
+    NVLink    bool
+}
+
+// Score 拓扑打分
+func (ta *TopologyAware) Score(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeName string,
+) (int64, *framework.Status) {
+    gpuCount := getGPURequest(pod)
+
+    // 单GPU，不考虑拓扑
+    if gpuCount <= 1 {
+        return 50, nil
+    }
+
+    // 多GPU，需要考虑拓扑
+    nodeInfo, err := ta.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+    if err != nil {
+        return 0, framework.NewStatus(framework.Error, err.Error())
+    }
+
+    score := int64(0)
+
+    // NVLink加分
+    if hasNVLink(nodeInfo) {
+        score += 30
+    }
+
+    // 同机架加分
+    rackNodes := countNodesInRack(nodeInfo, ta.topologyMap)
+    if rackNodes >= gpuCount {
+        score += 20
+    }
+
+    // 同可用区分
+    zoneNodes := countNodesInZone(nodeInfo, ta.topologyMap)
+    if zoneNodes >= gpuCount {
+        score += 10
+    }
+
+    return score, nil
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">自定义调度器要点</div>
+            <p><strong>模块化设计：</strong>采用插件架构，便于扩展</p>
+            <p><strong>状态管理：</strong>使用Informer监听资源变化</p>
+            <p><strong>并发控制：</strong>使用互斥锁保护共享状态</p>
+            <p><strong>错误处理：</strong>完善的错误处理和重试机制</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 调度器部署</h2>
+          <div class="card">
+            <h3 class="card-title">K8s部署配置</h3>
+            <div class="code-block">
+<pre><strong>调度器Deployment：</strong>
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-scheduler
+  namespace: kube-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-scheduler
+  template:
+    metadata:
+      labels:
+        app: ai-scheduler
+    spec:
+      serviceAccountName: ai-scheduler
+      containers:
+      - name: ai-scheduler
+        image: your-registry/ai-scheduler:v1.0
+        imagePullPolicy: Always
+        command:
+        - /ai-scheduler
+        - --kubeconfig=/etc/kubernetes/scheduler.conf
+        - --leader-elect=true
+        - --v=4
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubernetes
+          readOnly: true
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10259
+          initialDelaySeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 10259
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: ai-scheduler-kubeconfig
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-scheduler
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-scheduler
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/status"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["", "events.k8s.io"]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "create", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-scheduler
+subjects:
+- kind: ServiceAccount
+  name: ai-scheduler
+  namespace: kube-system</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 调度器测试</h2>
+          <div class="card">
+            <h3 class="card-title">测试用例</h3>
+            <div class="code-block">
+<pre><strong>调度器测试框架：</strong>
+
+package scheduler_test
+
+import (
+    "testing"
+
+    "k8s.io/kubernetes/pkg/scheduler"
+    "k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultbinder"
+)
+
+func TestGangScheduling(t *testing.T) {
+    tests := []struct {
+        name        string
+        pod         *v1.Pod
+        nodeInfo    *framework.NodeInfo
+        expectedOK  bool
+    }{
+        {
+            name: "All pods in gang ready",
+            pod:  createGangPod("gang1", 3, 3),
+            nodeInfo: createNodeInfoWithGPU(4),
+            expectedOK: true,
+        },
+        {
+            name: "Not enough resources",
+            pod:  createGangPod("gang1", 8, 8),
+            nodeInfo: createNodeInfoWithGPU(4),
+            expectedOK: false,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            gs := NewGangScheduler(nil)
+            status := gs.Filter(context.Background(), nil, tt.pod, tt.nodeInfo)
+            if tt.expectedOK && status.IsSuccess() != tt.expectedOK {
+                t.Errorf("Expected success, got %v", status)
+            }
+        })
+    }
+}
+
+func TestTopologyAware(t *testing.T) {
+    // 拓扑感知测试用例
+    // ... 测试代码
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 自定义调度器可以满足AI工作负载的特殊调度需求</li>
+                <li>• 调度器核心组件包括作业管理、队列管理、资源管理和策略引擎</li>
+                <li>• Gang调度确保分布式训练的所有Pod同时启动</li>
+                <li>• 拓扑感知调度优化GPU互联和通信效率</li>
+                <li>• 调度器采用插件架构，便于扩展和维护</li>
+                <li>• 通过K8s Deployment部署调度器，支持高可用</li>
+                <li>• 完善的测试用例保证调度器的可靠性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="7-3-Kubernetes调度原理.html">← 上一节</a>
+          <a href="7-5-多租户与资源隔离.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

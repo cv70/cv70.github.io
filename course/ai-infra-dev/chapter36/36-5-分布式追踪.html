@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.5 分布式追踪 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>36.5 分布式追踪</h1>
+          <p class="subtitle">构建AI系统的分布式追踪体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式追踪的核心概念</li>
+            <li>掌握OpenTelemetry标准</li>
+            <li>学习追踪数据采集与分析</li>
+            <li>实践AI系统的追踪实现</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式追踪" class="card-image">
+          <h3 class="card-title">分布式追踪的价值</h3>
+          <p class="card-text">
+            <strong>分布式追踪</strong>记录请求在多个服务间的完整路径，帮助定位性能瓶颈和故障根因。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 核心概念</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Trace（追踪）</h3>
+              <p class="card-text">一个请求的完整执行路径，包含多个Span</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Span（跨度）</h3>
+              <p class="card-text">单个服务或操作的执行单元</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Trace ID</h3>
+              <p class="card-text">唯一标识一个追踪的全局ID</p>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Span ID</h3>
+              <p class="card-text">唯一标识一个Span的ID</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 追踪架构</h2>
+          <div class="grid grid-4">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔧</div>
+              <h3 class="card-title">Instrumentation</h3>
+              <p class="card-text">代码埋点</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📤</div>
+              <h3 class="card-title">Collector</h3>
+              <p class="card-text">数据收集</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🗄️</div>
+              <h3 class="card-title">Storage</h3>
+              <p class="card-text">数据存储</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">UI</h3>
+              <p class="card-text">可视化展示</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛠️</span> 主流追踪系统</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>系统</th>
+                <th>特点</th>
+                <th>优势</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Jaeger</td>
+                <td>开源CNCF项目</td>
+                <td>成熟稳定、社区活跃</td>
+                <td>通用分布式追踪</td>
+              </tr>
+              <tr>
+                <td>Zipkin</td>
+                <td>最早的开源方案</td>
+                <td>轻量、易部署</td>
+                <td>简单场景</td>
+              </tr>
+              <tr>
+                <td>SkyWalking</td>
+                <td>国产APM平台</td>
+                <td>支持APM、可视化强</td>
+                <td>微服务监控</td>
+              </tr>
+              <tr>
+                <td>Tempo</td>
+                <td>Grafana原生集成</td>
+                <td>低成本、与Grafana无缝集成</td>
+                <td>Grafana用户</td>
+              </tr>
+              <tr>
+                <td>OpenTelemetry</td>
+                <td>标准化采集协议</td>
+                <td>厂商无关、可移植</td>
+                <td>所有场景</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> Jaeger部署</h2>
+          <div class="code-block">
+# docker-compose.yml
+version: '3'
+
+services:
+  jaeger-all-in-one:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger-all-in-one
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐍</span> Python集成示例</h2>
+          <div class="code-block">
+# 安装依赖
+# pip install opentelemetry-api opentelemetry-sdk
+# pip install opentelemetry-instrumentation
+# pip install opentelemetry-instrumentation-fastapi
+# pip install opentelemetry-exporter-jaeger
+
+import opentelemetry.trace as trace
+from opentelemetry import trace as trace_api
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.jaeger import JaegerExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# 配置追踪
+def setup_tracing(service_name: str):
+    # 设置提供者
+    trace.set_tracer_provider(TracerProvider())
+    tracer = trace.get_tracer(service_name)
+
+    # 配置Jaeger导出器
+    jaeger_exporter = JaegerExporter(
+        agent_host_name="localhost",
+        agent_port=6831,
+    )
+
+    # 添加批量处理器
+    span_processor = BatchSpanProcessor(jaeger_exporter)
+    trace.get_tracer_provider().add_span_processor(span_processor)
+
+    return tracer
+
+# 在训练任务中使用
+import torch
+from torch.utils.data import DataLoader
+
+class TrainingTracer:
+    def __init__(self):
+        self.tracer = setup_tracing("training-service")
+
+    def train_epoch(self, model, dataloader, optimizer, epoch):
+        with self.tracer.start_as_current_span("train_epoch") as span:
+            span.set_attribute("epoch", epoch)
+            span.set_attribute("batch_count", len(dataloader))
+
+            for batch_idx, (data, target) in enumerate(dataloader):
+                with self.tracer.start_as_current_span("train_batch") as batch_span:
+                    batch_span.set_attribute("batch_idx", batch_idx)
+
+                    # 前向传播
+                    with self.tracer.start_as_current_span("forward"):
+                        output = model(data)
+
+                    # 计算损失
+                    with self.tracer.start_as_current_span("compute_loss"):
+                        loss = criterion(output, target)
+                        batch_span.set_attribute("loss", float(loss))
+
+                    # 反向传播
+                    with self.tracer.start_as_current_span("backward"):
+                        loss.backward()
+
+                    # 优化器步骤
+                    with self.tracer.start_as_current_span("optimizer_step"):
+                        optimizer.step()
+                        optimizer.zero_grad()
+
+# 推理服务追踪
+from fastapi import FastAPI
+app = FastAPI()
+
+FastAPIInstrumentor.instrument_app(app, tracer_provider=trace_api.get_tracer_provider())
+
+@app.post("/predict")
+async def predict(request: dict):
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span("predict") as span:
+        # 数据预处理
+        with tracer.start_as_current_span("preprocess") as prep_span:
+            data = preprocess(request['data'])
+            prep_span.set_attribute("input_size", len(data))
+
+        # 模型推理
+        with tracer.start_as_current_span("inference") as inf_span:
+            result = model(data)
+            inf_span.set_attribute("model", model.__class__.__name__)
+
+        # 后处理
+        with tracer.start_as_current_span("postprocess"):
+            output = postprocess(result)
+
+        return {"result": output}
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> 训练任务追踪</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">训练任务关键Span</div>
+              <p>在训练任务中追踪关键环节的性能：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# 训练流水线追踪
+class TrainingPipeline:
+    def __init__(self):
+        self.tracer = setup_tracing("training-pipeline")
+
+    def run(self, config):
+        with self.tracer.start_as_current_span("training_pipeline") as span:
+            span.set_attribute("model", config.model)
+            span.set_attribute("batch_size", config.batch_size)
+            span.set_attribute("epochs", config.epochs)
+
+            # 数据加载
+            with self.tracer.start_as_current_span("data_loading"):
+                train_loader = self.load_data(config.train_path)
+                val_loader = self.load_data(config.val_path)
+
+            # 模型初始化
+            with self.tracer.start_as_current_span("model_init"):
+                model = self.create_model(config.model)
+
+            # 训练循环
+            with self.tracer.start_as_current_span("training_loop"):
+                for epoch in range(config.epochs):
+                    self.train_epoch(model, train_loader, epoch)
+                    self.validate(model, val_loader, epoch)
+
+            # 模型保存
+            with self.tracer.start_as_current_span("model_save"):
+                self.save_model(model)
+
+# 分布式训练追踪
+class DistributedTracing:
+    def __init__(self, rank, world_size):
+        self.rank = rank
+        self.world_size = world_size
+        self.tracer = setup_tracing(f"distributed-training-rank-{rank}")
+
+    def allreduce_trace(self, tensor):
+        with self.tracer.start_as_current_span("allreduce") as span:
+            span.set_attribute("tensor_size", tensor.numel())
+            span.set_attribute("rank", self.rank)
+
+            # 记录通信时间
+            start = time.time()
+            dist.all_reduce(tensor)
+            duration = time.time() - start
+
+            span.set_attribute("duration_ms", duration * 1000)
+            return tensor
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 推理服务追踪</h2>
+          <div class="code-block">
+# 推理服务流水线追踪
+class InferenceService:
+    def __init__(self, model):
+        self.model = model
+        self.tracer = setup_tracing("inference-service")
+
+    async def handle_request(self, request):
+        with self.tracer.start_as_current_span("inference_request") as span:
+            # 添加请求属性
+            span.set_attribute("request_id", request.id)
+            span.set_attribute("model_name", request.model)
+            span.set_attribute("input_size", len(request.data))
+
+            # 模型加载
+            with self.tracer.start_as_current_span("model_loading") as load_span:
+                if request.model != self.current_model:
+                    self.load_model(request.model)
+                load_span.set_attribute("loaded", True)
+
+            # 预处理
+            with self.tracer.start_as_current_span("preprocessing") as prep_span:
+                inputs = self.preprocess(request.data)
+                prep_span.set_attribute("preprocessed", True)
+
+            # 批处理
+            with self.tracer.start_as_current_span("batching") as batch_span:
+                batch = self.batch_requests(inputs)
+                batch_span.set_attribute("batch_size", len(batch))
+
+            # 推理
+            with self.tracer.start_as_current_span("model_inference") as inf_span:
+                outputs = self.model(batch)
+                inf_span.set_attribute("inference_time", time.time())
+
+            # 后处理
+            with self.tracer.start_as_current_span("postprocessing") as post_span:
+                results = self.postprocess(outputs)
+                post_span.set_attribute("output_size", len(results))
+
+            return results
+
+# RAG系统追踪
+class RAGTracing:
+    def __init__(self):
+        self.tracer = setup_tracing("rag-service")
+
+    def query(self, question):
+        with self.tracer.start_as_current_span("rag_query") as span:
+            span.set_attribute("question", question)
+
+            # 检索
+            with self.tracer.start_as_current_span("retrieval") as ret_span:
+                documents = self.retriever.search(question)
+                ret_span.set_attribute("doc_count", len(documents))
+
+            # 上下文构建
+            with self.tracer.start_as_current_span("context_building"):
+                context = self.build_context(documents)
+
+            # LLM生成
+            with self.tracer.start_as_current_span("llm_generation") as llm_span:
+                answer = self.llm.generate(question, context)
+                llm_span.set_attribute("tokens", len(answer))
+
+            return answer
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 追踪数据分析</h2>
+          <div class="card">
+            <h3 class="card-title">关键指标</h3>
+            <ul class="feature-list">
+              <li><strong>端到端延迟</strong> - 完整请求的耗时</li>
+              <li><strong>Span延迟</strong> - 各个操作的耗时分布</li>
+              <li><strong>调用链深度</strong> - Span的嵌套层级</li>
+              <li><strong>错误率</strong> - 失败的Span占比</li>
+              <li><strong>关键路径</strong> - 影响整体性能的Span</li>
+              <li><strong>服务依赖</strong> - 服务间的调用关系</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="追踪可视化">
+          <div class="caption">图：Jaeger追踪可视化界面</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">追踪最佳实践</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 对关键业务路径进行追踪，避免过度埋点</li>
+              <li>• 添加有意义的Span名称和属性</li>
+              <li>• 使用采样策略降低存储成本</li>
+              <li>• 确保Trace ID在跨服务调用中正确传递</li>
+              <li>• 定期分析追踪数据，发现性能瓶颈</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 分布式追踪记录请求在多服务间的完整路径</li>
+                <li>• OpenTelemetry提供标准化的追踪协议</li>
+                <li>• 在训练和推理任务中合理埋点</li>
+                <li>• 通过追踪数据分析定位性能瓶颈</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="36-4-日志收集（ELK/Loki）.html">← 上一节</a>
+          <a href="../chapter37/37-1-告警规则设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

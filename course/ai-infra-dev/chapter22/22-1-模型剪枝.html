@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.1 模型剪枝 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>22.1 模型剪枝</h1>
+          <p class="subtitle">通过剪枝减少模型参数和计算量</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型剪枝的基本原理</li>
+            <li>掌握剪枝的类型和方法</li>
+            <li>学习剪枝流程和技巧</li>
+            <li>了解剪枝工具和实践案例</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=800" alt="模型剪枝示意图" class="card-image">
+          <h3 class="card-title">什么是模型剪枝</h3>
+          <p class="card-text">
+            <strong>模型剪枝（Model Pruning）</strong>是指通过移除神经网络中不重要的参数或结构来减少模型大小和计算量的技术。
+            就像修剪树木的枝叶一样，剪枝可以让模型更紧凑、更高效。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 剪枝的核心思想</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">为什么可以剪枝</h3>
+              <ul class="feature-list">
+                <li><strong>参数冗余</strong>：深度学习模型通常过度参数化</li>
+                <li><strong>权重分布</strong>：大量权重接近于零</li>
+                <li><strong>功能重叠</strong>：不同神经元可能学习相似特征</li>
+                <li><strong>容量富裕</strong>：模型容量往往超过任务需求</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">剪枝的好处</h3>
+              <ul class="feature-list">
+                <li><strong>减少计算量</strong>：降低推理延迟</li>
+                <li><strong>减少显存占用</strong>：支持更大batch</li>
+                <li><strong>提高缓存命中率</strong>：更好的内存访问</li>
+                <li><strong>降低能耗</strong>：适合边缘部署</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> 剪枝类型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>分类维度</th>
+                <th>类型</th>
+                <th>描述</th>
+                <th>特点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td rowspan="2"><strong>剪枝粒度</strong></td>
+                <td>非结构化剪枝</td>
+                <td>逐个参数剪枝</td>
+                <td>精度高，需要稀疏库支持</td>
+              </tr>
+              <tr>
+                <td>结构化剪枝</td>
+                <td>按通道/层剪枝</td>
+                <td>易部署，精度略低</td>
+              </tr>
+              <tr>
+                <td rowspan="2"><strong>剪枝时机</strong></td>
+                <td>训练后剪枝</td>
+                <td>先训练再剪枝</td>
+                <td>简单，但需要大量训练</td>
+              </tr>
+              <tr>
+                <td>训练中剪枝</td>
+                <td>训练时同时剪枝</td>
+                <td>效率高，训练稳定</td>
+              </tr>
+              <tr>
+                <td rowspan="2"><strong>剪枝顺序</strong></td>
+                <td>一次性剪枝</td>
+                <td>达到目标即停止</td>
+                <td>快速，但精度损失大</td>
+              </tr>
+              <tr>
+                <td>迭代式剪枝</td>
+                <td>多次剪枝+微调</td>
+                <td>精度好，耗时较长</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800" alt="神经网络结构">
+          <div class="caption">图：神经网络结构与剪枝示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 剪枝流程</h2>
+          <div class="card">
+            <h3 class="card-title">完整剪枝流程</h3>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; justify-content: center;">
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: #4CAF50; color: white; border-radius: 8px; font-weight: bold;">
+                预训练
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                重要性评估
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                参数剪枝
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                模型微调
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: #4CAF50; color: white; border-radius: 8px; font-weight: bold;">
+                评估部署
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 重要性评估方法</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">权重幅度</h3>
+              <ul class="feature-list">
+                <li>基于权重的绝对值</li>
+                <li>小权重被认为不重要</li>
+                <li>简单直观</li>
+                <li>最常用的方法</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">梯度信息</h3>
+              <ul class="feature-list">
+                <li>基于梯度的变化率</li>
+                <li>反映参数对损失的影响</li>
+                <li>需要额外计算</li>
+                <li>更准确</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">一阶泰勒展开</h3>
+              <ul class="feature-list">
+                <li>近似损失变化</li>
+                <li>计算效率高</li>
+                <li>平衡精度和效率</li>
+                <li>实用性强</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">敏感度分析</h3>
+              <ul class="feature-list">
+                <li>逐层评估影响</li>
+                <li>确定每层的剪枝比例</li>
+                <li>复杂度高</li>
+                <li>效果好</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 剪枝实现示例</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.utils.prune as prune
+
+def prune_model(model, pruning_rate=0.3):
+    """
+    对模型进行非结构化剪枝
+    """
+    # 对所有卷积层和全连接层进行剪枝
+    for name, module in model.named_modules():
+        if isinstance(module, (nn.Conv2d, nn.Linear)):
+            # L1非结构化剪枝
+            prune.l1_unstructured(
+                module,
+                name='weight',
+                amount=pruning_rate  # 剪枝比例
+            )
+
+def structured_prune(model, pruning_rate=0.3):
+    """
+    对模型进行结构化剪枝（按通道）
+    """
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            # Ln结构化剪枝
+            prune.ln_structured(
+                module,
+                name='weight',
+                amount=pruning_rate,
+                n=2,  # L2范数
+                dim=0  # 按通道剪枝
+            )
+
+def iterative_prune(model, target_sparsity=0.5, steps=10):
+    """
+    迭代式剪枝
+    """
+    current_sparsity = 0
+    for i in range(steps):
+        # 计算当前步的剪枝比例
+        step_sparsity = (target_sparsity - current_sparsity) / (steps - i)
+        prune_model(model, step_sparsity)
+
+        # 微调模型
+        # train_model(...)
+
+        # 计算当前稀疏度
+        current_sparsity = calculate_sparsity(model)
+
+# 使用示例
+model = load_model()
+
+# 非结构化剪枝
+prune_model(model, pruning_rate=0.5)
+
+# 结构化剪枝
+structured_prune(model, pruning_rate=0.3)
+
+# 移除剪枝掩码（使其永久化）
+for module in model.modules():
+    if hasattr(module, 'weight'):
+        prune.remove(module, 'weight')
+</code></pre>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">剪枝实践建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>从小剪枝比例开始（10%-30%），逐步增加</li>
+              <li>每次剪枝后进行充分的微调</li>
+              <li>优先剪枝全连接层，其次是卷积层</li>
+              <li>结构化剪枝更适合实际部署</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 剪枝通过移除不重要参数来减少模型大小和计算量</li>
+                <li>• 非结构化剪枝精度高，结构化剪枝易部署</li>
+                <li>• 剪枝流程包括预训练、评估、剪枝、微调</li>
+                <li>• 迭代式剪枝比一次性剪枝效果更好</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter21/21-5-推理指标体系.html">← 上一节</a>
+          <a href="22-2-知识蒸馏.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

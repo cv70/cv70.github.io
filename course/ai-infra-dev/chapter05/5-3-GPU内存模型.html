@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.3 GPU内存模型 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>5.3 GPU内存模型</h1>
+          <p class="subtitle">深入理解GPU内存层次与访问模式</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解GPU内存层次结构</li>
+            <li>掌握共享内存的使用</li>
+            <li>了解内存合并的重要性</li>
+            <li>认识统一内存技术</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU内存" class="card-image">
+          <h3 class="card-title">GPU内存模型概述</h3>
+          <p class="card-text">
+            GPU内存模型复杂而强大，包含从最快的寄存器到最慢的全局内存多层结构。理解这些内存类型及其访问模式对于编写高性能GPU程序至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 内存层次结构</h2>
+          <div class="card">
+            <h3 class="card-title">存储层次</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+GPU内存层次：
+
+                  ↑ 速度 ↑
+                  ↓ 容量 ↓
+
+┌─────────────────────────────────────┐
+│  寄存器（Register）               │  最快，线程私有
+│  • 数量有限（每个线程）           │
+│  • 编译器自动分配                 │
+│  • 无需手动管理                   │
+├─────────────────────────────────────┤
+│  共享内存（Shared Memory）         │  快，Block内共享
+│  • 手动管理                       │
+│  • 需要__syncthreads()同步         │
+│  • 可编程缓存                     │
+├─────────────────────────────────────┤
+│  L1/L2 Cache                      │  硬件缓存
+│  • 透明加速                       │
+│  • 自动管理                       │
+├─────────────────────────────────────┤
+│  常量内存（Constant Memory）       │  只读，全局共享
+│  • 编译时常量                     │
+│  • 缓存优化                       │
+├─────────────────────────────────────┤
+│  纹理内存（Texture Memory）       │  只读，特殊访问
+│  • 空间局部性优化                 │
+│  • 纹理采样                       │
+├─────────────────────────────────────┤
+│  全局内存（Global Memory）         │  慢，全局共享
+│  • 容量大（GB级）                 │
+│  • 主要存储空间                   │
+│  • 需要优化访问模式               │
+└─────────────────────────────────────┘
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 内存规格对比</h2>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>内存类型</th>
+                  <th>访问速度</th>
+                  <th>容量</th>
+                  <th>作用域</th>
+                  <th>生命周期</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>寄存器</strong></td>
+                  <td>~1周期</td>
+                  <td>64KB/SM</td>
+                  <td>线程私有</td>
+                  <td>Kernel执行期</td>
+                </tr>
+                <tr>
+                  <td><strong>共享内存</strong></td>
+                  <td>~10周期</td>
+                  <td>228KB/SM</td>
+                  <td>Block内</td>
+                  <td>Block生命周期</td>
+                </tr>
+                <tr>
+                  <td><strong>L2 Cache</strong></td>
+                  <td>~50周期</td>
+                  <td>50MB/GPU</td>
+                  <td>全局</td>
+                  <td>硬件管理</td>
+                </tr>
+                <tr>
+                  <td><strong>全局内存</strong></td>
+                  <td>~500周期</td>
+                  <td>80GB/H100</td>
+                  <td>全局</td>
+                  <td>手动管理</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 共享内存</h2>
+          <div class="card">
+            <h3 class="card-title">可编程缓存</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              共享内存是GPU上最快的可编程内存，可用于优化全局内存访问：
+            </p>
+            <div class="code-block">
+共享内存使用示例：
+
+__global__ void shared_memory_example(float *input, float *output, int n) {
+    // 声明共享内存
+    extern __shared__ float s_data[];
+
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + tid;
+
+    // 加载数据到共享内存
+    if (gid < n) {
+        s_data[tid] = input[gid];
+    }
+    __syncthreads();  // 同步等待所有加载完成
+
+    // 处理共享内存数据（比全局内存快）
+    if (gid < n) {
+        s_data[tid] = s_data[tid] * 2;
+    }
+    __syncthreads();
+
+    // 写回结果
+    if (gid < n) {
+        output[gid] = s_data[tid];
+    }
+}
+
+// 调用时需要指定共享内存大小
+int blockSize = 256;
+int sharedMemSize = blockSize * sizeof(float);
+shared_memory_example<<<numBlocks, blockSize, sharedMemSize>>>(d_input, d_output, n);
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">使用建议</div>
+                <p>共享内存适合存储频繁访问的数据，可以显著减少对慢速全局内存的访问。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 内存合并</h2>
+          <div class="card">
+            <h3 class="card-title">Coalesced Access</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              内存合并是GPU性能优化的关键，确保Warp中的线程访问连续内存：
+            </p>
+            <div class="code-block">
+内存合并示例：
+
+// 不好：非合并访问
+__global__ void uncoalesced_access(float *data) {
+    int tid = threadIdx.x;
+    int stride = 1024;  // 大步长
+    data[tid * stride] = tid;  // 非连续访问
+    // Warp内线程访问相距1024的内存
+}
+
+// 好：合并访问
+__global__ void coalesced_access(float *data) {
+    int tid = threadIdx.x;
+    data[tid] = tid;  // 连续访问
+    // Warp内线程访问连续的32个浮点数
+}
+
+// 2D访问优化
+__global__ void row_major_optimized(float *matrix, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < width && y < height) {
+        int idx = y * width + x;  // 行主序
+        matrix[idx] = idx;  // 合并访问
+    }
+}
+
+// 列主序访问
+__global__ void column_major_optimized(float *matrix, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < width && y < height) {
+        int idx = x * height + y;  // 列主序
+        matrix[idx] = idx;  // 合并访问
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 统一内存</h2>
+          <div class="card">
+            <h3 class="card-title">Unified Memory</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              统一内存简化了GPU编程，让开发者无需手动管理数据传输：
+            </p>
+            <div class="code-block">
+统一内存使用：
+
+#include <cuda_runtime.h>
+
+// 分配统一内存
+float *data;
+cudaMallocManaged(&data, n * sizeof(float));
+
+// 主机可以直接访问
+for (int i = 0; i < n; i++) {
+    data[i] = i;
+}
+
+// GPU可以直接访问
+kernel<<<blocks, threads>>>(data, n);
+
+// 自动数据传输
+// CUDA Runtime自动处理主机与GPU间的数据移动
+
+// 显式预取（优化性能）
+cudaMemPrefetchAsync(data, n * sizeof(float), 0);  // 预取到GPU
+kernel<<<blocks, threads>>>(data, n);
+cudaMemPrefetchAsync(data, n * sizeof(float), cudaCpuDeviceId);  // 预取到CPU
+
+// 释放内存
+cudaFree(data);
+            </div>
+            <div class="grid grid-2">
+              <div>
+                <h4>优点</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>简化编程</li>
+                  <li>自动数据迁移</li>
+                  <li>减少错误</li>
+                  <li>代码简洁</li>
+                </ul>
+              </div>
+              <div>
+                <h4>缺点</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>性能开销</li>
+                  <li>页面错误</li>
+                  <li>不可预测</li>
+                  <li>依赖HBM支持</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 内存优化策略</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化建议</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>最大化共享内存使用</li>
+                  <li>确保内存合并访问</li>
+                  <li>减少寄存器压力</li>
+                  <li>利用纹理内存的特殊访问模式</li>
+                  <li>使用异步内存传输重叠计算</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU有复杂的内存层次结构</li>
+                <li>• 共享内存是快速可编程缓存</li>
+                <li>• 内存合并是性能优化的关键</li>
+                <li>• 统一内存简化编程但有性能开销</li>
+                <li>• 优化内存访问模式可显著提升性能</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="5-2-GPU线程层次结构.html">← 上一节</a>
+          <a href="5-4-Kernel优化基础.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

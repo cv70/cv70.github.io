@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6.4 网络拓扑设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>6.4 网络拓扑设计</h1>
+          <p class="subtitle">构建高速互联的AI集群网络</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解AI集群网络的关键要求</li>
+            <li>掌握Fat-Tree和Leaf-Spine拓扑设计</li>
+            <li>了解不同网络技术的特性</li>
+            <li>学会规划网络带宽和延迟</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800" alt="网络连接" class="card-image">
+          <h3 class="card-title">AI集群网络需求</h3>
+          <p class="card-text">
+            <strong>分布式训练</strong>需要频繁的梯度同步通信，网络性能直接影响训练效率。
+            一个1000+ GPU的集群每秒可能传输数TB的梯度数据，对网络的带宽、延迟和可靠性提出了极高要求。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AI网络通信特征</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">高带宽需求</h3>
+              <div class="code-block">
+<pre>典型通信量：
+• 单节点间梯度同步: 50-100GB/s
+• 集群级聚合: 数TB/s
+• All-Reduce通信: 频繁且大块
+
+要求：
+• 节点间带宽 ≥ GPU显存带宽
+• 通常需要100-400Gbps互联</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">低延迟要求</h3>
+              <div class="code-block">
+<pre>关键指标：
+• RTT: < 10μs (机架内)
+• RTT: < 100μs (跨机架)
+• 抖动: < 5μs
+
+影响：
+• 延迟直接影响通信开销
+• 影响梯度同步效率
+• 影响整体训练速度</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">通信模式</h3>
+              <div class="code-block">
+<pre>主要模式：
+• All-Reduce: 梯度聚合
+• All-Gather: 参数收集
+• Broadcast: 参数分发
+• Scatter: 数据分发
+
+特点：
+• 多对多通信
+• 同步密集
+• 需要集体通信优化</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌳</span> Fat-Tree拓扑</h2>
+          <div class="card">
+            <h3 class="card-title">Fat-Tree架构详解</h3>
+            <div class="code-block">
+<pre><strong>Fat-Tree三层架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                         Core Layer                           │
+│                    (核心交换机层)                            │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐          │
+│  │ Core1  │  │ Core2  │  │ Core3  │  │ Core4  │          │
+│  │ 400G   │  │ 400G   │  │ 400G   │  │ 400G   │          │
+│  └───┬────┘  └───┬────┘  └───┬────┘  └───┬────┘          │
+└──────┼──────────┼──────────┼──────────┼───────────────────┘
+       │          │          │          │
+┌──────┼──────────┼──────────┼──────────┼───────────────────┐
+│      │   ┌──────▼──────┐  ┌──────▼──────┐                   │
+│  ┌───▼──▼──┐  │  Agg1      │  │  Agg2      │                   │
+│  │  Edge1   │──│  200G      │──│  200G      │──┐               │
+│  │  100G    │  └──────┬──────┘  └──────┬──────┘  │               │
+│  └───┬──────┘         │                │         │               │
+│  ┌───▼──────┐         │                │         │               │
+│  │  Edge2   │         │                │         │               │
+│  │  100G    │         │                │         │               │
+│  └───┬──────┘         │                │         │               │
+└──────┼────────────────┼────────────────┼─────────┼───────────────┘
+       │                │                │         │
+    ┌──▼──┐          ┌──▼──┐          ┌──▼──┐   ┌──▼──┐
+    │Svr01│          │Svr02│          │Svr03│   │Svr04│
+    └─────┘          └─────┘          └─────┘   └─────┘
+    (计算节点)       (计算节点)       (计算节点) (计算节点)
+
+<strong>设计参数：</strong>
+• k-ary Fat-Tree: k为端口号
+• 交换机数量: 5k²/4
+• 主机数量: k³/4
+• 无阻塞设计: 1:1收敛比</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌲</span> Leaf-Spine拓扑</h2>
+          <div class="card">
+            <h3 class="card-title">Leaf-Spine架构详解</h3>
+            <div class="code-block">
+<pre><strong>Leaf-Spine两层架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                        Spine Layer                           │
+│                     (骨干交换机层)                            │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐          │
+│  │Spine-1 │  │Spine-2 │  │Spine-3 │  │Spine-4 │          │
+│  │ 400G   │  │ 400G   │  │ 400G   │  │ 400G   │          │
+│  └───┬────┘  └───┬────┘  └───┬────┘  └───┬────┘          │
+└──────┼──────────┼──────────┼──────────┼───────────────────┘
+       │          │          │          │
+┌──────┼──────────┼──────────┼──────────┼───────────────────┐
+│      │    ┌─────▼─────┐   ┌─────▼─────┐  ┌─────▼─────┐    │
+│  ┌───▼────▼────┐    ┌────▼────┐    ┌────▼────┐  ┌────▼────┐│
+│  │  Leaf-1    │    │Leaf-2   │    │Leaf-3   │  │Leaf-4  ││
+│  │  100G      │    │ 100G    │    │ 100G    │  │ 100G   ││
+│  └───┬────┬───┘    └──┬───┬───┘    └──┬───┬───┘  └──┬───┬──┘│
+└──────┼────┼───────────┼────┼──────────┼────┼───────┼────┼───┘
+       │    │           │    │          │    │       │    │
+    ┌──▼──┐┌▼──┐     ┌──▼──┐┌▼──┐   ┌──▼──┐┌▼──┐ ┌──▼──┐┌▼──┐
+    │Node1││Node2│     │Node3││Node4│   │Node5││Node6│ │Node7││Node8│
+    └─────┘└─────┘     └─────┘└─────┘   └─────┘└─────┘ └─────┘└─────┘
+
+<strong>设计参数：</strong>
+• Leaf交换机: 连接计算节点和Spine
+• Spine交换机: 实现所有Leaf间互联
+• 带宽: 节点到Leaf = Leaf到Spine
+• 扩展性: 水平扩展Spine提升容量
+
+<strong>优势：</strong>
+• 结构简单，易于维护
+• 等延迟设计，任意节点间延迟相同
+• 易于横向扩展
+• 适合超大规模集群</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">拓扑选择建议</div>
+            <p><strong>Fat-Tree：</strong>适合中小规模集群（< 1000节点），成本效益好，易于规划</p>
+            <p><strong>Leaf-Spine：</strong>适合大规模集群（> 1000节点），扩展性好，等延迟设计</p>
+            <p><strong>混合拓扑：</strong>机架内Fat-Tree，机架间Leaf-Spine，平衡成本与性能</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 网络技术选型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>带宽</th>
+                <th>延迟</th>
+                <th>成本</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>InfiniBand HDR</td>
+                <td>200Gbps</td>
+                <td>~100ns</td>
+                <td>高</td>
+                <td>高性能训练集群</td>
+              </tr>
+              <tr>
+                <td>InfiniBand NDR</td>
+                <td>400Gbps</td>
+                <td>~70ns</td>
+                <td>很高</td>
+                <td>超大模型训练</td>
+              </tr>
+              <tr>
+                <td>RoCE v2</td>
+                <td>100-200Gbps</td>
+                <td>~1μs</td>
+                <td>中</td>
+                <td>云AI平台</td>
+              </tr>
+              <tr>
+                <td>iWARP</td>
+                <td>100Gbps</td>
+                <td>~2μs</td>
+                <td>中低</td>
+                <td>通用AI应用</td>
+              </tr>
+              <tr>
+                <td>TCP/IP</td>
+                <td>100Gbps</td>
+                <td>~10μs</td>
+                <td>低</td>
+                <td>管理网络</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📐</span> 网络带宽规划</h2>
+          <div class="card">
+            <h3 class="card-title">带宽计算模型</h3>
+            <div class="code-block">
+<pre><strong>训练通信带宽需求：</strong>
+
+1. 梯度同步带宽需求：
+   Bandwidth = Model_Size × Gradient_Bits × Num_DDP_World × Frequency
+
+   示例（GPT-3 175B, FP16, 64卡）：
+   Bandwidth = 175GB × 2 × 64 × 1/s ≈ 22TB/s
+
+2. 网络带宽规划（实际考虑）：
+   • 考虑通信优化（梯度压缩、重叠计算）
+   • 多级通信（NVLink + InfiniBand）
+   • 有效利用系数: 0.5-0.7
+
+3. 节点互联带宽：
+   • 单机8卡: NVLink ~900GB/s
+   • 节点间: 200-400Gbps IB/RoCE
+   • 满足梯度同步的50-70%</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 多平面网络设计</h2>
+          <div class="card">
+            <h3 class="card-title">典型AI集群网络架构</h3>
+            <div class="code-block">
+<pre><strong>四平面网络架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                    管理网络 (Mgmt Network)                    │
+│  • 1Gbps 以太网                                               │
+│  • 用于SSH、IPMI、监控                                        │
+│  • 冗余设计                                                    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    业务网络 (Data Network)                     │
+│  • 25/100Gbps 以太网                                         │
+│  • 用于数据存储访问、外部服务                                 │
+│  • 也可用于RoCE RDMA                                          │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  计算网络 (Compute Network)                   │
+│  • 200/400Gbps InfiniBand 或 RoCE                             │
+│  • 用于梯度同步、集合通信                                     │
+│  • 最低延迟，最高带宽                                         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  存储网络 (Storage Network)                   │
+│  • 专用于存储系统访问                                         │
+│  • 100Gbps 以太网 或 InfiniBand                              │
+│  • 保障存储SLA                                                │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 网络优化技术</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">RDMA技术</h3>
+              <div class="code-block">
+<pre><strong>RDMA (远程直接内存访问)</strong>
+
+优势：
+• 零拷贝：直接内存到内存
+• 绕过CPU：降低CPU开销
+• 低延迟：微秒级响应
+
+实现：
+• InfiniBand: 原生RDMA
+• RoCE v2: 以太网上RDMA
+• iWARP: TCP上RDMA
+
+配置要点：
+• 启用PFC (优先级流控)
+• 配置ECN (显式拥塞通知)
+• 硬件支持DCN</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">集合通信优化</h3>
+              <div class="code-block">
+<pre><strong>NCCL通信优化</strong>
+
+技术：
+• Tree算法: 层次化通信
+• Ring算法: 环形通信
+• CollNet: 混合优化
+• 节点内外分层
+
+配置：
+• NCCL_IB_DISABLE=0
+• NCCL_NET_GDR_LEVEL=5
+• NCCL_IB_HCA=mlx5_0
+
+监控：
+• nvidia-smi观察通信
+• Nsight System分析</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">网络设计注意事项</div>
+            <p><strong>收敛比：</strong>1:1最佳，但成本高，AI集群通常2:1或4:1收敛比</p>
+            <p><strong>布线管理：</strong>大规模集群需要专业布线方案，考虑可维护性</p>
+            <p><strong>故障隔离：</strong>单个链路故障不应影响整个集群</p>
+            <p><strong>测试验证：</strong>部署后进行全面性能测试（iperf, ib_write_bw等）</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• AI集群网络需要高带宽、低延迟来支持频繁的梯度同步</li>
+                <li>• Fat-Tree适合中小规模，Leaf-Spine适合大规模集群</li>
+                <li>• InfiniBand提供最佳性能，RoCE是性价比较高的选择</li>
+                <li>• 网络带宽应根据模型规模和GPU数量进行规划</li>
+                <li>• 多平面网络设计能更好地隔离不同流量</li>
+                <li>• RDMA技术能显著降低通信延迟和CPU开销</li>
+                <li>• 集合通信优化是提升分布式训练效率的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="6-3-存储节点设计.html">← 上一节</a>
+          <a href="6-5-集群高可用设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

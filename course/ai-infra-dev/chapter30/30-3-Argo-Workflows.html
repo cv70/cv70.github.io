@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.3 Argo Workflows - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>30.3 Argo Workflows</h1>
+          <p class="subtitle">容器原生的流水线引擎</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Argo Workflows的核心概念</li>
+            <li>掌握Argo的安装与配置</li>
+            <li>学会编写和运行Workflow</li>
+            <li>了解Argo的高级特性</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Argo" class="card-image">
+          <h3 class="card-title">Argo Workflows简介</h3>
+          <p class="card-text">
+            <strong>Argo Workflows</strong>是Kubernetes原生的容器工作流引擎。
+            它通过Kubernetes CRD定义工作流，提供强大的编排能力，是运行批处理和ML任务的理想选择。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 核心概念</h2>
+
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">Workflow</h3>
+              <p class="card-text">工作流定义。</p>
+              <ul class="feature-list">
+                <li>DAG结构</li>
+                <li>步骤定义</li>
+                <li>参数传递</li>
+                <li>生命周期管理</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Template</h3>
+              <p class="card-text">可复用模板。</p>
+              <ul class="feature-list">
+                <li>容器定义</li>
+                <li>脚本模板</li>
+                <li>资源模板</li>
+                <li>参数化</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Step</h3>
+              <p class="card-text">工作流步骤。</p>
+              <ul class="feature-list">
+                <li>串行执行</li>
+                <li>并行执行</li>
+                <li>依赖关系</li>
+                <li>输出捕获</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 安装Argo Workflows</h2>
+
+          <h3>使用Helm安装</h3>
+          <div class="code-block">
+# 添加Argo仓库
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+
+# 创建命名空间
+kubectl create namespace argo
+
+# 安装Argo Workflows
+helm install argo-workflows argo/argo-workflows \
+  --namespace argo \
+  --version 0.21.1 \
+  --set server.serviceType=LoadBalancer \
+  --set workflow.serviceAccount.create=true \
+  --set controller.workflowNamespaces=argo,default
+
+# 验证安装
+kubectl get pods -n argo
+kubectl get svc -n argo
+
+# 获取访问URL
+kubectl get svc argo-workflows-server -n argo
+          </code>
+
+          <h3>使用CLI安装</h3>
+          <div class="code-block">
+# 安装Argo CLI
+curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.4.8/argo-linux-amd64
+chmod +x argo-linux-amd64
+sudo mv ./argo-linux-amd64 /usr/local/bin/argo
+
+# 安装Argo到Kubernetes
+kubectl create namespace argo
+kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.4.8/quick-start-static.yaml
+
+# 验证安装
+argo version
+          </code>
+
+          <h3>配置CLI</h3>
+          <div class="code-block">
+# 配置Argo CLI访问
+argo server
+
+# 或设置上下文
+argo cluster set argo-server \
+  --server https://localhost:2746
+
+# 列出工作流
+argo list
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">安装选项</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• <strong>Standalone</strong>：单命名空间安装</li>
+                <li>• <strong>Multi-namespace</strong>：跨命名空间管理</li>
+                <li>• <strong>Helm</strong>：灵活配置，生产推荐</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 编写Workflow</h2>
+
+          <h3>基础Workflow</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: training-workflow-
+  namespace: argo
+spec:
+  entrypoint: training-pipeline
+  templates:
+  - name: training-pipeline
+    steps:
+    - - name: load-data
+        template: load-data
+      - name: train-model
+        template: train-model
+
+  - name: load-data
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "print('Loading data...')"]
+
+  - name: train-model
+    container:
+      image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+      command: ["python"]
+      args: ["-c", "print('Training model...')"]
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+          </code>
+
+          <h3>参数化Workflow</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: param-workflow-
+spec:
+  entrypoint: training-pipeline
+  arguments:
+    parameters:
+    - name: learning-rate
+      value: "0.001"
+    - name: batch-size
+      value: "32"
+    - name: epochs
+      value: "100"
+  templates:
+  - name: training-pipeline
+    inputs:
+      parameters:
+      - name: learning-rate
+      - name: batch-size
+      - name: epochs
+    steps:
+    - - name: train
+        template: train
+        arguments:
+          parameters:
+          - name: learning-rate
+            value: "{{inputs.parameters.learning-rate}}"
+          - name: batch-size
+            value: "{{inputs.parameters.batch-size}}"
+          - name: epochs
+            value: "{{inputs.parameters.epochs}}"
+
+  - name: train
+    inputs:
+      parameters:
+      - name: learning-rate
+      - name: batch-size
+      - name: epochs
+    container:
+      image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+      command: ["python", "train.py"]
+      args: [
+        "--learning-rate", "{{inputs.parameters.learning-rate}}",
+        "--batch-size", "{{inputs.parameters.batch-size}}",
+        "--epochs", "{{inputs.parameters.epochs}}"
+      ]
+          </code>
+
+          <h3>提交Workflow</h3>
+          <div class="code-block">
+# 提交Workflow
+kubectl create -f workflow.yaml
+
+# 或使用Argo CLI
+argo submit workflow.yaml
+
+# 查看运行状态
+argo list
+
+# 查看Workflow详情
+argo get <workflow-name>
+
+# 查看日志
+argo logs <workflow-name>
+argo logs <workflow-name> -f  # 跟踪日志
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 高级特性</h2>
+
+          <h3>DAG工作流</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: dag-workflow-
+spec:
+  entrypoint: dag-diamond
+  templates:
+  - name: dag-diamond
+    dag:
+      tasks:
+      - name: A
+        template: task-template
+      - name: B
+        depends: A
+        template: task-template
+      - name: C
+        depends: A
+        template: task-template
+      - name: D
+        depends: B and C
+        template: task-template
+
+  - name: task-template
+    container:
+      image: alpine:3.17
+      command: ["echo"]
+      args: ["{{inputs.parameters.message}}"]
+          </code>
+
+          <h3>条件执行</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: conditional-workflow-
+spec:
+  entrypoint: conditional-pipeline
+  templates:
+  - name: conditional-pipeline
+    steps:
+    - - name: evaluate
+        template: evaluate
+    - - name: deploy
+        template: deploy
+        when: "{{steps.evaluate.outputs.result}} == 0.95"
+      - name: retrain
+        template: retrain
+        when: "{{steps.evaluate.outputs.result}} < 0.95"
+
+  - name: evaluate
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "print(0.95)"]
+
+  - name: deploy
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "print('Deploying...')"]
+
+  - name: retrain
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "print('Retraining...')"]
+          </code>
+
+          <h3>循环执行</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: loop-workflow-
+spec:
+  entrypoint: loop-pipeline
+  templates:
+  - name: loop-pipeline
+    steps:
+    - - name: train-folds
+        template: train-fold
+        arguments:
+          parameters:
+          - name: fold
+            value: "{{item}}"
+        withItems:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+    - - name: aggregate
+        template: aggregate
+        arguments:
+          parameters:
+          - name: models
+            value: "{{steps.train-folds.outputs.result}}"
+
+  - name: train-fold
+    inputs:
+      parameters:
+      - name: fold
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["train.py", "--fold", "{{inputs.parameters.fold}}"]
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> Artifact管理</h2>
+
+          <h3>输入输出Artifact</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: artifact-workflow-
+spec:
+  entrypoint: artifact-pipeline
+  templates:
+  - name: artifact-pipeline
+    steps:
+    - - name: generate-data
+        template: generate-data
+    - - name: train-model
+        template: train-model
+        arguments:
+          artifacts:
+          - name: input-data
+            from: "{{steps.generate-data.outputs.artifacts.output-data}}"
+
+  - name: generate-data
+    outputs:
+      artifacts:
+      - name: output-data
+        path: /tmp/data.csv
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "import pandas as pd; pd.DataFrame({'a': [1,2,3]}).to_csv('/tmp/data.csv')"]
+
+  - name: train-model
+    inputs:
+      artifacts:
+      - name: input-data
+        path: /tmp/data.csv
+    container:
+      image: python:3.9
+      command: ["python"]
+      args: ["-c", "print('Training with data...')"]
+          </code>
+
+          <h3>Artifact存储</h3>
+          <div class="code-block">
+# 使用S3作为Artifact存储
+apiVersion: argoproj.io/v1alpha1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+data:
+  artifactRepository: |
+    s3:
+      bucket: argo-artifacts
+      endpoint: s3.amazonaws.com
+      insecure: false
+      accessKeySecret:
+        name: s3-credentials
+        key: accessKey
+      secretKeySecret:
+        name: s3-credentials
+        key: secretKey
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 监控与调试</h2>
+
+          <h3>查看运行状态</h3>
+          <div class="code-block">
+# 列出所有Workflow
+argo list
+
+# 查看特定Workflow
+argo get <workflow-name>
+
+# 查看Workflow YAML
+argo get <workflow-name> -o yaml
+
+# 查看Workflow图
+argo get <workflow-name> --graph
+          </code>
+
+          <h3>查看日志</h3>
+          <div class="code-block">
+# 查看所有日志
+argo logs <workflow-name>
+
+# 查看特定步骤日志
+argo logs <workflow-name> -c step-name
+
+# 跟踪日志
+argo logs -f <workflow-name>
+
+# 查看最近的日志
+argo logs <workflow-name> --tail=100
+          </code>
+
+          <h3>调试选项</h3>
+          <div class="code-block">
+# 保留失败的Pod用于调试
+spec:
+  podGC:
+    strategy: OnPodCompletion
+    # options: OnPodCompletion, OnPodSuccess, OnWorkflowCompletion, OnWorkflowSuccess
+
+# 设置重试策略
+spec:
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnError  # Always, OnError, OnFailure
+
+# 设置超时
+spec:
+  activeDeadlineSeconds: 3600  # 1小时
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">Workflow设计</h4>
+              <ul class="feature-list">
+                <li>使用DAG结构明确定义依赖</li>
+                <li>模板化可复用的步骤</li>
+                <li>设置合理的资源限制</li>
+                <li>配置重试和超时策略</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">资源管理</h4>
+              <ul class="feature-list">
+                <li>设置CPU/内存请求和限制</li>
+                <li>配置GPU请求</li>
+                <li>使用节点亲和性</li>
+                <li>优先级和抢占配置</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">数据管理</h4>
+              <ul class="feature-list">
+                <li>使用共享存储</li>
+                <li>配置Artifact存储</li>
+                <li>增量处理大数据</li>
+                <li>清理临时数据</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">监控告警</h4>
+              <ul class="feature-list">
+                <li>集成Prometheus监控</li>
+                <li>设置失败告警</li>
+                <li>跟踪执行时间</li>
+                <li>资源使用监控</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">Argo优势</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• Kubernetes原生，CRD驱动</li>
+                <li>• 灵活的DAG和步骤编排</li>
+                <li>• 强大的模板系统</li>
+                <li>• 完善的CLI和UI</li>
+                <li>• 丰富的生态系统</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• Argo是Kubernetes原生的流水线引擎</li>
+                <li>• 支持复杂的DAG和步骤编排</li>
+                <li>• YAML声明式定义工作流</li>
+                <li>• 与Kubernetes生态深度集成</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="30-2-Kubeflow-Pipelines.html">← 上一节</a>
+          <a href="30-4-流水线编排设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

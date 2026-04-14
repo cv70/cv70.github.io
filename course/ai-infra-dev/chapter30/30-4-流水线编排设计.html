@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>30.4 流水线编排设计 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>30.4 流水线编排设计</h1>
+          <p class="subtitle">设计高效的ML流水线</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解流水线编排的核心原则</li>
+            <li>掌握DAG设计与优化</li>
+            <li>学会资源调度策略</li>
+            <li>了解流水线治理最佳实践</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="流水线编排" class="card-image">
+          <h3 class="card-title">流水线编排设计概述</h3>
+          <p class="card-text">
+            <strong>流水线编排</strong>是设计和优化工作流执行顺序、资源分配和依赖管理的过程。
+            良好的编排设计可以显著提高流水线效率、降低成本并确保可靠性。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 编排模式</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">顺序执行</h3>
+              <p class="card-text">步骤按顺序执行。</p>
+              <div class="code-block">
+# 步骤1 -> 步骤2 -> 步骤3
+pipeline:
+  steps:
+  - step1
+  - step2
+  - step3
+              </div>
+              <ul class="feature-list">
+                <li>简单易理解</li>
+                <li>依赖清晰</li>
+                <li>效率较低</li>
+                <li>适合小规模</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">并行执行</h3>
+              <p class="card-text">多个步骤并行运行。</p>
+              <div class="code-block">
+# 步骤1 和 步骤2 并行
+pipeline:
+  dag:
+    tasks:
+    - task1
+    - task2
+              </div>
+              <ul class="feature-list">
+                <li>提高效率</li>
+                <li>减少总时间</li>
+                <li>需要资源充足</li>
+                <li>适合独立任务</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">分支执行</h3>
+              <p class="card-text">根据条件选择分支。</p>
+              <div class="code-block">
+# 条件分支
+if condition:
+    branch1
+else:
+    branch2
+              </div>
+              <ul class="feature-list">
+                <li>灵活决策</li>
+                <li>支持多路径</li>
+                <li>需要明确定义</li>
+                <li>适合复杂逻辑</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">混合执行</h3>
+              <p class="card-text">结合多种模式。</p>
+              <div class="code-block">
+# 并行 + 顺序 + 条件
+pipeline:
+  tasks:
+  - parallel1
+  - parallel2
+  - sequential: [depends on parallel]
+  - conditional: [depends on sequential]
+              </div>
+              <ul class="feature-list">
+                <li>最灵活</li>
+                <li>最优效率</li>
+                <li>复杂度高</li>
+                <li>适合复杂流程</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> DAG设计</h2>
+
+          <h3>DAG示例：训练流水线</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: training-dag-
+spec:
+  entrypoint: training-pipeline
+  templates:
+  - name: training-pipeline
+    dag:
+      tasks:
+      # 数据准备（并行）
+      - name: collect-data
+        template: collect-data
+      - name: validate-data
+        template: validate-data
+        depends: collect-data
+      - name: preprocess-data
+        template: preprocess-data
+        depends: validate-data
+
+      # 特征工程
+      - name: extract-features
+        template: extract-features
+        depends: preprocess-data
+
+      # 模型训练（并行）
+      - name: train-model-v1
+        template: train-model
+        depends: extract-features
+        arguments:
+          parameters:
+          - name: model-type
+            value: "v1"
+      - name: train-model-v2
+        template: train-model
+        depends: extract-features
+        arguments:
+          parameters:
+          - name: model-type
+            value: "v2"
+
+      # 模型评估
+      - name: evaluate-models
+        template: evaluate-models
+        depends: [train-model-v1, train-model-v2]
+
+      # 部署（条件）
+      - name: deploy-model
+        template: deploy-model
+        depends: evaluate-models
+        when: "{{tasks.evaluate-models.outputs.best_accuracy}} > 0.95"
+          </code>
+
+          <div class="image-container">
+            <img src="https://www.kubeflow.org/docs/images/pipelines-concepts-dag.png" alt="DAG示例">
+            <div class="caption">图：训练流水线DAG</div>
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">DAG设计原则</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 明确定义任务依赖关系</li>
+                <li>识别可以并行的任务</li>
+                <li>考虑资源限制</li>
+                <li>设计合理的任务粒度</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 性能优化</h2>
+
+          <h3>并行度控制</h3>
+          <div class="code-block">
+# 限制并发任务数
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: parallel-workflow-
+spec:
+  parallelism: 4  # 最多4个任务并行
+  entrypoint: parallel-pipeline
+  templates:
+  - name: parallel-pipeline
+    steps:
+    - - name: process-data
+        template: process-task
+        withItems:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+          </code>
+
+          <h3>资源优化</h3>
+          <div class="code-block">
+# 设置资源请求和限制
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: resource-opt-workflow-
+spec:
+  entrypoint: optimized-pipeline
+  templates:
+  - name: optimized-pipeline
+    steps:
+    - - name: training-task
+        template: train-model
+        arguments:
+          parameters:
+          - name: gpu-request
+            value: "1"
+          - name: memory-limit
+            value: "16Gi"
+
+  - name: train-model
+    inputs:
+      parameters:
+      - name: gpu-request
+      - name: memory-limit
+    container:
+      image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+      resources:
+        requests:
+          nvidia.com/gpu: "{{inputs.parameters.gpu-request}}"
+          memory: "8Gi"
+        limits:
+          nvidia.com/gpu: "{{inputs.parameters.gpu-request}}"
+          memory: "{{inputs.parameters.memory-limit}}"
+          </code>
+
+          <h3>缓存策略</h3>
+          <div class="code-block">
+# 使用缓存加速重复任务
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: cached-workflow-
+spec:
+  entrypoint: cached-pipeline
+  templates:
+  - name: cached-pipeline
+    steps:
+    - - name: train-with-cache
+        template: train-model
+        arguments:
+          parameters:
+          - name: cache-key
+            value: "model-v1-{{inputs.parameters.data-version}}"
+
+  - name: train-model
+    inputs:
+      parameters:
+      - name: cache-key
+    cache:
+      key: "{{inputs.parameters.cache-key}}"
+    container:
+      image: python:3.9
+      command: ["python", "train.py"]
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 资源调度策略</h2>
+
+          <h3>节点亲和性</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: affinity-workflow-
+spec:
+  entrypoint: affinity-pipeline
+  templates:
+  - name: affinity-pipeline
+    steps:
+    - - name: gpu-task
+        template: gpu-task
+        arguments:
+          parameters:
+          - name: node-type
+            value: "gpu-node"
+
+  - name: gpu-task
+    inputs:
+      parameters:
+      - name: node-type
+    nodeSelector:
+      node-type: "{{inputs.parameters.node-type}}"
+    container:
+      image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+          </code>
+
+          <h3>优先级调度</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: priority-workflow-
+spec:
+  priority: 100  # 数值越大优先级越高
+  entrypoint: priority-pipeline
+  templates:
+  - name: priority-pipeline
+    steps:
+    - - name: critical-task
+        template: critical-task
+          </code>
+
+          <h3>资源配额</h3>
+          <div class="code-block">
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workflow-quota
+  namespace: argo
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: "200Gi"
+    requests.nvidia.com/gpu: "50"
+    limits.cpu: "200"
+    limits.memory: "400Gi"
+    limits.nvidia.com/gpu: "100"
+  scopes:
+  - BestEffort
+  - NotBestEffort
+          </code>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">调度策略</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 使用节点亲和性优化资源利用</li>
+                <li>• 设置优先级保证关键任务</li>
+                <li>• 配置资源配额控制成本</li>
+                <li>• 监控资源使用动态调整</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 容错与恢复</h2>
+
+          <h3>重试策略</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: retry-workflow-
+spec:
+  entrypoint: retry-pipeline
+  templates:
+  - name: retry-pipeline
+    steps:
+    - - name: robust-task
+        template: task-with-retry
+
+  - name: task-with-retry
+    retryStrategy:
+      limit: 3  # 最多重试3次
+      retryPolicy: OnError  # Always, OnError, OnFailure
+      backoff:
+        duration: "5s"  # 初始延迟
+        factor: 2  # 延迟倍增
+        maxDuration: "5m"  # 最大延迟
+    container:
+      image: python:3.9
+      command: ["python", "task.py"]
+          </code>
+
+          <h3>超时控制</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: timeout-workflow-
+spec:
+  activeDeadlineSeconds: 3600  # 总超时1小时
+  entrypoint: timeout-pipeline
+  templates:
+  - name: timeout-pipeline
+    steps:
+    - - name: task-with-timeout
+        template: timeout-task
+        arguments:
+          parameters:
+          - name: task-timeout
+            value: "600"  # 任务超时10分钟
+
+  - name: timeout-task
+    inputs:
+      parameters:
+      - name: task-timeout
+    activeDeadlineSeconds: "{{inputs.parameters.task-timeout}}"
+    container:
+      image: python:3.9
+      command: ["python", "task.py"]
+          </code>
+
+          <h3>失败处理</h3>
+          <div class="code-block">
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: error-handling-workflow-
+spec:
+  entrypoint: error-handling-pipeline
+  templates:
+  - name: error-handling-pipeline
+    steps:
+    - - name: risky-task
+        template: task
+        onExit: exit-handler  # 无论成功或失败都执行
+      - name: exit-handler
+        template: cleanup-task
+        when: "{{workflow.status}} != Succeeded"
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 监控与治理</h2>
+
+          <h3>性能监控</h3>
+          <div class="code-block">
+# Prometheus监控指标
+# argo_workflow_status
+# argo_workflow_duration_seconds
+# argo_pod_pending_duration_seconds
+# argo_pod_running_duration_seconds
+
+# Grafana查询示例
+# 平均Workflow执行时间
+avg(argo_workflow_duration_seconds)
+
+# Workflow成功率
+sum(rate(argo_workflow_status{status="Succeeded"}[5m])) /
+sum(rate(argo_workflow_status[5m]))
+
+# 资源使用
+sum(kube_pod_container_resource_requests{namespace="argo", resource="nvidia.com/gpu"})
+          </code>
+
+          <h3>告警规则</h3>
+          <div class="code-block">
+groups:
+- name: argo-workflows
+  rules:
+  - alert: WorkflowFailed
+    expr: argo_workflow_status{status="Failed"} > 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Workflow {{ $labels.workflow }} failed"
+
+  - alert: WorkflowTimeout
+    expr: argo_workflow_status{status="Failed"} > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Workflow {{ $labels.workflow }} timed out"
+
+  - alert: HighResourceUsage
+    expr: sum(kube_pod_container_resource_requests{namespace="argo", resource="nvidia.com/gpu"}) > 80
+    labels:
+      severity: warning
+    annotations:
+      summary: "High GPU usage in Argo namespace"
+          </code>
+
+          <h3>成本监控</h3>
+          <div class="code-block">
+# 计算Workflow成本
+cost_per_gpu_hour = 1.5  # USD
+cost_per_cpu_hour = 0.1   # USD
+cost_per_gb_hour = 0.01  # USD
+
+# 计算公式
+total_cost = (
+    gpu_hours * cost_per_gpu_hour +
+    cpu_hours * cost_per_cpu_hour +
+    gb_hours * cost_per_gb_hour
+)
+
+# 设置成本预警
+if total_cost > 1000:
+    alert("High cost workflow")
+          </code>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 最佳实践</h2>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">流水线设计</h4>
+              <ul class="feature-list">
+                <li>模块化组件设计</li>
+                <li>清晰的依赖关系</li>
+                <li>合理的任务粒度</li>
+                <li>考虑并行执行机会</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">资源管理</h4>
+              <ul class="feature-list">
+                <li>设置合理的资源请求</li>
+                <li>配置优先级和抢占</li>
+                <li>使用节点亲和性</li>
+                <li>监控资源使用</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">容错设计</h4>
+              <ul class="feature-list">
+                <li>配置重试策略</li>
+                <li>设置超时限制</li>
+                <li>实现失败处理</li>
+                <li>设计恢复机制</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">治理与优化</h4>
+              <ul class="feature-list">
+                <li>建立标准模板</li>
+                <li>实施监控告警</li>
+                <li>定期成本审查</li>
+                <li>持续性能优化</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <div class="title">成功要素</div>
+              <ul style="list-style: none; padding: 0;">
+                <li>• 清晰的流水线设计</li>
+                <li>• 高效的资源利用</li>
+                <li>• 完善的容错机制</li>
+                <li>• 可靠的监控体系</li>
+                <li>• 持续的优化改进</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0;">
+                <li>• 良好的编排设计提高流水线效率</li>
+                <li>• DAG设计明确定义任务依赖</li>
+                <li>• 资源优化降低成本和提升性能</li>
+                <li>• 容错设计提高可靠性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="30-3-Argo-Workflows.html">← 上一节</a>
+          <a href="30-5-CI-CD-for-ML.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

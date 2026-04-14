@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11.2 模型版本管理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>11.2 模型版本管理</h1>
+          <p class="subtitle">构建可追溯的模型版本控制系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型版本管理的重要性</li>
+            <li>掌握模型版本命名规范</li>
+            <li>学习模型血缘追踪方法</li>
+            <li>了解模型回滚与恢复策略</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="版本控制概念图" class="card-image">
+          <h3 class="card-title">模型版本管理的重要性</h3>
+          <p class="card-text">
+            模型版本管理是MLOps的核心组成部分，它确保模型的可追溯性、可复现性和可恢复性。
+            良好的版本管理能够帮助我们追踪模型的演进历史，快速定位问题，并在必要时回滚到稳定版本。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏷️</span> 模型版本标识体系</h2>
+
+          <h3>语义化版本号</h3>
+          <div class="code-block">
+模型版本格式: MAJOR.MINOR.PATCH
+
+- MAJOR: 架构重大变更，不兼容
+- MINOR: 功能新增，向后兼容
+- PATCH: 问题修复，向后兼容
+
+示例:
+  - 1.0.0 (初始版本)
+  - 1.1.0 (新增功能)
+  - 1.1.1 (bug修复)
+  - 2.0.0 (架构重构)
+          </div>
+
+          <h3>版本信息元数据</h3>
+          <div class="code-block">
+{
+    "model_version": "1.2.3",
+    "model_id": "model-abc123",
+    "commit_hash": "a1b2c3d4e5f6",
+    "training_config": {
+        "epochs": 100,
+        "batch_size": 32,
+        "learning_rate": 0.001
+    },
+    "dataset": {
+        "name": "imagenet",
+        "version": "1.0",
+        "split": "train"
+    },
+    "metrics": {
+        "accuracy": 0.95,
+        "loss": 0.15
+    },
+    "tags": ["production", "stable", "fast"],
+    "created_at": "2024-01-15T10:00:00Z",
+    "created_by": "user@example.com"
+}
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 模型生命周期管理</h2>
+
+          <h3>版本状态流转</h3>
+          <div class="card">
+            <div style="text-align: center; margin: 2rem 0;">
+              <span style="display: inline-block; padding: 8px 16px; background: #e0e0e0; border-radius: 20px; margin: 5px;">开发中</span>
+              →
+              <span style="display: inline-block; padding: 8px 16px; background: #fff3cd; border-radius: 20px; margin: 5px;">测试中</span>
+              →
+              <span style="display: inline-block; padding: 8px 16px; background: #d4edda; border-radius: 20px; margin: 5px;">预发布</span>
+              →
+              <span style="display: inline-block; padding: 8px 16px; background: #c3e6cb; border-radius: 20px; margin: 5px;">生产环境</span>
+              →
+              <span style="display: inline-block; padding: 8px 16px; background: #d6d8db; border-radius: 20px; margin: 5px;">归档</span>
+            </div>
+          </div>
+
+          <h3>版本标签体系</h3>
+          <div class="grid grid-2">
+            <div class="card">
+              <h4 class="card-title">环境标签</h4>
+              <ul class="feature-list">
+                <li><code>dev</code> - 开发环境</li>
+                <li><code>test</code> - 测试环境</li>
+                <li><code>staging</code> - 预发布环境</li>
+                <li><code>prod</code> - 生产环境</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4 class="card-title">状态标签</h4>
+              <ul class="feature-list">
+                <li><code>stable</code> - 稳定版本</li>
+                <li><code>experimental</code> - 实验版本</li>
+                <li><code>deprecated</code> - 已弃用</li>
+                <li><code>archived</code> - 已归档</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 模型血缘追踪</h2>
+
+          <h3>数据血缘</h3>
+          <div class="code-block">
+# 数据血缘记录
+data_lineage = {
+    "model_version": "1.2.0",
+    "dataset": {
+        "source": "s3://bucket/data",
+        "version": "v2.1",
+        "checksum": "sha256:abc123...",
+        "preprocessing": {
+            "script": "preprocess.py",
+            "commit": "def456",
+            "parameters": {
+                "normalize": True,
+                "augment": True
+            }
+        }
+    }
+}
+          </div>
+
+          <h3>代码血缘</h3>
+          <div class="code-block">
+# 代码血缘记录
+code_lineage = {
+    "model_version": "1.2.0",
+    "repository": "https://github.com/org/model",
+    "branch": "main",
+    "commit": "a1b2c3d4",
+    "requirements": {
+        "pytorch": "2.0.1",
+        "tensorflow": "2.13.0",
+        "numpy": "1.24.0"
+    },
+    "training_script": "train.py",
+    "model_definition": "models/transformer.py"
+}
+          </div>
+
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">最佳实践</div>
+              <p>模型血缘应该自动记录，包括数据版本、代码版本、训练参数和环境配置。使用工具如MLflow、Weights & Biases或DVC可以简化这个过程。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 版本管理工具</h2>
+
+          <h3>MLflow Model Registry</h3>
+          <div class="code-block">
+import mlflow
+from mlflow.tracking import MlflowClient
+
+# 初始化客户端
+client = MlflowClient()
+
+# 注册模型
+model_uri = f"runs:/{run_id}/model"
+model = mlflow.register_model(model_uri, "MyModel")
+
+# 设置版本阶段
+client.transition_model_version_stage(
+    name="MyModel",
+    version=model.version,
+    stage="Production"
+)
+
+# 获取生产版本
+production_model = client.get_latest_versions("MyModel", stages=["Production"])[0]
+print(f"Production version: {production_model.version}")
+          </div>
+
+          <h3>DVC模型版本控制</h3>
+          <div class="code-block">
+# 初始化DVC
+dvc init
+
+# 追踪模型文件
+dvc add models/model.pt
+git add models/model.pt.dvc models/.gitignore
+git commit -m "Add model v1.0"
+
+# 切换到不同版本
+git checkout v1.0
+dvc checkout
+
+# 比较模型差异
+dvc diff models/model.pt.dvc
+          </div>
+
+          <h3>自定义版本管理</h3>
+          <div class="code-block">
+import os
+import json
+import shutil
+from datetime import datetime
+
+class ModelVersionManager:
+    def __init__(self, base_dir="models"):
+        self.base_dir = base_dir
+        self.versions_dir = os.path.join(base_dir, "versions")
+
+    def save_version(self, model, version, metadata):
+        """保存模型版本"""
+        version_dir = os.path.join(self.versions_dir, f"v{version}")
+        os.makedirs(version_dir, exist_ok=True)
+
+        # 保存模型文件
+        model_path = os.path.join(version_dir, "model.pt")
+        torch.save(model.state_dict(), model_path)
+
+        # 保存元数据
+        metadata_path = os.path.join(version_dir, "metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        # 更新最新版本链接
+        self._update_latest(version)
+
+        return version_dir
+
+    def load_version(self, version=None):
+        """加载指定版本"""
+        if version is None:
+            version = self._get_latest_version()
+
+        version_dir = os.path.join(self.versions_dir, f"v{version}")
+        model_path = os.path.join(version_dir, "model.pt")
+        return torch.load(model_path)
+
+    def list_versions(self):
+        """列出所有版本"""
+        versions = [d[1:] for d in os.listdir(self.versions_dir)
+                   if d.startswith('v') and os.path.isdir(os.path.join(self.versions_dir, d))]
+        return sorted(versions, reverse=True)
+
+    def _update_latest(self, version):
+        """更新最新版本链接"""
+        latest_link = os.path.join(self.versions_dir, "latest")
+        if os.path.exists(latest_link) or os.path.islink(latest_link):
+            os.remove(latest_link)
+        os.symlink(f"v{version}", latest_link)
+
+    def _get_latest_version(self):
+        """获取最新版本"""
+        latest_link = os.path.join(self.versions_dir, "latest")
+        return os.path.basename(os.readlink(latest_link)).replace('v', '')
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 模型回滚策略</h2>
+
+          <h3>自动回滚触发条件</h3>
+          <div class="card">
+            <ul class="feature-list">
+              <li><strong>性能下降</strong>：准确率下降超过阈值</li>
+              <li><strong>延迟增加</strong>：推理延迟超过SLA</li>
+              <li><strong>错误率升高</strong>：预测错误率超过基准</li>
+              <li><strong>异常检测</strong>：输出分布异常变化</li>
+              <li><strong>用户反馈</strong>：收到大量负面反馈</li>
+            </ul>
+          </div>
+
+          <h3>回滚流程</h3>
+          <div class="code-block">
+class ModelRollbackManager:
+    def __init__(self, registry_client):
+        self.registry = registry_client
+        self.rollback_history = []
+
+    def monitor_production(self, metrics, thresholds):
+        """监控生产模型性能"""
+        for metric, value in metrics.items():
+            if value < thresholds[metric]:
+                self.trigger_rollback(metric, value)
+
+    def trigger_rollback(self, metric, current_value):
+        """触发回滚"""
+        print(f"Alert: {metric} = {current_value}, triggering rollback")
+
+        # 获取上一个稳定版本
+        previous_version = self._get_previous_stable_version()
+
+        # 执行回滚
+        self.rollback_to(previous_version)
+
+        # 记录回滚事件
+        self.rollback_history.append({
+            'timestamp': datetime.now().isoformat(),
+            'metric': metric,
+            'value': current_value,
+            'from_version': self._get_current_version(),
+            'to_version': previous_version
+        })
+
+    def rollback_to(self, version):
+        """回滚到指定版本"""
+        # 1. 停止当前版本服务
+        # 2. 加载目标版本模型
+        # 3. 启动新服务
+        # 4. 验证服务正常
+        # 5. 更新路由配置
+        pass
+
+    def _get_previous_stable_version(self):
+        """获取上一个稳定版本"""
+        # 从历史记录中查找
+        versions = self.registry.list_versions("MyModel")
+        for v in versions:
+            if v.status == "Production" and v.version != self._get_current_version():
+                return v.version
+        return versions[-2].version  # 返回次新版本
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> A/B测试与金丝雀发布</h2>
+
+          <h3>A/B测试架构</h3>
+          <div class="code-block">
+# A/B测试配置
+ab_test_config = {
+    "test_name": "model_v2_vs_v1",
+    "start_time": "2024-01-15T00:00:00Z",
+    "end_time": "2024-01-22T00:00:00Z",
+    "traffic_allocation": {
+        "model_v1": 0.8,    # 80%流量到旧版本
+        "model_v2": 0.2     # 20%流量到新版本
+    },
+    "metrics": [
+        "accuracy",
+        "latency_p95",
+        "user_satisfaction"
+    ],
+    "success_criteria": {
+        "accuracy_improvement": 0.02,  # 至少提升2%
+        "latency_increase_max": 0.1    # 延迟增加不超过10%
+    }
+}
+          </div>
+
+          <h3>金丝雀发布</h3>
+          <div class="code-block">
+# 金丝雀发布流程
+canary_stages = [
+    {"traffic": 0.01, "duration_hours": 2, "check_interval_minutes": 15},
+    {"traffic": 0.05, "duration_hours": 4, "check_interval_minutes": 30},
+    {"traffic": 0.10, "duration_hours": 6, "check_interval_minutes": 30},
+    {"traffic": 0.25, "duration_hours": 12, "check_interval_minutes": 60},
+    {"traffic": 0.50, "duration_hours": 24, "check_interval_minutes": 60},
+    {"traffic": 1.00, "duration_hours": 24, "check_interval_minutes": 120}
+]
+
+def rollout_canary(model_version):
+    """执行金丝雀发布"""
+    for stage in canary_stages:
+        print(f"Rolling to {stage['traffic']*100}% traffic")
+
+        # 调整流量分配
+        adjust_traffic(model_version, stage['traffic'])
+
+        # 监控指标
+        for _ in range(int(stage['duration_hours'] * 60 / stage['check_interval_minutes'])):
+            if not check_health():
+                rollback_to_previous()
+                return False
+            sleep(stage['check_interval_minutes'] * 60)
+
+    print("Canary deployment successful!")
+    return True
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">回滚注意事项</div>
+            <p>在执行模型回滚前，确保：1）已备份当前版本数据；2）有完整的回滚计划；3）回滚过程经过测试；4）有监控告警机制；5）记录回滚原因用于后续分析。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗂️</span> 模型归档策略</h2>
+
+          <h3>归档标准</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>条件</th>
+                <th>操作</th>
+                <th>保留期限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>模型使用时间超过1年且未被使用</td>
+                <td>归档到冷存储</td>
+                <td>永久</td>
+              </tr>
+              <tr>
+                <td>模型性能低于当前基线</td>
+                <td>标记为deprecated</td>
+                <td>6个月</td>
+              </tr>
+              <tr>
+                <td>实验性模型</td>
+                <td>归档到实验仓库</td>
+                <td>3个月</td>
+              </tr>
+              <tr>
+                <td>生产环境历史版本</td>
+                <td>保留关键版本</td>
+                <td>1年</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>归档自动化</h3>
+          <div class="code-block">
+class ModelArchiver:
+    def __init__(self, registry):
+        self.registry = registry
+
+    def archive_old_models(self, max_age_days=365):
+        """归档旧模型"""
+        models = self.registry.list_models()
+
+        for model in models:
+            versions = self.registry.list_versions(model.name)
+
+            for version in versions:
+                age = self._calculate_age(version.created_at)
+
+                if age > max_age_days and not version.is_used:
+                    self._archive_version(model.name, version.version)
+
+    def _archive_version(self, model_name, version):
+        """归档单个版本"""
+        # 1. 移动到归档存储
+        archive_path = f"s3://archive-bucket/{model_name}/v{version}"
+        self._move_to_archive(version.path, archive_path)
+
+        # 2. 更新元数据
+        version.metadata["archived"] = True
+        version.metadata["archive_path"] = archive_path
+        version.metadata["archived_at"] = datetime.now().isoformat()
+
+        # 3. 标记为已归档
+        self.registry.update_version(model_name, version.version, {
+            "stage": "Archived",
+            "metadata": version.metadata
+        })
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800" alt="数据分析与监控">
+          <div class="caption">图：完善的监控系统确保模型版本的可观测性</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 模型版本管理需要规范的命名和标签体系</li>
+                <li>• 模型血缘追踪确保可复现性和可追溯性</li>
+                <li>• 自动化回滚机制保障生产环境稳定性</li>
+                <li>• A/B测试和金丝雀发布降低发布风险</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="11-1-模型格式与序列化.html">← 上一节</a>
+          <a href="11-3-模型仓库设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6.3 存储节点设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>6.3 存储节点设计</h1>
+          <p class="subtitle">构建高性能的AI存储系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解AI工作负载的存储特征</li>
+            <li>掌握分布式文件系统的应用</li>
+            <li>了解对象存储的部署架构</li>
+            <li>学会设计多层级存储体系</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="数据中心存储" class="card-image">
+          <h3 class="card-title">AI存储挑战</h3>
+          <p class="card-text">
+            <strong>AI存储系统</strong>面临独特的挑战：海量小文件（图像数据集）、极高的并发访问（训练数据加载）、
+            大文件高速传输（模型checkpoint）、混合读写模式等。传统的存储架构无法满足AI场景的需求。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AI场景存储特征分析</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">训练阶段</h3>
+              <ul class="feature-list">
+                <li><strong>数据特征：</strong>大量小文件（图像、文本）</li>
+                <li><strong>访问模式：</strong>顺序读取为主，高并发</li>
+                <li><strong>性能要求：</strong>高吞吐量，低延迟</li>
+                <li><strong>典型负载：</strong>ImageNet（140万图片）</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">推理阶段</h3>
+              <ul class="feature-list">
+                <li><strong>数据特征：</strong>小请求频繁，实时性要求高</li>
+                <li><strong>访问模式：</strong>随机读写，高频访问</li>
+                <li><strong>性能要求：</strong>极低延迟，高并发</li>
+                <li><strong>典型负载：</strong>模型加载，推理输出</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🗂️</span> 分布式文件系统</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Lustre文件系统</h3>
+              <p class="card-text">高性能并行文件系统，广泛用于HPC和AI场景</p>
+              <div class="code-block">
+<pre><strong>核心特性：</strong>
+• 元数据与数据分离
+• 支持PB级存储容量
+• 多客户端并发访问
+• 高带宽吞吐（数百GB/s）
+
+<strong>适用场景：</strong>
+• 大规模训练集群
+• 超算中心
+• 需要POSIX兼容</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">GPFS (IBM Spectrum Scale)</h3>
+              <p class="card-text">企业级并行文件系统，支持混合云</p>
+              <div class="code-block">
+<pre><strong>核心特性：</strong>
+• 全局命名空间
+• 自动数据分层
+• 容错机制完善
+• 支持云存储集成
+
+<strong>适用场景：</strong>
+• 企业AI平台
+• 混合云架构
+• 需要数据生命周期管理</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">☁️</span> 对象存储</h2>
+          <div class="card">
+            <h3 class="card-title">MinIO部署架构</h3>
+            <div class="code-block">
+<pre><strong>MinIO分布式部署示例：</strong>
+
+┌────────────────────────────────────────────┐
+│          MinIO Gateway / Load Balancer      │
+└────────────────┬───────────────────────────┘
+                 │
+    ┌────────────┼────────────┐
+    │            │            │
+┌───▼───┐   ┌───▼───┐   ┌───▼───┐
+│Server1│   │Server2│   │Server3│
+│MinIO  │   │MinIO  │   │MinIO  │
+│Data1-2│   │Data3-4│   │Data5-6│
+└───────┘   └───────┘   └───────┘
+    │            │            │
+    └────────────┼────────────┘
+                 │
+         ┌───────▼────────┐
+         │  分散纠删码(EC)  │
+         │  支持N:K配置    │
+         └────────────────┘
+
+<strong>配置要点：</strong>
+• 至少4个节点保证可用性
+• 每节点配置多块NVMe
+• 使用纠删码（EC）而非副本
+• 启用版本控制和生命周期管理</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">对象存储vs文件存储</div>
+            <p><strong>对象存储：</strong>适合海量非结构化数据、低成本、无限扩展，但不支持POSIX</p>
+            <p><strong>文件存储：</strong>支持POSIX，适合训练时直接访问，但成本较高</p>
+            <p><strong>建议：</strong>训练数据用对象存储，热点数据缓存到文件存储或计算节点本地</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 高性能缓存层</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">Alluxio分布式缓存</h3>
+              <div class="code-block">
+<pre><strong>架构优势：</strong>
+• 虚拟文件系统层
+• 统一异构存储访问
+• 内存+SSD分层缓存
+• 透明加速
+
+<strong>典型配置：</strong>
+• Workers: 8-16台服务器
+• 每节点: 1-2TB NVMe
+• 缓存策略: LRU/LFU
+• 预热: 数据集预加载</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">NVMe闪存阵列</h3>
+              <div class="code-block">
+<pre><strong>硬件方案：</strong>
+• 商用全闪阵列（Pure Storage等）
+• 自建NVMe集群（Ceph/ROCKS）
+• U.2/U.3 NVMe SSD
+
+<strong>性能指标：</strong>
+• 吞吐: 50-200 GB/s
+• IOPS: 1M+
+• 延迟: <100μs
+
+<strong>用途：</strong>
+• 热数据缓存
+• Checkpoint存储
+• 模型仓库</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 多层级存储架构</h2>
+          <div class="card">
+            <h3 class="card-title">分层存储策略</h3>
+            <div class="code-block">
+<pre><strong>三层存储架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│  第一层：热数据层 (Hot Tier)                                   │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: NVMe SSD阵列                                        │
+│  • 容量: 50TB - 500TB                                        │
+│  • 性能: 100GB/s+ 吞吐                                       │
+│  • 用途: 训练数据缓存、Checkpoint、活跃模型                  │
+│  • 策略: 高速SSD，低延迟，频繁访问                           │
+└─────────────────────────────────────────────────────────────┘
+                            ↑ 自动分层
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  第二层：温数据层 (Warm Tier)                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: 分布式文件系统 (Lustre/GPFS)                        │
+│  • 容量: 2PB - 20PB                                          │
+│  • 性能: 10GB/s - 50GB/s 吞吐                               │
+│  • 用途: 中期项目数据、历史模型、预处理结果                  │
+│  • 策略: 成本与性能平衡，7x24小时可用                       │
+└─────────────────────────────────────────────────────────────┘
+                            ↑ 自动归档
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  第三层：冷数据层 (Cold Tier)                                 │
+│  ─────────────────────────────────────────────────────────   │
+│  • 技术: 对象存储 (S3/MinIO) + 磁带库                        │
+│  • 容量: 50PB+                                              │
+│  • 性能: GB/s级别吞吐                                       │
+│  • 用途: 原始数据、归档数据、长期保存                       │
+│  • 策略: 成本最低，访问频率低                               │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> 存储节点配置示例</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">文件存储节点</h3>
+              <div class="code-block">
+<pre><strong>Lustre OSS节点配置</strong>
+
+CPU:   2x AMD EPYC 7543 (32核)
+内存:   512GB DDR4
+网络:   2x 100Gbps InfiniBand
+       2x 25Gbps 以太网
+
+存储:
+  • 12x 15.84TB NVMe (U.3)
+  • 总容量: ~180TB 原始
+  • RAID 6: ~120TB 可用
+  • 吞吐: 50GB/s+
+
+用途: 元数据/对象存储服务器</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">对象存储节点</h3>
+              <div class="code-block">
+<pre><strong>MinIO存储节点配置</strong>
+
+CPU:   1x AMD EPYC 7351P (16核)
+内存:   256GB DDR4
+网络:   2x 25Gbps 以太网
+       1x 1Gbps 管理网
+
+存储:
+  • 24x 18.9TB SATA HDD
+  • 总容量: ~450TB 原始
+  • EC 8:4: ~300TB 可用
+  • 吞吐: 2-5GB/s
+
+用途: 数据归档和冷存储</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 数据生命周期管理</h2>
+          <div class="card">
+            <h3 class="card-title">自动分层策略</h3>
+            <div class="code-block">
+<pre><strong>数据迁移规则：</strong>
+
+┌──────────────────────────────────────────────────────────────┐
+│ 访问频率 → 分层策略                                           │
+├──────────────────────────────────────────────────────────────┤
+│ 每日访问    → 保持在Hot Tier (NVMe)                          │
+│ 每周访问    → 保持在Hot Tier，必要时预加载到计算节点         │
+│ 每月访问    → 迁移到Warm Tier (文件系统)                    │
+│ 半年以上    → 归档到Cold Tier (对象存储)                    │
+│ 永久保存    → 迁移到磁带库或 Glacier                         │
+└──────────────────────────────────────────────────────────────┘
+
+<strong>实现方式：</strong>
+
+1. 使用策略引擎（如Lustre HSM）
+2. 基于访问热度自动迁移
+3. 手动或定期批量迁移
+4. 数据保留策略合规管理</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">容量规划建议</div>
+            <p><strong>训练数据：</strong>按3-5年规划，考虑数据集持续增长</p>
+            <p><strong>模型文件：</strong>大模型checkpoint可达数百GB，需要预留足够空间</p>
+            <p><strong>冗余与保护：</strong>采用EC（纠删码）而非简单副本，平衡可用性与成本</p>
+            <p><strong>监控告警：</strong>设置容量阈值（70%、85%、95%）及时扩容</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• AI存储系统需应对海量小文件和高并发访问的挑战</li>
+                <li>• 训练阶段需要高吞吐，推理阶段需要低延迟</li>
+                <li>• 分布式文件系统（Lustre/GPFS）适合高性能访问</li>
+                <li>• 对象存储（MinIO）适合海量非结构化数据存储</li>
+                <li>• 多层级存储架构通过分层实现性能与成本的平衡</li>
+                <li>• 高性能缓存层（Alluxio）能显著提升训练数据访问速度</li>
+                <li>• 数据生命周期管理自动优化存储成本</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="6-2-计算节点设计.html">← 上一节</a>
+          <a href="6-4-网络拓扑设计.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

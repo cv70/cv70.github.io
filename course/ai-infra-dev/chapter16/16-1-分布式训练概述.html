@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.1 分布式训练概述 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>16.1 分布式训练概述</h1>
+          <p class="subtitle">理解分布式训练的基本概念与价值</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式训练的定义与核心价值</li>
+            <li>掌握分布式训练的主要应用场景</li>
+            <li>了解分布式训练的发展历程</li>
+            <li>认识分布式训练面临的挑战</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式训练概念图" class="card-image">
+          <h3 class="card-title">什么是分布式训练？</h3>
+          <p class="card-text">
+            <strong>分布式训练（Distributed Training）</strong>是指将训练任务分配到多个计算节点上并行执行，
+            通过协同工作来加速模型训练过程的技术。简单来说，就是利用多台机器、多个GPU同时训练同一个模型。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 为什么需要分布式训练？</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">⏰</div>
+              <h3 class="card-title">时间成本</h3>
+              <p class="card-text">大模型训练可能需要数月时间，分布式训练可将训练时间缩短到几天甚至几小时</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">💾</div>
+              <h3 class="card-title">显存限制</h3>
+              <p class="card-text">单个GPU显存有限，无法容纳超大规模模型，需要分布式存储模型参数</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">数据规模</h3>
+              <p class="card-text">万亿级语料库需要分布式数据加载和处理能力</p>
+            </div>
+            <div class="card">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
+              <h3 class="card-title">加速迭代</h3>
+              <p class="card-text">快速实验和验证不同模型架构，加速研发周期</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 分布式训练的核心机制</h2>
+          <div class="card">
+            <h3 class="card-title">基本工作流程</h3>
+            <div class="code-block">
+1. 数据分片：将训练数据分配到不同节点
+2. 前向传播：各节点独立计算前向传播
+3. 梯度计算：各节点计算本地梯度
+4. 梯度同步：通过集合通信聚合所有节点的梯度
+5. 参数更新：使用聚合后的梯度更新模型参数
+6. 重复迭代：持续上述步骤直到收敛
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 分布式训练的三大策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>核心思想</th>
+                <th>适用场景</th>
+                <th>通信开销</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>数据并行</strong></td>
+                <td>每个节点拥有完整的模型副本，处理不同的数据</td>
+                <td>数据量大、模型适中</td>
+                <td>高（需同步梯度）</td>
+              </tr>
+              <tr>
+                <td><strong>模型并行</strong></td>
+                <td>将模型切分到不同节点，每个节点处理模型的一部分</td>
+                <td>模型超大、显存不足</td>
+                <td>中（需同步中间激活）</td>
+              </tr>
+              <tr>
+                <td><strong>流水线并行</strong></td>
+                <td>将模型层分配到不同节点，形成流水线</td>
+                <td>深层模型、长序列</td>
+                <td>低（异步流水线）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800" alt="分布式计算节点">
+          <div class="caption">图：分布式训练需要多个计算节点协同工作</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏛️</span> 分布式训练的发展历程</h2>
+          <div class="timeline">
+            <div class="timeline-item">
+              <div class="timeline-marker">2012</div>
+              <div class="timeline-content">
+                <h4>单GPU训练</h4>
+                <p>AlexNet使用单块GPU训练，开启了深度学习革命</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker">2015</div>
+              <div class="timeline-content">
+                <h4>多GPU训练</h4>
+                <p>ResNet使用多GPU数据并行训练，提升训练效率</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker">2018</div>
+              <div class="timeline-content">
+                <h4>大规模分布式</h4>
+                <p>BERT、GPT等大模型采用千卡分布式训练</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker">2020</div>
+              <div class="timeline-content">
+                <h4>万卡集群</h4>
+                <p>GPT-3使用万卡集群训练，开启万亿参数时代</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker">2023+</div>
+              <div class="timeline-content">
+                <h4>万卡互联</h4>
+                <p>万卡互联成为标准，训练效率持续提升</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">关键挑战</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>通信瓶颈：</strong>节点间梯度同步是性能瓶颈</li>
+              <li><strong>负载均衡：</strong>确保各节点工作量均衡</li>
+              <li><strong>容错机制：</strong>节点故障时需要快速恢复</li>
+              <li><strong>调试困难：</strong>分布式系统调试复杂度高</li>
+              <li><strong>资源管理：</strong>高效调度和管理大规模计算资源</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 扩展效率</h2>
+          <div class="card">
+            <h3 class="card-title">强扩展 vs 弱扩展</h3>
+            <p class="card-text">
+              <strong>强扩展（Strong Scaling）：</strong>固定总工作量，增加节点数量，期望时间线性减少<br>
+              <strong>弱扩展（Weak Scaling）：</strong>随着节点增加，成比例增加工作量，保持每节点工作量不变
+            </p>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <p>实际应用中，强扩展更常见，但通信开销导致效率随节点增加而下降。理想的扩展效率是线性（N个节点，N倍加速），但实际通常只能达到60-80%的效率。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 分布式训练利用多节点并行加速模型训练</li>
+                <li>• 主要解决时间成本、显存限制、数据规模三大问题</li>
+                <li>• 三大并行策略：数据并行、模型并行、流水线并行</li>
+                <li>• 面临通信瓶颈、负载均衡、容错等挑战</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter15/15-5-混合精度通信.html">← 上一节</a>
+          <a href="16-2-数据并行原理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

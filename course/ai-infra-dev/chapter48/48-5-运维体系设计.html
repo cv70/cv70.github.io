@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>48.5 运维体系设计 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>48.5 运维体系设计</h1>
+          <p class="subtitle">构建可靠的运维保障体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解运维体系的组成</li>
+            <li>掌握监控告警设计</li>
+            <li>学会日志管理方案</li>
+            <li>了解备份恢复策略</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 运维体系组成</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">监控告警</h3>
+              <ul class="feature-list">
+                <li>指标采集</li>
+                <li>监控仪表盘</li>
+                <li>告警规则</li>
+                <li>通知渠道</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">日志管理</h3>
+              <ul class="feature-list">
+                <li>日志收集</li>
+                <li>日志存储</li>
+                <li>日志分析</li>
+                <li>日志检索</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">运维自动化</h3>
+              <ul class="feature-list">
+                <li>自动化部署</li>
+                <li>自动扩缩容</li>
+                <li>故障自愈</li>
+                <li>批量操作</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 监控指标体系</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>类别</th>
+                <th>指标</th>
+                <th>阈值</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>资源指标</td>
+                <td>CPU使用率</td>
+                <td>>80%</td>
+                <td>节点负载</td>
+              </tr>
+              <tr>
+                <td>资源指标</td>
+                <td>内存使用率</td>
+                <td>>85%</td>
+                <td>内存压力</td>
+              </tr>
+              <tr>
+                <td>GPU指标</td>
+                <td>GPU利用率</td>
+                <td><10%</td>
+                <td>资源浪费</td>
+              </tr>
+              <tr>
+                <td>GPU指标</td>
+                <td>GPU温度</td>
+                <td>>85°C</td>
+                <td>散热问题</td>
+              </tr>
+              <tr>
+                <td>任务指标</td>
+                <td>任务失败率</td>
+                <td>>5%</td>
+                <td>任务异常</td>
+              </tr>
+              <tr>
+                <td>网络指标</td>
+                <td>网络丢包率</td>
+                <td>>1%</td>
+                <td>网络问题</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔔</span> 告警规则配置</h2>
+          <div class="code-block">
+<pre><code># Prometheus告警规则
+groups:
+- name: ai_platform_alerts
+  rules:
+  # 节点资源告警
+  - alert: HighCPUUsage
+    expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) by (instance) > 0.8
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage on {{ $labels.instance }}"
+      description: "CPU usage is {{ $value }}%"
+
+  # GPU温度告警
+  - alert: HighGPUTemperature
+    expr: DCGM_FI_DEV_GPU_TEMP > 85
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High GPU temperature"
+      description: "GPU {{ $labels.gpu }} temperature is {{ $value }}°C"
+
+  # GPU显存告警
+  - alert: HighGPUMemoryUsage
+    expr: DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_TOTAL > 0.95
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High GPU memory usage"
+      description: "GPU {{ $labels.gpu }} memory usage is {{ $value }}%"
+
+  # 任务失败告警
+  - alert: HighTaskFailureRate
+    expr: rate(kube_job_status_failed[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High task failure rate"
+      description: "Task failure rate is {{ $value }}"
+
+  # 存储空间告警
+  - alert: LowDiskSpace
+    expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Low disk space"
+      description: "Disk {{ $labels.device }} has less than 10% free space"</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 日志管理架构</h2>
+          <div class="code-block">
+<pre><code# ELK日志架构
+
+# Filebeat配置
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/containers/*.log
+  fields:
+    env: production
+    app: ai-platform
+  fields_under_root: true
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "ai-platform-%{+yyyy.MM.dd}"
+
+processors:
+- add_kubernetes_metadata:
+  host: ${NODE_NAME}
+  matchers:
+  - logs_path:
+      logs_path: "/var/log/containers/"
+
+---
+
+# Logstash管道
+input {
+  beats {
+    port => 5044
+  }
+}
+
+filter {
+  # 解析JSON日志
+  if [message] =~ /^\{.*\}$/ {
+    json {
+      source => "message"
+    }
+  }
+
+  # 提取训练日志
+  if [log_type] == "training" {
+    grok {
+      match => {
+        "message" => "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} %{GREEDYDATA:msg}"
+      }
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "ai-platform-%{+yyyy.MM.dd}"
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 自动化运维</h2>
+          <div class="code-block">
+<pre><code># 自动化运维脚本
+import requests
+import time
+
+class PlatformOps:
+    def __init__(self, api_url):
+        self.api_url = api_url
+
+    def check_health(self):
+        """健康检查"""
+        endpoints = [
+            '/health',
+            '/api/v1/health',
+            '/training/health',
+            '/inference/health'
+        ]
+        for endpoint in endpoints:
+            try:
+                response = requests.get(f"{self.api_url}{endpoint}")
+                if response.status_code != 200:
+                    print(f"Health check failed: {endpoint}")
+            except Exception as e:
+                print(f"Health check error: {endpoint}, {e}")
+
+    def restart_failed_tasks(self):
+        """重启失败任务"""
+        response = requests.get(f"{self.api_url}/api/v1/tasks?status=failed")
+        tasks = response.json()
+
+        for task in tasks:
+            print(f"Restarting task: {task['id']}")
+            requests.post(f"{self.api_url}/api/v1/tasks/{task['id']}/restart")
+
+    def scale_inference(self, target_replicas):
+        """扩缩容推理服务"""
+        response = requests.patch(
+            f"{self.api_url}/api/v1/deployments/inference",
+            json={"replicas": target_replicas}
+        )
+        return response.json()
+
+    def cleanup_old_logs(self, days=30):
+        """清理旧日志"""
+        cutoff_date = time.time() - days * 86400
+        # 调用日志清理API
+        requests.delete(f"{self.api_url}/api/v1/logs?before={cutoff_date}")</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 备份恢复策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">备份策略</h3>
+              <div class="code-block">
+<pre><code># Kubernetes资源备份
+kubectl get all,configmaps,secrets,pvc --all-namespaces -o yaml > backup.yaml
+
+# Etcd备份
+ETCDCTL_API=3 etcdctl snapshot save snapshot.db \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key
+
+# 数据库备份
+mysqldump -u root -p database_name > backup.sql</code></pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">恢复流程</h3>
+              <div class="code-block">
+<pre><code># Etcd恢复
+ETCDCTL_API=3 etcdctl snapshot restore snapshot.db \
+  --data-dir /var/lib/etcd-from-backup
+
+# K8s资源恢复
+kubectl apply -f backup.yaml
+
+# 数据库恢复
+mysql -u root -p database_name < backup.sql</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">运维最佳实践</div>
+            <p><strong>监控先行</strong>：建立全面的监控体系，提前发现问题。<strong>文档完善</strong>：详细记录运维流程和应急方案。<strong>定期演练</strong>：定期进行故障演练和恢复测试。<strong>持续改进</strong>：根据故障经验不断优化运维体系。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 运维体系包括监控告警、日志管理、运维自动化</li>
+                <li>• 监控指标覆盖资源、GPU、任务、网络等维度</li>
+                <li>• 告警规则需要合理设置阈值，避免告警疲劳</li>
+                <li>• 备份恢复策略是数据安全的保障</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="48-4-任务调度设计.html">← 上一节</a>
+          <a href="../chapter49/49-1-训练任务规划.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

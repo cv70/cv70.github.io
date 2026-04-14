@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7.3 Kubernetes调度原理 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>7.3 Kubernetes调度原理</h1>
+          <p class="subtitle">深入理解K8s调度机制与AI优化</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Kubernetes调度架构和工作流程</li>
+            <li>掌握调度器插件机制和自定义调度</li>
+            <li>了解GPU资源管理和调度</li>
+            <li>学会优化K8s的AI工作负载调度</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="Kubernetes" class="card-image">
+          <h3 class="card-title">Kubernetes调度简介</h3>
+          <p class="card-text">
+            <strong>Kubernetes调度器</strong>负责将Pod调度到合适的节点上运行。
+            在AI场景中，需要特别关注GPU资源调度、拓扑感知、亲和性等特性，
+            以满足深度学习训练和推理的特殊需求。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 调度架构</h2>
+          <div class="card">
+            <h3 class="card-title">K8s调度架构</h3>
+            <div class="code-block">
+<pre><strong>Kubernetes调度架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│  用户提交                                                     │
+│  ─────────────────────────────────────────────────────────   │
+│  • kubectl apply -f pod.yaml                                 │
+│  • kubectl create deployment                                 │
+│  • kubectl run                                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  API Server                                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  • 接受Pod创建请求                                           │
+│  • 写入etcd                                                  │
+│  • 状态维护                                                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Scheduler (调度器)                                           │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
+│  │  Informer     │  │  Scheduling   │  │  Bind        │  │
+│  │  Watch Events │  │  Cycle        │  │  Pod to Node │  │
+│  └───────────────┘  └───────┬────────┘  └──────┬───────┘  │
+│                              │                 │           │
+│  ┌──────────────────────────┼─────────────────┤           │
+│  │ 调度流程                │                 │           │
+│  │ 1. Filter (过滤)        │                 │           │
+│  │ 2. Score (打分)         │                 │           │
+│  │ 3. Select (选择)        │                 │           │
+│  │ 4. Bind (绑定)          │                 │           │
+│  └──────────────────────────┼─────────────────┘           │
+└─────────────────────────────┼───────────────────────────────┘
+                              ↓
+                    ┌─────────────────┐
+                    │  etcd (状态存储)  │
+                    └─────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 调度流程</h2>
+          <div class="card">
+            <h3 class="card-title">详细调度步骤</h3>
+            <div class="code-block">
+<pre><strong>调度周期：</strong>
+
+1. 监听Pod变化 (Informer)
+   └─ Watch未调度的Pod
+   └─ 更新队列
+
+2. 过滤阶段 (Filter)
+   └─ PodFitsResources: 资源足够
+   └─ PodFitsHostPorts: 端口可用
+   └─ PodMatchNodeSelector: 标签匹配
+   └─ NoDiskConflict: 磁盘冲突
+   └─ MaxEBSVolumeCount: 卷数量限制
+   └─ GeneralPredicates: 通用条件
+   └─ 输出: 可行节点列表
+
+3. 打分阶段 (Score)
+   └─ NodeResourcesFit: 资源余量
+   └─ NodeAffinity: 亲和性
+   └─ TaintToleration: 污点容忍
+   └─ NodeAffinityPriority: 节点亲和
+   └─ ImageLocality: 镜像本地
+   └─ 输出: 每个节点得分
+
+4. 选择阶段 (Select)
+   └─ 选择得分最高的节点
+   └─ 处理平分情况
+
+5. 绑定阶段 (Bind)
+   └─ 将Pod绑定到节点
+   └─ 更新API Server
+   └─ Kubelet拉取Pod</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔌</span> 调度器插件</h2>
+          <div class="card">
+            <h3 class="card-title">调度框架插件</h3>
+            <div class="code-block">
+<pre><strong>调度插件架构：</strong>
+
+Extension Points (扩展点):
+
+QueueSort:
+  └─ 队列排序优先级
+  └─ 插件: PrioritySort
+
+PreFilter:
+  └─ 过滤前预处理
+  └─ 插件: InterPodAffinity, NodeResourcesFit
+
+Filter:
+  └─ 节点过滤
+  └─ 插件: NodeUnschedulable, NodeName, NodePorts
+
+PostFilter:
+  └─ 过滤后处理
+  └─ 插件: DefaultPreemption
+
+PreScore:
+  └─ 打分前预处理
+  └─ 插件: InterPodAffinity
+
+Score:
+  └─ 节点打分
+  └─ 插件: NodeResourcesBalancedAllocation, NodeAffinity
+
+NormalizeScore:
+  └─ 分数归一化
+  └─ 插件: 默认归一化
+
+Reserve:
+  └─ 保留节点资源
+  └─ 插件: VolumeBinding
+
+PreBind:
+  └─ 绑定前处理
+  └─ 插件: VolumeBinding
+
+Bind:
+  └─ 绑定Pod到节点
+  └─ 插件: DefaultBinder
+
+PostBind:
+  └─ 绑定后处理
+  └─ 插件: 无默认插件
+
+Unreserve:
+  └─ 释放保留资源
+  └─ 插件: VolumeBinding</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> GPU资源管理</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">NVIDIA设备插件</h3>
+              <div class="code-block">
+<pre><strong>GPU设备插件：</strong>
+
+# 部署NVIDIA设备插件
+kubectl apply -f https://raw.githubusercontent.com/
+  NVIDIA/k8s-device-plugin/v0.14.0/
+  deployments/nvidia-device-plugin-daemonset.yaml
+
+# 查看GPU资源
+kubectl describe node node01 | grep nvidia
+
+# 资源类型
+• nvidia.com/gpu: 标准GPU
+• nvidia.com/gpumem: GPU显存
+• nvidia.com/mig: MIG切片
+
+# 查看节点GPU
+kubectl get nodes -o json |
+  jq '.items[] | {
+      name: .metadata.name,
+      gpu: .status.allocatable."nvidia.com/gpu"
+    }'</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">GPU调度示例</h3>
+              <div class="code-block">
+<pre><strong>GPU Pod配置：</strong>
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-pod
+spec:
+  containers:
+  - name: ai-container
+    image: nvidia/pytorch:22.04
+    resources:
+      limits:
+        nvidia.com/gpu: 4  # 请求4个GPU
+      requests:
+        nvidia.com/gpu: 4
+    command: ["python", "train.py"]
+    args:
+      - "--gpus=4"
+      - "--batch-size=128"
+  nodeSelector:
+    gpu: "true"
+
+# MIG GPU调度
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - resources:
+      limits:
+        nvidia.com/mig-1g.5gb: 2</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">GPU调度注意事项</div>
+            <p><strong>独占性：</strong>GPU默认是独占资源，不支持共享</p>
+            <p><strong>精度：</strong>requests和limits必须相等</p>
+            <p><strong>亲和性：</strong>使用节点亲和性确保GPU节点</p>
+            <p><strong>拓扑：</strong>考虑NUMA和GPU拓扑</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 亲和性与反亲和性</h2>
+          <div class="card">
+            <h3 class="card-title">调度策略配置</h3>
+            <div class="code-block">
+<pre><strong>节点亲和性 (NodeAffinity)：</strong>
+
+apiVersion: v1
+kind: Pod
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: gpu
+            operator: In
+            values:
+            - "true"
+          - key: nvidia.com/gpu.count
+            operator: Gt
+            values:
+            - "4"
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+            - zone-a
+
+<strong>Pod亲和性 (PodAffinity)：</strong>
+
+affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - training-job
+      topologyKey: "kubernetes.io/hostname"
+
+<strong>Pod反亲和性 (PodAntiAffinity)：</strong>
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - inference-server
+      topologyKey: "kubernetes.io/hostname"</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚨</span> 污点与容忍</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">污点配置</h3>
+              <div class="code-block">
+<pre><strong>节点污点：</strong>
+
+# 设置污点
+kubectl taint nodes node01 dedicated=gpu:NoSchedule
+kubectl taint nodes node01 nvidia.com/gpu=true:NoExecute
+
+# 查看污点
+kubectl describe node node01 | grep Taint
+
+# 删除污点
+kubectl taint nodes node01 dedicated:NoSchedule-
+
+# 污点效果
+• NoSchedule: 不调度
+• PreferNoSchedule: 尽量不调度
+• NoExecute: 不调度并驱逐Pod</pre>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">容忍配置</h3>
+              <div class="code-block">
+<pre><strong>Pod容忍：</strong>
+
+spec:
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: gpu
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 3600
+
+# 专用GPU节点Pod
+spec:
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# 临时容忍
+spec:
+  tolerations:
+  - key: "maintenance"
+    operator: "Equal"
+    value: "true"
+    effect: "NoExecute"
+    tolerationSeconds: 300  # 5分钟后驱逐</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 自定义调度器</h2>
+          <div class="card">
+            <h3 class="card-title">自定义调度器开发</h3>
+            <div class="code-block">
+<pre><strong>自定义调度器框架：</strong>
+
+package main
+
+import (
+    "fmt"
+    "k8s.io/klog/v2"
+    "k8s.io/kubernetes/pkg/scheduler/framework"
+    "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
+)
+
+// AIScheduler 自定义AI调度器
+type AIScheduler struct {
+    handle framework.Handle
+}
+
+func (s *AIScheduler) Name() string {
+    return "AI-Scheduler"
+}
+
+// Filter 过滤阶段
+func (s *AIScheduler) Filter(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeInfo *framework.NodeInfo,
+) *framework.Status {
+    // GPU拓扑检查
+    if !checkGPUTopology(pod, nodeInfo) {
+        return framework.NewStatus(
+            framework.Unschedulable,
+            "GPU topology mismatch",
+        )
+    }
+    return nil
+}
+
+// Score 打分阶段
+func (s *AIScheduler) Score(
+    ctx context.Context,
+    state *framework.CycleState,
+    pod *v1.Pod,
+    nodeName string,
+) (int64, *framework.Status) {
+    // 计算节点得分
+    score := calculateScore(pod, nodeName)
+    return score, nil
+}
+
+// New 创建调度器实例
+func New(cfg, h framework.Handle) (framework.Plugin, error) {
+    return &AIScheduler{handle: h}, nil
+}
+
+// 注册插件
+func main() {
+    scheme := runtime.NewScheme()
+    config := runtime.NewClientConfig(
+        kubeconfig,
+        "",
+        &rest.Config{},
+    )
+
+    command := app.NewSchedulerCommand(
+        app.WithPlugin(Name, New),
+    )
+
+    if err := command.Execute(); err != nil {
+        klog.Fatalf("Unable to run scheduler: %v", err)
+    }
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> AI调度优化</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>优化点</th>
+                <th>策略</th>
+                <th>效果</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GPU拓扑</td>
+                <td>拓扑感知调度，优先同机架</td>
+                <td>降低通信延迟</td>
+              </tr>
+              <tr>
+                <td>资源碎片</td>
+                <td>Bin Packing算法</td>
+                <td>提高利用率</td>
+              </tr>
+              <tr>
+                <td>批处理</td>
+                <td>使用Volcano调度器</td>
+                <td>支持Gang调度</td>
+              </tr>
+              <tr>
+                <td>扩缩容</td>
+                <td>Cluster Autoscaler</td>
+                <td>弹性伸缩</td>
+              </tr>
+              <tr>
+                <td>优先级</td>
+                <td>PodPriorityClass</td>
+                <td>抢占机制</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">K8s调度最佳实践</div>
+            <p><strong>GPU节点：</strong>使用污点防止普通Pod占用GPU</p>
+            <p><strong>资源请求：</strong>准确设置requests和limits</p>
+            <p><strong>亲和性：</strong>合理使用亲和性提高调度效率</p>
+            <p><strong>监控：</strong>监控调度延迟和资源利用率</p>
+            <p><strong>自定义：</strong>AI场景推荐使用Volcano等专用调度器</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• K8s调度器通过过滤、打分、选择、绑定四个阶段实现Pod调度</li>
+                <li>• 调度框架支持插件机制，可自定义调度逻辑</li>
+                <li>• NVIDIA设备插件提供GPU资源管理能力</li>
+                <li>• 亲和性和反亲和性实现智能调度</li>
+                <li>• 污点和容忍机制实现节点隔离和专用资源</li>
+                <li>• 可开发自定义调度器满足特定需求</li>
+                <li>• AI场景建议使用Volcano等优化调度器</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="7-2-Slurm调度系统.html">← 上一节</a>
+          <a href="7-4-自定义调度器开发.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

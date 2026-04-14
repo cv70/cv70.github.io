@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9.2 分布式文件系统 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>9.2 分布式文件系统</h1>
+          <p class="subtitle">构建高性能的并行文件系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式文件系统的架构</li>
+            <li>掌握Lustre和GPFS的配置</li>
+            <li>学会优化文件系统性能</li>
+            <li>了解文件系统的监控方法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-efc535b5c243?w=800" alt="分布式文件系统" class="card-image">
+          <h3 class="card-title">分布式文件系统简介</h3>
+          <p class="card-text">
+            <strong>分布式文件系统</strong>提供跨多个服务器的高性能文件存储，
+            适合AI训练的大规模数据访问需求，支持PB级容量和百GB/s吞吐。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> Lustre架构</h2>
+          <div class="card">
+            <h3 class="card-title">Lustre组件</h3>
+            <div class="code-block">
+<pre><strong>Lustre架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      客户端层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • 计算节点 • 训练节点 • 开发环境                           │
+│  • POSIX接口 • LD_PRELOAD                                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      元数据服务器 (MDS)                       │
+│  ─────────────────────────────────────────────────────────   │
+│  • 文件元数据管理                                            │
+│  • 目录结构                                                  │
+│  • 权限控制                                                  │
+│  • HA配置: Active/Standby                                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      对象存储服务器 (OSS)                     │
+│  ─────────────────────────────────────────────────────────   │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐        │
+│  │ OSS-1  │  │ OSS-2  │  │ OSS-3  │  │ OSS-4  │        │
+│  │  OST-1 │  │  OST-2 │  │  OST-3 │  │  OST-4 │        │
+│  └────────┘  └────────┘  └────────┘  └────────┘        │
+│                                                             │
+│  • 数据存储                                                │
+│  • 条带分布                                                │
+│  • 负载均衡                                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↑↓
+┌─────────────────────────────────────────────────────────────┐
+│                      存储网络 (LNet)                        │
+│  ─────────────────────────────────────────────────────────   │
+│  • InfiniBand • RoCE • 以太网                             │
+│  • RDMA支持                                                │
+│  • 多路径传输                                              │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Lustre配置</h2>
+          <div class="card">
+            <h3 class="card-title">Lustre部署配置</h3>
+            <div class="code-block">
+<pre><strong>Lustre配置示例：</strong>
+
+# MDS配置
+mkfs.lustre --fsname=ai-cluster \
+    --mdt \
+    --mgsnode=10.0.1.100@tcp0 \
+    --backfs=ldiskfs \
+    --mountpoint=/data/mdt \
+    /dev/sdb
+
+# OSS配置
+mkfs.lustre --fsname=ai-cluster \
+    --ost \
+    --mgsnode=10.0.1.100@tcp0 \
+    --backfs=ldiskfs \
+    --mountpoint=/data/ost1 \
+    /dev/sdc
+
+# 客户端挂载
+mount -t lustre 10.0.1.100@tcp0:/ai-cluster /mnt/lustre
+
+# 条带配置
+lfs setstripe -c 16 -i 4 -s 1M /mnt/lustre/train
+
+# 查看条带信息
+lfs getstripe /mnt/lustre/train
+
+# 性能调优
+sysctl -w fs.lustre.max_rpcs_in_flight=2048
+sysctl -w fs.lustre.max_pages_per_rpc=2048
+
+# 监控命令
+lctl get_param -n osc.*.osc.*.stats
+lfs df -h
+lfs getstripe -c /mnt/lustre/train</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">Lustre优化要点</div>
+            <p><strong>条带配置：</strong>根据数据大小和访问模式调整</p>
+            <p><strong>缓存策略：</strong>调整客户端缓存大小</p>
+            <p><strong>网络优化：</strong>使用RDMA和MTU优化</p>
+            <p><strong>负载均衡：</strong>合理分配OST资源</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化</h2>
+          <div class="card">
+            <h3 class="card-title">文件系统调优</h3>
+            <div class="code-block">
+<pre><strong>性能优化策略：</strong>
+
+1. 条带优化
+   # 大文件优化
+   lfs setstripe -c 32 -s 2M /data/large
+
+   # 小文件优化
+   lfs setstripe -c 1 -s 256K /data/small
+
+2. 缓存优化
+   # 增加客户端缓存
+   sysctl -w fs.lustre.max_cached_mb=2048
+
+   # 启用readahead
+   lfs setstripe -E 2m /data
+
+3. 网络优化
+   # 增加RPC数量
+   sysctl -w fs.lustre.max_rpcs_in_flight=4096
+
+   # 启用TCP_NODELAY
+   sysctl -w net.core.tcp_no_delay_save=1
+
+4. 磁盘优化
+   # 调整IO调度
+   echo deadline > /sys/block/sdX/queue/scheduler
+
+   # 增加队列深度
+   echo 128 > /sys/block/sdX/queue/nr_requests</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 分布式文件系统提供高性能、大容量的文件存储</li>
+                <li>• Lustre包括MDS、OSS和OST组件</li>
+                <li>• 条带配置是性能优化的关键</li>
+                <li>• 需要根据访问模式调整缓存和网络参数</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="9-1-AI场景存储需求分析.html">← 上一节</a>
+          <a href="9-3-对象存储.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

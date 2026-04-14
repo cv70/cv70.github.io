@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14.1 网络拓扑类型 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>14.1 网络拓扑类型</h1>
+          <p class="subtitle">AI集群网络架构设计</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解网络拓扑的基本概念</li>
+            <li>掌握Fat-Tree拓扑设计</li>
+            <li>学习Leaf-Spine架构</li>
+            <li>了解不同拓扑的适用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络拓扑图" class="card-image">
+          <h3 class="card-title">网络拓扑的重要性</h3>
+          <p class="card-text">
+            网络拓扑是AI集群网络设计的核心，决定了网络的可扩展性、性能和成本。
+            合理的拓扑设计能够在满足带宽需求的同时，控制建设成本，
+            为大规模AI训练提供稳定的网络基础。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌳</span> Fat-Tree拓扑</h2>
+
+          <h3>基本原理</h3>
+          <div class="code-block"""
+Fat-Tree (胖树) 拓扑:
+
+设计原理:
+- 类似树形结构
+- 带宽向上逐级汇聚
+- 每层链路带宽相同
+- 实现无阻塞通信
+
+结构特点:
+- k-ary Fat-Tree
+- 三层结构：Core-Aggregation-Edge
+- 每层交换机数量可计算
+- 端到端路径固定
+
+无阻塞条件:
+- Core交换机带宽 ≥ 所有Edge交换机总带宽
+- 保证任意节点间全速通信
+          </div>
+
+          <h3>Fat-Tree计算</h3>
+          <div class="code-block"""
+k-ary Fat-Tree参数:
+
+k: 交换机端口数
+p: 每交换机下行端口数
+u: 每交换机上行端口数
+p = u = k/2
+
+组件数量:
+Edge交换机: (k/2)^2
+Aggregation交换机: (k/2)^2
+Core交换机: (k/2)^2
+总计交换机: 3*(k/2)^2
+
+主机数量:
+N = (k/2)^2 * k
+
+示例 (k=8):
+- Edge交换机: 16
+- Aggregation交换机: 16
+- Core交换机: 16
+- 主机数量: 64
+
+路径特点:
+- 任意主机间: 6跳
+- 等距路径
+- 多路径可选
+          </div>
+
+          <h3>Fat-Tree配置</h3>
+          <div class="code-block"""
+Fat-Tree配置示例:
+
+1. 端口分配
+   Edge交换机:
+   - 下行: 连接主机
+   - 上行: 连接Aggregation
+
+   Aggregation交换机:
+   - 下行: 连接Edge
+   - 上行: 连接Core
+
+   Core交换机:
+   - 下行: 连接Aggregation
+   - 上行: 无
+
+2. VLAN划分
+   - 每个Pod独立VLAN
+   - 跨Pod路由通过Core
+
+3. 路由配置
+   - 静态路由或OSPF
+   - ECMP多路径
+
+4. IP分配
+   - 统一编址方案
+   - 便于路由聚合
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🍃</span> Leaf-Spine拓扑</h2>
+
+          <h3>架构特点</h3>
+          <div class="code-block"""
+Leaf-Spine 拓扑:
+
+架构特点:
+- 两层扁平结构
+- Leaf交换机连接主机
+- Spine交换机互联Leaf
+- 所有Leaf到Spine等距
+
+优势:
+1. 低延迟
+   - 最多3跳
+   - 固定路径长度
+
+2. 高可扩展性
+   - 增加Leaf: 更多主机
+   - 增加Spine: 更多带宽
+
+3. 高可用性
+   - 多路径
+   - 无单点故障
+
+4. 易管理
+   - 扁平结构
+   - 简化配置
+          </div>
+
+          <h3>Leaf-Spine设计</h3>
+          <div class="code-block"""
+Leaf-Spine 设计参数:
+
+基本公式:
+- 主机数 = Leaf数 × 每Leaf主机数
+- 总带宽 = Spine数 × 每链路带宽
+- 无阻塞条件: Spine带宽 ≥ Leaf总上行带宽
+
+设计步骤:
+1. 确定主机数量
+   N = 1000
+
+2. 选择Leaf交换机规格
+   端口: 48×25GbE 或 24×100GbE
+   假设: 48×25GbE
+
+3. 计算所需Leaf数
+   Leaf数 = ceil(1000/48) = 21
+
+4. 计算所需Spine数
+   需要上行带宽 = 21×48/2×25 = 12.6Tb/s
+   每Spine提供 = 48×25 = 1.2Tb/s
+   Spine数 = ceil(12.6/1.2) = 11
+
+5. 验证无阻塞
+   Spine总带宽 = 11×1.2Tb/s = 13.2Tb/s ≥ 12.6Tb/s
+
+实际配置:
+- Leaf: 21台 × 48端口
+- Spine: 11台 × 48端口
+- 支持: 1008个25GbE主机
+          </div>
+
+          <h3>扩展策略</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>扩展类型</th>
+                <th>操作</th>
+                <th>效果</th>
+                <th>成本</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>横向扩展主机</td>
+                <td>增加Leaf</td>
+                <td>增加主机容量</td>
+                <td>中等</td>
+              </tr>
+              <tr>
+                <td>纵向扩展带宽</td>
+                <td>增加Spine</td>
+                <td>增加总带宽</td>
+                <td>中等</td>
+              </tr>
+              <tr>
+                <td>升级端口速率</td>
+                <td>替换交换机</td>
+                <td>单端口性能提升</td>
+                <td>高</td>
+              </tr>
+              <tr>
+                <td>混合扩展</td>
+                <td>组合方式</td>
+                <td>灵活调整</td>
+                <td>可调</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 其他拓扑类型</h2>
+
+          <h3>Dragonfly拓扑</h3>
+          <div class="code-block"""
+Dragonfly 拓扑:
+
+特点:
+- 低直径
+- 高带宽
+- 低成本
+
+结构:
+- 分组节点
+- 组内全互联
+- 组间互联
+
+优势:
+- 延迟低
+- 带宽高
+- 扩展性好
+
+应用:
+- 超级计算机
+- HPC集群
+          </div>
+
+          <h3>Hypercube拓扑</h3>
+          <div class="code-block"""
+Hypercube (超立方体) 拓扑:
+
+特点:
+- 规则结构
+- 易于路由
+- 对称性好
+
+结构:
+- n维超立方体
+- 2^n个节点
+- 每节点n个连接
+
+优势:
+- 低延迟
+- 容错性好
+- 负载均衡
+
+劣势:
+- 扩展受限
+- 高度要求高
+
+应用:
+- 小规模集群
+- 超级计算机
+          </div>
+
+          <h3>Torus拓扑</h3>
+          <div class="code-block"""
+Torus (环面) 拓扑:
+
+特点:
+- 二维或三维网格
+- 环形连接
+- 低维度
+
+结构:
+- 2D Torus: 网格+环形
+- 3D Torus: 立体+环形
+
+优势:
+- 布局简单
+- 适应物理布局
+- 成本低
+
+应用:
+- 大规模集群
+- 超级计算机
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 拓扑对比</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>拓扑类型</th>
+                <th>直径</th>
+                <th>可扩展性</th>
+                <th>成本</th>
+                <th>延迟</th>
+                <th>适用规模</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fat-Tree</td>
+                <td>6</td>
+                <td>高</td>
+                <td>中</td>
+                <td>中</td>
+                <td>中等规模</td>
+              </tr>
+              <tr>
+                <td>Leaf-Spine</td>
+                <td>3</td>
+                <td>极高</td>
+                <td>低</td>
+                <td>低</td>
+                <td>所有规模</td>
+              </tr>
+              <tr>
+                <td>Dragonfly</td>
+                <td>~4</td>
+                <td>高</td>
+                <td>中</td>
+                <td>低</td>
+                <td>大规模</td>
+              </tr>
+              <tr>
+                <td>Hypercube</td>
+                <td>n</td>
+                <td>低</td>
+                <td>高</td>
+                <td>低</td>
+                <td>小规模</td>
+              </tr>
+              <tr>
+                <td>Torus</td>
+                <td>~4</td>
+                <td>中</td>
+                <td>低</td>
+                <td>中</td>
+                <td>大规模</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 拓扑设计实践</h2>
+
+          <h3>设计流程</h3>
+          <div class="code-block"""
+网络拓扑设计流程:
+
+1. 需求分析
+   - 节点数量
+   - 带宽需求
+   - 延迟要求
+   - 成本预算
+   - 扩展预期
+
+2. 拓扑选择
+   - 评估不同拓扑
+   - 比较成本效益
+   - 考虑长期规划
+   - 选择最优方案
+
+3. 详细设计
+   - 确定交换机型号
+   - 计算设备数量
+   - 规划端口分配
+   - 设计IP编址
+
+4. 验证评估
+   - 带宽验证
+   - 延迟测试
+   - 故障模拟
+   - 压力测试
+
+5. 实施部署
+   - 设备采购
+   - 物理安装
+   - 配置调试
+   - 上线运行
+          </div>
+
+          <h3>容量规划</h3>
+          <div class="code-block"""
+容量规划示例:
+
+场景: 1000节点AI训练集群
+
+需求:
+- 节点数: 1000
+- 每节点带宽: 100GbE
+- 集合通信: All-Reduce
+- 扩展预期: 2000节点
+
+拓扑选择: Leaf-Spine
+
+配置:
+- Leaf: 48×100GbE交换机，21台
+- Spine: 48×400GbE交换机，8台
+- 链路: 100GbE或400GbE
+
+带宽验证:
+- 总需求: 1000 × 100GbE = 100TbE
+- 提供带宽: 8 × 48 × 400GbE = 153.6TbE
+- 余量: 53.6%
+
+扩展验证:
+- 扩展到2000节点
+- 新增Leaf: 21台
+- 新增Spine: 8台
+- 总带宽: 307.2TbE
+- 需求: 200TbE
+- 满足扩展需求
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">设计建议</div>
+            <p>1）Leaf-Spine是AI集群的首选拓扑；2）无阻塞设计保证性能；3）考虑未来扩展预留空间；4）多路径提高可靠性；5）使用网络仿真工具验证设计。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络架构">
+          <div class="caption">图：合理的网络拓扑是AI集群性能的基础</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 网络拓扑决定集群的可扩展性和性能</li>
+                <li>• Fat-Tree提供无阻塞通信</li>
+                <li>• Leaf-Spine是最佳实践方案</li>
+                <li>• 合理的拓扑设计需要综合考虑多种因素</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter13/13-5-国产互联技术.html">← 上一节</a>
+          <a href="14-2-集合通信原语.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

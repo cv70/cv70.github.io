@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>31.4 训练监控与告警 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>31.4 训练监控与告警</h1>
+          <p class="subtitle">构建全方位的LLM训练可观测性体系</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解LLM训练监控的关键指标</li>
+            <li>掌握多层次监控体系设计</li>
+            <li>学习告警规则与响应流程</li>
+            <li>了解监控工具与平台</li>
+            <li>认识监控数据的分析与优化</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="监控仪表盘" class="card-image">
+          <h3 class="card-title">训练监控概述</h3>
+          <p class="card-text">
+            大规模LLM训练涉及上千个GPU节点，训练周期长达数周，完善的监控体系能够<strong>及时发现问题</strong>、<strong>定位故障根因</strong>、<strong>优化训练效率</strong>，确保训练任务的顺利进行。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 监控指标体系</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">训练指标</h3>
+              <ul class="feature-list">
+                <li>Loss收敛曲线</li>
+                <li>学习率变化</li>
+                <li>梯度范数</li>
+                <li>吞吐量</li>
+                <li>训练速度</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">系统指标</h3>
+              <ul class="feature-list">
+                <li>GPU利用率</li>
+                <li>显存使用</li>
+                <li>CPU使用率</li>
+                <li>内存使用</li>
+                <li>磁盘I/O</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">网络指标</h3>
+              <ul class="feature-list">
+                <li>网络带宽</li>
+                <li>通信延迟</li>
+                <li>丢包率</li>
+                <li>NCCL通信量</li>
+                <li>集合通信时间</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> GPU深度监控</h2>
+          <div class="card">
+            <h3 class="card-title">DCGM（Data Center GPU Manager）</h3>
+            <div class="code-block">
+<pre>
+DCGM关键指标：
+# GPU使用率
+DCGM_FI_DEV_GPU_UTIL
+
+# 显存使用
+DCGM_FI_DEV_FB_USED
+DCGM_FI_DEV_FB_FREE
+
+# 温度与功耗
+DCGM_FI_DEV_GPU_TEMP
+DCGM_FI_DEV_POWER_USAGE
+
+# 通信指标
+DCGM_FI_PROF_NVLINK_TX_BYTES
+DCGM_FI_PROF_PCIE_RX_BYTES
+
+# 性能计数器
+DCGM_FI_PROF_GR_ENGINE_ACTIVE
+DCGM_FI_PROF_DRAM_ACTIVE
+
+# 安装与配置
+dcgmi dmon -e 1001,1002,1003,1004 -d 5
+
+# Prometheus Exporter
+pip install prometheus-dcgm-exporter</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🌐</span> 分布式训练监控</h2>
+          <div class="card">
+            <h3 class="card-title">PyTorch Profiler集成</h3>
+            <div class="code-block">
+<pre>
+import torch.profiler as profiler
+
+with profiler.profile(
+    activities=[
+        profiler.ProfilerActivity.CPU,
+        profiler.ProfilerActivity.CUDA,
+    ],
+    schedule=profiler.schedule(
+        wait=1,
+        warmup=1,
+        active=3,
+        repeat=2
+    ),
+    on_trace_ready=profiler.tensorboard_trace_handler(
+        './logs/profiler'
+    ),
+    record_shapes=True,
+    profile_memory=True,
+    with_stack=True
+) as prof:
+    for step, batch in enumerate(dataloader):
+        train_step(batch)
+        prof.step()
+
+# 关键指标：
+# - 计算时间占比
+# - 通信时间占比
+# - 数据加载时间
+# - 内存峰值</pre>
+            </div>
+            <p class="card-text">
+              PyTorch Profiler提供<strong>详细的性能分析</strong>，包括计算、通信、I/O各环节的时间分布，是识别训练瓶颈的重要工具。
+            </p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 监控仪表盘设计</h2>
+          <div class="card">
+            <h3 class="card-title">Grafana仪表盘示例</h3>
+            <div class="code-block">
+<pre>
+训练监控仪表盘布局：
+
+Row 1: 训练进度
+  ├─ 全局步数
+  ├─ 当前Epoch
+  ├─ 剩余时间估计
+  └─ 完成度进度条
+
+Row 2: 性能指标
+  ├─ Loss曲线（训练/验证）
+  ├─ 学习率调度
+  ├─ 梯度范数
+  └─ Token吞吐量
+
+Row 3: GPU集群状态
+  ├─ 集群GPU利用率
+  ├─ 节点健康状态
+  ├─ 温度分布
+  └─ 功耗分布
+
+Row 4: 网络通信
+  ├─ 集合通信带宽
+  ├─ 通信延迟
+  ├─ NVLink带宽
+  └─ InfiniBand流量
+
+Row 5: 告警面板
+  ├─ 活跃告警
+  ├─ 告警历史
+  ├─ 事件时间线
+  └─ 节点故障率</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">可视化技巧</div>
+            <p>使用<strong>热力图</strong>展示集群节点状态，<strong>时间序列图</strong>展示指标趋势，<strong>柱状图</strong>对比不同节点的性能。合理使用阈值线和颜色标记帮助快速识别异常。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚨</span> 告警规则设计</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>告警类别</th>
+                <th>告警条件</th>
+                <th>严重级别</th>
+                <th>响应策略</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>训练异常</td>
+                <td>Loss爆炸/NAN</td>
+                <td>严重</td>
+                <td>立即检查训练参数</td>
+              </tr>
+              <tr>
+                <td>GPU故障</td>
+                <td>GPU利用率=0持续5分钟</td>
+                <td>严重</td>
+                <td>检查节点硬件状态</td>
+              </tr>
+              <tr>
+                <td>内存溢出</td>
+                <td>显存使用>95%</td>
+                <td>警告</td>
+                <td>调整batch size或gradient accumulation</td>
+              </tr>
+              <tr>
+                <td>通信异常</td>
+                <td>NCCL超时/通信失败</td>
+                <td>严重</td>
+                <td>检查网络连接</td>
+              </tr>
+              <tr>
+                <td>存储异常</td>
+                <td>I/O延迟>100ms</td>
+                <td>警告</td>
+                <td>检查存储系统</td>
+              </tr>
+              <tr>
+                <td>进度缓慢</td>
+                <td>吞吐量下降>50%</td>
+                <td>警告</td>
+                <td>性能分析定位瓶颈</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📡</span> 告警通知渠道</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📧</div>
+              <h3 class="card-title">邮件通知</h3>
+              <p class="card-text">适用于非紧急告警，提供详细信息</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">💬</div>
+              <h3 class="card-title">即时通讯</h3>
+              <p class="card-text">Slack/钉钉/企业微信，快速响应</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">📞</div>
+              <h3 class="card-title">电话/短信</h3>
+              <p class="card-text">严重告警，确保即时触达</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 告警配置示例</h2>
+          <div class="card">
+            <h3 class="card-title">Prometheus告警规则</h3>
+            <div class="code-block">
+<pre>
+groups:
+  - name: llm_training
+    interval: 30s
+    rules:
+      # Loss异常检测
+      - alert: TrainingLossExploded
+        expr: |
+          (training_loss - training_loss offset 1m) / training_loss > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "训练Loss爆炸"
+          description: "Job {{ $labels.job }} Loss在5分钟内增长超过50%"
+
+      # GPU利用率过低
+      - alert: LowGPUUtilization
+        expr: |
+          avg(DCGM_FI_DEV_GPU_UTIL) by (job) < 30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU利用率过低"
+          description: "Job {{ $labels.job }} GPU利用率低于30%"
+
+      # GPU温度过高
+      - alert: GPUTemperatureHigh
+        expr: |
+          DCGM_FI_DEV_GPU_TEMP > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU温度过高"
+          description: "GPU {{ $labels.gpu }} 温度为 {{ $value }}°C"
+
+      # NCCL通信超时
+      - alert: NCCLTimeout
+        expr: |
+          rate(nccl_timeouts_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "NCCL通信超时"
+          description: "检测到NCCL通信超时，可能存在网络问题"</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">告警疲劳</div>
+            <p>过多的告警会导致<strong>告警疲劳</strong>。要合理设置阈值和持续时间，实现<strong>告警分级</strong>和<strong>告警聚合</strong>，合并相似告警，确保每个告警都有明确的响应策略。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔬</span> 性能分析与优化</h2>
+          <div class="card">
+            <h3 class="card-title">常见性能瓶颈及优化</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>瓶颈类型</th>
+                  <th>识别方法</th>
+                  <th>优化策略</th>
+                  <th>预期提升</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>计算瓶颈</td>
+                  <td>GPU利用率>90%</td>
+                  <td>混合精度、算子融合</td>
+                  <td>20-30%</td>
+                </tr>
+                <tr>
+                  <td>内存瓶颈</td>
+                  <td>显存使用>90%</td>
+                  <td>gradient checkpointing、ZeRO</td>
+                  <td>2-4x模型容量</td>
+                </tr>
+                <tr>
+                  <td>通信瓶颈</td>
+                  <td>通信时间占比>50%</td>
+                  <td>梯度压缩、通信重叠</td>
+                  <td>30-50%</td>
+                </tr>
+                <tr>
+                  <td>I/O瓶颈</td>
+                  <td>数据加载时间长</td>
+                  <td>预加载、并行数据加载</td>
+                  <td>50-100%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 实验追踪集成</h2>
+          <div class="card">
+            <h3 class="card-title">MLflow集成</h3>
+            <div class="code-block">
+<pre>
+import mlflow
+
+# 启动MLflow追踪
+mlflow.start_run()
+
+# 记录训练参数
+mlflow.log_params({
+    "learning_rate": args.lr,
+    "batch_size": args.batch_size,
+    "model_size": args.model_size,
+})
+
+# 记录训练指标
+for step in range(max_steps):
+    loss = train_step()
+    mlflow.log_metrics({
+        "loss": loss,
+        "lr": scheduler.get_lr()[0],
+        "grad_norm": grad_norm,
+    }, step=step)
+
+# 记录模型
+mlflow.pytorch.log_model(model, "model")
+
+# 记录artifact
+mlflow.log_artifact("config.yaml")
+
+# 结束追踪
+mlflow.end_run()</pre>
+            </div>
+            <p class="card-text">
+              将监控数据与<strong>实验追踪</strong>系统集成，可以全面记录训练过程，方便后续分析和复现。
+            </p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• LLM训练需要多层次、全方位的监控体系</li>
+                <li>• DCGM提供GPU深度监控能力</li>
+                <li>• PyTorch Profiler帮助定位性能瓶颈</li>
+                <li>• 合理的告警规则和响应机制至关重要</li>
+                <li>• 监控数据分析指导训练优化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="31-3-训练断点续训.html">← 上一节</a>
+          <a href="31-5-故障容错机制.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

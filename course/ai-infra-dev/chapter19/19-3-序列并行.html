@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19.3 序列并行 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>19.3 序列并行</h1>
+          <p class="subtitle">突破序列长度限制的技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解序列并行的核心思想</li>
+            <li>掌握Ring Self Attention的实现</li>
+            <li>了解序列并行的优势</li>
+            <li>认识序列并行的应用场景</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="序列并行" class="card-image">
+          <h3 class="card-title">什么是序列并行？</h3>
+          <p class="card-text">
+            <strong>序列并行（Sequence Parallelism）</strong>是一种将序列维度
+            切分到多个GPU上的并行策略。与传统的张量并行不同，序列并行将输入序列
+            按长度方向切分，使得每个GPU只处理序列的一部分。这样可以支持更长的序列，
+            同时减少显存占用。Megatron-LM的序列并行基于Ring Self Attention，
+            通过环形通信计算全局注意力。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 序列长度与显存</h2>
+          <div class="card">
+            <h3 class="card-title">传统方法的限制</h3>
+            <div class="code-block">
+标准Self Attention的显存占用：
+
+输入：X ∈ ℝ^(B×S×H)
+其中：B=batch size, S=sequence length, H=hidden size
+
+注意力计算：
+Q, K, V = Linear(X)  # 3 × B×S×H
+
+Attention Matrix = Q × K^T  # B×S×S
+
+显存计算：
+
+1. Q, K, V：
+   3 × B × S × H × sizeof(float16)
+
+2. Attention Matrix：
+   B × S × S × sizeof(float16)
+
+3. Output：
+   B × S × H × sizeof(float16)
+
+总显存（仅Attention部分）：
+= 3BSH + BS² + BSH
+= BS² + 4BSH
+
+示例：
+• B = 4, S = 2048, H = 4096, FP16
+• 显存 = 4×2048²×2 + 4×4×2048×4096×2
+        = 33.6 MB + 268.4 MB
+        ≈ 302 MB
+
+如果S = 8192：
+• 显存 = 4×8192²×2 + 4×4×8192×4096×2
+        = 537.6 MB + 1073.7 MB
+        ≈ 1611 MB
+
+问题：
+• 显存占用随S²增长
+• 长序列（S>4096）显存不足
+• 限制了长序列任务
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 序列并行原理</h2>
+          <div class="card">
+            <h3 class="card-title">Ring Self Attention</h3>
+            <div class="code-block">
+序列并行切分：
+
+假设S = 4096, SP（sequence parallel）= 4
+
+每个GPU处理序列的1/4：
+
+┌─────────────────────────────────────────┐
+│ 序列：[token_0, token_1, ..., token_4095] │
+├─────────────────────────────────────────┤
+│ GPU0: [token_0, ..., token_1023]        │ S/4
+│ GPU1: [token_1024, ..., token_2047]     │ S/4
+│ GPU2: [token_2048, ..., token_3071]     │ S/4
+│ GPU3: [token_3072, ..., token_4095]     │ S/4
+└─────────────────────────────────────────┘
+
+Ring Self Attention计算：
+
+每个GPU需要计算其token与所有token的注意力：
+1. 本地token与自己token的注意力（本地计算）
+2. 本地token与其他GPU token的注意力（通信）
+
+Ring通信模式：
+
+Step 1:
+GPU0: 计算与本地token的注意力
+GPU1: 计算与本地token的注意力
+GPU2: 计算与本地token的注意力
+GPU3: 计算与本地token的注意力
+
+Step 2:
+GPU0 → GPU1: 发送K₀, V₀
+GPU1 → GPU2: 发送K₁, V₁
+GPU2 → GPU3: 发送K₂, V₂
+GPU3 → GPU0: 发送K₃, V₃
+
+Step 3:
+GPU0: 计算与GPU3 token的注意力
+GPU1: 计算与GPU0 token的注意力
+GPU2: 计算与GPU1 token的注意力
+GPU3: 计算与GPU2 token的注意力
+
+Step 4:
+GPU0 → GPU1: 发送K₃, V₃
+GPU1 → GPU2: 发送K₀, V₀
+GPU2 → GPU3: 发送K₁, V₁
+GPU3 → GPU0: 发送K₂, V₂
+
+...（继续环形通信）
+
+经过SP步后，每个GPU获得完整输出
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 显存优化效果</h2>
+          <div class="card">
+            <h3 class="card-title">序列并行的显存节省</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>配置</th>
+                  <th>Attention显存</th>
+                  <th>最大序列长度</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>无SP</strong></td>
+                  <td>BS² + 4BSH</td>
+                  <td>~2048</td>
+                </tr>
+                <tr>
+                  <td><strong>SP=2</strong></td>
+                  <td>BS²/2 + 4BSH</td>
+                  <td>~4096</td>
+                </tr>
+                <tr>
+                  <td><strong>SP=4</strong></td>
+                  <td>BS²/4 + 4BSH</td>
+                  <td>~8192</td>
+                </tr>
+                <tr>
+                  <td><strong>SP=8</strong></td>
+                  <td>BS²/8 + 4BSH</td>
+                  <td>~16384</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+示例：B=4, H=4096, FP16, A100 80GB
+
+无SP：
+• Attention显存 ≈ 302 MB (S=2048)
+• 最大S ≈ 2048
+
+SP=4：
+• Attention显存 ≈ 302 MB (S=8192)
+• 最大S ≈ 8192
+
+SP=8：
+• Attention显存 ≈ 302 MB (S=16384)
+• 最大S ≈ 16384
+
+总结：
+• 序列并行使最大序列长度线性增长
+• SP=4 → 4倍序列长度
+• SP=8 → 8倍序列长度
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="序列并行">
+          <div class="caption">图：序列并行通过环形通信计算全局注意力</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 性能分析</h2>
+          <div class="card">
+            <h3 class="card-title">序列并行的性能特性</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>说明</th>
+                  <th>优化策略</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>通信次数</strong></td>
+                  <td>每层SP次点对点通信</td>
+                  <td>使用NVLink加速</td>
+                </tr>
+                <tr>
+                  <td><strong>通信量</strong></td>
+                  <td>与SP成正比</td>
+                  <td>限制SP大小</td>
+                </tr>
+                <tr>
+                  <td><strong>计算量</strong></td>
+                  <td>与SP无关</td>
+                  <td>不适用</td>
+                </tr>
+                <tr>
+                  <td><strong>显存占用</strong></td>
+                  <td>Attention矩阵减为1/SP</td>
+                  <td>增加SP</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 实现要点</h2>
+          <div class="card">
+            <h3 class="card-title">序列并行的关键实现</h3>
+            <div class="code-block">
+1. 序列切分
+
+def split_sequence(x, sp_rank, sp_size):
+    """切分序列维度"""
+    B, S, H = x.shape
+    seq_per_rank = S // sp_size
+
+    start_idx = sp_rank * seq_per_rank
+    end_idx = (sp_rank + 1) * seq_per_rank
+
+    x_local = x[:, start_idx:end_idx, :]
+    return x_local
+
+2. Ring Attention
+
+def ring_attention(q, k, v, sp_rank, sp_size):
+    """环形注意力计算"""
+    B, S_local, H = q.shape
+    S_total = S_local * sp_size
+
+    # 初始化输出
+    output = torch.zeros_like(q)
+
+    # 初始化attention buffer
+    attention_buffer = torch.zeros_like(q)
+
+    # 环形通信
+    for step in range(sp_size):
+        # 当前GPU的K, V
+        k_current = k
+        v_current = v
+
+        # 计算当前注意力
+        scores = torch.matmul(q, k_current.transpose(-2, -1))
+        scores = scores / torch.sqrt(torch.tensor(H, dtype=torch.float32))
+        attention_weights = torch.softmax(scores, dim=-1)
+        attention_output = torch.matmul(attention_weights, v_current)
+
+        # 累积到buffer
+        attention_buffer += attention_output
+
+        # 通信：环形发送K, V
+        k_next = ring_send_recv(k, sp_rank, sp_size)
+        v_next = ring_send_recv(v, sp_rank, sp_size)
+        k = k_next
+        v = v_next
+
+    return attention_buffer
+
+3. 集合输出
+
+def merge_sequence(x_local, sp_rank, sp_size):
+    """合并序列输出"""
+    # AllGather收集完整序列
+    x_full = torch.distributed.all_gather(x_local)
+
+    return x_full
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 应用场景</h2>
+          <div class="card">
+            <h3 class="card-title">序列并行的适用场景</h3>
+            <div class="code-block">
+1. 长文本生成
+   • 生成超过2048 token的长文本
+   • 需要保持上下文一致性
+   • 示例：小说生成、代码生成
+
+2. 长文档理解
+   • 处理整篇文档
+   • 需要全局注意力
+   • 示例：文档摘要、问答
+
+3. 视频理解
+   • 视频作为长序列处理
+   • 需要跨帧注意力
+   • 示例：视频分类、动作识别
+
+4. 时间序列
+   • 处理长时序数据
+   • 需要长期依赖
+   • 示例：股票预测、天气预测
+
+5. 基因序列
+   • 处理超长基因序列
+   • 需要全局上下文
+   • 示例：基因分析、蛋白质结构预测
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>通信开销：</strong>SP增加会带来通信开销</li>
+              <li><strong>序列长度：</strong>序列长度必须能被SP整除</li>
+              <li><strong>位置编码：</strong>需要特殊处理位置编码</li>
+              <li><strong>性能权衡：</strong>需要在显存和速度间权衡</li>
+              <li><strong>调试困难：</strong>分布式系统调试复杂</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>SP大小：</strong>通常2、4或8</li>
+              <li><strong>结合TP：</strong>序列并行通常与张量并行结合</li>
+              <li><strong>监控性能：</strong>观察通信时间占比</li>
+              <li><strong>测试序列长度：</strong>逐步增加序列长度</li>
+              <li><strong>使用NVLink：</strong>单机多卡使用NVLink加速</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 序列并行将序列维度切分到多个GPU</li>
+                <li>• 使用Ring Self Attention计算全局注意力</li>
+                <li>• Attention矩阵显存减少为1/SP</li>
+                <li>• 支持的序列长度线性增长</li>
+                <li>• 适合长序列任务：文本生成、文档理解等</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="19-2-张量并行实现.html">← 上一节</a>
+          <a href="19-4-Megatron-LM部署实践.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

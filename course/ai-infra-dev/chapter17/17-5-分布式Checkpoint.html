@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.5 分布式Checkpoint - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>17.5 分布式Checkpoint</h1>
+          <p class="subtitle">高效保存和加载分布式训练状态</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式Checkpoint的重要性</li>
+            <li>掌握不同框架的Checkpoint保存方法</li>
+            <li>了解Checkpoint的优化策略</li>
+            <li>学会处理Checkpoint加载和恢复训练</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式Checkpoint" class="card-image">
+          <h3 class="card-title">分布式Checkpoint概述</h3>
+          <p class="card-text">
+            在分布式训练中，Checkpoint（检查点）用于保存训练状态，
+            包括模型参数、优化器状态、训练轮次等。分布式Checkpoint面临挑战：
+            如何高效保存分片参数、如何处理多进程一致性、如何减少I/O开销。
+            正确的Checkpoint策略对长时间训练的容错和恢复至关重要。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> DDP的Checkpoint</h2>
+          <div class="card">
+            <h3 class="card-title">保存和加载DDP模型</h3>
+            <div class="code-block">
+DDP模型保存（只在rank 0上保存）：
+
+import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+def save_checkpoint(model, optimizer, epoch, filename):
+    """保存checkpoint"""
+    if dist.get_rank() == 0:  # 只在主进程保存
+        # 获取原始模型（不是DDP包装器）
+        model_state = model.module.state_dict()
+
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model_state,
+            'optimizer_state_dict': optimizer.state_dict(),
+            # 可选：保存其他信息
+            'lr_scheduler_state': lr_scheduler.state_dict(),
+            'scaler': scaler.state_dict()  # 如果使用混合精度
+        }
+
+        torch.save(checkpoint, filename)
+        print(f'Checkpoint saved to {filename}')
+
+# 使用示例
+for epoch in range(num_epochs):
+    # 训练...
+
+    # 每N个epoch保存一次
+    if (epoch + 1) % save_interval == 0:
+        save_checkpoint(ddp_model, optimizer, epoch,
+                       f'checkpoint_epoch_{epoch}.pt')
+
+加载checkpoint（所有进程都需要加载）：
+
+def load_checkpoint(model, optimizer, filename):
+    """加载checkpoint"""
+    checkpoint = torch.load(filename, map_location='cpu')
+
+    # 加载模型参数
+    model.module.load_state_dict(checkpoint['model_state_dict'])
+
+    # 加载优化器状态
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    # 加载其他状态
+    start_epoch = checkpoint['epoch'] + 1
+
+    return start_epoch
+
+# 使用示例
+if os.path.exists('checkpoint_latest.pt'):
+    start_epoch = load_checkpoint(ddp_model, optimizer, 'checkpoint_latest.pt')
+    print(f'Resuming from epoch {start_epoch}')
+else:
+    start_epoch = 0
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> FSDP的Checkpoint</h2>
+          <div class="card">
+            <h3 class="card-title">保存和加载FSDP模型</h3>
+            <div class="code-block">
+FSDP支持两种Checkpoint方式：
+
+方式1：完整Checkpoint（所有rank协同保存）
+
+from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+def save_fsdp_checkpoint(model, optimizer, epoch, filename):
+    """保存FSDP checkpoint（完整保存）"""
+    rank = dist.get_rank()
+
+    # 配置：所有rank协同保存完整模型
+    full_state_dict_config = FullStateDictConfig(
+        offload_to_cpu=True,  # 卸载到CPU，节省GPU显存
+        rank0_only=True       # 只在rank 0上最终保存
+    )
+
+    with FSDP.state_dict_type(
+        model,
+        StateDictType.FULL_STATE_DICT,
+        full_state_dict_config
+    ):
+        state_dict = model.state_dict()
+
+    if rank == 0:
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': state_dict,
+            'optimizer_state_dict': optimizer.state_dict(),
+        }
+        torch.save(checkpoint, filename)
+        print(f'Checkpoint saved to {filename}')
+
+方式2：分片Checkpoint（每个rank保存自己的分片）
+
+from torch.distributed.fsdp import ShardedStateDictConfig
+
+def save_sharded_checkpoint(model, optimizer, epoch, dir_path):
+    """保存分片checkpoint"""
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    # 配置：每个rank保存自己的分片
+    sharded_state_dict_config = ShardedStateDictConfig(
+        offload_to_cpu=True
+    )
+
+    with FSDP.state_dict_type(
+        model,
+        StateDictType.SHARDED_STATE_DICT,
+        sharded_state_dict_config
+    ):
+        state_dict = model.state_dict()
+
+    # 每个rank保存自己的分片
+    filename = os.path.join(dir_path, f'shard_{rank}.pt')
+    torch.save(state_dict, filename)
+
+    if rank == 0:
+        # 保存元信息
+        meta = {
+            'epoch': epoch,
+            'world_size': world_size,
+        }
+        torch.save(meta, os.path.join(dir_path, 'meta.pt'))
+
+加载分片Checkpoint：
+
+def load_sharded_checkpoint(model, dir_path):
+    """加载分片checkpoint"""
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    # 加载分片
+    filename = os.path.join(dir_path, f'shard_{rank}.pt')
+    state_dict = torch.load(filename)
+
+    # 使用FSDP加载
+    with FSDP.state_dict_type(model, StateDictType.SHARDED_STATE_DICT):
+        model.load_state_dict(state_dict)
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> Checkpoint优化</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">I/O优化</h3>
+              <ul class="feature-list">
+                <li><strong>异步保存：</strong>使用独立线程/进程</li>
+                <li><strong>增量保存：</strong>只保存变化部分</li>
+                <li><strong>压缩：</strong>使用zip或gzip压缩</li>
+                <li><strong>分布式文件系统：</strong>使用Lustre/GPFS</li>
+              </ul>
+              <div class="code-block">
+异步保存示例：
+
+import threading
+import queue
+
+save_queue = queue.Queue()
+
+def save_worker():
+    while True:
+        data = save_queue.get()
+        torch.save(data['checkpoint'], data['filename'])
+        save_queue.task_done()
+
+# 启动保存线程
+save_thread = threading.Thread(target=save_worker, daemon=True)
+save_thread.start()
+
+# 异步保存
+save_queue.put({'checkpoint': checkpoint, 'filename': 'ckpt.pt'})
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">显存优化</h3>
+              <ul class="feature-list">
+                <li><strong>CPU卸载：</strong>offload_to_cpu=True</li>
+                <li><strong>分阶段保存：</strong>分层保存参数</li>
+                <li><strong>释放梯度：</strong>保存后释放梯度</li>
+                <li><strong>使用FP16：</strong>减少存储大小</li>
+              </ul>
+              <div class="code-block">
+FSDP优化保存：
+
+full_state_dict_config = FullStateDictConfig(
+    offload_to_cpu=True,    # 卸载到CPU
+    rank0_only=True         # 只rank 0保存
+)
+
+# 对于超大规模模型，可以考虑使用
+# DeepSpeed的ZeRO-Offload进一步优化
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 恢复训练</h2>
+          <div class="card">
+            <h3 class="card-title">从Checkpoint恢复训练</h3>
+            <div class="code-block">
+完整的恢复训练流程：
+
+def resume_training(checkpoint_path):
+    """从checkpoint恢复训练"""
+    # 1. 加载checkpoint
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+    # 2. 重建模型
+    model = build_model()
+    model = DDP(model.cuda())
+
+    # 3. 加载模型参数
+    model.module.load_state_dict(checkpoint['model_state_dict'])
+
+    # 4. 重建优化器
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    # 5. 重建学习率调度器
+    lr_scheduler = get_lr_scheduler(optimizer)
+    lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state'])
+
+    # 6. 恢复训练轮次
+    start_epoch = checkpoint['epoch'] + 1
+
+    # 7. 恢复混合精度scaler
+    scaler = torch.cuda.amp.GradScaler()
+    scaler.load_state_dict(checkpoint['scaler'])
+
+    return model, optimizer, lr_scheduler, scaler, start_epoch
+
+# 使用示例
+if os.path.exists('checkpoint_latest.pt'):
+    model, optimizer, lr_scheduler, scaler, start_epoch = \
+        resume_training('checkpoint_latest.pt')
+    print(f'Resuming training from epoch {start_epoch}')
+else:
+    model, optimizer, lr_scheduler, scaler = \
+        build_training_components()
+    start_epoch = 0
+
+# 继续训练
+for epoch in range(start_epoch, num_epochs):
+    train_epoch(model, optimizer, lr_scheduler, scaler, epoch)
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Checkpoint管理">
+          <div class="caption">图：良好的Checkpoint策略是长时间训练的保障</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> Checkpoint管理策略</h2>
+          <div class="card">
+            <h3 class="card-title">不同的保存策略</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>策略</th>
+                  <th>说明</th>
+                  <th>适用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>定期保存</strong></td>
+                  <td>固定间隔保存</td>
+                  <td>标准训练</td>
+                </tr>
+                <tr>
+                  <td><strong>最佳模型</strong></td>
+                  <td>保存验证集最佳模型</td>
+                  <td>需要最优性能</td>
+                </tr>
+                <tr>
+                  <td><strong>最新N个</strong></td>
+                  <td>只保留最近的N个checkpoint</td>
+                  <td>节省存储空间</td>
+                </tr>
+                <tr>
+                  <td><strong>分阶段保存</strong></td>
+                  <td>训练初期频繁，后期稀疏</td>
+                  <td>长时间训练</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 常见问题</h2>
+          <div class="card">
+            <h3 class="card-title">问题与解决方案</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>原因</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>模型参数不匹配</strong></td>
+                  <td>模型结构变化</td>
+                  <td>确保模型结构一致，或使用参数映射</td>
+                </tr>
+                <tr>
+                  <td><strong>显存不足</strong></td>
+                  <td>checkpoint太大</td>
+                  <td>使用CPU卸载或分片保存</td>
+                </tr>
+                <tr>
+                  <td><strong>加载慢</strong></td>
+                  <td>I/O瓶颈</td>
+                  <td>使用更快的存储或分布式文件系统</td>
+                </tr>
+                <tr>
+                  <td><strong>优化器状态丢失</strong></td>
+                  <td>忘记保存优化器</td>
+                  <td>确保保存完整的训练状态</td>
+                </tr>
+                <tr>
+                  <td><strong>多进程冲突</strong></td>
+                  <td>多个进程同时写入</td>
+                  <td>只在rank 0上保存</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">最佳实践</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>定期保存：</strong>每1-5小时保存一次</li>
+              <li><strong>保留最新：</strong>只保留最近的3-5个checkpoint</li>
+              <li><strong>保存完整状态：</strong>包括模型、优化器、学习率等</li>
+              <li><strong>测试恢复：</strong>定期测试checkpoint能否正确恢复</li>
+              <li><strong>使用云存储：</strong>将重要checkpoint备份到云存储</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Checkpoint对长时间训练的容错和恢复至关重要</li>
+                <li>• DDP在rank 0上保存完整模型</li>
+                <li>• FSDP支持完整和分片两种保存方式</li>
+                <li>• 优化I/O和显存可以提升checkpoint性能</li>
+                <li>• 定期测试checkpoint恢复能力</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="17-4-分布式数据加载.html">← 上一节</a>
+          <a href="../chapter18/18-1-DeepSpeed概述.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

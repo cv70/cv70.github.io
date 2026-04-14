@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.5 流式数据处理 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>10.5 流式数据处理</h1>
+          <p class="subtitle">实时数据流处理架构</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解流式处理的概念</li>
+            <li>掌握流处理框架</li>
+            <li>学会实时特征计算</li>
+            <li>了解流批一体架构</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800" alt="流式处理" class="card-image">
+          <h3 class="card-title">流式处理简介</h3>
+          <p class="card-text">
+            <strong>流式处理</strong>实时处理连续产生的数据，支持在线学习、
+            实时推荐等低延迟场景。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 流处理架构</h2>
+          <div class="card">
+            <h3 class="card-title">Kafka + Flink架构</h3>
+            <div class="code-block">
+<pre><strong>流处理架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      数据源层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • IoT设备 • 日志系统 • 数据库CDC • API推送                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      消息队列                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • Kafka • Pulsar • Kinesis                                │
+│  • 分区存储 • 高吞吐 • 持久化                              │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      流处理引擎                              │
+│  ─────────────────────────────────────────────────────────   │
+│  • Flink • Spark Streaming • Storm                         │
+│  • 实时计算 • 窗口聚合 • 状态管理                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      输出层                                 │
+│  ─────────────────────────────────────────────────────────   │
+│  • 特征存储 • 实时存储 • 消息队列 • 数据库                  │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Flink示例</h2>
+          <div class="card">
+            <h3 class="card-title">实时特征计算</h3>
+            <div class="code-block">
+<pre><strong>Flink流处理：</strong>
+
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.table import StreamTableEnvironment
+
+# 创建执行环境
+env = StreamExecutionEnvironment.get_execution_environment()
+t_env = StreamTableEnvironment.create(env)
+
+# 定义数据源
+t_env.execute_sql("""
+    CREATE TABLE user_events (
+        user_id BIGINT,
+        event_type STRING,
+        timestamp BIGINT,
+        properties MAP<STRING, STRING>
+    ) WITH (
+        'connector' = 'kafka',
+        'topic' = 'user_events',
+        'properties.bootstrap.servers' = 'localhost:9092',
+        'format' = 'json'
+    )
+""")
+
+# 实时特征计算
+t_env.execute_sql("""
+    INSERT INTO user_features
+    SELECT
+        user_id,
+        COUNT(*) as event_count,
+        SUM(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) as purchase_count,
+        AVG(TIMESTAMPDIFF(SECOND, LAG(timestamp) OVER (PARTITION BY user_id ORDER BY timestamp), timestamp)) as avg_interval
+    FROM user_events
+    GROUP BY
+        user_id,
+        TUMBLE(rowtime, INTERVAL '1' HOUR)
+""")
+
+# 执行作业
+env.execute("User Feature Calculation")</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">流处理注意事项</div>
+            <p><strong>窗口策略：</strong>选择合适的窗口大小和滑动步长</p>
+            <p><strong>状态管理：</strong>合理管理检查点和状态后端</p>
+            <p><strong>背压处理：</strong>处理数据积压和延迟</p>
+            <p><strong>容错机制：</strong>确保exactly-once语义</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 流批一体</h2>
+          <div class="card">
+            <h3 class="card-title">统一数据处理</h3>
+            <div class="code-block">
+<pre><strong>流批一体架构：</strong>
+
+# 使用Flink Table API处理流批数据
+
+# 流式处理
+t_env.execute_sql("""
+    SELECT * FROM user_events_stream
+    WHERE event_type = 'purchase'
+""")
+
+# 批处理
+t_env.execute_sql("""
+    SELECT * FROM user_events_batch
+    WHERE event_date = '2024-01-01'
+""")
+
+# 统一API
+# 相同的SQL，不同的执行模式</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 流式处理支持实时数据分析和在线学习</li>
+                <li>• Kafka + Flink是主流的流处理架构</li>
+                <li>• 窗口计算和状态管理是关键特性</li>
+                <li>• 流批一体简化数据处理架构</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="10-4-数据加载与预处理.html">← 上一节</a>
+          <a href="10-6-数据血缘管理.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

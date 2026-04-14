@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10.6 数据血缘管理 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>10.6 数据血缘管理</h1>
+          <p class="subtitle">追踪数据流向与来源</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解数据血缘的概念</li>
+            <li>掌握血缘追踪的方法</li>
+            <li>学会血缘可视化</li>
+            <li>了解血缘管理的应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="数据血缘" class="card-image">
+          <h3 class="card-title">数据血缘简介</h3>
+          <p class="card-text">
+            <strong>数据血缘（Data Lineage）</strong>追踪数据从源头到最终用途的完整路径，
+            帮助理解数据流向、发现数据问题和满足合规要求。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 血缘架构</h2>
+          <div class="card">
+            <h3 class="card-title">血缘管理系统</h3>
+            <div class="code-block">
+<pre><strong>血缘管理架构：</strong>
+
+┌─────────────────────────────────────────────────────────────┐
+│                      数据源层                                │
+│  ─────────────────────────────────────────────────────────   │
+│  • 数据库 • 文件系统 • API • 外部数据                        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      血缘采集层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  • 静态分析 • 动态追踪 • 元数据采集 • 日志解析                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      血缘存储层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  • 图数据库 • 元数据仓库 • 关系数据库                        │
+│  • Neo4j • JanusGraph • OpenMetadata                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      血缘服务层                              │
+│  ─────────────────────────────────────────────────────────   │
+│  • 查询服务 • 可视化服务 • 分析服务 • 告警服务              │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      应用层                                 │
+│  ─────────────────────────────────────────────────────────   │
+│  • 数据治理 • 影响分析 • 审计追踪 • 合规报告                  │
+└─────────────────────────────────────────────────────────────┘</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 血缘类型</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>描述</th>
+                <th>获取方式</th>
+                <th>应用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>技术血缘</td>
+                <td>代码级别的数据流</td>
+                <td>代码分析、日志</td>
+                <td>调试、优化</td>
+              </tr>
+              <tr>
+                <td>逻辑血缘</td>
+                <td>业务逻辑的数据流</td>
+                <td>元数据、文档</td>
+                <td>业务理解</td>
+              </tr>
+              <tr>
+                <td>端到端血缘</td>
+                <td>全链路数据流</td>
+                <td>综合追踪</td>
+                <td>影响分析</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> OpenMLDB示例</h2>
+          <div class="card">
+            <h3 class="card-title">血缘追踪实现</h3>
+            <div class="code-block">
+<pre><strong>血缘追踪代码：</strong>
+
+from sqlalchemy import create_engine, MetaData
+import networkx as nx
+
+# 创建血缘图
+lineage_graph = nx.DiGraph()
+
+# 追踪数据转换
+def track_data_transformation(source, transformation, target):
+    # 添加节点
+    lineage_graph.add_node(source, type='source')
+    lineage_graph.add_node(target, type='target')
+
+    # 添加边和元数据
+    lineage_graph.add_edge(source, target,
+                          transformation=transformation,
+                          timestamp=datetime.now())
+
+    return lineage_graph
+
+# 示例：追踪训练数据血缘
+track_data_transformation(
+    source='raw_images',
+    transformation='preprocessing: resize, normalize',
+    target='train_images'
+)
+
+track_data_transformation(
+    source='train_images',
+    transformation='augmentation: flip, rotate',
+    target='augmented_images'
+)
+
+track_data_transformation(
+    source='augmented_images',
+    transformation='train: ResNet50',
+    target='model_checkpoint.pth'
+)
+
+# 查询血缘
+def get_lineage(data_item):
+    predecessors = list(lineage_graph.predecessors(data_item))
+    successors = list(lineage_graph.successors(data_item))
+
+    return {
+        'inputs': predecessors,
+        'outputs': successors,
+        'full_lineage': nx.descendants(lineage_graph, data_item)
+    }
+
+# 可视化血缘
+import matplotlib.pyplot as plt
+
+def visualize_lineage():
+    pos = nx.spring_layout(lineage_graph)
+    nx.draw(lineage_graph, pos, with_labels=True,
+            node_size=2000, node_color='lightblue',
+            font_size=10, arrows=True)
+    plt.show()
+
+visualize_lineage()</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">血缘管理价值</div>
+            <p><strong>问题定位：</strong>快速定位数据问题源头</p>
+            <p><strong>影响分析：</strong>评估变更的影响范围</p>
+            <p><strong>合规审计：</strong>满足数据治理要求</p>
+            <p><strong>知识传承：</strong>保留数据处理知识</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 血缘应用</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>应用</th>
+                <th>血缘用途</th>
+                <th>价值</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>数据治理</td>
+                <td>追踪数据流向，发现异常</td>
+                <td>提高数据质量</td>
+              </tr>
+              <tr>
+                <td>模型管理</td>
+                <td>追溯训练数据来源</td>
+                <td>可复现性</td>
+              </tr>
+              <tr>
+                <td>影响分析</td>
+                <td>评估变更影响</td>
+                <td>降低风险</td>
+              </tr>
+              <tr>
+                <td>合规审计</td>
+                <td>证明数据来源合法</td>
+                <td>满足合规</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 数据血缘追踪数据的完整路径</li>
+                <li>• 血缘类型包括技术血缘、逻辑血缘和端到端血缘</li>
+                <li>• 血缘系统包括采集、存储、服务和应用层</li>
+                <li>• 血缘管理支持数据治理、模型管理和合规审计</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="10-5-流式数据处理.html">← 上一节</a>
+          <a href="#">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

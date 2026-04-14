@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>36.2 Prometheus监控 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>36.2 Prometheus监控</h1>
+          <p class="subtitle">使用Prometheus构建AI基础设施监控系统</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Prometheus的核心架构</li>
+            <li>掌握PromQL查询语言</li>
+            <li>学习监控目标发现机制</li>
+            <li>实践告警规则配置</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Prometheus架构" class="card-image">
+          <h3 class="card-title">Prometheus架构</h3>
+          <p class="card-text">
+            <strong>Prometheus</strong>是一个开源的监控告警系统，采用Pull模式采集时序数据。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 核心组件</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📡</div>
+              <h3 class="card-title">Prometheus Server</h3>
+              <p class="card-text">核心服务，负责采集、存储、查询</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔌</div>
+              <h3 class="card-title">Exporters</h3>
+              <p class="card-text">指标暴露器，采集各类服务指标</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3.5rem; margin-bottom: 1rem;">📊</div>
+              <h3 class="card-title">Grafana</h3>
+              <p class="card-text">可视化面板，展示监控数据</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 常用Exporters</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Exporter</th>
+                <th>用途</th>
+                <th>端口</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Node Exporter</td>
+                <td>系统级指标</td>
+                <td>9100</td>
+                <td>CPU、内存、磁盘、网络</td>
+              </tr>
+              <tr>
+                <td>NVIDIA DCGM Exporter</td>
+                <td>GPU指标</td>
+                <td>9400</td>
+                <td>GPU利用率、显存、温度</td>
+              </tr>
+              <tr>
+                <td>cAdvisor</td>
+                <td>容器指标</td>
+                <td>8080</td>
+                <td>Kubernetes容器监控</td>
+              </tr>
+              <tr>
+                <td>Blackbox Exporter</td>
+                <td>探测服务</td>
+                <td>9115</td>
+                <td>HTTP/HTTPS/TCP探测</td>
+              </tr>
+              <tr>
+                <td>Process Exporter</td>
+                <td>进程级指标</td>
+                <td>9256</td>
+                <td>特定进程监控</td>
+              </tr>
+              <tr>
+                <td>Slurm Exporter</td>
+                <td>Slurm集群</td>
+                <td>9264</td>
+                <td>HPC作业调度监控</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> PromQL查询语言</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">常用查询示例</div>
+              <p>PromQL是Prometheus的查询语言，功能强大：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# 查询GPU利用率
+nvidia_gpu_utilization_gpu
+
+# 查询平均GPU利用率
+avg(nvidia_gpu_utilization_gpu)
+
+# 按节点聚合GPU利用率
+avg by (hostname) (nvidia_gpu_utilization_gpu)
+
+# 计算GPU显存使用率
+nvidia_gpu_memory_used_bytes /
+  nvidia_gpu_memory_total_bytes * 100
+
+# 查询过去5分钟的速率
+rate(nvidia_gpu_utilization_gpu[5m])
+
+# 计算p99延迟
+histogram_quantile(0.99,
+  rate(request_duration_seconds_bucket[5m])
+)
+
+# 条件查询
+node_memory_MemAvailable_bytes /
+  node_memory_MemTotal_bytes * 100 < 10
+
+# 多指标组合
+up{job="training"} == 0
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📋</span> Prometheus配置示例</h2>
+          <div class="code-block">
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ai-training'
+    environment: 'production'
+
+# 告警规则文件
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# 服务发现配置
+scrape_configs:
+  # GPU监控
+  - job_name: 'dcgm-exporter'
+    static_configs:
+      - targets:
+          - 'gpu-node-01:9400'
+          - 'gpu-node-02:9400'
+        labels:
+          cluster: 'gpu-cluster'
+
+  # Kubernetes服务发现
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+  # Slurm监控
+  - job_name: 'slurm-exporter'
+    static_configs:
+      - targets: ['slurm-head:9264']
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚠️</span> 告警规则配置</h2>
+          <div class="code-block">
+# alerts.yml
+groups:
+  - name: gpu_alerts
+    interval: 30s
+    rules:
+      # GPU高利用率告警
+      - alert: HighGPUUtilization
+        expr: nvidia_gpu_utilization_gpu > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} 高利用率"
+          description: "GPU {{ $labels.gpu }} 在节点 {{ $labels.hostname }} 利用率超过90%"
+
+      # GPU温度告警
+      - alert: HighGPUTemperature
+        expr: nvidia_gpu_temperature_gpu > 85
+        for: 3m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU温度过高"
+          description: "GPU {{ $labels.gpu }} 温度达到 {{ $value }}°C"
+
+      # 训练任务异常
+      - alert: TrainingJobFailed
+        expr: training_job_status == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: training
+        annotations:
+          summary: "训练任务失败"
+          description: "任务 {{ $labels.job_id }} 训练失败"
+
+  - name: system_alerts
+    rules:
+      # 磁盘空间告警
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes /
+              node_filesystem_size_bytes < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "磁盘空间不足"
+          description: "挂载点 {{ $labels.mountpoint }} 空间不足10%"
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> Recording Rules</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">预计算规则</div>
+              <p>Recording Rules可以预计算常用查询，提升查询性能：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# recording.yml
+groups:
+  - name: gpu_recording
+    interval: 30s
+    rules:
+      # GPU显存使用率
+      - record: job:gpu_memory_usage:percent
+        expr: nvidia_gpu_memory_used_bytes /
+              nvidia_gpu_memory_total_bytes * 100
+
+      # 集群GPU平均利用率
+      - record: cluster:gpu_utilization:avg
+        expr: avg(nvidia_gpu_utilization_gpu)
+
+      # 集群GPU总数
+      - record: cluster:gpu:total
+        expr: count(nvidia_gpu_utilization_gpu)
+
+      # 训练吞吐量
+      - record: job:training:throughput
+        expr: sum(rate(training_samples_total[5m])) by (job_id)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🐳</span> Docker部署Prometheus</h2>
+          <div class="code-block">
+# docker-compose.yml
+version: '3'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+
+volumes:
+  prometheus_data:
+  grafana_data:
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">性能优化建议</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 设置合理的数据保留时间，避免存储爆炸</li>
+              <li>• 使用Recording Rules预计算常用查询</li>
+              <li>• 对高基数标签进行合理降采样</li>
+              <li>• 使用联邦部署实现多集群监控</li>
+              <li>• 定期清理无用的指标和告警规则</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Prometheus采用Pull模式采集时序数据</li>
+                <li>• 通过多种Exporters采集不同维度的指标</li>
+                <li>• PromQL提供强大的数据查询能力</li>
+                <li>• 合理配置告警规则实现及时响应</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="36-1-监控指标体系.html">← 上一节</a>
+          <a href="36-3-GPU监控（DCGM）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

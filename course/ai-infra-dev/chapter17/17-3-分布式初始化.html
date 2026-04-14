@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.3 分布式初始化 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>17.3 分布式初始化</h1>
+          <p class="subtitle">正确设置分布式训练环境</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解分布式初始化的核心概念</li>
+            <li>掌握进程组的管理方法</li>
+            <li>了解不同的初始化方式</li>
+            <li>学会处理分布式环境配置</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="分布式初始化" class="card-image">
+          <h3 class="card-title">分布式初始化概述</h3>
+          <p class="card-text">
+            分布式训练的第一步是正确初始化分布式环境。这包括创建进程组、设置通信后端、
+            配置环境变量等。正确的初始化是分布式训练成功的基础，错误配置会导致通信失败或训练异常。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> 核心概念</h2>
+          <div class="card">
+            <h3 class="card-title">分布式训练的关键概念</h3>
+            <div class="code-block">
+1. 进程组（Process Group）
+   • 参与分布式训练的进程集合
+   • 所有进程属于同一个默认进程组
+   • 可以创建多个子进程组用于分组通信
+
+2. World Size
+   • 总进程数 = GPU总数
+   • 例如：8 GPU的机器，world_size = 8
+
+3. Rank
+   • 当前进程的唯一标识符
+   • 范围：0 到 world_size - 1
+   • rank 0通常作为主进程，负责日志、保存模型等
+
+4. Local Rank
+   • 节点内的进程编号
+   • 例如：2节点 × 8 GPU，每个节点的local_rank都是0-7
+
+5. Backend
+   • 通信后端：NCCL（GPU）、GLOO（CPU）、MPI（兼容）
+   • NCCL是NVIDIA优化的GPU通信库，性能最佳
+
+6. Master Address/Port
+   • 主节点的地址和端口
+   • 用于进程间建立连接
+   • 默认：localhost:29500
+
+7. Init Method
+   • 初始化方式：env://、tcp://、file://
+   • env://：从环境变量读取（推荐）
+   • tcp://：显式指定地址和端口
+   • file://：通过共享文件同步（已废弃）
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 初始化方式</h2>
+          <div class="card">
+            <h3 class="card-title">env:// 方式（推荐）</h3>
+            <div class="code-block">
+方式1：使用环境变量初始化
+
+# 设置环境变量
+export MASTER_ADDR="192.168.1.1"      # 主节点IP
+export MASTER_PORT="29500"             # 通信端口（29500-29600）
+export WORLD_SIZE=8                    # 总进程数
+export RANK=0                          # 当前进程rank（0-7）
+
+# 或者让torchrun自动设置
+
+import torch.distributed as dist
+
+# 初始化进程组
+dist.init_process_group(
+    backend='nccl',        # 通信后端
+    init_method='env://',  # 从环境变量读取配置
+)
+
+# 获取配置信息
+rank = dist.get_rank()
+world_size = dist.get_world_size()
+local_rank = int(os.environ['LOCAL_RANK'])
+
+# 设置当前设备
+torch.cuda.set_device(local_rank)
+
+print(f"Rank {rank}/{world_size}, Local Rank {local_rank}")
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> tcp:// 方式</h2>
+          <div class="card">
+            <h3 class="card-title">显式指定地址和端口</h3>
+            <div class="code-block">
+方式2：使用tcp://显式初始化
+
+import torch.distributed as dist
+
+# 初始化进程组（主节点）
+dist.init_process_group(
+    backend='nccl',
+    init_method='tcp://192.168.1.1:29500',
+    world_size=8,
+    rank=0
+)
+
+# 初始化进程组（从节点）
+dist.init_process_group(
+    backend='nccl',
+    init_method='tcp://192.168.1.1:29500',
+    world_size=8,
+    rank=1  # 每个进程使用不同的rank
+)
+
+# 在实际代码中，rank通常作为参数传入
+def init_process(rank, world_size):
+    dist.init_process_group(
+        backend='nccl',
+        init_method='tcp://192.168.1.1:29500',
+        world_size=world_size,
+        rank=rank
+    )
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 启动分布式训练</h2>
+          <div class="card">
+            <h3 class="card-title">torchrun 启动方式（推荐）</h3>
+            <div class="code-block">
+方式1：单机多GPU
+
+# 使用所有可用GPU
+torchrun --nproc_per_node=gpu train.py
+
+# 指定GPU数量
+torchrun --nproc_per_node=4 train.py
+
+# 自定义端口
+torchrun --master_port=29501 --nproc_per_node=4 train.py
+
+方式2：多机训练
+
+# 节点1（主节点）
+torchrun \
+  --nproc_per_node=8 \
+  --nnodes=2 \
+  --node_rank=0 \
+  --master_addr="192.168.1.1" \
+  --master_port=29500 \
+  train.py
+
+# 节点2（从节点）
+torchrun \
+  --nproc_per_node=8 \
+  --nnodes=2 \
+  --node_rank=1 \
+  --master_addr="192.168.1.1" \
+  --master_port=29500 \
+  train.py
+
+方式3：使用配置文件
+
+# config.yaml
+nnodes: 2
+nproc_per_node: 8
+node_rank: 0
+master_addr: "192.168.1.1"
+master_port: 29500
+
+# 启动
+torchrun --config config.yaml train.py
+
+环境变量说明：
+
+torchrun自动设置的环境变量：
+• RANK：全局rank（0 到 world_size-1）
+• LOCAL_RANK：节点内rank（0 到 nproc_per_node-1）
+• WORLD_SIZE：总进程数
+• LOCAL_WORLD_SIZE：节点内进程数
+• MASTER_ADDR：主节点地址
+• MASTER_PORT：主节点端口
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 通信后端选择</h2>
+          <div class="card">
+            <h3 class="card-title">后端特性对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>后端</th>
+                  <th>设备</th>
+                  <th>特点</th>
+                  <th>适用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>NCCL</strong></td>
+                  <td>GPU</td>
+                  <td>NVIDIA优化，性能最佳</td>
+                  <td>GPU训练（推荐）</td>
+                </tr>
+                <tr>
+                  <td><strong>GLOO</strong></td>
+                  <td>CPU/GPU</td>
+                  <td>支持CPU和GPU，性能一般</td>
+                  <td>CPU训练或小规模GPU</td>
+                </tr>
+                <tr>
+                  <td><strong>MPI</strong></td>
+                  <td>CPU</td>
+                  <td>兼容MPI生态</td>
+                  <td>需要MPI集成的场景</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+后端选择建议：
+
+# GPU训练：首选NCCL
+dist.init_process_group(backend='nccl')
+
+# CPU训练或无GPU：使用GLOO
+dist.init_process_group(backend='gloo')
+
+# 混合CPU/GPU：使用GLOO（NCCL不支持CPU）
+dist.init_process_group(backend='gloo')
+
+# 特定场景需要MPI：使用MPI
+dist.init_process_group(backend='mpi')
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 进程组管理</h2>
+          <div class="card">
+            <h3 class="card-title">高级进程组操作</h3>
+            <div class="code-block">
+创建子进程组：
+
+import torch.distributed as dist
+
+# 初始化默认进程组
+dist.init_process_group(backend='nccl', init_method='env://')
+
+# 创建子进程组（用于分组通信）
+# 例如：8个GPU分成2组，每组4个
+rank = dist.get_rank()
+group = [0, 1, 2, 3] if rank < 4 else [4, 5, 6, 7]
+subgroup = dist.new_group(group)
+
+# 在子进程组内通信
+if dist.get_rank() in group:
+    dist.all_reduce(tensor, group=subgroup)
+
+获取进程组信息：
+
+# 获取默认进程组
+default_group = dist.group.WORLD
+
+# 获取进程组大小
+group_size = dist.get_world_size(group=subgroup)
+
+# 获取进程在组内的rank
+group_rank = dist.get_rank(group=subgroup)
+
+销毁进程组：
+
+# 清理资源
+dist.destroy_process_group()
+
+# 注意：destroy后不能再创建新的进程组
+# 如果需要重新初始化，需要重启进程
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="多节点分布式训练">
+          <div class="caption">图：多节点分布式训练需要正确配置网络和进程组</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 常见问题排查</h2>
+          <div class="card">
+            <h3 class="card-title">初始化失败处理</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>错误</th>
+                  <th>原因</th>
+                  <th>解决方案</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Address already in use</strong></td>
+                  <td>端口被占用</td>
+                  <td>更换端口或关闭占用进程</td>
+                </tr>
+                <tr>
+                  <td><strong>Connection refused</strong></td>
+                  <td>主节点地址错误或防火墙</td>
+                  <td>检查IP和防火墙设置</td>
+                </tr>
+                <tr>
+                  <td><strong>Timeout</strong></td>
+                  <td>进程启动不同步</td>
+                  <td>检查各节点是否同时启动</td>
+                </tr>
+                <tr>
+                  <td><strong>CUDA error</strong></td>
+                  <td>GPU设备编号错误</td>
+                  <td>使用LOCAL_RANK设置设备</td>
+                </tr>
+                <tr>
+                  <td><strong>Backend not available</strong></td>
+                  <td>后端未编译支持</td>
+                  <td>重新编译PyTorch或更换后端</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>端口范围：</strong>使用29500-29600之间的端口，避免冲突</li>
+              <li><strong>防火墙：</strong>确保主节点开放指定端口</li>
+              <li><strong>时间同步：</strong>所有节点时间同步（NTP）</li>
+              <li><strong>SSH免密：</strong>多节点训练需要SSH免密登录</li>
+              <li><strong>环境一致：</strong>确保所有节点环境（PyTorch版本、CUDA等）一致</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 最佳实践</h2>
+          <div class="card">
+            <h3 class="card-title">推荐的初始化模板</h3>
+            <div class="code-block">
+import os
+import torch
+import torch.distributed as dist
+
+def setup_distributed():
+    """初始化分布式环境"""
+
+    # 方法1：使用torchrun（推荐）
+    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        rank = int(os.environ['RANK'])
+        world_size = int(os.environ['WORLD_SIZE'])
+        local_rank = int(os.environ.get('LOCAL_RANK', rank))
+
+        dist.init_process_group(backend='nccl')
+        torch.cuda.set_device(local_rank)
+
+    # 方法2：手动初始化（向后兼容）
+    else:
+        raise ValueError("Please use torchrun to launch distributed training")
+
+    return rank, world_size, local_rank
+
+def cleanup_distributed():
+    """清理分布式环境"""
+    if dist.is_initialized():
+        dist.destroy_process_group()
+
+def main():
+    # 初始化
+    rank, world_size, local_rank = setup_distributed()
+
+    # 只在rank 0上打印
+    if rank == 0:
+        print(f"Training on {world_size} GPUs")
+
+    # 创建模型（移到正确的GPU）
+    model = Model().cuda()
+
+    # 使用DDP包装
+    ddp_model = DDP(model, device_ids=[local_rank])
+
+    # 训练循环
+    for epoch in range(num_epochs):
+        # ...
+
+    # 清理
+    cleanup_distributed()
+
+if __name__ == '__main__':
+    main()
+
+# 使用torchrun启动
+# torchrun --nproc_per_node=gpu train.py
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 分布式初始化是训练的第一步，必须正确配置</li>
+                <li>• 推荐使用env://方式和torchrun启动</li>
+                <li>• NCCL是GPU训练的最佳后端</li>
+                <li>• 需要理解rank、world_size、local_rank等概念</li>
+                <li>• 遇到问题时检查网络、防火墙、时间同步等</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="17-2-FSDP原理与实践.html">← 上一节</a>
+          <a href="17-4-分布式数据加载.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

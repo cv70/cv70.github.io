@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24.5 推理并行策略 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>24.5 推理并行策略</h1>
+          <p class="subtitle">多GPU并行推理技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解推理并行的不同策略</li>
+            <li>掌握张量并行的原理</li>
+            <li>学习流水线并行的实现</li>
+            <li>了解张量流水线并行</li>
+          </ul>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 推理并行类型</h2>
+          <div class="card">
+            <h3 class="card-title">并行策略概览</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+              <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">🔢</div>
+                <div style="font-weight: bold; margin: 10px 0;">张量并行</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">按层切分</div>
+              </div>
+              <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">📊</div>
+                <div style="font-weight: bold; margin: 10px 0;">流水线并行</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">按层切分</div>
+              </div>
+              <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">📦</div>
+                <div style="font-weight: bold; margin: 10px 0;">数据并行</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">按样本切分</div>
+              </div>
+              <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem;">🌐</div>
+                <div style="font-weight: bold; margin: 10px 0;">专家并行</div>
+                <div style="font-size: 0.85em; color: var(--text-secondary);">MoE模型</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 张量并行</h2>
+          <div class="card">
+            <h3 class="card-title">Tensor Parallelism</h3>
+            <p>张量并行将每一层的张量切分到多个GPU上，每个GPU计算张量的一部分。</p>
+
+            <div class="grid grid-2" style="margin-top: 20px;">
+              <div>
+                <h4 style="margin: 15px 0 10px 0;">列并行</h4>
+                <ul class="feature-list">
+                  <li>权重按列切分</li>
+                  <li>输入复制到所有GPU</li>
+                  <li>每个GPU计算部分输出</li>
+                  <li>需要AllReduce聚合</li>
+                </ul>
+              </div>
+              <div>
+                <h4 style="margin: 15px 0 10px 0;">行并行</h4>
+                <ul class="feature-list">
+                  <li>权重按行切分</li>
+                  <li>输入按维度切分</li>
+                  <li>每个GPU计算独立输出</li>
+                  <li>不需要通信</li>
+                </ul>
+              </div>
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+              <div style="font-weight: bold; margin-bottom: 10px;">特点</div>
+              <ul class="feature-list">
+                <li><strong>通信</strong>：需要频繁通信</li>
+                <li><strong>显存</strong>：单GPU显存需求减少</li>
+                <li><strong>延迟</strong>：低延迟推理最佳选择</li>
+                <li><strong>适用</strong>：单一大模型推理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 流水线并行</h2>
+          <div class="card">
+            <h3 class="card-title">Pipeline Parallelism</h3>
+            <p>流水线并行将模型的不同层分布到不同的GPU上，形成计算流水线。</p>
+
+            <div style="margin-top: 20px;">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">GPU 0: 层1-10</div>
+                <div style="color: var(--text-secondary);">→</div>
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">GPU 1: 层11-20</div>
+                <div style="color: var(--text-secondary);">→</div>
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">GPU 2: 层21-30</div>
+                <div style="color: var(--text-secondary);">→</div>
+                <div style="padding: 10px 15px; background: #E3F2FD; border-radius: 6px;">GPU 3: 层31-40</div>
+              </div>
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+              <div style="font-weight: bold; margin-bottom: 10px;">特点</div>
+              <ul class="feature-list">
+                <li><strong>通信</strong>：GPU间通信较少</li>
+                <li><strong>显存</strong>：单GPU显存需求大幅减少</li>
+                <li><strong>延迟</strong>：流水线气泡导致延迟增加</li>
+                <li><strong>适用</strong>：大模型多GPU推理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="多GPU并行">
+          <div class="caption">图：多GPU并行推理架构示意图</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📦</span> 数据并行</h2>
+          <div class="card">
+            <h3 class="card-title">Data Parallelism</h3>
+            <p>数据并行将模型复制到每个GPU，每个GPU处理不同的输入batch。</p>
+
+            <div style="margin-top: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+              <div style="font-weight: bold; margin-bottom: 10px;">特点</div>
+              <ul class="feature-list">
+                <li><strong>通信</strong>：需要AllReduce同步梯度（训练）</li>
+                <li><strong>显存</strong>：每个GPU需要完整模型</li>
+                <li><strong>延迟</strong>：不适合低延迟推理</li>
+                <li><strong>适用</strong>：高吞吐量推理</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 推理并行实现</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.distributed as dist
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# 张量并行实现（简化版）
+class TensorParallelModel:
+    """
+    张量并行模型
+    """
+    def __init__(self, model, world_size, rank):
+        self.model = model
+        self.world_size = world_size
+        self.rank = rank
+
+        # 切分线性层权重
+        self._parallelize_linear_layers()
+
+    def _parallelize_linear_layers(self):
+        """
+        并行化线性层
+        """
+        for name, module in self.model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                weight = module.weight.data
+
+                # 列并行：按列切分
+                weight_chunk = torch.chunk(weight, self.world_size, dim=1)[self.rank]
+
+                # 更新权重
+                module.weight.data = weight_chunk
+
+                # 调整输出维度
+                module.out_features = weight_chunk.shape[0]
+
+    def forward(self, x):
+        """
+        前向传播
+        """
+        # 前向传播
+        output = self.model(x)
+
+        # 聚合输出（AllReduce）
+        if self.world_size > 1:
+            dist.all_reduce(output, op=dist.ReduceOp.SUM)
+
+        return output
+
+# 流水线并行实现（简化版）
+class PipelineParallelModel:
+    """
+    流水线并行模型
+    """
+    def __init__(self, model, stages, rank):
+        self.stages = stages
+        self.rank = rank
+
+        # 分配层到当前GPU
+        self._assign_layers_to_gpu(model)
+
+    def _assign_layers_to_gpu(self, model):
+        """
+        将层分配到GPU
+        """
+        layers_per_stage = len(model.layers) // self.stages
+
+        start_idx = self.rank * layers_per_stage
+        end_idx = start_idx + layers_per_stage
+
+        # 只保留当前阶段的层
+        self.model_layers = model.layers[start_idx:end_idx]
+
+    def forward(self, hidden_states):
+        """
+        前向传播
+        """
+        # 通过当前阶段的层
+        for layer in self.model_layers:
+            hidden_states = layer(hidden_states)
+
+        # 如果不是最后一个阶段，发送给下一个GPU
+        if self.rank < self.stages - 1:
+            dist.send(hidden_states, dst=self.rank + 1)
+            return None
+
+        return hidden_states
+
+# 使用vLLM的张量并行
+def vllm_tensor_parallel():
+    """
+    vLLM中的张量并行
+    """
+    from vllm import LLM, SamplingParams
+
+    # 初始化LLM（4个GPU）
+    llm = LLM(
+        model="meta-llama/Llama-2-70b-hf",
+        tensor_parallel_size=4,  # 使用4个GPU进行张量并行
+        trust_remote_code=True
+    )
+
+    sampling_params = SamplingParams(
+        temperature=0.8,
+        max_tokens=100
+    )
+
+    prompts = ["写一个Python函数"]
+
+    outputs = llm.generate(prompts, sampling_params)
+
+    for output in outputs:
+        print(f"Output: {output.outputs[0].text}")
+
+# 使用DeepSpeed的流水线并行
+def deepspeed_pipeline_parallel():
+    """
+    DeepSpeed中的流水线并行
+    """
+    import deepspeed
+
+    # 加载模型
+    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-70b-hf")
+
+    # 配置流水线并行
+    config = {
+        "train_batch_size": 1,
+        "gradient_accumulation_steps": 1,
+        "fp16": {
+            "enabled": True
+        },
+        "tensor_parallel": {
+            "enabled": False
+        },
+        "pipeline": {
+            "enabled": True,
+            "parallel_size": 4,  # 4个GPU流水线并行
+            "schedule": "interleaved"
+        }
+    }
+
+    # 初始化DeepSpeed
+    model_engine, _, _, _ = deepspeed.initialize(
+        model=model,
+        config=config
+    )
+
+    # 推理
+    inputs = torch.tensor([1, 2, 3]).cuda()
+    outputs = model_engine(inputs)
+
+    return outputs
+
+# 使用Megatron-LM的张量并行
+def megatron_tensor_parallel():
+    """
+    Megatron-LM中的张量并行
+    """
+    from megatron import initialize_megatron
+    from megatron.model import GPTModel
+    from megatron.utils import get_args
+
+    # 初始化Megatron
+    args = get_args()
+    initialize_megatron(args)
+
+    # 创建模型（自动张量并行）
+    model = GPTModel(
+        num_layers=32,
+        hidden_size=4096,
+        num_attention_heads=32,
+        tensor_model_parallel_size=args.tensor_model_parallel_size
+    )
+
+    # 推理
+    inputs = torch.tensor([1, 2, 3]).cuda()
+    outputs = model(inputs)
+
+    return outputs
+
+# 多GPU推理的最佳实践
+def multi_gpu_inference_tips():
+    """
+    多GPU推理的最佳实践
+    """
+    tips = [
+        "1. 张量并行适合低延迟场景，通常使用2-8个GPU",
+        "2. 流水线并行适合大模型，但会增加延迟",
+        "3. 70B+模型推荐结合张量并行和流水线并行",
+        "4. 使用NVLink加速GPU间通信",
+        "5. 监控GPU利用率，避免通信瓶颈",
+        "6. 不同GPU型号可能导致负载不均",
+        "7. 使用vLLM、DeepSpeed等框架简化实现",
+    ]
+
+    for tip in tips:
+        print(tip)
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚖️</span> 并行策略对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>GPU数量</th>
+                <th>显存需求</th>
+                <th>延迟</th>
+                <th>吞吐量</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>张量并行</strong></td>
+                <td>2-8</td>
+                <td>模型/N</td>
+                <td>低</td>
+                <td>高</td>
+                <td>低延迟推理</td>
+              </tr>
+              <tr>
+                <td><strong>流水线并行</strong></td>
+                <td>2-16</td>
+                <td>模型/N</td>
+                <td>中高</td>
+                <td>中高</td>
+                <td>大模型推理</td>
+              </tr>
+              <tr>
+                <td><strong>张量+流水线</strong></td>
+                <td>4-64</td>
+                <td>模型/(M×N)</td>
+                <td>中</td>
+                <td>最高</td>
+                <td>超大模型</td>
+              </tr>
+              <tr>
+                <td><strong>数据并行</strong></td>
+                <td>任意</td>
+                <td>完整模型</td>
+                <td>高</td>
+                <td>最高</td>
+                <td>高吞吐量</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">推理并行实践建议</div>
+            <ul style="color: var(--text-secondary);">
+              <li>7B以下模型通常单GPU即可</li>
+              <li>7B-70B模型推荐张量并行（2-8个GPU）</li>
+              <li>70B以上模型需要结合张量和流水线并行</li>
+              <li>使用NVLink加速GPU间通信</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 推理并行包括张量、流水线、数据并行等策略</li>
+                <li>• 张量并行适合低延迟，流水线并行适合大模型</li>
+                <li>• 70B+模型通常需要结合多种并行策略</li>
+                <li>• vLLM、DeepSpeed等框架简化了并行实现</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="24-4-投机解码.html">← 上一节</a>
+          <a href="../chapter25/25-1-推理服务框架.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

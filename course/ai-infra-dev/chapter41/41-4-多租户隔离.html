@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>41.4 多租户隔离 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>41.4 多租户隔离</h1>
+          <p class="subtitle">构建安全的租户隔离机制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解多租户架构的核心概念</li>
+            <li>掌握不同级别的隔离策略</li>
+            <li>了解资源配额与限额管理</li>
+            <li>学会设计安全的隔离方案</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="多租户架构概念图" class="card-image">
+          <h3 class="card-title">多租户架构概述</h3>
+          <p class="card-text">
+            <strong>多租户架构</strong>是指单个应用实例同时服务于多个租户（客户/组织/用户），
+            通过适当的隔离机制确保各租户的数据和操作互不干扰。在AI基础设施中，多租户隔离
+            是保障安全、公平性和资源利用率的关键。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏢</span> 租户隔离层次</h2>
+          <div class="grid grid-4">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 2.5rem; margin-bottom: 1rem;">📁</div>
+              <h3 class="card-title">数据隔离</h3>
+              <p class="card-text">租户数据分离存储</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔒</div>
+              <h3 class="card-title">计算隔离</h3>
+              <p class="card-text">租户任务独立运行</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 2.5rem; margin-bottom: 1rem;">🌐</div>
+              <h3 class="card-title">网络隔离</h3>
+              <p class="card-text">租户网络分离</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚙️</div>
+              <h3 class="card-title">应用隔离</h3>
+              <p class="card-text">租户环境独立</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔀</span> 多租户隔离模式</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>模式</th>
+                <th>隔离程度</th>
+                <th>资源利用率</th>
+                <th>成本</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>共享数据库</td>
+                <td>低</td>
+                <td>高</td>
+                <td>低</td>
+                <td>小规模、低敏感度</td>
+              </tr>
+              <tr>
+                <td>独立Schema</td>
+                <td>中</td>
+                <td>中</td>
+                <td>中</td>
+                <td>中等规模、中等敏感度</td>
+              </tr>
+              <tr>
+                <td>独立数据库</td>
+                <td>高</td>
+                <td>中</td>
+                <td>中高</td>
+                <td>大规模、高敏感度</td>
+              </tr>
+              <tr>
+                <td>独立实例</td>
+                <td>极高</td>
+                <td>低</td>
+                <td>高</td>
+                <td>超高安全要求</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 数据隔离策略</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">逻辑隔离</h3>
+              <div class="code-block">
+<pre class="language-sql">
+-- 共享表 + 租户ID
+CREATE TABLE models (
+  id BIGINT PRIMARY KEY,
+  tenant_id VARCHAR(64) NOT NULL,
+  name VARCHAR(256),
+  -- 查询时必须过滤
+  WHERE tenant_id = ?
+);</pre>
+              </div>
+              <ul class="feature-list">
+                <li>成本低，实现简单</li>
+                <li>隔离程度有限</li>
+                <li>需要严格查询过滤</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">物理隔离</h3>
+              <div class="code-block">
+<pre class="language-sql">
+-- 独立数据库
+CREATE DATABASE tenant_001;
+CREATE DATABASE tenant_002;
+
+-- 或独立Schema
+CREATE SCHEMA tenant_001;
+CREATE SCHEMA tenant_002;</pre>
+              </div>
+              <ul class="feature-list">
+                <li>隔离程度高</li>
+                <li>管理复杂度高</li>
+                <li>资源成本较高</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🖥️</span> 计算资源隔离</h2>
+          <h3>Kubernetes命名空间隔离</h3>
+          <div class="code-block">
+<pre class="language-yaml"># 为每个租户创建命名空间
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-001
+  labels:
+    tenant: "001"
+    environment: production</pre>
+          </div>
+
+          <h3 style="margin-top: 2rem;">ResourceQuota资源配额</h3>
+          <div class="code-block">
+<pre class="language-yaml">apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: tenant-001
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: 400Gi
+    limits.cpu: "200"
+    limits.memory: 800Gi
+    requests.nvidia.com/gpu: "16"
+    persistentvolumeclaims: "20"</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 网络隔离策略</h2>
+          <div class="card">
+            <ul class="feature-list">
+              <li><strong>VLAN/VXLAN隔离</strong>: 在网络层隔离租户流量</li>
+              <li><strong>Network Policy</strong>: Kubernetes网络策略控制Pod间通信</li>
+              <li><strong>Security Groups</strong>: 云平台的网络安全组规则</li>
+              <li><strong>服务网格</strong>: 使用Istio等实现零信任网络</li>
+              <li><strong>租户网关</strong>: 为每个租户提供独立的API网关</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">零信任架构</div>
+            <p>在多租户环境中，应采用零信任架构原则：
+            不信任任何内部流量，所有通信都需要认证和授权。</p>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 资源配额管理</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>资源类型</th>
+                <th>配额项</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>计算资源</td>
+                <td>CPU、GPU、内存</td>
+                <td>限制租户的计算能力</td>
+              </tr>
+              <tr>
+                <td>存储资源</td>
+                <td>磁盘、对象存储</td>
+                <td>限制租户的存储空间</td>
+              </tr>
+              <tr>
+                <td>网络资源</td>
+                <td>带宽、连接数</td>
+                <td>限制租户的网络使用</td>
+              </tr>
+              <tr>
+                <td>API资源</td>
+                <td>调用频率、并发数</td>
+                <td>限制租户的API访问</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 多租户代码实践</h2>
+          <div class="code-block">
+<pre class="language-python"># 多租户上下文管理
+class TenantContext:
+    def __init__(self):
+        self._context = threading.local()
+
+    def set_tenant(self, tenant_id):
+        self._context.tenant_id = tenant_id
+
+    def get_tenant(self):
+        return getattr(self._context, 'tenant_id', None)
+
+# 全局租户上下文
+tenant_context = TenantContext()
+
+# 使用中间件设置租户
+class TenantMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        # 从请求头获取租户ID
+        tenant_id = environ.get('HTTP_X_TENANT_ID')
+
+        if tenant_id:
+            # 验证租户是否存在
+            if not self.validate_tenant(tenant_id):
+                start_response('403 Forbidden', [])
+                return [b'Tenant not found']
+
+            # 设置租户上下文
+            tenant_context.set_tenant(tenant_id)
+
+        return self.app(environ, start_response)</pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🛡️</span> 隔离安全最佳实践</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">设计原则</h3>
+              <ul class="feature-list">
+                <li>最小共享原则</li>
+                <li>深度防御</li>
+                <li>默认拒绝</li>
+                <li>最小权限</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">运维要点</h3>
+              <ul class="feature-list">
+                <li>定期审查配额</li>
+                <li>监控租户行为</li>
+                <li>隔离故障域</li>
+                <li>快速隔离响应</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">常见风险</div>
+            <ul>
+              <li><strong>Noisy Neighbor</strong>: 一个租户消耗过多资源影响其他租户</li>
+              <li><strong>数据泄露</strong>: 错误配置导致租户间数据访问</li>
+              <li><strong>权限提升</strong>: 利用漏洞突破租户边界</li>
+              <li><strong>资源耗尽</strong>: 拒绝服务攻击影响所有租户</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800" alt="多租户架构">
+          <div class="caption">图：多层次的多租户隔离架构</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 多租户隔离需要在安全、成本和效率间平衡</li>
+                <li>• 多层次隔离比单一层次更安全</li>
+                <li>• 资源配额是保障公平的重要手段</li>
+                <li>• 持续监控和审计是维持隔离健康的关键</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="41-3-API安全.html">← 上一节</a>
+          <a href="41-5-安全合规.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

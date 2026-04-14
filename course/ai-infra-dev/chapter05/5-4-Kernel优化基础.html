@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.4 Kernel优化基础 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>5.4 Kernel优化基础</h1>
+          <p class="subtitle">提升GPU程序性能的关键技术</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解Kernel性能优化的重要性</li>
+            <li>掌握常用优化技术</li>
+            <li>了解优化工具</li>
+            <li>认识性能瓶颈分析</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="Kernel优化" class="card-image">
+          <h3 class="card-title">Kernel优化概述</h3>
+          <p class="card-text">
+            Kernel优化是提升GPU程序性能的核心。通过合理的线程配置、内存访问模式和计算优化，可以将性能提升数倍甚至数十倍。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能指标</h2>
+          <div class="card">
+            <h3 class="card-title">关键指标</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>定义</th>
+                  <th>目标</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>占用率</strong></td>
+                  <td>SM资源使用率</td>
+                  <td>> 80%</td>
+                </tr>
+                <tr>
+                  <td><strong>效率</strong></td>
+                  <td>实际利用率/理论峰值</td>
+                  <td>> 70%</td>
+                </tr>
+                <tr>
+                  <td><strong>算术强度</strong></td>
+                  <td>计算量/内存访问量</td>
+                  <td>最大化</td>
+                </tr>
+                <tr>
+                  <td><strong>内存带宽</strong></td>
+                  <td>实际带宽/理论带宽</td>
+                  <td>> 70%</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="code-block" style="margin-top: 1rem;">
+性能计算：
+
+// 理论峰值计算（H100）
+float peak_flops = 89.0e12;  // 89 TFLOPS (FP32)
+
+// 实际计算量
+float actual_flops = n_ops / time;
+
+// 计算效率
+float efficiency = actual_flops / peak_flops;
+
+// 理论内存带宽（H100）
+float peak_bandwidth = 3.35e12;  // 3.35 TB/s
+
+// 实际内存访问量
+float data_size = n_reads + n_writes;
+
+// 实际带宽
+float actual_bandwidth = data_size / time;
+
+// 内存效率
+float memory_efficiency = actual_bandwidth / peak_bandwidth;
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 计算优化</h2>
+          <div class="card">
+            <h3 class="card-title">算术优化</h3>
+            <div class="code-block">
+计算优化技巧：
+
+// 1. 使用内建函数（快速数学）
+__global__ void optimized_sqrt(float *data, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < n) {
+        // 使用__sqrtf替代sqrt（更快但精度略低）
+        data[tid] = __sqrtf(data[tid]);
+    }
+}
+
+// 2. 避免除法
+__global__ void avoid_division(float *data, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < n) {
+        // 不：data[tid] = data[tid] / 2.0f;
+        // 好：乘法代替除法
+        data[tid] = data[tid] * 0.5f;
+    }
+}
+
+// 3. 预计算循环不变量
+__global__ void loop_optimization(float *a, float *b, float *c, int n) {
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + tid;
+
+    float scale = 1.0f / n;  // 预计算
+    for (int i = 0; i < n; i++) {
+        c[gid] += a[gid] * b[i] * scale;
+    }
+}
+
+// 4. 循环展开
+__global__ void loop_unroll(float *data, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    #pragma unroll 4
+    for (int i = tid; i < n; i += stride * 4) {
+        data[i] *= 2.0f;
+        data[i + stride] *= 2.0f;
+        data[i + 2*stride] *= 2.0f;
+        data[i + 3*stride] *= 2.0f;
+    }
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 内存优化</h2>
+          <div class="card">
+            <h3 class="card-title">访问模式优化</h3>
+            <div class="code-block">
+内存优化技巧：
+
+// 1. 共享内存平铺（Tiling）
+__global__ void matrix_mul_tiled(float *A, float *B, float *C, int N) {
+    // 声明平铺大小为32x32的共享内存
+    __shared__ float tile_A[32][32];
+    __shared__ float tile_B[32][32];
+
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x, ty = threadIdx.y;
+
+    // 计算全局索引
+    int row = by * 32 + ty;
+    int col = bx * 32 + tx;
+
+    float sum = 0.0f;
+
+    // 循环处理所有平铺
+    for (int t = 0; t < N / 32; t++) {
+        // 加载到共享内存
+        tile_A[ty][tx] = A[row * N + t * 32 + tx];
+        tile_B[ty][tx] = B[(t * 32 + ty) * N + col];
+        __syncthreads();
+
+        // 计算部分积
+        for (int i = 0; i < 32; i++) {
+            sum += tile_A[ty][i] * tile_B[i][tx];
+        }
+        __syncthreads();
+    }
+
+    C[row * N + col] = sum;
+}
+
+// 2. 使用向量化加载
+__global__ void vectorized_load(float *data, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    // 每次4个float（16字节）
+    float4 *ptr = (float4*)data;
+    for (int i = tid; i < n/4; i += stride) {
+        float4 val = ptr[i];
+        // 处理val.x, val.y, val.z, val.w
+    }
+}
+
+// 3. 只读缓存
+__constant__ float const_data[256];  // 常量内存
+
+__global__ void use_constant_memory(float *output) {
+    int tid = threadIdx.x;
+    output[tid] = const_data[tid];  // 快速访问
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 编译器优化</h2>
+          <div class="card">
+            <h3 class="card-title">优化标志</h3>
+            <div class="code-block">
+NVCC编译选项：
+
+# 基本优化
+nvcc -O3 kernel.cu -o kernel
+
+# 针对特定GPU架构优化
+nvcc -O3 -arch=sm_80 kernel.cu -o kernel  # A100
+nvcc -O3 -arch=sm_86 kernel.cu -o kernel  # RTX 3090
+
+# 使用fast-math（更快但精度略低）
+nvcc -O3 -use_fast_math kernel.cu -o kernel
+
+# 控制最大寄存器使用
+nvcc -O3 -maxrregcount=64 kernel.cu -o kernel
+
+# 生成PTX代码查看优化结果
+nvcc -O3 -ptx kernel.cu -o kernel.ptx
+
+# 生成SASS代码（实际GPU指令）
+nvcc -O3 -cubin kernel.cu -o kernel.cubin
+cuobjdump -sass kernel.cubin
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 性能分析工具</h2>
+          <div class="card">
+            <h3 class="card-title">Nsight工具</h3>
+            <div class="grid grid-2">
+              <div>
+                <h4>Nsight Compute</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                  Kernel级性能分析，详细的资源使用和效率报告
+                </p>
+                <div class="code-block" style="font-size: 0.8rem; margin-top: 0.5rem;">
+# 命令行分析
+ncu --set full ./kernel_app
+
+# 生成报告
+ncu --set full ./kernel_app -o report
+                </div>
+              </div>
+              <div>
+                <h4>Nsight Systems</h4>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                  系统级分析，查看整体执行流程和瓶颈
+                </p>
+                <div class="code-block" style="font-size: 0.8rem; margin-top: 0.5rem;">
+# 系统分析
+nsys profile ./kernel_app -o report
+
+# 分析CUDA流和内存
+nsys profile --trace=cuda,nvtx ./kernel_app
+                </div>
+              </div>
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">使用建议</div>
+                <p>使用Nsight工具定期分析Kernel性能，找出瓶颈并进行针对性优化。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• Kernel优化需要关注多个性能指标</li>
+                <li>• 计算优化包括内建函数和循环优化</li>
+                <li>• 内存优化包括平铺和向量化</li>
+                <li>• 编译器选项可以进一步提升性能</li>
+                <li>• 使用性能分析工具找出瓶颈</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="5-3-GPU内存模型.html">← 上一节</a>
+          <a href="5-5-CUDA性能分析工具（Nsight）.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13.2 RoCE协议详解 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>13.2 RoCE协议详解</h1>
+          <p class="subtitle">RDMA over Converged Ethernet技术解析</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解RoCE协议的基本概念</li>
+            <li>掌握RoCE v1和v2的区别</li>
+            <li>了解RoCE的部署与配置</li>
+            <li>认识RoCE在AI集群中的应用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="RoCE网络架构" class="card-image">
+          <h3 class="card-title">什么是RoCE</h3>
+          <p class="card-text">
+            RoCE (RDMA over Converged Ethernet)是将RDMA技术运行在标准以太网上的协议。
+            它允许应用在以太网上实现RDMA的零拷贝、低延迟通信，同时保持与现有以太网
+            基础设施的兼容性，是构建AI集群的重要技术选择。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> RoCE协议栈</h2>
+
+          <h3>协议分层</h3>
+          <div class="code-block"""
+RoCE协议栈:
+
+┌─────────────────────────────────────────┐
+│         应用层                          │
+│    MPI, NCCL, RDMA应用                 │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         Verbs接口层                     │
+│    libibverbs, rdma-core                │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         RDMA传输层                      │
+│    IBTA RDMA Transport                 │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         RoCE封装层                      │
+│    RoCE v1/v2                         │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         UDP/IP层 (RoCE v2)             │
+│    或 Ethernet层 (RoCE v1)             │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         以太网MAC层                     │
+└──────────────┬──────────────────────────┘
+               ↓
+┌─────────────────────────────────────────┐
+│         物理层                         │
+│    10/25/40/100/200/400GbE            │
+└─────────────────────────────────────────┘
+          </div>
+
+          <h3>RoCE vs InfiniBand</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>RoCE</th>
+                <th>InfiniBand</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>传输介质</td>
+                <td>标准以太网</td>
+                <td>专用InfiniBand</td>
+              </tr>
+              <tr>
+                <td>网络设备</td>
+                <td>标准交换机</td>
+                <td>IB交换机</td>
+              </tr>
+              <tr>
+                <td>部署成本</td>
+                <td>较低</td>
+                <td>较高</td>
+              </tr>
+              <tr>
+                <td>性能</td>
+                <td>接近IB</td>
+                <td>最高</td>
+              </tr>
+              <tr>
+                <td>复杂性</td>
+                <td>中等</td>
+                <td>简单</td>
+              </tr>
+              <tr>
+                <td>适用场景</td>
+                <td>通用场景、云环境</td>
+                <td>高性能计算、AI训练</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> RoCE版本对比</h2>
+
+          <h3>RoCE v1</h3>
+          <div class="code-block"""
+RoCE v1 (RDMA over Converged Ethernet v1):
+
+特点:
+- 基于以太网二层（L2）
+- 不支持路由
+- 仅限同一子网
+- 使用以太网帧封装
+
+帧格式:
++-------------------+
+|  Ethernet Header  |
+|  (Dest MAC)      |
+|  (Src MAC)       |
+|  (EtherType)      |
++-------------------+
+|  BTH (Base        |
+|   Transport       |
+|   Header)         |
++-------------------+
+|  RDMA Segment     |
++-------------------+
+|  CRC (可选)       |
++-------------------+
+
+优势:
+- 实现简单
+- 低延迟（少一层封装）
+- 无需IP配置
+
+劣势:
+- 仅限本地子网
+- 不支持ECMP
+- 不支持QoS标记
+          </div>
+
+          <h3>RoCE v2</h3>
+          <div class="code-block"""
+RoCE v2 (RDMA over Converged Ethernet v2):
+
+特点:
+- 基于UDP/IP（L3）
+- 支持路由
+- 可跨越子网
+- 使用UDP端口4791
+
+帧格式:
++-------------------+
+|  Ethernet Header  |
++-------------------+
+|  IP Header        |
+|  (Src IP)        |
+|  (Dest IP)       |
++-------------------+
+|  UDP Header       |
+|  (Src Port: 4791)|
+|  (Dest Port: 4791)|
++-------------------+
+|  RoCEv2 Header    |
++-------------------+
+|  BTH             |
++-------------------+
+|  RDMA Segment     |
++-------------------+
+|  CRC             |
++-------------------+
+
+优势:
+- 支持路由和ECMP
+- 可跨越子网
+- 支持QoS
+- 更好的扩展性
+
+劣势:
+- 略高延迟（多一层封装）
+- 配置稍复杂
+          </div>
+
+          <h3>版本选择指南</h3>
+          <div class="code-block"""
+RoCE版本选择建议:
+
+RoCE v1适用场景:
+- 单一机架集群
+- 简单网络拓扑
+- 对延迟极度敏感
+- 不需要路由
+
+RoCE v2适用场景:
+- 多机架集群
+- 需要跨网段通信
+- 需要ECMP负载均衡
+- 需要QoS保障
+- 融合网络（存储+计算）
+
+典型配置:
+- 小集群（<32节点）: RoCE v1
+- 中等集群（32-256节点）: RoCE v2
+- 大集群（>256节点）: RoCE v2 + PFC + ECN
+- 融合网络: RoCE v2
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> RoCE配置与部署</h2>
+
+          <h3>网卡配置</h3>
+          <div class="code-block">
+#!/bin/bash
+# RoCE网卡配置脚本
+
+# 1. 加载驱动
+modprobe mlx5_core
+modprobe mlx5_ib
+
+# 2. 配置IP地址
+ifconfig mlx5_0 up
+ip addr add 192.168.1.1/24 dev mlx5_0
+
+# 3. 设置MTU
+ifconfig mlx5_0 mtu 9000
+
+# 4. 启用RoCE
+ethtool -L mlx5_0 combined 8  # 设置队列数
+ethtool -G mlx5_0 rx 4096 tx 4096  # 增加Ring Buffer
+
+# 5. 配置流控
+# 需要交换机支持PFC (Priority Flow Control)
+
+# 6. 验证配置
+ibv_devinfo
+ibstat
+          </div>
+
+          <h3>交换机配置（PFC）</h3>
+          <div class="code-block"""
+PFC (Priority Flow Control) 配置:
+
+PFC作用:
+- 在拥塞时暂停特定优先级队列
+- 防止丢包
+- 保证RDMA性能
+
+配置步骤:
+1. 启用DCB (Data Center Bridging)
+2. 配置优先级
+3. 启用PFC
+4. 映射优先级到队列
+
+交换机配置示例（Cisco NX-OS）:
+! 启用DCB
+feature dcb
+
+! 配置优先级
+priority-flow-control mode on
+
+! 配置PFC
+priority-flow-control priority 3 on
+
+! 配置QoS
+class-map type queuing MATCH-PRIORITY-3
+  match qos-group 3
+
+policy-map type queuing QOS-POLICY
+  class type queuing MATCH-PRIORITY-3
+    priority
+    bandwidth percent 30
+
+interface Ethernet1/1
+  service-policy type queuing output QOS-POLICY
+          </div>
+
+          <h3>ECN配置</h3>
+          <div class="code-block"""
+ECN (Explicit Congestion Notification) 配置:
+
+ECN作用:
+- 提前检测拥塞
+- 通知发送方降低速率
+- 比丢包更温和的拥塞控制
+
+配置参数:
+- ECN门限: Kmin, Kmax
+- 最大概率: Pmax
+
+Linux配置:
+sysctl -w net.ipv4.tcp_ecn=1
+
+交换机配置（Cisco NX-OS）:
+! 启用ECN
+hw-module queue-monitor-mode 2
+
+! 配置ECN参数
+queue-limit 2 pfc-threshold 3
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> RoCE性能优化</h2>
+
+          <h3>性能调优参数</h3>
+          <div class="code-block"""
+RoCE性能优化参数:
+
+1. MTU优化
+   - 推荐值: 9000 (Jumbo Frame)
+   - 提升吞吐，降低CPU开销
+   - 需要全网支持
+
+2. 中断优化
+   - 使用多队列
+   - 中断聚合
+   - NUMA亲和性
+
+3. CPU亲和性
+   - 绑定RDMA线程到特定CPU
+   - 利用本地内存
+   - 减少跨NUMA访问
+
+4. 内存优化
+   - 大页内存
+   - 内存预注册
+   - 减少内存注册开销
+
+5. 网络优化
+   - PFC配置
+   - ECN配置
+   - 多路径负载均衡
+
+配置示例:
+export NCCL_IB_GID_INDEX=3           # RoCE v2
+export NCCL_IB_TC=3                  # 优先级
+export NCCL_IB_HCA=mlx5_0            # HCA选择
+export NCCL_IB_SL=3                  # Service Level
+export NCCL_IB_TIMEOUT=18            # 超时时间
+          </div>
+
+          <h3>性能测试</h3>
+          <div class="code-block">
+#!/bin/bash
+# RoCE性能测试脚本
+
+# 1. 带宽测试
+echo "=== Bandwidth Test ==="
+ib_write_bw -d mlx5_0 -i 1 -s 65536 -D 30
+
+# 2. 延迟测试
+echo "=== Latency Test ==="
+ib_read_lat -d mlx5_0 -i 1 -s 1024 -n 10000
+
+# 3. 混合测试
+echo "=== Mixed Test ==="
+ib_write_bw -d mlx5_0 -i 1 -s 65536 -r 1000 -D 60
+
+# 4. 多流测试
+echo "=== Multi-stream Test ==="
+for i in {1..8}; do
+    ib_write_bw -d mlx5_0 -i 1 -s 65536 -D 10 &
+done
+wait
+
+# 5. 持续性能测试
+echo "=== Sustained Performance Test ==="
+ib_write_bw -d mlx5_0 -i 1 -s 65536 -D 3600 > perf.log 2>&1 &
+BG_PID=$!
+
+# 监控
+while kill -0 $BG_PID 2>/dev/null; do
+    ibstat
+    sleep 60
+done
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🤖</span> RoCE在AI训练中的应用</h2>
+
+          <h3>NCCL over RoCE</h3>
+          <div class="code-block"""
+NCCL RoCE配置:
+
+环境变量:
+export NCCL_IB_DISABLE=0              # 启用IB/RoCE
+export NCCL_SOCKET_IFNAME=ib0          # 接口选择
+export NCCL_IB_GID_INDEX=3             # RoCE v2 GID
+export NCCL_IB_HCA=mlx5_0:1            # HCA配置
+export NCCL_IB_TC=3                    # 优先级
+export NCCL_IB_SL=3                    # Service Level
+
+# 性能优化
+export NCCL_NET_GDR_LEVEL=5            # GPUDirect
+export NCCL_IB_TIMEOUT=18              # 超时
+export NCCL_IB_RETRY_CNT=7             # 重试
+
+# 调试
+export NCCL_DEBUG=INFO                 # 调试信息
+export NCCL_DEBUG_SUBSYS=NET,GRAPH      # 调试子系统
+
+# 验证配置
+mpirun -np 8 \
+    -H node1:4,node2:4 \
+    -bind-to none \
+    -map-by slot \
+    -x NCCL_DEBUG=INFO \
+    -x LD_LIBRARY_PATH \
+    -x NCCL_IB_GID_INDEX=3 \
+    ./all_reduce_perf -b 8M -e 128M -f 2 -g 1
+
+预期性能:
+- EDR: 100 Gbps, <2μs
+- HDR: 200 Gbps, <1μs
+- NDR: 400 Gbps, <0.5μs
+          </div>
+
+          <h3>故障排查</h3>
+          <div class="code-block"""
+常见问题及解决方案:
+
+1. 性能低于预期
+   检查:
+   - MTU配置
+   - PFC/ECN配置
+   - NUMA亲和性
+   - 网络拥塞
+
+   解决:
+   - 优化PFC参数
+   - 调整ECN门限
+   - 启用多路径
+
+2. 丢包问题
+   检查:
+   - 交换机缓冲区
+   - PFC配置
+   - 流量分布
+
+   解决:
+   - 增加交换机缓冲区
+   - 优化PFC配置
+   - 调整负载均衡
+
+3. 延迟高
+   检查:
+   - 路径跳数
+   - 队列深度
+   - CPU负载
+
+   解决:
+   - 优化拓扑
+   - 增加队列
+   - 调整中断
+
+4. 连接失败
+   检查:
+   - IP配置
+   - MTU一致
+   - 防火墙规则
+
+   解决:
+   - 统一网络配置
+   - 开放UDP 4791端口
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">部署建议</div>
+            <p>1）RoCE v2是推荐选择，支持更好的扩展性；2）正确配置PFC和ECN对性能至关重要；3）定期监控网络性能指标；4）使用专用网络隔离AI流量；5）在部署前进行充分的性能测试。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="网络设备">
+          <div class="caption">图：RoCE在标准以太网上实现RDMA的高性能通信</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• RoCE在以太网上实现RDMA的低延迟通信</li>
+                <li>• RoCE v2支持路由，更适合大规模集群</li>
+                <li>• PFC和ECN是RoCE性能优化的关键</li>
+                <li>• NCCL over RoCE是AI训练的主流配置</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="13-1-InfiniBand技术原理.html">← 上一节</a>
+          <a href="13-3-高速以太网方案.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

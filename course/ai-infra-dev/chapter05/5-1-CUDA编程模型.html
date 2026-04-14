@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5.1 CUDA编程模型 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>5.1 CUDA编程模型</h1>
+          <p class="subtitle">深入理解CUDA并行计算模型</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解CUDA的线程层次结构</li>
+            <li>掌握Kernel编程基础</li>
+            <li>了解内存层次结构</li>
+            <li>认识CUDA执行模型</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="CUDA编程" class="card-image">
+          <h3 class="card-title">CUDA编程模型概述</h3>
+          <p class="card-text">
+            CUDA（Compute Unified Device Architecture）是NVIDIA的并行计算平台和编程模型。它允许开发者使用C/C++等语言编写在GPU上运行的程序，利用GPU的大规模并行能力加速计算。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🧵</span> 线程层次结构</h2>
+          <div class="card">
+            <h3 class="card-title">层次化线程组织</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+CUDA线程层次：
+
+Grid (线程网格)
+  └─ Block (线程块)
+      └─ Thread (线程)
+
+示例配置：
+Grid: (2, 1, 1)        // 2个Block
+Block: (256, 1, 1)       // 每个Block 256个线程
+Total: 2 × 256 = 512     // 总共512个线程
+
+线程索引计算：
+int idx = blockIdx.x * blockDim.x + threadIdx.x;
+int idy = blockIdx.y * blockDim.y + threadIdx.y;
+int idz = blockIdx.z * blockDim.z + threadIdx.z;
+            </div>
+            <div class="tip-box info">
+              <span class="icon">💡</span>
+              <div class="content">
+                <div class="title">关键概念</div>
+                <p>Thread是最小执行单元，Block是一组可以协作的线程，Grid是执行同一Kernel的所有Block的集合。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> Kernel编程</h2>
+          <div class="card">
+            <h3 class="card-title">GPU函数</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              Kernel是在GPU上执行的函数，使用__global__修饰符声明：
+            </p>
+            <div class="code-block">
+基础Kernel示例：
+
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+// Kernel函数
+__global__ void hello_kernel() {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    printf("Hello from thread %d, block %d\n", threadIdx.x, blockIdx.x);
+}
+
+// Kernel：向量加法
+__global__ void vector_add(float *a, float *b, float *c, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        c[idx] = a[idx] + b[idx];
+    }
+}
+
+int main() {
+    int n = 1024;
+    float *d_a, *d_b, *d_c;
+
+    // 分配GPU内存
+    cudaMalloc(&d_a, n * sizeof(float));
+    cudaMalloc(&d_b, n * sizeof(float));
+    cudaMalloc(&d_c, n * sizeof(float));
+
+    // 启动Kernel
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    vector_add<<<numBlocks, blockSize>>>(d_a, d_b, d_c, n);
+
+    // 同步
+    cudaDeviceSynchronize();
+
+    // 释放内存
+    cudaFree(d_a);
+    cudaFree(d_b);
+    cudaFree(d_c);
+
+    return 0;
+}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 内存层次</h2>
+          <div class="card">
+            <h3 class="card-title">存储层次结构</h3>
+            <div class="code-block" style="font-family: monospace; line-height: 2;">
+CUDA内存层次：
+
+寄存器（Register）
+  └─ 线程私有
+  └─ 最快访问
+  └─ 有限数量
+
+共享内存（Shared Memory）
+  └─ Block内共享
+  └─ 读写速度快
+  └─ 需要同步
+
+全局内存（Global Memory）
+  └─ 所有线程共享
+  └─ 容量大但慢
+  └─ 缓存在L1/L2
+
+常量内存（Constant Memory）
+  └─ 只读内存
+  └─ 所有线程共享
+  └─ 缓存优化
+
+纹理内存（Texture Memory）
+  └─ 只读内存
+  └─ 空间局部性优化
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>内存类型</th>
+                  <th>访问速度</th>
+                  <th>作用域</th>
+                  <th>大小</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>寄存器</td>
+                  <td>极快</td>
+                  <td>线程私有</td>
+                  <td>有限</td>
+                </tr>
+                <tr>
+                  <td>共享内存</td>
+                  <td>快</td>
+                  <td>Block内</td>
+                  <td>48KB (H100)</td>
+                </tr>
+                <tr>
+                  <td>全局内存</td>
+                  <td>慢</td>
+                  <td>全局</td>
+                  <td>80GB (H100)</td>
+                </tr>
+                <tr>
+                  <td>常量内存</td>
+                  <td>快</td>
+                  <td>全局</td>
+                  <td>64KB</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> Warp执行</h2>
+          <div class="card">
+            <h3 class="card-title">SIMT执行模型</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+              CUDA以Warp为单位执行，每个Warp包含32个线程，同时执行相同的指令：
+            </p>
+            <div class="grid grid-2">
+              <div>
+                <h4>Warp特点</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>32个线程一组</li>
+                  <li>相同指令并行执行</li>
+                  <li>分支导致分化</li>
+                  <li>隐藏内存延迟</li>
+                </ul>
+              </div>
+              <div>
+                <h4>性能影响</h4>
+                <ul class="feature-list" style="list-style: disc;">
+                  <li>分支 divergence</li>
+                  <li>内存合并</li>
+                  <li>同步开销</li>
+                  <li>资源竞争</li>
+                </ul>
+              </div>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+Warp相关代码：
+
+// 获取Warp ID
+int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
+
+// 获取Lane ID
+int lane_id = threadIdx.x & (warpSize - 1);
+
+// Warp内归约
+__shared__ float shared_data[256];
+int idx = threadIdx.x;
+shared_data[idx] = data[idx];
+__syncthreads();
+
+for (int offset = warpSize/2; offset > 0; offset /= 2) {
+    if (lane_id < offset) {
+        shared_data[idx] += shared_data[idx + offset];
+    }
+}
+
+// 使用warp级本征函数（更快）
+int value;
+float warp_sum = __shfl_down_sync(0xffffffff, value, 1);
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> 内存管理</h2>
+          <div class="card">
+            <h3 class="card-title">CUDA内存API</h3>
+            <div class="code-block">
+内存操作API：
+
+// 分配内存
+cudaMalloc(void **devPtr, size_t size)
+cudaMallocManaged(void **devPtr, size_t size)  // 统一内存
+
+// 释放内存
+cudaFree(void *devPtr)
+
+// 内存传输（主机到设备）
+cudaMemcpy(void *dst, void *src, size_t size, enum cudaMemcpyKind kind)
+enum cudaMemcpyKind {
+    cudaMemcpyHostToDevice,
+    cudaMemcpyDeviceToHost,
+    cudaMemcpyDeviceToDevice,
+    cudaMemcpyHostToHost
+}
+
+// 内存填充
+cudaMemset(void *devPtr, int value, size_t count)
+
+// 内存拷贝异步
+cudaMemcpyAsync(void *dst, void *src, size_t size,
+               enum cudaMemcpyKind kind, cudaStream_t stream)
+
+// 统一内存（简化编程）
+float *data;
+cudaMallocManaged(&data, N * sizeof(float));
+// 在主机和GPU上都可以访问
+data[i] = value;  // 主机访问
+kernel<<<blocks, threads>>>(data);  // GPU访问
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 性能优化</h2>
+          <div class="card">
+            <div class="tip-box success">
+              <span class="icon">✅</span>
+              <div class="content">
+                <div class="title">优化策略</div>
+                <ul class="feature-list" style="list-style: disc; color: var(--text-secondary);">
+                  <li>最大化算术强度</li>
+                  <li>合并全局内存访问</li>
+                  <li>利用共享内存</li>
+                  <li>避免分支发散</li>
+                  <li>使用流重叠计算和传输</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• CUDA采用层次化线程结构</li>
+                <li>• Kernel是在GPU上执行的函数</li>
+                <li>• CUDA有多层内存层次</li>
+                <li>• Warp是执行的基本单元</li>
+                <li>• 优化需要考虑内存访问和执行模式</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="../chapter04/4-5-常用开发工具与IDE.html">← 上一节</a>
+          <a href="5-2-GPU线程层次结构.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

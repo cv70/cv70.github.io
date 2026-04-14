@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16.4 流水线并行原理 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>16.4 流水线并行原理</h1>
+          <p class="subtitle">高效利用流水线，提升大规模训练效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解流水线并行的基本概念</li>
+            <li>掌握GPipe的实现机制</li>
+            <li>了解1F1B调度策略</li>
+            <li>认识流水线气泡问题及优化方法</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="流水线示意图" class="card-image">
+          <h3 class="card-title">什么是流水线并行？</h3>
+          <p class="card-text">
+            <strong>流水线并行（Pipeline Parallelism）</strong>是指将模型的层分配到不同的GPU上，
+            每个GPU负责模型的一部分。数据像在流水线上一样，依次流经各个GPU。
+            这种方式可以大幅减少通信开销，适合大规模并行训练。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏭</span> 流水线并行的核心思想</h2>
+          <div class="card">
+            <h3 class="card-title">工业流水线类比</h3>
+            <p class="card-text">想象一个汽车装配流水线，每个工人负责不同的工序：</p>
+            <div class="code-block">
+传统方式（串行）：
+工人A完成全部工序 → 工人B完成全部工序 → 工人C完成全部工序
+效率低，资源浪费
+
+流水线方式（并行）：
+t1: 工人A(车1)  -         -         -
+t2: 工人A(车2)  工人B(车1)-         -
+t3: 工人A(车3)  工人B(车2)- 工人C(车1)-
+t4: 工人A(车4)  工人B(车3)- 工人C(车2)
+...
+
+效率高，各工位充分利用
+
+深度学习流水线：
+t1: GPU0(Layer0-1, batch1)  -              -              -
+t2: GPU0(Layer0-1, batch2)  GPU1(Layer2-3, batch1)-              -
+t3: GPU0(Layer0-1, batch3)  GPU1(Layer2-3, batch2)-GPU2(Layer4-5, batch1)-
+...
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> GPipe流水线并行</h2>
+          <div class="card">
+            <h3 class="card-title">GPipe实现机制</h3>
+            <p class="card-text">GPipe是Google提出的流水线并行框架，将模型分成多个阶段，每个阶段由一个GPU负责。</p>
+            <div class="code-block">
+GPipe关键概念：
+
+1. 微批次（Micro-batch）
+   将大batch分成多个小micro-batch
+   batch_size = num_micro_batches × micro_batch_size
+
+2. 流水线阶段（Pipeline Stage）
+   模型的层被均匀分配到各个GPU
+   例如：32层模型，4个GPU，每个GPU负责8层
+
+3. 流水线执行
+   填充阶段 → 稳态阶段 → 排水阶段
+
+GPipe执行示例（4个GPU，8个微批次）：
+
+GPU0    GPU1    GPU2    GPU3
+Layer0-1 Layer2-3 Layer4-5 Layer6-7
+
+时间 →
+t1:  F1     -       -       -
+t2:  F2     F1      -       -
+t3:  F3     F2      F1      -
+t4:  F4     F3      F2      F1
+t5:  F5     F4      F3      F2
+t6:  F6     F5      F4      F3
+t7:  F7     F6      F5      F4
+t8:  F8     F7      F6      F5
+t9:  B1     F8      F7      F6
+t10: B2     B1      F8      F7
+t11: B3     B2      B1      F8
+t12: B4     B3      B2      B1
+t13: -      B4      B3      B2
+t14: -      -       B4      B3
+t15: -      -       -       B4
+
+F=Forward, B=Backward, 数字=微批次ID
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPipe流水线">
+          <div class="caption">图：GPipe流水线并行需要经过填充、稳态、排水三个阶段</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 流水线效率分析</h2>
+          <div class="card">
+            <h3 class="card-title">流水线气泡问题</h3>
+            <p class="card-text">在流水线的填充和排水阶段，部分GPU处于空闲状态，这就是"气泡"（Bubble）。</p>
+            <div class="code-block">
+流水线效率公式：
+
+理想时间（无气泡）：
+T_ideal = num_micro_batches × micro_batch_time
+
+实际时间（有气泡）：
+T_actual = (num_stages + num_micro_batches - 1) × micro_batch_time
+
+流水线效率：
+Efficiency = T_ideal / T_actual
+           = num_micro_batches / (num_stages + num_micro_batches - 1)
+
+例子：
+• 4个GPU（4个流水线阶段），8个微批次
+  Efficiency = 8 / (4 + 8 - 1) = 8/11 ≈ 72.7%
+
+• 4个GPU，16个微批次
+  Efficiency = 16 / (4 + 16 - 1) = 16/19 ≈ 84.2%
+
+结论：微批次越多，流水线效率越高
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 1F1B调度策略</h2>
+          <div class="card">
+            <h3 class="card-title">减少流水线气泡</h3>
+            <p class="card-text">1F1B（One Forward One Backward）是一种优化的流水线调度策略，通过交错前向和反向传播来减少气泡。</p>
+            <div class="code-block">
+1F1B调度原理：
+
+与传统GPipe的区别：
+• GPipe：所有前向传播完成后再开始反向传播
+• 1F1B：前向和反向传播交错进行
+
+1F1B执行示例（4个GPU，8个微批次）：
+
+GPU0    GPU1    GPU2    GPU3
+Layer0-1 Layer2-3 Layer4-5 Layer6-7
+
+t1:  F1     -       -       -
+t2:  F2     F1      -       -
+t3:  F3     F2      F1      -
+t4:  F4     F3      F2      F1
+t5:  B1     F4      F3      F2
+t6:  B2     B1      F4      F3
+t7:  B3     B2      B1      F4
+t8:  B4     B3      B2      B1
+t9:  B5     B4      B3      B2
+t10: B6     B5      B4      B3
+t11: B7     B6      B5      B4
+t12: B8     B7      B6      B5
+t13: -      B8      B7      B6
+t14: -      -       B8      B7
+t15: -      -       -       B8
+
+优势：
+• 更早开始反向传播，释放激活值内存
+• 减少整体训练时间
+• 提高GPU利用率
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> 流水线并行优化技术</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">微批次调优</h3>
+              <p class="card-text">选择合适的微批次大小</p>
+              <ul class="feature-list">
+                <li>微批次太小：通信开销大</li>
+                <li>微批次太大：流水线气泡多</li>
+                <li>需要根据模型和网络调整</li>
+              </ul>
+              <div class="tip-box info">
+                <span class="icon">💡</span>
+                <div class="content">
+                  <p>经验法则：micro_batch_size × num_micro_batches = desired_global_batch_size</p>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">激活值检查点</h3>
+              <p class="card-text">减少显存占用</p>
+              <ul class="feature-list">
+                <li>只保存关键检查点的激活值</li>
+                <li>反向传播时重新计算</li>
+                <li>权衡计算和显存</li>
+              </ul>
+              <div class="tip-box info">
+                <span class="icon">💡</span>
+                <div class="content">
+                  <p>激活值检查点可减少30-50%的显存占用</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 流水线并行 vs 其他并行策略</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>特性</th>
+                <th>流水线并行</th>
+                <th>张量并行</th>
+                <th>数据并行</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>切分方式</strong></td>
+                <td>按模型层</td>
+                <td>按张量维度</td>
+                <td>按数据</td>
+              </tr>
+              <tr>
+                <td><strong>通信频率</strong></td>
+                <td>低（每层一次）</td>
+                <td>高（每层多次）</td>
+                <td>高（每步一次）</td>
+              </tr>
+              <tr>
+                <td><strong>可扩展性</strong></td>
+                <td>极高（千卡级）</td>
+                <td>低（≤8卡）</td>
+                <td>高（百卡级）</td>
+              </tr>
+              <tr>
+                <td><strong>实现难度</strong></td>
+                <td>中等</td>
+                <td>高</td>
+                <td>低</td>
+              </tr>
+              <tr>
+                <td><strong>适用场景</th></td>
+                <td>超大规模集群</td>
+                <td>单机多卡</td>
+                <td>通用场景</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">流水线并行的注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>负载均衡：</strong>确保各流水线阶段的工作量均衡</li>
+              <li><strong>网络延迟：</strong>流水线对网络延迟敏感</li>
+              <li><strong>微批次选择：</strong>需要仔细调优微批次大小</li>
+              <li><strong>梯度累积：</strong>可能需要跨多个微批次累积梯度</li>
+              <li><strong>容错性：</strong>节点故障时恢复成本高</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 流水线并行实践框架</h2>
+          <div class="card">
+            <h3 class="card-title">主流框架支持</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>框架</th>
+                  <th>流水线策略</th>
+                  <th>特点</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>GPipe</strong></td>
+                  <td>朴素流水线</td>
+                  <td>Google出品，简单易用</td>
+                </tr>
+                <tr>
+                  <td><strong>DeepSpeed</strong></td>
+                  <td>1F1B交错流水线</td>
+                  <td>Microsoft出品，性能优化</td>
+                </tr>
+                <tr>
+                  <td><strong>Megatron-LM</strong></td>
+                  <td>1F1B + 张量并行</td>
+                  <td>NVIDIA出品，高性能</td>
+                </tr>
+                <tr>
+                  <td><strong>Alpa</strong></td>
+                  <td>自动流水线优化</td>
+                  <td>自动最优调度</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💡</span> 实践建议</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <ul style="margin: 0; padding-left: 1.2rem;">
+                <li><strong>小规模（≤8卡）：</strong>优先使用数据并行或张量并行</li>
+                <li><strong>中规模（8-64卡）：</strong>考虑流水线+数据并行</li>
+                <li><strong>大规模（≥64卡）：</strong>流水线并行是必须的</li>
+                <li><strong>选择微批次：</strong>从32开始调整，找到最优值</li>
+                <li><strong>使用1F1B：</strong>优先使用1F1B而非朴素流水线</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 流水线并行按层切分模型，数据在各GPU间流动</li>
+                <li>• GPipe将batch分成微批次，形成流水线</li>
+                <li>• 1F1B调度通过交错前向和反向减少气泡</li>
+                <li>• 流水线效率取决于微批次数和流水线阶段数</li>
+                <li>• 适合大规模并行，可扩展到千卡级别</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="16-3-模型并行原理.html">← 上一节</a>
+          <a href="16-5-混合并行策略.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

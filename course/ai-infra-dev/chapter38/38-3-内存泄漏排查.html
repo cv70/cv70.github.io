@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>38.3 内存泄漏排查 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>38.3 内存泄漏排查</h1>
+          <p class="subtitle">定位和解决内存泄漏问题</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解内存泄漏的原因</li>
+            <li>掌握内存泄漏的检测方法</li>
+            <li>学习内存分析工具的使用</li>
+            <li>实践内存泄漏修复</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="内存分析" class="card-image">
+          <h3 class="card-title">内存泄漏类型</h3>
+          <p class="card-text">
+            <strong>内存泄漏</strong>是AI训练中常见的问题，会导致显存（GPU）或内存（CPU）持续增长。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 常见内存泄漏场景</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">GPU显存泄漏</h3>
+              <ul class="feature-list">
+                <li>张量未释放</li>
+                <li>模型引用未清理</li>
+                <li>缓存无限增长</li>
+                <li>数据加载器泄漏</li>
+                <li>分布式训练泄漏</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">CPU内存泄漏</h3>
+              <ul class="feature-list">
+                <li>循环引用</li>
+                <li>全局变量累积</li>
+                <li>缓存未清理</li>
+                <li>对象引用链</li>
+                <li>第三方库泄漏</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 内存监控方法</h2>
+          <div class="code-block">
+# GPU显存监控
+import torch
+
+def print_gpu_memory():
+    print(f"Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+    print(f"Reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+    print(f"Max allocated: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
+    print(f"Max reserved: {torch.cuda.max_memory_reserved() / 1024**3:.2f} GB")
+
+# 清空缓存
+torch.cuda.empty_cache()
+
+# 重置最大内存统计
+torch.cuda.reset_peak_memory_stats()
+
+# CPU内存监控
+import psutil
+import os
+
+def print_cpu_memory():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    print(f"RSS: {mem_info.rss / 1024**3:.2f} GB")
+    print(f"VMS: {mem_info.vms / 1024**3:.2f} GB")
+    print(f"Available: {psutil.virtual_memory().available / 1024**3:.2f} GB")
+
+# 定期监控
+def monitor_memory(interval=10):
+    import time
+    while True:
+        print(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+        print("GPU Memory:")
+        print_gpu_memory()
+        print("\nCPU Memory:")
+        print_cpu_memory()
+        time.sleep(interval)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 显存泄漏检测工具</h2>
+          <div class="code-block">
+# 使用torch.cuda.memory_snapshot()
+import torch
+
+def analyze_memory_snapshot():
+    snapshot = torch.cuda.memory_snapshot()
+    print(f"Total snapshots: {len(snapshot)}")
+
+    for segment in snapshot:
+        print(f"Segment: {segment['segment_type']}")
+        print(f"  Size: {segment['segment_size'] / 1024**2:.2f} MB")
+        print(f"  Blocks: {len(segment['blocks'])}")
+
+        for block in segment['blocks']:
+            print(f"    Block size: {block['size'] / 1024**2:.2f} MB")
+            print(f"    Block state: {block['state']}")
+
+# 使用pympler进行内存分析
+from pympler import asizeof, muppy, summary
+
+def analyze_python_objects():
+    all_objects = muppy.get_objects()
+    sum1 = summary.summarize(all_objects)
+    summary.print_(sum1)
+
+# 追踪对象增长
+def track_object_growth():
+    from pympler import tracker
+    tr = tracker.SummaryTracker()
+
+    # 基线
+    tr.print_diff()
+
+    # 执行操作
+    # ... your code ...
+
+    # 对比
+    tr.print_diff()
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> 常见内存泄漏修复</h2>
+          <div class="tip-box info">
+            <span class="icon">💡</span>
+            <div class="content">
+              <div class="title">内存泄漏修复策略</div>
+              <p>针对不同类型的内存泄漏采用不同的修复方法：</p>
+            </div>
+          </div>
+          <div class="code-block">
+# 1. 显存泄漏修复
+
+## 问题：张量累积
+# 错误做法
+def train_wrong():
+    outputs = []
+    for batch in dataloader:
+        output = model(batch)
+        outputs.append(output)  # 累积张量
+
+# 正确做法
+def train_correct():
+    for batch in dataloader:
+        output = model(batch)
+        # 处理后释放
+        process(output)
+        del output  # 显式删除
+        torch.cuda.empty_cache()  # 清空缓存
+
+## 问题：模型引用未清理
+# 错误做法
+def create_models():
+    models = []
+    for i in range(100):
+        models.append(MyModel().cuda())
+    return models  # 所有模型保留在内存
+
+# 正确做法
+def create_models():
+    for i in range(100):
+        model = MyModel().cuda()
+        # 使用后释放
+        process(model)
+        del model
+        torch.cuda.empty_cache()
+
+# 2. CPU内存泄漏修复
+
+## 问题：循环引用
+class Node:
+    def __init__(self):
+        self.parent = None
+        self.children = []
+
+# 错误做法
+def create_tree():
+    root = Node()
+    child = Node()
+    child.parent = root
+    root.children.append(child)
+    return root  # 循环引用导致无法释放
+
+# 正确做法
+import weakref
+
+def create_tree():
+    root = Node()
+    child = Node()
+    child.parent = weakref.ref(root)  # 使用弱引用
+    root.children.append(child)
+    return root
+
+## 问题：全局变量
+# 错误做法
+cache = {}
+def process_data(data):
+    key = data.id
+    cache[key] = data  # 无限增长
+
+# 正确做法
+from collections import OrderedDict
+
+class LRUCache:
+    def __init__(self, maxsize=1000):
+        self.cache = OrderedDict()
+        self.maxsize = maxsize
+
+    def get(self, key):
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        return None
+
+    def put(self, key, value):
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        self.cache[key] = value
+        if len(self.cache) > self.maxsize:
+            self.cache.popitem(last=False)
+
+cache = LRUCache(maxsize=1000)
+def process_data(data):
+    cache.put(data.id, data)
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 内存分析工具对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>工具</th>
+                <th>用途</th>
+                <th>特点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>torch.cuda.memory_stats</td>
+                <td>GPU显存统计</td>
+                <td>内置，实时</td>
+              </tr>
+              <tr>
+                <td>nvidia-smi</td>
+                <td>系统级显存监控</td>
+                <td>命令行，轻量</td>
+              </tr>
+              <tr>
+                <td>pympler</td>
+                <td>Python对象分析</td>
+                <td>详细，灵活</td>
+              </tr>
+              <tr>
+                <td>memory_profiler</td>
+                <td>逐行内存分析</td>
+                <td>可视化</td>
+              </tr>
+              <tr>
+                <td>tracemalloc</td>
+                <td>内存分配跟踪</td>
+                <td>Python内置</td>
+              </tr>
+              <tr>
+                <td>objgraph</td>
+                <td>对象引用图</td>
+                <td>可视化引用链</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔍</span> 内存泄漏诊断流程</h2>
+          <div class="code-block">
+# 内存泄漏诊断SOP
+
+## 1. 确认泄漏
+# 记录内存使用随时间的变化
+import time
+import torch
+import psutil
+import os
+
+def detect_leak():
+    gpu_memory = []
+    cpu_memory = []
+    timestamps = []
+
+    for step in range(100):
+        # 执行你的代码
+        run_training_step()
+
+        # 记录内存
+        gpu_memory.append(torch.cuda.memory_allocated() / 1024**3)
+        process = psutil.Process(os.getpid())
+        cpu_memory.append(process.memory_info().rss / 1024**3)
+        timestamps.append(time.time())
+
+    # 分析趋势
+    gpu_slope = calculate_slope(gpu_memory)
+    cpu_slope = calculate_slope(cpu_memory)
+
+    print(f"GPU memory growth: {gpu_slope:.6f} GB/s")
+    print(f"CPU memory growth: {cpu_slope:.6f} GB/s")
+
+## 2. 定位泄漏点
+# 使用memory_profiler
+from memory_profiler import profile
+
+@profile
+def suspicious_function():
+    # 你的代码
+    pass
+
+# 使用tracemalloc
+import tracemalloc
+tracemalloc.start()
+
+# 运行可疑代码
+run_suspicious_code()
+
+# 获取快照
+snapshot = tracemalloc.take_snapshot()
+top_stats = snapshot.statistics('lineno')
+
+for stat in top_stats[:10]:
+    print(stat)
+
+## 3. 分析对象引用
+import objgraph
+
+# 显示对象引用链
+objgraph.show_backrefs(
+    some_object,
+    max_depth=10,
+    filename='backref.png'
+)
+
+# 查找增长最快的类型
+objgraph.growth()
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎯</span> 预防内存泄漏</h2>
+          <div class="card">
+            <h3 class="card-title">最佳实践</h3>
+            <ul class="feature-list">
+              <li><strong>及时释放</strong> - 使用del显式删除对象</li>
+              <li><strong>避免循环</strong> - 使用弱引用打破循环</li>
+              <li><strong>限制缓存</strong> - 设置缓存上限和过期策略</li>
+              <li><strong>定期清理</strong> - 定期清空缓存和临时对象</li>
+              <li><strong>使用上下文</strong> - 利用with管理资源</li>
+              <li><strong>定期测试</strong> - 长时间运行测试内存稳定性</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="内存监控">
+          <div class="caption">图：内存使用监控</div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">内存泄漏排查注意事项</div>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+              <li>• 区分正常增长和泄漏</li>
+              <li>• 内存监控本身也有开销</li>
+              <li>• 长时间运行测试确认泄漏</li>
+              <li>• 检查第三方库的内存使用</li>
+              <li>• 关注GC和引用计数机制</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• GPU和CPU都可能发生内存泄漏</li>
+                <li>• 使用监控工具及时发现泄漏</li>
+                <li>• 针对不同原因采取相应修复措施</li>
+                <li>• 遵循最佳实践预防泄漏</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="38-2-GPU性能分析.html">← 上一节</a>
+          <a href="38-4-I-O瓶颈分析.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

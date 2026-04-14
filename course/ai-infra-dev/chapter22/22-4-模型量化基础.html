@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22.4 模型量化基础 - AI基础设施开发</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>22.4 模型量化基础</h1>
+          <p class="subtitle">降低模型精度以减少计算和存储需求</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解模型量化的基本概念</li>
+            <li>掌握量化精度与范围</li>
+            <li>学习量化方法</li>
+            <li>了解量化的硬件支持</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800" alt="量化示意图" class="card-image">
+          <h3 class="card-title">什么是模型量化</h3>
+          <p class="card-text">
+            <strong>模型量化（Model Quantization）</strong>是指将神经网络中的参数从高精度浮点数（如FP32）转换为低精度数（如INT8）的技术。
+            通过减少每个参数占用的比特数，可以显著降低模型的存储需求和计算成本。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 量化精度对比</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>精度类型</th>
+                <th>比特数</th>
+                <th>数值范围</th>
+                <th>存储大小</th>
+                <th>典型应用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>FP32</strong></td>
+                <td>32</td>
+                <td>±3.4×10³⁸</td>
+                <td>4 bytes</td>
+                <td>训练、推理（基准）</td>
+              </tr>
+              <tr>
+                <td><strong>FP16/BF16</strong></td>
+                <td>16</td>
+                <td>±6.5×10⁴</td>
+                <td>2 bytes</td>
+                <td>训练、推理</td>
+              </tr>
+              <tr>
+                <td><strong>INT8</strong></td>
+                <td>8</td>
+                <td>-128~127</td>
+                <td>1 byte</td>
+                <td>推理（主流）</td>
+              </tr>
+              <tr>
+                <td><strong>INT4</strong></td>
+                <td>4</td>
+                <td>-8~7</td>
+                <td>0.5 byte</td>
+                <td>推理（LLM）</td>
+              </tr>
+              <tr>
+                <td><strong>FP8</strong></td>
+                <td>8</td>
+                <td>±240</td>
+                <td>1 byte</td>
+                <td>训练、推理</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💾</span> 量化收益</h2>
+          <div class="grid grid-3">
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">💾</div>
+              <h3 class="card-title">存储减少</h3>
+              <p class="card-text">FP32→INT8 减少4倍存储</p>
+              <p class="card-text">FP32→INT4 减少8倍存储</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">⚡</div>
+              <h3 class="card-title">计算加速</h3>
+              <p class="card-text">INT8计算速度更快</p>
+              <p class="card-text">专用硬件支持</p>
+            </div>
+            <div class="card" style="text-align: center;">
+              <div style="font-size: 3rem; margin-bottom: 1rem;">🔋</div>
+              <h3 class="card-title">能耗降低</h3>
+              <p class="card-text">更低功耗</p>
+              <p class="card-text">适合边缘设备</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🎭</span> 量化方法</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">对称量化</h3>
+              <ul class="feature-list">
+                <li><strong>范围</strong>：[-scale, scale]</li>
+                <li><strong>零点</strong>：始终为0</li>
+                <li><strong>优点</strong>：计算简单</li>
+                <li><strong>缺点</strong>：分布不对称时精度损失大</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">非对称量化</h3>
+              <ul class="feature-list">
+                <li><strong>范围</strong>：[zero_point, zero_point + scale]</li>
+                <li><strong>零点</strong>：可调整</li>
+                <li><strong>优点</strong>：适应任意分布</li>
+                <li><strong>缺点</strong>：计算稍复杂</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="GPU计算">
+          <div class="caption">图：GPU对INT8计算的硬件支持</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 量化流程</h2>
+          <div class="card">
+            <h3 class="card-title">后训练量化（PTQ）</h3>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 15px; justify-content: center;">
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--accent-color); color: white; border-radius: 8px; font-weight: bold;">
+                训练好的模型
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                校准数据集
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--bg-secondary); border-radius: 8px; font-weight: bold;">
+                计算量化参数
+              </div>
+              <div style="flex: 0 0 auto; color: var(--text-secondary);">→</div>
+              <div style="flex: 0 0 auto; padding: 15px 20px; background: var(--accent-color); color: white; border-radius: 8px; font-weight: bold;">
+                量化模型
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 量化公式</h2>
+          <div class="card">
+            <h3 class="card-title">量化与反量化</h3>
+            <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; margin-top: 15px;">
+              <div style="margin-bottom: 15px; font-weight: bold;">对称量化</div>
+              <div style="font-family: monospace; font-size: 1.1em;">
+                <div>Q(x) = round(x / scale)</div>
+                <div>DQ(q) = q * scale</div>
+              </div>
+            </div>
+            <div style="padding: 20px; background: var(--bg-secondary); border-radius: 8px; margin-top: 15px;">
+              <div style="margin-bottom: 15px; font-weight: bold;">非对称量化</div>
+              <div style="font-family: monospace; font-size: 1.1em;">
+                <div>Q(x) = round(x / scale) + zero_point</div>
+                <div>DQ(q) = (q - zero_point) * scale</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> 量化实现示例</h2>
+          <div class="code-block">
+<pre><code>import torch
+import torch.nn as nn
+
+def quantize_tensor(tensor, num_bits=8):
+    """
+    对张量进行对称量化
+    """
+    # 计算量化参数
+    max_val = tensor.abs().max()
+    qmax = 2 ** (num_bits - 1) - 1
+
+    # 计算scale
+    scale = max_val / qmax
+
+    # 量化
+    quantized = torch.clamp(
+        torch.round(tensor / scale),
+        -qmax,
+        qmax
+    ).to(torch.int8)
+
+    return quantized, scale
+
+def dequantize_tensor(quantized, scale):
+    """
+    反量化
+    """
+    return quantized.float() * scale
+
+# 使用示例
+# 原始FP32张量
+fp32_tensor = torch.randn(10, 10)
+
+# 量化到INT8
+int8_tensor, scale = quantize_tensor(fp32_tensor, num_bits=8)
+
+# 反量化
+reconstructed = dequantize_tensor(int8_tensor, scale)
+
+# 计算量化误差
+error = (fp32_tensor - reconstructed).abs().mean()
+print(f"量化误差: {error:.6f}")
+
+# PyTorch内置量化
+from torch.ao.quantization import quantize_dynamic
+
+# 动态量化（权重）
+model = nn.Sequential(
+    nn.Linear(768, 768),
+    nn.ReLU(),
+    nn.Linear(768, 256)
+)
+
+quantized_model = quantize_dynamic(
+    model,
+    {nn.Linear},  # 要量化的层类型
+    dtype=torch.qint8
+)
+
+# 比较模型大小
+def get_model_size(model):
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    return param_size
+
+print(f"原始模型大小: {get_model_size(model) / 1024:.2f} KB")
+print(f"量化后模型大小: {get_model_size(quantized_model) / 1024:.2f} KB")
+</code></pre>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🚀</span> 硬件支持</h2>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 class="card-title">NVIDIA Tensor Core</h3>
+              <ul class="feature-list">
+                <li>FP16/FP8/INT8</li>
+                <li>2-4倍加速</li>
+                <li>Volta架构+</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Intel DL Boost</h3>
+              <ul class="feature-list">
+                <li>INT8指令</li>
+                <li>VNNI指令集</li>
+                <li>Cascade Lake+</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">ARM NEON</h3>
+              <ul class="feature-list">
+                <li>INT8/INT16</li>
+                <li>SIMD指令</li>
+                <li>移动端优化</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">量化注意事项</div>
+            <ul style="color: var(--text-secondary);">
+              <li>量化会带来精度损失，需要评估实际影响</li>
+              <li>低比特量化（INT4）可能需要特殊校准</li>
+              <li>不同层的敏感性不同，可考虑分层量化</li>
+              <li>某些硬件不支持低精度计算</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 量化通过降低精度减少存储和计算需求</li>
+                <li>• INT8是最常用的推理量化格式</li>
+                <li>• 对称和非对称量化各有优缺点</li>
+                <li>• 现代GPU和CPU都有专门的量化计算单元</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="22-3-低秩分解.html">← 上一节</a>
+          <a href="22-5-混合精度量化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

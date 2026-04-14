@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>17.2 FSDP原理与实践 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <!-- 左侧目录 -->
+    <div id="sidebar-container"></div>
+
+    <!-- 主内容区 -->
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>17.2 FSDP原理与实践</h1>
+          <p class="subtitle">全分片数据并行，突破显存限制</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解FSDP的核心思想和原理</li>
+            <li>掌握FSDP的使用方法和配置</li>
+            <li>了解FSDP的显存优化机制</li>
+            <li>认识FSDP与DDP的区别</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="FSDP架构图" class="card-image">
+          <h3 class="card-title">什么是PyTorch FSDP？</h3>
+          <p class="card-text">
+            <strong>FSDP（Fully Sharded Data Parallel）</strong>是PyTorch 2.0引入的全分片数据并行框架。
+            与DDP每个GPU存储完整模型不同，FSDP将模型参数、梯度和优化器状态全部切分到多个GPU上。
+            通过全分片，FSDP可以训练比DDP大得多的模型，是训练大模型的重要工具。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🏗️</span> FSDP核心原理</h2>
+          <div class="card">
+            <h3 class="card-title">全分片机制</h3>
+            <div class="code-block">
+FSDP的三种分片：
+
+1. 参数分片（Parameter Sharding）
+   • 模型参数均匀分片到所有GPU
+   • 每个GPU只存储部分参数
+   • 前向传播时动态收集所需的参数
+
+2. 梯度分片（Gradient Sharding）
+   • 反向传播时梯度也分片存储
+   • 每个GPU只计算和存储部分梯度
+   • 梯度同步后直接在各GPU上分片更新
+
+3. 优化器状态分片（Optimizer State Sharding）
+   • 优化器状态（如Adam的动量）也分片
+   • 这是显存占用的大头
+   • 大幅减少总显存占用
+
+显存占用对比（假设1B参数模型）：
+
+DDP（不使用offload）：
+• 参数：2 GB（FP16）
+• 梯度：2 GB（FP16）
+• 优化器状态：12 GB（FP32参数+动量+方差）
+• 激活值：约4-8 GB
+• 总计：约20-24 GB
+
+FSDP（4卡）：
+• 每卡参数：0.5 GB（FP16/4）
+• 每卡梯度：0.5 GB（FP16/4）
+• 每卡优化器状态：3 GB（FP32/4）
+• 激活值：约4-8 GB（与DDP相同）
+• 每卡总计：约8-12 GB
+
+节省：约50%显存！
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚙️</span> FSDP工作流程</h2>
+          <div class="card">
+            <h3 class="card-title">前向和反向传播</h3>
+            <div class="code-block">
+前向传播（Forward Pass）：
+
+对于每一层：
+1. AllGather：收集该层的完整参数
+   ┌─────────────────────────────────┐
+   │ GPU0: [P₀]  GPU1: [P₁]  GPU2: [P₂] │
+   │           ↓ AllGather           │
+   │ GPU0: [P₀P₁P₂] GPU1: [P₀P₁P₂] ... │
+   └─────────────────────────────────┘
+
+2. 计算该层输出（所有GPU都有完整参数）
+
+3. Free：释放不需要的参数，保留激活值
+
+反向传播（Backward Pass）：
+
+对于每一层：
+1. 计算梯度（基于激活值）
+
+2. ReduceScatter：聚合梯度并分片
+   ┌─────────────────────────────────┐
+   │ GPU0: [G₀]  GPU1: [G₁]  GPU2: [G₂] │
+   │           ↓ ReduceScatter       │
+   │ GPU0: [G₀]  GPU1: [G₁]  GPU2: [G₂] │
+   └─────────────────────────────────┘
+
+3. 更新参数：使用分片的梯度更新分片的参数
+   • 不需要AllReduce，更高效
+   • 每个GPU独立更新自己的参数分片
+
+关键优化：
+• 自动激活值检查点
+• 计算与通信重叠
+• 通信原语优化（AllGather + ReduceScatter替代AllReduce）
+            </div>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="FSDP通信模式">
+          <div class="caption">图：FSDP使用AllGather和ReduceScatter替代DDP的AllReduce</div>
+        </image-container>
+
+        <div class="content-block">
+          <h2><span class="icon">💻</span> FSDP基本使用</h2>
+          <div class="card">
+            <h3 class="card-title">FSDP代码示例</h3>
+            <div class="code-block">
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import MixedPrecision, BackwardPrefetch
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+
+def setup(rank, world_size):
+    dist.init_process_group(
+        backend='nccl',
+        init_method='env://',
+        world_size=world_size,
+        rank=rank
+    )
+    torch.cuda.set_device(rank)
+
+class TransformerLayer(torch.nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.attention = torch.nn.MultiheadAttention(hidden_size, num_heads=8)
+        self.ffn = torch.nn.Sequential(
+            torch.nn.Linear(hidden_size, hidden_size * 4),
+            torch.nn.GELU(),
+            torch.nn.Linear(hidden_size * 4, hidden_size)
+        )
+
+    def forward(self, x):
+        attn_out, _ = self.attention(x, x, x)
+        x = x + attn_out
+        ffn_out = self.ffn(x)
+        return x + ffn_out
+
+class TransformerModel(torch.nn.Module):
+    def __init__(self, hidden_size, num_layers):
+        super().__init__()
+        self.layers = torch.nn.ModuleList([
+            TransformerLayer(hidden_size) for _ in range(num_layers)
+        ])
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+def train(rank, world_size):
+    setup(rank, world_size)
+
+    # 创建模型
+    model = TransformerModel(hidden_size=1024, num_layers=24)
+
+    # 定义混合精度策略
+    mixed_precision = MixedPrecision(
+        param_dtype=torch.float16,
+        reduce_dtype=torch.float16,
+        buffer_dtype=torch.float16,
+    )
+
+    # 定义包装策略（按层包装）
+    auto_wrap_policy = transformer_auto_wrap_policy
+
+    # 用FSDP包装模型
+    fsdp_model = FSDP(
+        model,
+        sharding_strategy='FULL_SHARD',  # 全分片
+        mixed_precision=mixed_precision,
+        auto_wrap_policy=auto_wrap_policy,
+        backward_prefetch=BackwardPrefetch.BACKWARD_PRE,  // 预取优化
+    )
+
+    # 创建优化器（直接包装FSDP模型）
+    optimizer = torch.optim.AdamW(
+        fsdp_model.parameters(),
+        lr=1e-4,
+        weight_decay=0.01
+    )
+
+    # 训练循环
+    for epoch in range(100):
+        for batch_idx, (inputs, targets) in enumerate(dataloader):
+            inputs = inputs.cuda()
+            targets = targets.cuda()
+
+            # 前向传播
+            outputs = fsdp_model(inputs)
+            loss = torch.nn.functional.cross_entropy(outputs, targets)
+
+            # 反向传播
+            optimizer.zero_grad()
+            loss.backward()
+
+            # 更新参数
+            optimizer.step()
+
+            if rank == 0 and batch_idx % 10 == 0:
+                print(f'Epoch {epoch}, Loss: {loss.item()}')
+
+    dist.destroy_process_group()
+
+if __name__ == '__main__':
+    world_size = 8
+    mp.spawn(train, args=(world_size,), nprocs=world_size, join=True)
+            </div>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">⚡</span> FSDP高级配置</h2>
+          <div class="card">
+            <h3 class="card-title">分片策略</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>策略</th>
+                  <th>说明</th>
+                  <th>显存节省</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>FULL_SHARD</strong></td>
+                  <td>参数、梯度、优化器状态全分片</td>
+                  <td>最大（约50%）</td>
+                </tr>
+                <tr>
+                  <td><strong>SHARD_GRAD_OP</strong></td>
+                  <td>梯度和优化器状态分片</td>
+                  <td>中等（约33%）</td>
+                </tr>
+                <tr>
+                  <td><strong>NO_SHARD</strong></td>
+                  <td>不分片（等同于DDP）</td>
+                  <td>无</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> FSDP vs DDP vs DeepSpeed</h2>
+          <div class="card">
+            <h3 class="card-title">框架对比</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>特性</th>
+                  <th>DDP</th>
+                  <th>FSDP</th>
+                  <th>DeepSpeed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>参数存储</strong></td>
+                  <td>完整副本</td>
+                  <td>分片</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>梯度存储</strong></td>
+                  <td>完整副本</td>
+                  <td>分片</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>优化器状态</strong></td>
+                  <td>完整副本</td>
+                  <td>分片</td>
+                  <td>分片</td>
+                </tr>
+                <tr>
+                  <td><strong>显存节省</strong></td>
+                  <td>无</td>
+                  <td>约50%</td>
+                  <td>约50-80%</td>
+                </tr>
+                <tr>
+                  <td><strong>CPU Offload</strong></td>
+                  <td>不支持</td>
+                  <td>有限支持</td>
+                  <td>完整支持</td>
+                </tr>
+                <tr>
+                  <td><strong>易用性</strong></td>
+                  <td>简单</td>
+                  <td>中等</td>
+                  <td>复杂</td>
+                </tr>
+                <tr>
+                  <td><strong>性能</th></td>
+                  <td>优秀</td>
+                  <td>优秀</td>
+                  <td>优秀</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔧</span> FSDP优化技巧</h2>
+          <div class="grid grid-2">
+            <div class="card">
+              <h3 class="card-title">包装策略优化</h3>
+              <ul class="feature-list">
+                <li>按层包装，减少通信频率</li>
+                <li>使用auto_wrap_policy自动决定包装粒度</li>
+                <li>大层单独包装</li>
+                <li>小层合并包装</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">通信优化</h3>
+              <ul class="feature-list">
+                <li>使用BACKWARD_PRE预取</li>
+                <li>增大通信桶大小</li>
+                <li>使用混合精度减少数据量</li>
+                <li>计算与通信重叠</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">显存优化</h3>
+              <ul class="feature-list">
+                <li>使用CPU offload卸载优化器</li>
+                <li>启用激活值检查点</li>
+                <li>使用混合精度训练</li>
+                <li>调整batch size</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">性能监控</h3>
+              <ul class="feature-list">
+                <li>监控通信时间占比</li>
+                <li>检查GPU利用率</li>
+                <li>分析显存占用</li>
+                <li>使用torch.profiler分析</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">FSDP注意事项</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>保存模型：</strong>需要先gather参数再保存，或使用state_dict_type='sharded'</li>
+              <li><strong>模型加载：</strong>需要使用sharded state_dict加载</li>
+              <li><strong>自定义层：</strong>需要正确注册可训练参数</li>
+              <li><strong>通信开销：</strong>小模型下FSDP可能比DDP慢</li>
+              <li><strong>调试困难：</strong>分布式系统调试复杂</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <span class="icon">💡</span>
+          <div class="content">
+            <div class="title">何时使用FSDP？</div>
+            <ul style="margin: 0; padding-left: 1.2rem;">
+              <li><strong>显存不足：</strong>DDP无法加载模型时</li>
+              <li><strong>大模型训练：</strong>参数量>1B的模型</li>
+              <li><strong>长序列：</strong>需要激活值检查点的场景</li>
+              <li><strong>PyTorch生态：</strong>希望使用PyTorch原生支持</li>
+              <li><strong>中等规模：</strong>8-64卡，FSDP比DeepSpeed更简单</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• FSDP将模型、梯度、优化器状态全部分片</li>
+                <li>• 相比DDP可节省约50%显存</li>
+                <li>• 使用AllGather+ReduceScatter替代AllReduce</li>
+                <li>• 支持混合精度、激活值检查点等优化</li>
+                <li>• 适合大模型训练，是PyTorch 2.0的重要特性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="17-1-DDP原理与实践.html">← 上一节</a>
+          <a href="17-3-分布式初始化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+  <div id="footer-container"></div>
+  <script src="/assets/js/load-components.js"></script>
+</body>
+</html>

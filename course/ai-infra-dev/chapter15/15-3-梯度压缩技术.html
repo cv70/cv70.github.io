@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15.3 梯度压缩技术 - AI基础设施开发修炼手册</title>
+  <link rel="shortcut icon" href="/assets/img/favicon.ico">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="header-container"></div>
+
+  <div class="course-layout">
+    <div id="sidebar-container"></div>
+    <main class="course-main">
+      <div class="container" style="padding: 0;">
+        <header class="page-header">
+          <h1>15.3 梯度压缩技术</h1>
+          <p class="subtitle">减少通信量提升训练效率</p>
+        </header>
+
+        <div class="content-block animate-fade-in-up">
+          <h2><span class="icon">🎯</span> 学习目标</h2>
+          <ul class="feature-list">
+            <li>理解梯度压缩的基本原理</li>
+            <li>掌握常见的压缩算法</li>
+            <li>学习压缩在框架中的实现</li>
+            <li>了解压缩的影响与权衡</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据压缩" class="card-image">
+          <h3 class="card-title">梯度压缩的价值</h3>
+          <p class="card-text">
+            大规模模型训练中，梯度通信是主要瓶颈之一。梯度压缩技术
+            通过减少传输的数据量，显著降低通信延迟和带宽需求，
+            在保证训练精度的前提下提升训练效率。
+          </p>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📊</span> 压缩技术分类</h2>
+
+          <h3>技术对比</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>压缩比</th>
+                <th>精度影响</th>
+                <th>计算开销</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>量化</td>
+                <td>2-4x</td>
+                <td>小</td>
+                <td>极低</td>
+                <td>通用</td>
+              </tr>
+              <tr>
+                <td>稀疏化</td>
+                <td>4-100x</td>
+                <td>中</td>
+                <td>低</td>
+                <td>大模型</td>
+              </tr>
+              <tr>
+                <td>TopK</td>
+                <td>10-100x</td>
+                <td>中</td>
+                <td>低</td>
+                <td>大模型</td>
+              </tr>
+              <tr>
+                <td>LowRank</td>
+                <td>2-10x</td>
+                <td>小</td>
+                <td>中</td>
+                <td>特定层</td>
+              </tr>
+              <tr>
+                <td>SignSGD</td>
+                <td>32x</td>
+                <td>中</td>
+                <td>极低</td>
+                <td>特定场景</td>
+              </tr>
+              <tr>
+                <td>误差反馈</td>
+                <td>2-4x</td>
+                <td>极小</td>
+                <td>低</td>
+                <td>通用</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔢</span> 量化压缩</h2>
+
+          <h3>基本原理</h3>
+
+          <div class="code-block"""
+量化原理:
+
+将FP32/FP16梯度量化为低比特表示
+
+线性量化:
+quantized = round(original / scale) + zero_point
+dequantized = (quantized - zero_point) * scale
+
+量化精度:
+- FP32: 32 bits
+- FP16: 16 bits
+- Int8: 8 bits
+- Int4: 4 bits
+
+压缩比:
+- FP32 → Int8: 4x
+- FP16 → Int8: 2x
+- FP32 → Int4: 8x
+
+实现步骤:
+1. 计算梯度范围
+2. 计算scale和zero_point
+3. 量化梯度
+4. 传输量化后梯度
+5. 反量化
+6. 应用到模型参数
+          </div>
+
+          <h3>PyTorch实现</h3>
+
+          <div class="code-block"""
+PyTorch梯度量化:
+
+import torch
+import torch.distributed as dist
+
+class QuantizedDDP(torch.nn.Module):
+    def __init__(self, module, quantization_bits=8):
+        super().__init__()
+        self.module = module
+        self.quantization_bits = quantization_bits
+        self.register_buffer('scale', torch.tensor(1.0))
+        self.register_buffer('zero_point', torch.tensor(0))
+
+    def quantize(self, tensor):
+        """量化张量"""
+        qmin = 0
+        qmax = (1 << self.quantization_bits) - 1
+
+        # 计算scale和zero_point
+        min_val = tensor.min()
+        max_val = tensor.max()
+        scale = (max_val - min_val) / (qmax - qmin)
+        zero_point = qmin - min_val / scale
+
+        # 量化
+        quantized = torch.clamp(
+            torch.round(tensor / scale + zero_point),
+            qmin, qmax
+        ).char()  # 8-bit = char
+
+        return quantized, scale, zero_point
+
+    def dequantize(self, quantized, scale, zero_point):
+        """反量化"""
+        return (quantized.float() - zero_point) * scale
+
+    def forward(self, *inputs):
+        # 前向计算
+        output = self.module(*inputs)
+        return output
+
+# 使用
+model = QuantizedDDP(MyModel(), quantization_bits=8)
+model = torch.nn.parallel.DistributedDataParallel(model)
+          </div>
+
+          <h3>DeepSpeed压缩</h3>
+
+          <div class="code-block"""
+DeepSpeed梯度压缩配置:
+
+ds_config = {
+    "train_batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 1e-4
+        }
+    },
+    "gradient_clipping": 1.0,
+    "communication_compression": {
+        "compression_type": "quantization",  # 量化
+        "quantization_bits": 8,           # 量化位数
+        "overlap_communication": True,     # 通信重叠
+        "compress_forward": False,         # 前向压缩
+        "compress_backward": True          # 反向压缩
+    }
+}
+
+# 启动
+deepspeed train.py \
+    --deepspeed ds_config.json \
+    --batch_size_per_gpu 32
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">✂️</span> 稀疏化压缩</h2>
+
+          <h3>TopK稀疏化</h3>
+
+          <div class="code-block"""
+TopK稀疏化原理:
+
+保留梯度中最重要的K个元素
+
+算法:
+1. 计算梯度的绝对值
+2. 选择最大的K个值
+3. 其他值设为0
+4. 创建稀疏张量
+5. 传输稀疏张量
+
+压缩比:
+- K/N (N为元素总数)
+- 例如: 10% → 10x
+
+实现:
+import torch
+
+def topk_sparsify(gradient, sparsity_ratio=0.1):
+    """TopK稀疏化"""
+    # 计算要保留的元素数量
+    k = int(gradient.numel() * sparsity_ratio)
+
+    # 选择最大的K个值
+    topk_values, topk_indices = torch.topk(
+        gradient.abs().view(-1), k
+    )
+
+    # 创建稀疏张量
+    sparse_gradient = torch.zeros_like(gradient)
+    sparse_gradient.view(-1)[topk_indices] = \
+        gradient.view(-1)[topk_indices]
+
+    return sparse_gradient
+
+# 使用
+for param in model.parameters():
+    if param.grad is not None:
+        param.grad = topk_sparsify(param.grad, 0.1)
+          </div>
+
+          <h3>阈值稀疏化</h3>
+
+          <div class="code-block"""
+阈值稀疏化:
+
+保留超过阈值的梯度元素
+
+算法:
+1. 计算梯度阈值
+2. 保留超过阈值的元素
+3. 其他值设为0
+
+实现:
+def threshold_sparsify(gradient, threshold=0.01):
+    """阈值稀疏化"""
+    # 计算阈值
+    max_val = gradient.abs().max()
+    threshold_value = threshold * max_val
+
+    # 应用阈值
+    mask = gradient.abs() > threshold_value
+    sparse_gradient = gradient * mask.float()
+
+    return sparse_gradient
+
+# 动态阈值
+def adaptive_threshold_sparsify(gradient, sparsity_ratio=0.1):
+    """自适应阈值稀疏化"""
+    # 计算阈值使达到目标稀疏度
+    sorted_values = torch.sort(
+        gradient.abs().view(-1), descending=True
+    ).values
+    threshold_value = sorted_values[int(
+        gradient.numel() * sparsity_ratio
+    )]
+
+    return threshold_sparsify(gradient, threshold_value / gradient.abs().max())
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">🔄</span> 误差反馈</h2>
+
+          <h3>原理与实现</h3>
+
+          <div class="code-block"""
+误差反馈原理:
+
+维护累积的量化误差，在下次通信时补偿
+
+算法:
+1. 量化梯度
+2. 计算量化误差
+3. 累积误差
+4. 下次量化时补偿
+
+公式:
+error_accumulated += (quantized - original)
+next_quantized = quantize(original + error_accumulated)
+error_accumulated += (quantized - original)
+
+优势:
+- 补偿量化误差
+- 提高训练精度
+- 减少精度损失
+
+实现:
+class ErrorFeedbackCompression:
+    def __init__(self, quantization_bits=8):
+        self.bits = quantization_bits
+        self.error_accumulator = None
+
+    def compress(self, tensor):
+        """压缩张量（带误差反馈）"""
+        if self.error_accumulator is None:
+            self.error_accumulator = torch.zeros_like(tensor)
+
+        # 补偿累积误差
+        compensated = tensor + self.error_accumulator
+
+        # 量化
+        quantized, scale, zero_point = self.quantize(compensized)
+
+        # 反量化
+        dequantized = self.dequantize(quantized, scale, zero_point)
+
+        # 计算新的误差
+        error = compensated - dequantized
+        self.error_accumulator = error
+
+        return quantized, scale, zero_point
+
+    def quantize(self, tensor):
+        # 量化实现
+        pass
+
+    def dequantize(self, quantized, scale, zero_point):
+        # 反量化实现
+        pass
+          </div>
+
+          <h3>PyTorch集成</h3>
+
+          <div class="code-block"""
+PyTorch误差反馈实现:
+
+import torch
+import torch.distributed as dist
+
+class ErrorFeedbackOptimizer(torch.optim.Optimizer):
+    def __init__(self, params, compression_ratio=0.1):
+        super().__init__(params)
+        self.compression_ratio = compression_ratio
+        self.error_feedback = {}
+
+    def step(self):
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+
+                # 误差反馈
+                if p in self.error_feedback:
+                    p.grad += self.error_feedback[p]
+
+                # TopK稀疏化
+                k = int(p.grad.numel() * self.compression_ratio)
+                topk_values, topk_indices = torch.topk(
+                    p.grad.abs().view(-1), k
+                )
+
+                # 创建稀疏梯度
+                sparse_grad = torch.zeros_like(p.grad)
+                sparse_grad.view(-1)[topk_indices] = \
+                    p.grad.view(-1)[topk_indices]
+
+                # 计算误差
+                error = p.grad - sparse_grad
+                self.error_feedback[p] = error
+
+                # 应用稀疏梯度
+                p.grad = sparse_grad
+
+        # 更新参数
+        super().step()
+          </div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📈</span> 性能影响</h2>
+
+          <h3>压缩效果</h3>
+
+          <table>
+            <thead>
+              <tr>
+                <th>压缩方法</th>
+                <th>压缩比</th>
+                <th>通信时间</th>
+                <th>精度损失</th>
+                <th>训练速度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>无压缩</td>
+                <td>1x</td>
+                <td>基准</td>
+                <td>无</td>
+                <td>1.0x</td>
+              </tr>
+              <tr>
+                <td>FP16量化</td>
+                <td>2x</td>
+                <td>0.6x</td>
+                <td>极小</td>
+                <td>1.2x</td>
+              </tr>
+              <tr>
+                <td>Int8量化</td>
+                <td>4x</td>
+                <td>0.4x</td>
+                <td>小</td>
+                <td>1.4x</td>
+              </tr>
+              <tr>
+                <td>Int4量化</td>
+                <td>8x</td>
+                <td>0.3x</td>
+                <td>中</td>
+                <td>1.6x</td>
+              </tr>
+              <tr>
+                <td>10%稀疏化</td>
+                <td>10x</td>
+                <td>0.25x</td>
+                <td>小</td>
+                <td>1.8x</td>
+              </tr>
+              <tr>
+                <td>1%稀疏化</td>
+                <td>100x</td>
+                <td>0.1x</td>
+                <td>中</td>
+                <td>2.0x</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>权衡分析</h3>
+
+          <div class="code-block"""
+梯度压缩的权衡:
+
+1. 通信时间 vs 计算时间
+   - 压缩减少通信时间
+   - 增加量化/反量化开销
+   - 需要找到平衡点
+
+2. 精度 vs 速度
+   - 更高压缩比更快
+   - 但可能损失更多精度
+   - 需要权衡
+
+3. 稳定性 vs 效率
+   - 激进压缩更高效
+   - 但可能影响训练稳定性
+   - 需要谨慎选择
+
+4. 显存 vs 性能
+   - 压缩减少传输显存
+   - 但可能需要额外缓冲
+   - 需要合理规划
+
+选择建议:
+- 初期: 使用FP16或Int8
+- 中期: 尝试稀疏化
+- 成熟: 混合压缩策略
+          </div>
+        </div>
+
+        <div class="tip-box warning">
+          <span class="icon">⚠️</span>
+          <div class="content">
+            <div class="title">使用注意事项</div>
+            <p>1）从低压缩比开始，逐步增加；2）监控训练精度和稳定性；3）不同阶段使用不同压缩策略；4）结合误差反馈减少精度损失；5）在验证集上评估压缩影响。</p>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800" alt="数据传输">
+          <div class="caption">图：梯度压缩显著减少通信开销</div>
+        </div>
+
+        <div class="content-block">
+          <h2><span class="icon">📝</span> 本节小结</h2>
+          <div class="tip-box success">
+            <span class="icon">✅</span>
+            <div class="content">
+              <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>• 梯度压缩可以显著减少通信量</li>
+                <li>• 量化和稀疏化是最常用的方法</li>
+                <li>• 误差反馈可以减少精度损失</li>
+                <li>• 需要平衡速度、精度和稳定性</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="chapter-nav">
+          <a href="15-2-通信与计算重叠.html">← 上一节</a>
+          <a href="15-4-流水线通信优化.html">下一节 →</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/dark-mode.js"></script>
+  <script src="../load-sidebar.js"></script>
+
+    <div id="footer-container"></div>
+    <script src="/assets/js/load-components.js"></script>
+</body>
+</html>
