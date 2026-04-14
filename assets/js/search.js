@@ -48,6 +48,11 @@ const SearchEngine = {
         { id: 43, title: '嵌入式软件开发修炼手册', url: '/course/embedded-dev/', category: '课程', desc: '嵌入式C语言与驱动开发实战' },
         { id: 44, title: '量化交易开发修炼手册', url: '/course/quant-trading/', category: '课程', desc: '量化交易策略与系统开发' },
         { id: 45, title: '全栈应用开发修炼手册', url: '/course/node-ts-fullstack/', category: '课程', desc: 'TypeScript + NestJS 全栈课程' },
+        { id: 46, title: '节奏大师', url: '/game/rhythm-master/', category: '游戏', desc: '跟着音乐节奏，挑战反应速度' },
+        { id: 47, title: '音游练习', url: '/game/music-practice/', category: '游戏', desc: '简单有趣的钢琴音游，练习节奏感' },
+        { id: 48, title: '弹射球', url: '/game/gravity-ball/', category: '游戏', desc: '重力物理模拟，精准弹射挑战' },
+        { id: 49, title: '弹幕躲避', url: '/game/bullet-dodge/', category: '游戏', desc: '在弹幕中生存，挑战反应极限' },
+        { id: 50, title: '堆叠游戏', url: '/game/stack-tower/', category: '游戏', desc: '精准堆叠，建造高塔' },
     ],
 
     // 创建 FlexSearch 索引
