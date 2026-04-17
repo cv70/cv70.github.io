@@ -55,6 +55,8 @@ const SearchEngine = {
         { id: 50, title: '弹幕躲避', url: '/game/bullet-dodge/', category: '游戏', desc: '在弹幕中生存，挑战反应极限' },
         { id: 51, title: '堆叠游戏', url: '/game/stack-tower/', category: '游戏', desc: '精准堆叠，建造高塔' },
         { id: 52, title: 'Harness Engineering：驯服复杂的艺术', url: '/article/harness-engineering/', category: '文章', desc: '如何用工程化实践驯服复杂的项目代码' },
+        { id: 53, title: '超级个体不是被制造出来的，而是被炼成的', url: '/article/super-individual/', category: '文章', desc: '探讨赫尔墨斯主义视角下的超级个体修炼之路：汞、硫、盐三原则如何转化为现代能力模型。' },
+        { id: 54, title: '如何用博客写作练就炼金术士的观察力', url: '/article/blog-writing-alchemist-observation/', category: '文章', desc: '通过符号翻译、过程记录和限制释放三个练习，在博客写作中培养洞察事物本质的能力。' },
     ],
 
     // 创建 FlexSearch 索引
